@@ -274,16 +274,6 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
     final allGroups = ref.watch(groupsProvider);
     final filters = ref.watch(portalFiltersProvider);
     final groups = portalVisibleGroups(allGroups, filters.hidden, filters.order);
-    final byName = {for (final item in allGroups) item.name: item};
-    // A selector may point at another selector, so the chip has to follow the
-    // chain to the node that actually carries traffic.
-    String? resolve(String? name, [int depth = 0]) {
-      if (name == null || depth > 6) return null;
-      final next = byName[name];
-      if (next == null) return name;
-      return resolve(next.now, depth + 1);
-    }
-
     final active = ref.watch(portalGroupProvider) ?? groups.firstOrNull?.name;
     final hint = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7);
     return Row(
@@ -322,14 +312,9 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                 ),
                           // A selector says nothing useful without its current
                           // server, so the chip carries the resolved node too.
-                          label: Text(() {
-                            if (_display == 2) return '';
-                            final node = resolve(item.now);
-                            if (node == null || node == item.name) {
-                              return item.name;
-                            }
-                            return '${item.name} → $node';
-                          }()),
+                          // The strip names the filter only. Which server sits behind
+                          // 'Auto' is the list's job, not the strip's.
+                          label: Text(_display == 2 ? '' : item.name),
                           selected: item.name == active,
                           onSelected: (_) => ref
                               .read(portalGroupProvider.notifier)
