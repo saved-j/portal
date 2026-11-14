@@ -302,7 +302,8 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
   final _controller = ScrollController();
   var _canBack = false;
   var _canForward = false;
-  /// 0 — название, 1 — название и сервер, 2 — иконка и сервер, 3 — только иконка.
+  /// 0 — название, 1 — иконка и название, 2 — только иконка. The strip never names
+  /// the server: which one sits behind 'Auto' is the list's answer, not the strip's.
   var _display = 0;
 
   @override
@@ -338,14 +339,6 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
     final allGroups = ref.watch(groupsProvider);
     final filters = ref.watch(portalFiltersProvider);
     final groups = portalVisibleGroups(allGroups, filters.hidden, filters.order);
-    final byName = {for (final item in allGroups) item.name: item};
-    String? resolve(String? name, [int depth = 0]) {
-      if (name == null || depth > 6) return null;
-      final next = byName[name];
-      if (next == null) return name;
-      return resolve(next.now, depth + 1);
-    }
-
     final active = ref.watch(portalGroupProvider) ?? groups.firstOrNull?.name;
     final hint = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7);
     return Row(
@@ -358,7 +351,7 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
         ),
         Expanded(
           child: GestureDetector(
-            onDoubleTap: () => setState(() => _display = (_display + 1) % 4),
+            onDoubleTap: () => setState(() => _display = (_display + 1) % 3),
             child: NotificationListener<ScrollMetricsNotification>(
               onNotification: (_) {
                 _syncEdges();
@@ -378,12 +371,8 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                           // icon+server, icon. Everything centres by construction.
                           label: Builder(
                             builder: (context) {
-                              final node = resolve(item.now);
-                              final server =
-                                  node == null || node == item.name ? null : node;
-                              final showIcon = _display >= 2;
+                              final showIcon = _display >= 1;
                               final showName = _display <= 1;
-                              final showServer = _display == 1 || _display == 2;
                               final mark = SizedBox.square(
                                 dimension: 16,
                                 child: CommonTargetIcon(
@@ -391,19 +380,15 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                   fallback: GroupMonogram(item.name),
                                 ),
                               );
-                              if (!showName && !showServer) return mark;
-                              final text = [
-                                if (showName) item.name,
-                                if (showServer && server != null) server,
-                              ].join(' · ');
-                              if (!showIcon) return Text(text);
+                              if (!showName) return mark;
+                              if (!showIcon) return Text(item.name);
                               return Row(
                                 mainAxisSize: MainAxisSize.min,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   mark,
                                   const SizedBox(width: 6),
-                                  Text(text),
+                                  Text(item.name),
                                 ],
                               );
                             },
