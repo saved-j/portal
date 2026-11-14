@@ -47,6 +47,23 @@ class PortalPendingNotifier extends Notifier<String?> {
 final portalPendingProvider =
     NotifierProvider<PortalPendingNotifier, String?>(PortalPendingNotifier.new);
 
+/// Rows whose protocol is revealed. Long press toggles one row, so the label stays
+/// where the eye already looks — in front of the delay, not in a sheet.
+class PortalProtocolRowsNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void toggle(String name) {
+    final next = {...state};
+    if (!next.remove(name)) next.add(name);
+    state = next;
+  }
+}
+
+final portalProtocolRowsProvider =
+    NotifierProvider<PortalProtocolRowsNotifier, Set<String>>(
+        PortalProtocolRowsNotifier.new);
+
 class PortalFiltersNotifier extends Notifier<({Set<String> hidden, List<String> order})> {
   @override
   ({Set<String> hidden, List<String> order}) build() =>
@@ -495,6 +512,9 @@ class _ServerRowState extends ConsumerState<_ServerRow>
         ? resolve(widget.proxy.name)
         : null;
     final delay = ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
+    final revealed = ref.watch(
+      portalProtocolRowsProvider.select((rows) => rows.contains(widget.proxy.name)),
+    );
     final color = widget.selected
         ? scheme.onPrimaryContainer
         : scheme.onSurfaceVariant;
@@ -525,12 +545,7 @@ class _ServerRowState extends ConsumerState<_ServerRow>
           child: child,
         );
       },
-      child: GestureDetector(
-        onDoubleTap: () {
-          HapticFeedback.mediumImpact();
-          showPortalDetails(context, widget.proxy, widget.group);
-        },
-        child: ListTile(
+      child: ListTile(
         dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8),
         leading: GlyphIcon(
@@ -549,12 +564,27 @@ class _ServerRowState extends ConsumerState<_ServerRow>
             fontWeight: widget.selected ? FontWeight.w600 : null,
           ),
         ),
-        trailing: Text(
-          _delayText(delay),
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: _delayColor(delay),
-            fontWeight: FontWeight.w600,
-          ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (revealed) ...[
+              Text(
+                widget.proxy.type.toUpperCase(),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  letterSpacing: 0.4,
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              _delayText(delay),
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: _delayColor(delay),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
         onTap: () {
           HapticFeedback.selectionClick();
@@ -564,7 +594,10 @@ class _ServerRowState extends ConsumerState<_ServerRow>
                 proxyName: widget.proxy.name,
               );
         },
-        ),
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          ref.read(portalProtocolRowsProvider.notifier).toggle(widget.proxy.name);
+        },
       ),
     );
   }
@@ -815,55 +848,3 @@ final portalConnectionsBadgeProvider =
     NotifierProvider<PortalBadgeNotifier, bool>(PortalBadgeNotifier.new);
 
 
-/// What the row actually is: the protocol the engine reports, who provides it and
-/// where it sits. Double tap, because a single tap already means 'use this one'.
-Future<void> showPortalDetails(
-  BuildContext context,
-  Proxy proxy,
-  Group group,
-) {
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (context) {
-      final theme = Theme.of(context);
-      Widget row(String label, String value) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 120,
-                  child: Text(
-                    label,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ),
-                Expanded(
-                  child: Text(value, style: theme.textTheme.bodyMedium),
-                ),
-              ],
-            ),
-          );
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(proxy.name, style: theme.textTheme.titleMedium),
-              const SizedBox(height: 10),
-              row('Протокол', proxy.type.toUpperCase()),
-              row('Провайдер', proxy.providerName ?? '—'),
-              row('Описание', proxy.serverDescription ?? '—'),
-              row('Группа', group.name),
-              row('Сейчас', group.now ?? '—'),
-            ],
-          ),
-        ),
-      );
-    },
-  );
-}
