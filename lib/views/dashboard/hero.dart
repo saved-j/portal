@@ -640,11 +640,14 @@ class _ConnectButton extends ConsumerWidget {
           (g) => !{'DIRECT', 'REJECT'}.contains(g.name.toUpperCase()),
           orElse: () => groups.first,
         );
+    // Only a real icon from the panel: a monogram letter inside the portal reads as a
+    // stray glyph, not as a server.
+    if (group.icon.isEmpty) return null;
     return SizedBox.square(
       dimension: 56,
       child: CommonTargetIcon(
         src: group.icon,
-        fallback: GroupMonogram(group.name),
+        fallback: const SizedBox.shrink(),
       ),
     );
   }

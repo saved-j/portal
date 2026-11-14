@@ -187,7 +187,7 @@ class PortalModeSwitch extends ConsumerWidget {
     if (modes.length < 2) return const SizedBox.shrink();
     return Row(
       children: [
-        const Spacer(),
+        // Switch at the left edge, its label to the right of it.
         // Centred pair: a larger label in the legacy green while the network is on,
         // and a switch that reads as a switch. The editor button only exists in the
         // network mode, so 'Сеть порталов' has somewhere obvious to lead.
@@ -199,16 +199,6 @@ class PortalModeSwitch extends ConsumerWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                context.appLocalizations.rules,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: mode == Mode.rule
-                      ? const Color(0xFF00F5A0)
-                      : theme.colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 8),
               Switch(
                 value: mode == Mode.rule,
                 activeThumbColor: const Color(0xFF00F5A0),
@@ -220,19 +210,16 @@ class PortalModeSwitch extends ConsumerWidget {
                       .pickMode(value ? Mode.rule : Mode.global);
                 },
               ),
-              if (mode == Mode.rule) ...[
-                const SizedBox(width: 4),
-                // One hub for everything the network mode adds: the proxies
-                // dashboard, the sort order and the filter editor.
-                IconButton(
-                  tooltip: 'Сеть порталов',
-                  onPressed: () {
-                    HapticFeedback.selectionClick();
-                    _showNetworkActions(context, ref);
-                  },
-                  icon: const GlyphIcon(AppGlyphs.sliders, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                context.appLocalizations.rules,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: mode == Mode.rule
+                      ? const Color(0xFF00F5A0)
+                      : theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
                 ),
-              ],
+              ),
             ],
           ),
         ),
@@ -411,6 +398,24 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
     final hint = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7);
     return Row(
       children: [
+        // Leftmost control of the strip: tap for the filter editor, hold for the
+        // proxies dashboard. Sorting lives on its own button and is not repeated here.
+        GestureDetector(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            showPortalFilterEditor(context);
+          },
+          onLongPress: () {
+            HapticFeedback.mediumImpact();
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ProxiesView()),
+            );
+          },
+          child: const Padding(
+            padding: EdgeInsets.only(right: 6),
+            child: GlyphIcon(AppGlyphs.sliders, size: 20),
+          ),
+        ),
         SizedBox(
           width: 18,
           child: _canBack
@@ -880,52 +885,3 @@ final portalConnectionsBadgeProvider =
 
 
 
-/// Everything the network mode adds, behind one button: the proxies dashboard, the
-/// order of the server list, and the editor for the filter strip.
-Future<void> _showNetworkActions(BuildContext context, WidgetRef ref) {
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (sheetContext) {
-      final sort = ref.read(portalSortProvider);
-      return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const GlyphIcon(AppGlyphs.proxies),
-              title: const Text('Порталы'),
-              subtitle: const Text('Зашборд прокси: группы, узлы, замеры'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ProxiesView()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const GlyphIcon(AppGlyphs.sort),
-              title: const Text('Сортировка'),
-              subtitle: Text(
-                sort == PortalSort.ping ? 'сейчас: по пингу' : 'сейчас: по имени',
-              ),
-              onTap: () {
-                ref.read(portalSortProvider.notifier).toggle();
-                Navigator.of(sheetContext).pop();
-              },
-            ),
-            ListTile(
-              leading: const GlyphIcon(AppGlyphs.filter),
-              title: const Text('Фильтры'),
-              subtitle: const Text('Порядок и скрытие групп в ленте'),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                showPortalFilterEditor(context);
-              },
-            ),
-          ],
-        ),
-      );
-    },
-  );
-}
