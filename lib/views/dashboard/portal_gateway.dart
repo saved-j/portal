@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:flutter/scheduler.dart';
+
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/ui/ui.dart';
@@ -46,19 +48,19 @@ class PortalGatewayCore extends StatefulWidget {
 
 class _PortalGatewayCoreState extends State<PortalGatewayCore>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    // A porthole does not loop; time runs long enough that nothing ever "cuts".
-    duration: const Duration(seconds: 1000),
-  )..repeat();
+  // An endless clock, not a cycle: nothing rewinds, so the sky never cuts back to a
+  // beginning. Depth is a function of elapsed seconds.
+  final ValueNotifier<double> _clock = ValueNotifier<double>(0);
+  late final Ticker _ticker = createTicker((elapsed) {
+    _clock.value = elapsed.inMicroseconds / Duration.microsecondsPerSecond;
+  })..start();
 
-  /// One randomly generated sky. Regenerated every cycle so the picture is never the
-  /// same twice, which is the point of a porthole.
   final _SpaceField _space = _SpaceField.generate(math.Random());
 
   @override
   void dispose() {
-    _controller.dispose();
+    _ticker.dispose();
+    _clock.dispose();
     super.dispose();
   }
 
@@ -106,10 +108,10 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
     return SizedBox.square(
       dimension: widget.size,
       child: AnimatedBuilder(
-        animation: _controller,
+        animation: _clock,
         builder: (context, child) {
-          final t = reduced ? 0.0 : _controller.value;
-          final pulse = reduced ? 1.0 : 0.95 + 0.11 * _pulseWave(t);
+          final t = reduced ? 0.0 : _clock.value;
+          final pulse = reduced ? 1.0 : 0.97 + 0.05 * _pulseWave(t);
           return Transform.scale(
             scale: pulse,
             child: CustomPaint(
@@ -138,8 +140,8 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
     );
   }
 
-  /// 0 → 1 → 0 across the loop, so the breathing is symmetric.
-  double _pulseWave(double t) => math.sin(t * math.pi * 2).abs();
+  /// Breathing on the endless clock: one breath per 2.5 seconds.
+  double _pulseWave(double seconds) => math.sin(seconds * 0.8).abs();
 }
 
 class _GatewayPainter extends CustomPainter {
@@ -214,7 +216,7 @@ class _GatewayPainter extends CustomPainter {
 
     // Everything drifts outward from the centre: depth maps to radius, so the sky
     // flies at the viewer instead of cutting to another frame.
-    final flow = turn * 200.0;
+    final flow = turn * 0.22;
 
     for (final star in space.stars) {
       final z = (star.z + flow * star.speed) % 1.0;
@@ -224,7 +226,7 @@ class _GatewayPainter extends CustomPainter {
         center.dy + math.sin(star.angle) * distance,
       );
       final edge = math.min(1.0, (1.0 - z) / 0.08);
-      final twinkle = 0.55 + 0.45 * math.sin(turn * math.pi * 400 + star.angle * 9);
+      final twinkle = 0.55 + 0.45 * math.sin(turn * 2.4 + star.angle * 9);
       final alpha = (0.15 + 0.85 * z) * edge * twinkle;
       canvas.drawCircle(
         offset,
@@ -280,7 +282,7 @@ class _GatewayPainter extends CustomPainter {
     }
 
     for (final comet in space.comets) {
-      final progress = (turn * 1.6 + comet.offset) % 1.0;
+      final progress = (turn * 0.06 + comet.offset) % 1.0;
       final head = Offset(
         center.dx + comet.x * radius + comet.dx * radius * progress,
         center.dy + comet.y * radius + comet.dy * radius * progress,

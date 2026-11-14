@@ -20,6 +20,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'pages/pages.dart';
+import 'views/dashboard/portal_launch.dart';
 
 Widget buildManagerStack({
   required bool isDesktop,
@@ -158,15 +159,17 @@ class ApplicationState extends ConsumerState<Application> {
             ...GlobalMaterialLocalizations.delegates,
           ],
           builder: (context, child) {
-            return ThemeCrossFade(
-              child: buildManagerStack(
+            return PortalLaunchGate(
+              child: ThemeCrossFade(
+                child: buildManagerStack(
                 isDesktop: system.isDesktop,
                 onConnectivityChanged: _handleConnectivityChanged,
                 terminateSignals: _terminateSignals,
-                child: RemoteFocusAdapter(
-                  enabled: system.isTV,
-                  floatingKeyboard: app?.floatingKeyboard,
-                  child: child!,
+                  child: RemoteFocusAdapter(
+                    enabled: system.isTV,
+                    floatingKeyboard: app?.floatingKeyboard,
+                    child: child!,
+                  ),
                 ),
               ),
             );
