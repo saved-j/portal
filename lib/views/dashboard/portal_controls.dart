@@ -501,7 +501,12 @@ class _ServerRowState extends ConsumerState<_ServerRow>
           child: child,
         );
       },
-      child: ListTile(
+      child: GestureDetector(
+        onDoubleTap: () {
+          HapticFeedback.mediumImpact();
+          showPortalDetails(context, widget.proxy, widget.group);
+        },
+        child: ListTile(
         dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8),
         leading: GlyphIcon(
@@ -535,6 +540,7 @@ class _ServerRowState extends ConsumerState<_ServerRow>
                 proxyName: widget.proxy.name,
               );
         },
+        ),
       ),
     );
   }
@@ -783,3 +789,57 @@ final portalProfilesBadgeProvider =
     NotifierProvider<PortalBadgeNotifier, bool>(PortalBadgeNotifier.new);
 final portalConnectionsBadgeProvider =
     NotifierProvider<PortalBadgeNotifier, bool>(PortalBadgeNotifier.new);
+
+
+/// What the row actually is: the protocol the engine reports, who provides it and
+/// where it sits. Double tap, because a single tap already means 'use this one'.
+Future<void> showPortalDetails(
+  BuildContext context,
+  Proxy proxy,
+  Group group,
+) {
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) {
+      final theme = Theme.of(context);
+      Widget row(String label, String value) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 120,
+                  child: Text(
+                    label,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ),
+                Expanded(
+                  child: Text(value, style: theme.textTheme.bodyMedium),
+                ),
+              ],
+            ),
+          );
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(proxy.name, style: theme.textTheme.titleMedium),
+              const SizedBox(height: 10),
+              row('Протокол', proxy.type.toUpperCase()),
+              row('Провайдер', proxy.providerName ?? '—'),
+              row('Описание', proxy.serverDescription ?? '—'),
+              row('Группа', group.name),
+              row('Сейчас', group.now ?? '—'),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
