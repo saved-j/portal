@@ -72,10 +72,12 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     final appLocalizations = context.appLocalizations;
     return CommonScaffold(
       backgroundColor: DashboardColors.of(context).page,
+      // The hero screen carries its own header: a title bar with the page name,
+      // a mode toggle and the developer core-reset button is noise there.
       title: editing
           ? appLocalizations.editDashboard
-          : appLocalizations.dashboard,
-      actions: [if (!editing) const CoreStatusButton()],
+          : (hero ? '' : appLocalizations.dashboard),
+      actions: [if (!editing && !hero) const CoreStatusButton()],
       confirmationAction: editing
           ? IconButtonData(
               glyph: AppGlyphs.check,
@@ -84,7 +86,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             )
           : null,
       iconActions: [
-        if (mode != null && ref.watch(globalModeAllowedProvider))
+        if (mode != null && !hero && ref.watch(globalModeAllowedProvider))
           IconButtonData(
             glyph: mode == Mode.global ? AppGlyphs.proxies : AppGlyphs.rules,
             tooltip:

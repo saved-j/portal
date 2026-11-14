@@ -98,28 +98,20 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                             size: 22,
                           ),
                         ),
+                        // No app icon and no app name here: the screen shows the
+                        // service the subscription belongs to, not the product that
+                        // opened the door.
                         Expanded(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            spacing: 10,
-                            children: [
-                              _ServiceLogo(
-                                url: headers.serviceLogo,
-                                size: _inlineLogoSize,
-                                radius: AppRadius.md,
+                          child: Center(
+                            child: EmojiText(
+                              headers.serviceName ?? 'portal-connect',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyle.title3.of(
+                                context,
+                                emphasized: true,
                               ),
-                              Flexible(
-                                child: EmojiText(
-                                  headers.serviceName ?? appName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyle.title2.of(
-                                    context,
-                                    emphasized: true,
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                         IconButton(
