@@ -96,7 +96,10 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
       });
     }
     final selectedName = _picked ?? group.now;
-    final members = [...group.all];
+    final members = [
+      for (final proxy in group.all)
+        if (!{'DIRECT', 'REJECT'}.contains(proxy.name.toUpperCase())) proxy,
+    ];
     if (_order == _SortOrder.alphabet) {
       members.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     } else {
