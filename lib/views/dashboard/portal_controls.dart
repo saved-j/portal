@@ -56,15 +56,21 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
   /// visual: it is applied the moment the tunnel comes up.
   String? _picked;
 
+  /// Which group the strip shows; the list follows it.
+  String? _groupName;
+
   @override
   Widget build(BuildContext context) {
-    final groups = ref.watch(groupsProvider);
-    final group = groups
-        .where((item) => item.hidden == false)
-        .where((item) {
+    final allGroups = ref.watch(groupsProvider);
+    final groups = allGroups.where((item) {
+      if (item.hidden == true) return false;
       final name = item.name.toUpperCase();
       return name != 'DIRECT' && name != 'REJECT';
-    }).firstOrNull;
+    }).toList();
+    final group = groups
+            .where((item) => item.name == _groupName)
+            .firstOrNull ??
+        groups.firstOrNull;
     if (group == null) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -103,13 +109,40 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
       children: [
         Row(
           children: [
-            Text(
-              group.name,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+            if (groups.length <= 1)
+              Text(
+                group.name,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              )
+            else
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final item in groups)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text(item.name),
+                            selected: item.name == group.name,
+                            onSelected: (_) =>
+                                setState(() => _groupName = item.name),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
+            IconButton(
+              tooltip: context.appLocalizations.delayTest,
+              onPressed: () => ref
+                  .read(proxiesActionProvider.notifier)
+                  .delayTest(group.all),
+              icon: const GlyphIcon(AppGlyphs.bolt, size: 18),
             ),
-            const Spacer(),
             IconButton(
               tooltip: '${context.appLocalizations.sort}: '
                   '${_order == _SortOrder.ping ? 'пинг' : 'A-Z'}',
