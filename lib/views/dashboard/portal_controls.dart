@@ -140,10 +140,16 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
                 ),
               ),
             IconButton(
-              tooltip: context.appLocalizations.delayTest,
-              onPressed: () => ref
-                  .read(proxiesActionProvider.notifier)
-                  .delayTest(group.all),
+              // Delay is measured through the running core, so the button stays
+              // disabled until the portal is open instead of answering -1 ms.
+              tooltip: running
+                  ? context.appLocalizations.delayTest
+                  : context.appLocalizations.openPortal,
+              onPressed: running
+                  ? () => ref
+                      .read(proxiesActionProvider.notifier)
+                      .delayTest(group.all)
+                  : null,
               icon: const GlyphIcon(AppGlyphs.bolt, size: 18),
             ),
             IconButton(
@@ -195,10 +201,8 @@ class _ServerRow extends ConsumerWidget {
       dense: true,
       selected: selected,
       // Colour, not just the marker: a tinted row is what the eye finds first.
-      tileColor: selected
-          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.45)
-          : null,
-      selectedTileColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.45),
+      tileColor: selected ? theme.colorScheme.primaryContainer : null,
+      selectedTileColor: theme.colorScheme.primaryContainer,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 8),
       leading: GlyphIcon(
