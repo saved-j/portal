@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/service_probe.dart' show routedOutbound;
 import 'package:fl_clash/features/features.dart';
+import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/outbound_ip.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -85,22 +86,51 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      spacing: 12,
                       children: [
-                        _ServiceLogo(
-                          url: headers.serviceLogo,
-                          size: _inlineLogoSize,
-                          radius: AppRadius.md,
+                        IconButton(
+                          tooltip: context.appLocalizations.tools,
+                          onPressed: () => ref
+                              .read(currentPageLabelProvider.notifier)
+                              .toPage(PageLabel.tools),
+                          icon: const GlyphIcon(
+                            AppGlyphs.settings,
+                            size: 22,
+                          ),
                         ),
-                        Flexible(
-                          child: EmojiText(
-                            headers.serviceName ?? appName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyle.title2.of(
-                              context,
-                              emphasized: true,
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            spacing: 10,
+                            children: [
+                              _ServiceLogo(
+                                url: headers.serviceLogo,
+                                size: _inlineLogoSize,
+                                radius: AppRadius.md,
+                              ),
+                              Flexible(
+                                child: EmojiText(
+                                  headers.serviceName ?? appName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyle.title2.of(
+                                    context,
+                                    emphasized: true,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: context.appLocalizations.profiles,
+                          onPressed: () => ref
+                              .read(currentPageLabelProvider.notifier)
+                              .toPage(PageLabel.profiles),
+                          icon: Badge(
+                            label: Text('${ref.watch(profilesProvider).length}'),
+                            child: const GlyphIcon(
+                              AppGlyphs.profiles,
+                              size: 22,
                             ),
                           ),
                         ),

@@ -55,6 +55,10 @@ class HomePage extends ConsumerWidget {
 class _HomeShell extends ConsumerWidget {
   const _HomeShell({required this.child});
 
+  /// Portal Connect ships without the bottom dock; `--dart-define=PORTAL_SHOW_DOCK=true`
+  /// brings it back for debugging the old navigation.
+  static final bool _showDock = bool.fromEnvironment('PORTAL_SHOW_DOCK');
+
   final Widget child;
 
   void _handleToPage(PageLabel pageLabel, WidgetRef ref) {
@@ -92,7 +96,10 @@ class _HomeShell extends ConsumerWidget {
                   end: 0,
                   bottom: 0,
                   child: AnimatedVisibility.bottomNavigation(
-                    visible: isMobile && floating,
+                    // Portal Connect is one surface: the dock is retired, the corners
+                    // of the page carry settings and subscriptions instead. The
+                    // environment flag keeps the old dock reachable for debugging.
+                    visible: _showDock && isMobile && floating,
                     child: _NavigationPadding(
                       child: NavigationDock(
                         destinations: [
@@ -114,7 +121,7 @@ class _HomeShell extends ConsumerWidget {
             ),
           ),
           AnimatedVisibility.bottomNavigation(
-            visible: isMobile && !floating,
+            visible: _showDock && isMobile && !floating,
             child: _NavigationPadding(
               child: NavigationBar(
                 destinations: [
