@@ -527,9 +527,9 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                 mainAxisSize: MainAxisSize.min,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Text(text),
-                                  const SizedBox(width: 6),
                                   mark,
+                                  const SizedBox(width: 6),
+                                  Text(text),
                                 ],
                               );
                             },
