@@ -11,6 +11,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/views/profiles/add.dart';
 import 'package:fl_clash/widgets/widgets.dart';
+import 'portal_controls.dart';
 import 'portal_gateway.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -140,6 +141,10 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                     const AnnouncementCard(),
                     if (ref.watch(announcementProvider) != null)
                       const SizedBox(height: _gap),
+                    const PortalModeSwitch(),
+                    const SizedBox(height: 8),
+                    const PortalServerList(),
+                    const SizedBox(height: _gap),
                     _ServerPanel(group: headers.serverGroup),
                     const SizedBox(height: _gap),
                     const ProfilesCard(),
