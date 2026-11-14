@@ -271,9 +271,9 @@ class PortalPlanCard extends ConsumerWidget {
                     style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),
-                if (used != null)
+                if (used != null && total > 0)
                   Text(
-                    '$used/$total'.replaceFirst('$used', gb(used)).replaceFirst('$total', gb(total)),
+                    '${gb(used)} / ${gb(total)}',
                     style: theme.textTheme.labelMedium
                         ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
