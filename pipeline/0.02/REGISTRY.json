@@ -59,8 +59,8 @@
     {
       "group": "40-interface",
       "file": "patches/40-interface.mbox",
-      "bytes": 99098,
-      "sha256": "6f550e88541f3378b5f2f65738adb5e110cc1338e5d61b6e88c928dbccf48d33",
+      "bytes": 102211,
+      "sha256": "9186470917c5a912029233ea64ff17b614a25abe15f78d0e245659dcae8326f7",
       "paths": [
         "lib/application.dart",
         "lib/common/l10n_labels.dart",

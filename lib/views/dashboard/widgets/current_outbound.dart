@@ -19,10 +19,11 @@ import 'package:material_ui/material_ui.dart';
 
 import 'card.dart';
 import 'proxy_groups.dart';
+import 'package:fl_clash/common/outbound.dart';
 
-const _builtinOutbounds = {'DIRECT', 'REJECT', 'REJECT-DROP', 'PASS'};
 
-bool isBuiltinOutbound(String name) => _builtinOutbounds.contains(name);
+
+bool isBuiltinOutbound(String name) => isBuiltinOutboundName(name);
 
 const _decorationGrowth = 0.12;
 

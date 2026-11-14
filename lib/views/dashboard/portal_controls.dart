@@ -571,6 +571,11 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                             ref
                                 .read(portalGroupProvider.notifier)
                                 .pick(item.name);
+                            // The porthole's mark reads the profile's current group; a
+                            // chip that only moved its own state left the two disagreeing.
+                            ref
+                                .read(proxiesActionProvider.notifier)
+                                .updateCurrentGroupName(item.name);
                           },
                             ),
                           ),
@@ -602,16 +607,27 @@ Color _liveGreen(BuildContext context) =>
         ? const Color(0xFF00F5A0)
         : const Color(0xFF0E9F6E);
 
-const _delayFast = Color(0xFF00F5A0);
-const _delaySlow = Color(0xFFFFC107);
-const _delayBad = Color(0xFFFF4B6E);
+// Theme-aware: the neon palette is right on the dark screen and unreadable on white.
+Color _delayFast(BuildContext context) => Theme.of(context).brightness == Brightness.dark
+    ? const Color(0xFF00F5A0)
+    : const Color(0xFF0E9F6E);
+Color _delaySlow(BuildContext context) => Theme.of(context).brightness == Brightness.dark
+    ? const Color(0xFFFFC107)
+    : const Color(0xFFB26A00);
+Color _delayBad(BuildContext context) => Theme.of(context).brightness == Brightness.dark
+    ? const Color(0xFFFF4B6E)
+    : const Color(0xFFB3261E);
 
-Color _delayColor(int? value) {
-  if (value == null) return const Color(0xFF7C8699);
-  if (value <= 0) return _delayBad; // timeout
-  if (value <= 399) return _delayFast;
-  if (value <= 1499) return _delaySlow;
-  return _delayBad;
+Color _delayColor(BuildContext context, int? value) {
+  if (value == null) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF7C8699)
+        : const Color(0xFF5F6B7A);
+  }
+  if (value <= 0) return _delayBad(context); // timeout
+  if (value <= 399) return _delayFast(context);
+  if (value <= 1499) return _delaySlow(context);
+  return _delayBad(context);
 }
 
 String _delayText(int? value) {
@@ -746,7 +762,7 @@ class _ServerRowState extends ConsumerState<_ServerRow>
             Text(
               _delayText(delay),
               style: theme.textTheme.labelMedium?.copyWith(
-                color: _delayColor(delay),
+                color: _delayColor(context, delay),
                 fontWeight: FontWeight.w600,
               ),
             ),

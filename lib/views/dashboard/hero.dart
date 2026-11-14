@@ -19,15 +19,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'style.dart';
-import 'widgets/widgets.dart';
 import 'package:fl_clash/common/outbound.dart';
 import 'package:flutter/services.dart';
 
 const heroMaxWidth = 520.0;
 
 const _logoSize = 96.0;
-const _flagSize = 52.0;
 const _connectHeight = 56.0;
 const _gap = 12.0;
 
@@ -250,72 +247,31 @@ class _EmptyHero extends StatelessWidget {
   }
 }
 
-/// The panel's logo, png or svg, else the app's own icon.
-class _ServiceLogo extends ConsumerWidget {
-  const _ServiceLogo({
-    this.url,
-    this.size = _logoSize,
-    this.radius = AppRadius.xxl,
-  });
-
-  final String? url;
-  final double size;
-  final BorderRadius radius;
+/// The app's own icon. The panel-logo branch that used to live here was unreachable —
+/// no call site ever passed a url — so the widget is what it always did in practice.
+class _ServiceLogo extends StatelessWidget {
+  const _ServiceLogo();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final url = this.url;
-    final fallback = Image.asset(
-      'assets/images/icon.png',
-      width: size,
-      height: size,
-      fit: BoxFit.cover,
-    );
-    final path = url == null
-        ? null
-        : ref.watch(panelLogoPathProvider(url)).value;
-    final Widget logo = url == null || path == null
-        ? fallback
-        : url.toLowerCase().endsWith('.svg')
-        ? SvgPicture.file(
-            File(path),
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-            placeholderBuilder: (_) => fallback,
-          )
-        : Image.file(
-            File(path),
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => fallback,
-          );
-    return Center(
-      child: ClipRSuperellipse(
-        borderRadius: radius,
-        child: SizedBox.square(dimension: size, child: logo),
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(_logoSize / 4),
+      child: Image.asset(
+        'assets/images/icon.png',
+        width: _logoSize,
+        height: _logoSize,
+        fit: BoxFit.cover,
       ),
     );
   }
 }
 
-/// The selection the panel's group, or the first group with one, is on,
-/// with its flag, the exit address while running and its delay; a tap
-/// opens the picker.
-/// countries.
-
-/// Four bars, as a phone shows its signal, lit by how low the delay is.
-
-/// Full width: filled with a play glyph while stopped, easing into an
-/// outline in the primary color with a stop glyph and the run time while
-/// running.
-/// When the portal was switched off, in wall-clock milliseconds. A top-level notifier
-/// because the closing animation outlives the widget that started it.
+/// When the portal was switched off, in wall-clock milliseconds. Top-level because the
+/// closing iris outlives the widget that started it.
 final ValueNotifier<int?> portalClosedAtMs = ValueNotifier<int?>(null);
 
 /// When the portal was switched on. The ignition runs from the press, not from the
-/// moment the engine reports a tunnel — the picture must lead, the task follows.
+/// moment the engine reports a tunnel — the picture leads, the task follows.
 final ValueNotifier<int?> portalOpenedAtMs = ValueNotifier<int?>(null);
 
 class _ConnectButton extends ConsumerWidget {

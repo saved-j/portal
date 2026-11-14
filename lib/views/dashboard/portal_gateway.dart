@@ -99,7 +99,6 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
   Widget build(BuildContext context) {
     final colorScheme = context.colorScheme;
     final portal = colorScheme.primary;
-    final accent = colorScheme.tertiary;
     final reduced = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     final Widget core;
     if (!widget.isStart) {
@@ -145,7 +144,6 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
             child: CustomPaint(
               painter: _GatewayPainter(
                 portal: portal,
-                accent: accent,
                 turn: t,
                 active: widget.isStart || _igniting(),
                 intensity: widget.intensity,
@@ -199,7 +197,6 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
 class _GatewayPainter extends CustomPainter {
   const _GatewayPainter({
     required this.portal,
-    required this.accent,
     required this.turn,
     required this.active,
     required this.intensity,
@@ -209,7 +206,6 @@ class _GatewayPainter extends CustomPainter {
   });
 
   final Color portal;
-  final Color accent;
   final double turn;
   final bool active;
   final double intensity;
@@ -505,7 +501,6 @@ class _GatewayPainter extends CustomPainter {
       oldDelegate.turn != turn ||
       oldDelegate.active != active ||
       oldDelegate.portal != portal ||
-      oldDelegate.accent != accent ||
       oldDelegate.space != space ||
       oldDelegate.ignite != ignite ||
       oldDelegate.collapse != collapse;

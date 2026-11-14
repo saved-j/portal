@@ -217,10 +217,10 @@ index 66821acb77b0a0fa59ff034c8ae2e96d8a6fb22e..4dcce94acb0ff77038fb2e39d4d99835
                  .read(setupActionProvider.notifier)
                  .pickMode(mode == Mode.global ? Mode.rule : Mode.global),
 diff --git a/lib/views/dashboard/hero.dart b/lib/views/dashboard/hero.dart
-index bff7fb331bc423a6fef223bf1854ccfc2188700f..fa12947d72f5cba6af81c30b718424763453aa4e 100644
+index bff7fb331bc423a6fef223bf1854ccfc2188700f..2cdd3a94dbbd9d84635fa189cb3a88cf97cdb43e 100644
 --- a/lib/views/dashboard/hero.dart
 +++ b/lib/views/dashboard/hero.dart
-@@ -3,25 +3,30 @@ import 'dart:io';
+@@ -3,26 +3,28 @@ import 'dart:io';
  import 'package:collection/collection.dart';
  import 'package:fl_clash/common/common.dart';
  import 'package:fl_clash/common/service_probe.dart' show routedOutbound;
@@ -241,9 +241,9 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..fa12947d72f5cba6af81c30b71842476
  import 'package:flutter_svg/flutter_svg.dart';
  import 'package:material_ui/material_ui.dart';
  
- import 'style.dart';
+-import 'style.dart';
 -import 'widgets/card.dart';
- import 'widgets/widgets.dart';
+-import 'widgets/widgets.dart';
 +import 'package:fl_clash/common/outbound.dart';
 +import 'package:flutter/services.dart';
  
@@ -251,10 +251,11 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..fa12947d72f5cba6af81c30b71842476
  
  const _logoSize = 96.0;
 -const _inlineLogoSize = 56.0;
- const _flagSize = 52.0;
+-const _flagSize = 52.0;
  const _connectHeight = 56.0;
  const _gap = 12.0;
-@@ -84,42 +89,127 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
+ 
+@@ -84,42 +86,127 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                    crossAxisAlignment: CrossAxisAlignment.stretch,
                    children: [
                      Row(
@@ -406,17 +407,86 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..fa12947d72f5cba6af81c30b71842476
            ],
          ),
        ),
-@@ -213,418 +303,133 @@ class _ServiceLogo extends ConsumerWidget {
- /// The selection the panel's group, or the first group with one, is on,
- /// with its flag, the exit address while running and its delay; a tap
- /// opens the picker.
+@@ -160,471 +247,145 @@ class _EmptyHero extends StatelessWidget {
+   }
+ }
+ 
+-/// The panel's logo, png or svg, else the app's own icon.
+-class _ServiceLogo extends ConsumerWidget {
+-  const _ServiceLogo({
+-    this.url,
+-    this.size = _logoSize,
+-    this.radius = AppRadius.xxl,
+-  });
+-
+-  final String? url;
+-  final double size;
+-  final BorderRadius radius;
++/// The app's own icon. The panel-logo branch that used to live here was unreachable —
++/// no call site ever passed a url — so the widget is what it always did in practice.
++class _ServiceLogo extends StatelessWidget {
++  const _ServiceLogo();
+ 
+   @override
+-  Widget build(BuildContext context, WidgetRef ref) {
+-    final url = this.url;
+-    final fallback = Image.asset(
+-      'assets/images/icon.png',
+-      width: size,
+-      height: size,
+-      fit: BoxFit.cover,
+-    );
+-    final path = url == null
+-        ? null
+-        : ref.watch(panelLogoPathProvider(url)).value;
+-    final Widget logo = url == null || path == null
+-        ? fallback
+-        : url.toLowerCase().endsWith('.svg')
+-        ? SvgPicture.file(
+-            File(path),
+-            width: size,
+-            height: size,
+-            fit: BoxFit.cover,
+-            placeholderBuilder: (_) => fallback,
+-          )
+-        : Image.file(
+-            File(path),
+-            width: size,
+-            height: size,
+-            fit: BoxFit.cover,
+-            errorBuilder: (_, _, _) => fallback,
+-          );
+-    return Center(
+-      child: ClipRSuperellipse(
+-        borderRadius: radius,
+-        child: SizedBox.square(dimension: size, child: logo),
++  Widget build(BuildContext context) {
++    return ClipRRect(
++      borderRadius: BorderRadius.circular(_logoSize / 4),
++      child: Image.asset(
++        'assets/images/icon.png',
++        width: _logoSize,
++        height: _logoSize,
++        fit: BoxFit.cover,
+       ),
+     );
+   }
+ }
+ 
+-/// The selection the panel's group, or the first group with one, is on,
+-/// with its flag, the exit address while running and its delay; a tap
+-/// opens the picker.
 -class _ServerPanel extends ConsumerWidget {
 -  const _ServerPanel({required this.group});
-+/// countries.
++/// When the portal was switched off, in wall-clock milliseconds. Top-level because the
++/// closing iris outlives the widget that started it.
++final ValueNotifier<int?> portalClosedAtMs = ValueNotifier<int?>(null);
  
 -  /// The group the panel named, else the first with a live pick.
 -  final String? group;
-+/// Four bars, as a phone shows its signal, lit by how low the delay is.
++/// When the portal was switched on. The ignition runs from the press, not from the
++/// moment the engine reports a tunnel — the picture leads, the task follows.
++final ValueNotifier<int?> portalOpenedAtMs = ValueNotifier<int?>(null);
  
 -  @override
 -  Widget build(BuildContext context, WidgetRef ref) {
@@ -615,20 +685,24 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..fa12947d72f5cba6af81c30b71842476
 -    );
 -  }
 -}
-+/// Full width: filled with a play glyph while stopped, easing into an
-+/// outline in the primary color with a stop glyph and the run time while
-+/// running.
-+/// When the portal was switched off, in wall-clock milliseconds. A top-level notifier
-+/// because the closing animation outlives the widget that started it.
-+final ValueNotifier<int?> portalClosedAtMs = ValueNotifier<int?>(null);
++class _ConnectButton extends ConsumerWidget {
  
 -Group? _pickedGroupOf(List<Group> groups, String? name) {
 -  if (name != null) {
 -    final named = groups.getGroup(name);
 -    if (named != null) {
 -      return named;
--    }
--  }
++  /// The press answers with its own rhythm: opening is a heavier double beat, closing a
++  /// softer pair — the hand should feel which way the portal is going.
++  void _portalHaptics({required bool starting}) {
++    if (starting) {
++      HapticFeedback.heavyImpact();
++      Future<void>.delayed(const Duration(milliseconds: 130), HapticFeedback.mediumImpact);
++    } else {
++      HapticFeedback.mediumImpact();
++      Future<void>.delayed(const Duration(milliseconds: 150), HapticFeedback.lightImpact);
+     }
+   }
 -  for (final group in groups) {
 -    if (group.realNow.isNotEmpty && !isBuiltinOutbound(group.realNow)) {
 -      return group;
@@ -636,10 +710,7 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..fa12947d72f5cba6af81c30b71842476
 -  }
 -  return groups.firstOrNull;
 -}
-+/// When the portal was switched on. The ignition runs from the press, not from the
-+/// moment the engine reports a tunnel — the picture must lead, the task follows.
-+final ValueNotifier<int?> portalOpenedAtMs = ValueNotifier<int?>(null);
- 
+-
 -/// The server's flag in a circle and a count of the group's other
 -/// countries.
 -class _FlagBadge extends StatelessWidget {
@@ -650,25 +721,13 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..fa12947d72f5cba6af81c30b71842476
 -    required this.checking,
 -    required this.onRefresh,
 -  });
-+class _ConnectButton extends ConsumerWidget {
  
 -  final String? code;
 -  final int count;
 -  final bool active;
 -  final bool checking;
 -  final VoidCallback onRefresh;
-+  /// The press answers with its own rhythm: opening is a heavier double beat, closing a
-+  /// softer pair — the hand should feel which way the portal is going.
-+  void _portalHaptics({required bool starting}) {
-+    if (starting) {
-+      HapticFeedback.heavyImpact();
-+      Future<void>.delayed(const Duration(milliseconds: 130), HapticFeedback.mediumImpact);
-+    } else {
-+      HapticFeedback.mediumImpact();
-+      Future<void>.delayed(const Duration(milliseconds: 150), HapticFeedback.lightImpact);
-+    }
-+  }
- 
+-
 -  @override
 -  Widget build(BuildContext context) {
 -    final colorScheme = context.colorScheme;
@@ -928,10 +987,10 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..fa12947d72f5cba6af81c30b71842476
  }
 diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..d3175e503a401a4661b50e903f9bf6eeb1a12223
+index 0000000000000000000000000000000000000000..1af5247973ddbfbd9fb0ffcf370f048db3a22ae7
 --- /dev/null
 +++ b/lib/views/dashboard/portal_controls.dart
-@@ -0,0 +1,966 @@
+@@ -0,0 +1,982 @@
 +import 'package:fl_clash/common/common.dart';
 +import 'package:fl_clash/enum/enum.dart';
 +import 'package:fl_clash/models/models.dart';
@@ -1505,6 +1564,11 @@ index 0000000000000000000000000000000000000000..d3175e503a401a4661b50e903f9bf6ee
 +                            ref
 +                                .read(portalGroupProvider.notifier)
 +                                .pick(item.name);
++                            // The porthole's mark reads the profile's current group; a
++                            // chip that only moved its own state left the two disagreeing.
++                            ref
++                                .read(proxiesActionProvider.notifier)
++                                .updateCurrentGroupName(item.name);
 +                          },
 +                            ),
 +                          ),
@@ -1536,16 +1600,27 @@ index 0000000000000000000000000000000000000000..d3175e503a401a4661b50e903f9bf6ee
 +        ? const Color(0xFF00F5A0)
 +        : const Color(0xFF0E9F6E);
 +
-+const _delayFast = Color(0xFF00F5A0);
-+const _delaySlow = Color(0xFFFFC107);
-+const _delayBad = Color(0xFFFF4B6E);
++// Theme-aware: the neon palette is right on the dark screen and unreadable on white.
++Color _delayFast(BuildContext context) => Theme.of(context).brightness == Brightness.dark
++    ? const Color(0xFF00F5A0)
++    : const Color(0xFF0E9F6E);
++Color _delaySlow(BuildContext context) => Theme.of(context).brightness == Brightness.dark
++    ? const Color(0xFFFFC107)
++    : const Color(0xFFB26A00);
++Color _delayBad(BuildContext context) => Theme.of(context).brightness == Brightness.dark
++    ? const Color(0xFFFF4B6E)
++    : const Color(0xFFB3261E);
 +
-+Color _delayColor(int? value) {
-+  if (value == null) return const Color(0xFF7C8699);
-+  if (value <= 0) return _delayBad; // timeout
-+  if (value <= 399) return _delayFast;
-+  if (value <= 1499) return _delaySlow;
-+  return _delayBad;
++Color _delayColor(BuildContext context, int? value) {
++  if (value == null) {
++    return Theme.of(context).brightness == Brightness.dark
++        ? const Color(0xFF7C8699)
++        : const Color(0xFF5F6B7A);
++  }
++  if (value <= 0) return _delayBad(context); // timeout
++  if (value <= 399) return _delayFast(context);
++  if (value <= 1499) return _delaySlow(context);
++  return _delayBad(context);
 +}
 +
 +String _delayText(int? value) {
@@ -1680,7 +1755,7 @@ index 0000000000000000000000000000000000000000..d3175e503a401a4661b50e903f9bf6ee
 +            Text(
 +              _delayText(delay),
 +              style: theme.textTheme.labelMedium?.copyWith(
-+                color: _delayColor(delay),
++                color: _delayColor(context, delay),
 +                fontWeight: FontWeight.w600,
 +              ),
 +            ),
@@ -1900,10 +1975,10 @@ index 0000000000000000000000000000000000000000..d3175e503a401a4661b50e903f9bf6ee
 +
 diff --git a/lib/views/dashboard/portal_gateway.dart b/lib/views/dashboard/portal_gateway.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..dbb8a184400fa893ecbe3ab197b7f2d9aa4934e6
+index 0000000000000000000000000000000000000000..b6df1592a65d2d16321dfc30ef593c64cde5f28c
 --- /dev/null
 +++ b/lib/views/dashboard/portal_gateway.dart
-@@ -0,0 +1,636 @@
+@@ -0,0 +1,631 @@
 +import 'dart:math' as math;
 +
 +import 'package:flutter/scheduler.dart';
@@ -2005,7 +2080,6 @@ index 0000000000000000000000000000000000000000..dbb8a184400fa893ecbe3ab197b7f2d9
 +  Widget build(BuildContext context) {
 +    final colorScheme = context.colorScheme;
 +    final portal = colorScheme.primary;
-+    final accent = colorScheme.tertiary;
 +    final reduced = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 +    final Widget core;
 +    if (!widget.isStart) {
@@ -2051,7 +2125,6 @@ index 0000000000000000000000000000000000000000..dbb8a184400fa893ecbe3ab197b7f2d9
 +            child: CustomPaint(
 +              painter: _GatewayPainter(
 +                portal: portal,
-+                accent: accent,
 +                turn: t,
 +                active: widget.isStart || _igniting(),
 +                intensity: widget.intensity,
@@ -2105,7 +2178,6 @@ index 0000000000000000000000000000000000000000..dbb8a184400fa893ecbe3ab197b7f2d9
 +class _GatewayPainter extends CustomPainter {
 +  const _GatewayPainter({
 +    required this.portal,
-+    required this.accent,
 +    required this.turn,
 +    required this.active,
 +    required this.intensity,
@@ -2115,7 +2187,6 @@ index 0000000000000000000000000000000000000000..dbb8a184400fa893ecbe3ab197b7f2d9
 +  });
 +
 +  final Color portal;
-+  final Color accent;
 +  final double turn;
 +  final bool active;
 +  final double intensity;
@@ -2411,7 +2482,6 @@ index 0000000000000000000000000000000000000000..dbb8a184400fa893ecbe3ab197b7f2d9
 +      oldDelegate.turn != turn ||
 +      oldDelegate.active != active ||
 +      oldDelegate.portal != portal ||
-+      oldDelegate.accent != accent ||
 +      oldDelegate.space != space ||
 +      oldDelegate.ignite != ignite ||
 +      oldDelegate.collapse != collapse;
@@ -2540,6 +2610,24 @@ index 0000000000000000000000000000000000000000..dbb8a184400fa893ecbe3ab197b7f2d9
 +  final n = math.sin(value * 127.1 + 311.7) * 43758.5453123;
 +  return n - n.floorToDouble();
 +}
+diff --git a/lib/views/dashboard/widgets/current_outbound.dart b/lib/views/dashboard/widgets/current_outbound.dart
+index b788b55a5f7483ac5ccd893ec89d6a745a90bdb5..da5063139c0d9964d2d1dfb36fa9e59fa85daff3 100644
+--- a/lib/views/dashboard/widgets/current_outbound.dart
++++ b/lib/views/dashboard/widgets/current_outbound.dart
+@@ -19,10 +19,11 @@ import 'package:material_ui/material_ui.dart';
+ 
+ import 'card.dart';
+ import 'proxy_groups.dart';
++import 'package:fl_clash/common/outbound.dart';
+ 
+-const _builtinOutbounds = {'DIRECT', 'REJECT', 'REJECT-DROP', 'PASS'};
+ 
+-bool isBuiltinOutbound(String name) => _builtinOutbounds.contains(name);
++
++bool isBuiltinOutbound(String name) => isBuiltinOutboundName(name);
+ 
+ const _decorationGrowth = 0.12;
+ 
 diff --git a/lib/views/hotkey.dart b/lib/views/hotkey.dart
 index 460627c385f58e7354bdd2e6ff60a1a16475370e..d8e346e61b6a41dd59a4df52c34a745425f09ac8 100644
 --- a/lib/views/hotkey.dart
