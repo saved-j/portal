@@ -24,11 +24,11 @@ import 'package:material_ui/material_ui.dart';
 import 'style.dart';
 import 'widgets/card.dart';
 import 'widgets/widgets.dart';
+import 'package:fl_clash/common/outbound.dart';
 
 const heroMaxWidth = 520.0;
 
 const _logoSize = 96.0;
-const _inlineLogoSize = 56.0;
 const _flagSize = 52.0;
 const _connectHeight = 56.0;
 const _gap = 12.0;
@@ -299,226 +299,6 @@ class _ServiceLogo extends ConsumerWidget {
 /// The selection the panel's group, or the first group with one, is on,
 /// with its flag, the exit address while running and its delay; a tap
 /// opens the picker.
-class _ServerPanel extends ConsumerWidget {
-  const _ServerPanel({required this.group});
-
-  /// The group the panel named, else the first with a live pick.
-  final String? group;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final appLocalizations = context.appLocalizations;
-    final colorScheme = context.colorScheme;
-    final colors = DashboardColors.of(context);
-    final groups = ref.watch(currentGroupsStateProvider).value;
-    final picked = _pickedGroupOf(groups, group);
-    final groupName = picked?.name;
-    final selected = groupName == null
-        ? null
-        : ref.watch(selectedProxyNameProvider(groupName));
-    final leaf = selected == null || selected.isEmpty
-        ? null
-        : ref.watch(realSelectedProxyStateProvider(selected));
-    final serverName = selected ?? '';
-    final delay = serverName.isEmpty
-        ? null
-        : ref.watch(
-            delayProvider(
-              proxyName: serverName,
-              testUrl: leaf?.testUrl ?? picked?.testUrl,
-            ),
-          );
-    final isStart = ref.watch(isStartProvider);
-    final entry = ref.watch(
-      outboundIpProbeProvider.select((state) => state.entryOf(routedOutbound)),
-    );
-    final ipInfo = entry.value;
-    final hideIp = ref.watch(
-      appSettingProvider.select((state) => state.hideIp),
-    );
-    final server = picked?.all.firstWhereOrNull(
-      (proxy) => proxy.name == serverName,
-    );
-    final nameCode =
-        serverName.flagCountryCode ??
-        server?.serverDescription?.flagCountryCode ??
-        leaf?.proxyName.flagCountryCode;
-    final code = nameCode ?? (isStart ? ipInfo?.countryCode : null);
-    final others = picked == null
-        ? const <String>[]
-        : ref
-              .watch(groupFlagsProvider(picked.name))
-              .where((other) => other != nameCode)
-              .toList();
-    final otherCount = others.isNotEmpty
-        ? others.length
-        : picked == null
-        ? 0
-        : (picked.all.length - 1).clamp(0, 999);
-    final title = serverName.isEmpty
-        ? appLocalizations.changeServer
-        : serverName.withoutLeadingFlag;
-    final ipStyle = DashboardText.label(context);
-    final Widget? ip = !isStart || serverName.isEmpty || hideIp
-        ? null
-        : ipInfo != null
-        ? Tooltip(
-            message: appLocalizations.details(appLocalizations.outboundIp),
-            child: InkWell(
-              mouseCursor: clickableCursor,
-              onTap: () => showIpQualitySheet(context, ip: ipInfo.ip),
-              customBorder: AppShape.xs,
-              child: Text(
-                ipInfo.ip,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: ipStyle,
-              ),
-            ),
-          )
-        : entry.isLoading
-        ? SkeletonText(width: 110, style: ipStyle)
-        : null;
-    final recheck = isStart && !entry.isLoading
-        ? () => ref.read(outboundIpProbeProvider.notifier).refresh(const [
-            routedOutbound,
-          ])
-        : null;
-    void changeServer() => showProxiesSheet(context, groupName: groupName);
-    final swap = groups.isEmpty || hideIp
-        ? null
-        : SizedBox(
-            height: AppTextStyle.headline.leading,
-            child: DashboardIconButton(
-              glyph: AppGlyphs.swap,
-              tooltip: appLocalizations.changeServer,
-              onPressed: changeServer,
-            ),
-          );
-    return DashboardCard(
-      semanticLabel: appLocalizations.changeServer,
-      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-      child: Row(
-        spacing: 12,
-        children: [
-          _FlagBadge(
-            code: code,
-            count: otherCount,
-            active: isStart,
-            checking: entry.isLoading,
-            onRefresh: recheck ?? () {},
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: hideIp
-                          ? Tooltip(
-                              message: appLocalizations.changeServer,
-                              child: FocusRing(
-                                shape: AppShape.xs,
-                                standsOff: true,
-                                child: InkWell(
-                                  mouseCursor: clickableCursor,
-                                  onTap: groups.isEmpty ? null : changeServer,
-                                  customBorder: AppShape.xs,
-                                  hoverColor: Colors.transparent,
-                                  splashColor: Colors.transparent,
-                                  highlightColor: Colors.transparent,
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      minHeight: kMinInteractiveDimension,
-                                    ),
-                                    child: Align(
-                                      alignment:
-                                          AlignmentDirectional.centerStart,
-                                      widthFactor: 1,
-                                      child: EmojiText(
-                                        title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTextStyle.title3.of(
-                                          context,
-                                          emphasized: true,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            )
-                          : EmojiText(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyle.headline.of(
-                                context,
-                                emphasized: true,
-                              ),
-                            ),
-                    ),
-                    ?swap,
-                  ],
-                ),
-                if (ip != null) ...[const SizedBox(height: 2), ip],
-              ],
-            ),
-          ),
-          if (serverName.isNotEmpty)
-            Tooltip(
-              message: appLocalizations.changeServer,
-              child: InkWell(
-                mouseCursor: clickableCursor,
-                onTap: groups.isEmpty ? null : changeServer,
-                customBorder: AppShape.xs,
-                child: SizedBox(
-                  width: 52,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _SignalBars(delay: delay),
-                      if (delay != null && delay > 0)
-                        Text(
-                          '$delay ms',
-                          maxLines: 1,
-                          style: DashboardText.figure(
-                            context,
-                            AppTextStyle.caption1,
-                            color:
-                                colorScheme.delayColor(delay) ?? colors.thumb,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-Group? _pickedGroupOf(List<Group> groups, String? name) {
-  if (name != null) {
-    final named = groups.getGroup(name);
-    if (named != null) {
-      return named;
-    }
-  }
-  for (final group in groups) {
-    if (group.realNow.isNotEmpty && !isBuiltinOutbound(group.realNow)) {
-      return group;
-    }
-  }
-  return groups.firstOrNull;
-}
-
-/// The server's flag in a circle and a count of the group's other
 /// countries.
 class _FlagBadge extends StatelessWidget {
   const _FlagBadge({
@@ -637,7 +417,7 @@ class _ConnectButton extends ConsumerWidget {
     );
     final group = groups.where((g) => g.name == current).firstOrNull ??
         groups.firstWhere(
-          (g) => !{'DIRECT', 'REJECT'}.contains(g.name.toUpperCase()),
+          (g) => !isBuiltinOutboundName(g.name),
           orElse: () => groups.first,
         );
     // Only a real icon from the panel: a monogram letter inside the portal reads as a

@@ -57,6 +57,17 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
 
   final _SpaceField _space = _SpaceField.generate(math.Random());
 
+  /// Clock value when the portal opened: the ignition runs for ~0.9 s from there.
+  double _ignitedAt = -1000;
+
+  @override
+  void didUpdateWidget(PortalGatewayCore oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isStart && !oldWidget.isStart) {
+      _ignitedAt = _clock.value;
+    }
+  }
+
   @override
   void dispose() {
     _ticker.dispose();
@@ -122,6 +133,7 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
                 active: widget.isStart,
                 intensity: widget.intensity,
                 space: _space,
+                ignite: ((t - _ignitedAt) / 0.9).clamp(0.0, 1.0),
               ),
               child: Center(
                 child: IconTheme.merge(
@@ -152,6 +164,7 @@ class _GatewayPainter extends CustomPainter {
     required this.active,
     required this.intensity,
     required this.space,
+    required this.ignite,
   });
 
   final Color portal;
@@ -160,6 +173,9 @@ class _GatewayPainter extends CustomPainter {
   final bool active;
   final double intensity;
   final _SpaceField space;
+
+  /// 0 → 1 over the first 0.9 s of an open portal; 1 means "fully open".
+  final double ignite;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -216,7 +232,7 @@ class _GatewayPainter extends CustomPainter {
 
     // Everything drifts outward from the centre: depth maps to radius, so the sky
     // flies at the viewer instead of cutting to another frame.
-    final flow = turn * 0.22;
+    final flow = turn * 1.15;
 
     for (final star in space.stars) {
       final z = (star.z + flow * star.speed) % 1.0;
@@ -226,7 +242,7 @@ class _GatewayPainter extends CustomPainter {
         center.dy + math.sin(star.angle) * distance,
       );
       final edge = math.min(1.0, (1.0 - z) / 0.08);
-      final twinkle = 0.55 + 0.45 * math.sin(turn * 2.4 + star.angle * 9);
+      final twinkle = 0.55 + 0.45 * math.sin(turn * 7.0 + star.angle * 9);
       final alpha = (0.15 + 0.85 * z) * edge * twinkle;
       canvas.drawCircle(
         offset,
@@ -236,7 +252,7 @@ class _GatewayPainter extends CustomPainter {
     }
 
     for (final planet in space.planets) {
-      final z = (planet.z + flow * 0.15 * planet.speed) % 1.0;
+      final z = (planet.z + flow * 0.42 * planet.speed) % 1.0;
       final distance = radius * 0.9 * z * z;
       final planetCenter = Offset(
         center.dx + math.cos(planet.angle) * distance,
@@ -282,7 +298,7 @@ class _GatewayPainter extends CustomPainter {
     }
 
     for (final comet in space.comets) {
-      final progress = (turn * 0.06 + comet.offset) % 1.0;
+      final progress = (turn * 0.22 + comet.offset) % 1.0;
       final head = Offset(
         center.dx + comet.x * radius + comet.dx * radius * progress,
         center.dy + comet.y * radius + comet.dy * radius * progress,
@@ -313,6 +329,25 @@ class _GatewayPainter extends CustomPainter {
       );
     }
 
+    if (ignite < 1) {
+      // Opening: a shock ring runs out from the core and the sky brightens, so the
+      // moment of connection is visible instead of merely being "on".
+      final e = ignite;
+      canvas.drawCircle(
+        center,
+        radius * (0.15 + 0.85 * e),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.4 * (1 - e) + 0.6
+          ..color = portal.withValues(alpha: 0.75 * (1 - e)),
+      );
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()..color = portal.withValues(alpha: 0.22 * (1 - e)),
+      );
+    }
+
     canvas.restore();
 
     // The porthole frame stays, so the sky still reads as the portal.
@@ -332,7 +367,8 @@ class _GatewayPainter extends CustomPainter {
       oldDelegate.active != active ||
       oldDelegate.portal != portal ||
       oldDelegate.accent != accent ||
-      oldDelegate.space != space;
+      oldDelegate.space != space ||
+      oldDelegate.ignite != ignite;
 }
 
 

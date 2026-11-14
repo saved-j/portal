@@ -8,6 +8,7 @@ import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:fl_clash/common/outbound.dart';
 
 /// How the server list is ordered; the switch sits next to the mode control.
 enum PortalSort { ping, alphabet }
@@ -115,32 +116,22 @@ typedef PortalLive = ({
   int connections,
   int down,
   int up,
-  Map<String, int> byGroup,
 });
 
 final portalLiveProvider = Provider<PortalLive>((ref) {
   final list = ref.watch(requestsProvider).list;
   var down = 0;
   var up = 0;
-  final byGroup = <String, int>{};
   for (final request in list) {
     final requestDown = request.downloadSpeed ?? 0;
     final requestUp = request.uploadSpeed ?? 0;
     down += requestDown;
     up += requestUp;
-    if (request.chains.isNotEmpty) {
-      byGroup.update(
-        request.chains.first,
-        (value) => value + requestDown + requestUp,
-        ifAbsent: () => requestDown + requestUp,
-      );
-    }
   }
   return (
     connections: list.length,
     down: down,
     up: up,
-    byGroup: byGroup,
   );
 });
 
@@ -158,7 +149,6 @@ class PortalFiltersNotifier extends Notifier<({Set<String> hidden, List<String> 
   void reorder(List<String> order) =>
       state = (hidden: state.hidden, order: order);
 
-  void reset() => state = (hidden: <String>{}, order: const <String>[]);
 }
 
 final portalFiltersProvider = NotifierProvider<PortalFiltersNotifier,
@@ -166,13 +156,7 @@ final portalFiltersProvider = NotifierProvider<PortalFiltersNotifier,
 
 /// The engine's built-in outbounds sometimes arrive decorated ('DIRECT 🇷🇺',
 /// 'Direct '), so the check is on the leading word, not on an exact match.
-bool _isBuiltinOutbound(String name) {
-  final upper = name.trim().toUpperCase();
-  return upper == 'DIRECT' ||
-      upper == 'REJECT' ||
-      upper.startsWith('DIRECT ') ||
-      upper.startsWith('REJECT ');
-}
+bool _isBuiltinOutbound(String name) => isBuiltinOutboundName(name);
 
 List<Group> portalGroups(List<Group> all) => [
       for (final item in all)
@@ -494,7 +478,7 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                             opacity: bypassed ? 0.45 : 1,
                             child: ChoiceChip(
                           showCheckmark: false,
-                          // Four layouts, one row each: name, name+server,
+                          // Five layouts, one row each: name, name+server,
                           // icon+server, icon. Everything centres by construction.
                           label: Builder(
                             builder: (context) {

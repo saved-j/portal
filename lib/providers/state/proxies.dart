@@ -1,4 +1,5 @@
 part of '../state.dart';
+import 'package:fl_clash/common/outbound.dart';
 
 @riverpod
 GroupsState currentGroupsState(Ref ref) {
@@ -26,10 +27,7 @@ GroupsState currentGroupsState(Ref ref) {
 /// and REJECT are routing targets, not portals, and picking one by hand is how a
 /// user silently ends up without a tunnel. GLOBAL stays: it is the mihomo
 /// selector the global mode relies on.
-bool _selectable(Group group) {
-  final name = group.name.toUpperCase();
-  return name != 'DIRECT' && name != 'REJECT';
-}
+bool _selectable(Group group) => !isBuiltinOutboundName(group.name);
 
 Group _withoutSelection(Group group) {
   final all = group.all.any(_hasSelection)
@@ -48,10 +46,7 @@ Group _withoutSelection(Group group) {
   return group.copyWith(now: '', all: selectable);
 }
 
-bool _selectableMember(Proxy proxy) {
-  final name = proxy.name.toUpperCase();
-  return name != 'DIRECT' && name != 'REJECT';
-}
+bool _selectableMember(Proxy proxy) => !isBuiltinOutboundName(proxy.name);
 
 bool _hasSelection(Proxy proxy) => proxy.now?.isNotEmpty ?? false;
 
