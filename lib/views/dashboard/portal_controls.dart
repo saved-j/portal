@@ -37,15 +37,21 @@ final portalGroupProvider =
 
 /// The row the user just tapped. The engine may take a moment to switch, so the
 /// highlight moves at once and this clears when the group reports the same choice.
-class PortalPendingNotifier extends Notifier<String?> {
+class PortalPendingNotifier extends Notifier<Map<String, String>> {
   @override
-  String? build() => null;
+  Map<String, String> build() => const {};
 
-  void pick(String? name) => state = name;
+  void pick(String group, String proxy) => state = {...state, group: proxy};
+
+  void clear(String group) {
+    if (!state.containsKey(group)) return;
+    state = {...state}..remove(group);
+  }
 }
 
 final portalPendingProvider =
-    NotifierProvider<PortalPendingNotifier, String?>(PortalPendingNotifier.new);
+    NotifierProvider<PortalPendingNotifier, Map<String, String>>(
+        PortalPendingNotifier.new);
 
 /// Rows whose protocol is revealed. Long press toggles one row, so the label stays
 /// where the eye already looks — in front of the delay, not in a sheet.
@@ -63,6 +69,31 @@ class PortalProtocolRowsNotifier extends Notifier<Set<String>> {
 final portalProtocolRowsProvider =
     NotifierProvider<PortalProtocolRowsNotifier, Set<String>>(
         PortalProtocolRowsNotifier.new);
+
+/// Groups the user turned into a bypass: their outbound is DIRECT, so the chip can
+/// simply go grey. The name people know for that state is 'не идёт через портал'.
+class PortalBypassNotifier extends Notifier<Map<String, String?>> {
+  @override
+  Map<String, String?> build() => const {};
+
+  Future<void> toggle(WidgetRef ref, Group group) async {
+    final action = ref.read(proxiesActionProvider.notifier);
+    if (state.containsKey(group.name)) {
+      final restore = state[group.name];
+      state = {...state}..remove(group.name);
+      if (restore != null) {
+        await action.changeProxy(groupName: group.name, proxyName: restore);
+      }
+      return;
+    }
+    state = {...state, group.name: group.now};
+    await action.changeProxy(groupName: group.name, proxyName: 'DIRECT');
+  }
+}
+
+final portalBypassProvider =
+    NotifierProvider<PortalBypassNotifier, Map<String, String?>>(
+        PortalBypassNotifier.new);
 
 class PortalFiltersNotifier extends Notifier<({Set<String> hidden, List<String> order})> {
   @override
@@ -241,11 +272,11 @@ class PortalServerList extends ConsumerWidget {
       );
     }
     final sort = ref.watch(portalSortProvider);
-    final pending = ref.watch(portalPendingProvider);
+    final pending = ref.watch(portalPendingProvider)[group.name];
     if (pending != null && group.now == pending) {
       // Applied for real: drop the optimistic marker on the next frame.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(portalPendingProvider.notifier).pick(null);
+        ref.read(portalPendingProvider.notifier).clear(group.name);
       });
     }
     final selectedName = pending ?? group.now;
@@ -302,8 +333,8 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
   final _controller = ScrollController();
   var _canBack = false;
   var _canForward = false;
-  /// 0 — название, 1 — иконка и название, 2 — только иконка. The strip never names
-  /// the server: which one sits behind 'Auto' is the list's answer, not the strip's.
+  /// 0 — название, 1 — название и сервер, 2 — иконка и сервер, 3 — только иконка.
+  /// A selector is named by its own name ('Auto'), never by the node it happens to use.
   var _display = 0;
 
   @override
@@ -340,6 +371,7 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
     final filters = ref.watch(portalFiltersProvider);
     final groups = portalVisibleGroups(allGroups, filters.hidden, filters.order);
     final active = ref.watch(portalGroupProvider) ?? groups.firstOrNull?.name;
+    final bypassedNames = ref.watch(portalBypassProvider).keys.toSet();
     final hint = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7);
     return Row(
       children: [
@@ -351,7 +383,7 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
         ),
         Expanded(
           child: GestureDetector(
-            onDoubleTap: () => setState(() => _display = (_display + 1) % 3),
+            onDoubleTap: () => setState(() => _display = (_display + 1) % 4),
             child: NotificationListener<ScrollMetricsNotification>(
               onNotification: (_) {
                 _syncEdges();
@@ -363,16 +395,31 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                 child: Row(
                   children: [
                     for (final item in groups)
-                      Padding(
+                      Builder(builder: (context) {
+                        final bypassed = bypassedNames.contains(item.name);
+                        return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 3),
-                        child: ChoiceChip(
+                        child: GestureDetector(
+                          // Long press turns the filter into a bypass: the engine gets
+                          // DIRECT, the chip goes grey, nobody has to hunt for DIRECT
+                          // in the server list.
+                          onLongPress: () {
+                            HapticFeedback.mediumImpact();
+                            ref
+                                .read(portalBypassProvider.notifier)
+                                .toggle(ref, item);
+                          },
+                          child: Opacity(
+                            opacity: bypassed ? 0.45 : 1,
+                            child: ChoiceChip(
                           showCheckmark: false,
                           // Four layouts, one row each: name, name+server,
                           // icon+server, icon. Everything centres by construction.
                           label: Builder(
                             builder: (context) {
-                              final showIcon = _display >= 1;
+                              final showIcon = _display >= 2;
                               final showName = _display <= 1;
+                              final showServer = _display == 1 || _display == 2;
                               final mark = SizedBox.square(
                                 dimension: 16,
                                 child: CommonTargetIcon(
@@ -380,15 +427,25 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                   fallback: GroupMonogram(item.name),
                                 ),
                               );
-                              if (!showName) return mark;
-                              if (!showIcon) return Text(item.name);
+                              // The engine's own answer, not the resolved chain: when a
+                              // selector points at another selector the chip says 'Auto'.
+                              final server = item.now;
+                              final text = [
+                                if (showName) item.name,
+                                if (showServer && server != null && server != item.name)
+                                  server,
+                              ].join(' · ');
+                              if (!showIcon) {
+                                return Text(text.isEmpty ? item.name : text);
+                              }
+                              if (text.isEmpty) return mark;
                               return Row(
                                 mainAxisSize: MainAxisSize.min,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   mark,
                                   const SizedBox(width: 6),
-                                  Text(item.name),
+                                  Text(text),
                                 ],
                               );
                             },
@@ -400,9 +457,11 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                 .read(portalGroupProvider.notifier)
                                 .pick(item.name);
                           },
+                            ),
+                          ),
                         ),
-
-                      ),
+                      );
+                      }),
                   ],
                 ),
               ),
@@ -573,7 +632,9 @@ class _ServerRowState extends ConsumerState<_ServerRow>
         ),
         onTap: () {
           HapticFeedback.selectionClick();
-          ref.read(portalPendingProvider.notifier).pick(widget.proxy.name);
+          ref
+              .read(portalPendingProvider.notifier)
+              .pick(widget.group.name, widget.proxy.name);
           ref.read(proxiesActionProvider.notifier).changeProxy(
                 groupName: widget.group.name,
                 proxyName: widget.proxy.name,
