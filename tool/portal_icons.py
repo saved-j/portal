@@ -58,9 +58,22 @@ def write(img, path, size):
     img.resize((size, size), Image.LANCZOS).save(path)
 
 
-master_square = draw_mark(S)                       # с фоном, для легаси-иконок
-master_fg = draw_mark(S, background=False, inset=0.10)  # прозрачный foreground
-master_mono = draw_mark(S, background=False, inset=0.10, monochrome=True)
+SOURCE = ROOT / "tool/branding/portal_icon_source.jpg"
+
+if SOURCE.exists():
+    # The owner's mark (a lit door inside a nest of cables) is the brand; the drawn
+    # fallback stays only for a checkout that lost the source file.
+    base = Image.open(SOURCE).convert("RGBA").resize((S, S), Image.LANCZOS)
+    master_square = base
+    master_fg = base
+    grey = base.convert("L")
+    mono = Image.new("RGBA", (S, S), (255, 255, 255, 0))
+    mono.putalpha(grey.point(lambda v: 0 if v < 40 else 255))
+    master_mono = mono
+else:
+    master_square = draw_mark(S)
+    master_fg = draw_mark(S, background=False, inset=0.10)
+    master_mono = draw_mark(S, background=False, inset=0.10, monochrome=True)
 
 # --- Android: legacy square icons
 android_densities = {
