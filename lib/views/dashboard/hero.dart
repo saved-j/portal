@@ -11,6 +11,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/views/profiles/add.dart';
 import 'package:fl_clash/views/access.dart';
+import 'package:fl_clash/views/connection/connection_feeds.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'portal_controls.dart';
 import 'portal_gateway.dart';
@@ -131,9 +132,13 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                         ),
                         IconButton(
                           tooltip: context.appLocalizations.connections,
-                          onPressed: () => ref
-                              .read(currentPageLabelProvider.notifier)
-                              .toPage(PageLabel.connections),
+                          // The connections page is not in the phone navigation any
+                          // more, so switching the page index did nothing: push it.
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ConnectionFeedsView(),
+                            ),
+                          ),
                           icon: const GlyphIcon(
                             AppGlyphs.connections,
                             size: 22,
