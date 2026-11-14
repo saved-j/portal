@@ -177,7 +177,8 @@ const proxiesListStoreKey = PageStorageKey<String>('proxies_list');
 const toolsStoreKey = PageStorageKey<String>('tools');
 const profilesStoreKey = PageStorageKey<String>('profiles');
 
-const defaultPrimaryColor = 0xFF03A9F4;
+// Portal Connect accent: the cyan of the legacy PortalVPN gateway button.
+const defaultPrimaryColor = 0xFF00E5FF;
 
 const maxLogsLength = 5000;
 const maxRequestsLength = 2000;
@@ -192,6 +193,7 @@ const trafficSampleLength = 30;
 // macOS accent colors.
 const defaultPrimaryColors = [
   defaultPrimaryColor,
+  0xFFA855F7, // Portal purple, the second half of the legacy palette
   0xFF007AFF,
   0xFFCB30E0,
   0xFFFF2D55,
