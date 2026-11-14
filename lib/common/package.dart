@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'common.dart';
@@ -8,13 +6,12 @@ extension PackageInfoExtension on PackageInfo {
   String get displayVersion =>
       appVersionDefine.isNotEmpty ? appVersionDefine : version;
 
-  /// `FlClashX/v<app> core/<mihomo> Platform/<os>`; the core token is left
-  /// out until a version is known.
-  String uaWith(String coreVersion) => [
-    '$appName/v$displayVersion',
-    if (coreVersion.isNotEmpty) 'core/$coreVersion',
-    'Platform/${Platform.operatingSystem}',
-  ].join(' ');
+  /// Presents the client as mihomo so panels serve the Mihomo YAML template:
+  /// `mihomo/v<core>`. Without a core version yet, the app version stands in.
+  String uaWith(String coreVersion) {
+    final version = coreVersion.replaceFirst(RegExp('^v'), '');
+    return 'mihomo/v${version.isNotEmpty ? version : displayVersion}';
+  }
 }
 
 int compareVersions(String version1, String version2) {
