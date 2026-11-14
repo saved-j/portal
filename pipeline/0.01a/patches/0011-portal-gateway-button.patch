@@ -1,0 +1,471 @@
+From 6be6dd20e4e20a6f23585cf1cb129e9a649d057d Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 01:05:08 +0800
+Subject: [PATCH] brand: the portal itself as the connect control
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The legacy client replaced the power button with a living portal: a breathing core
+with two rings turning in opposite directions. The hero dashboard gets the same
+control, drawn with a CustomPainter, and the label under it is the action itself
+(«Открыть портал» / «Закрыть портал») instead of the engine's start/stop wording.
+Motion is skipped when the platform asks for reduced animations.
+---
+ arb/intl_en.arb                         |   6 +-
+ arb/intl_ru.arb                         |   6 +-
+ lib/l10n/intl/messages_en.dart          |   4 +
+ lib/l10n/intl/messages_ru.dart          |   4 +
+ lib/l10n/l10n.dart                      |  25 ++++
+ lib/views/dashboard/hero.dart           |  99 ++++----------
+ lib/views/dashboard/portal_gateway.dart | 170 ++++++++++++++++++++++++
+ 7 files changed, 242 insertions(+), 72 deletions(-)
+ create mode 100644 lib/views/dashboard/portal_gateway.dart
+
+diff --git a/arb/intl_en.arb b/arb/intl_en.arb
+index 7c4b8b80..6c210b76 100644
+--- a/arb/intl_en.arb
++++ b/arb/intl_en.arb
+@@ -1037,5 +1037,9 @@
+   "updateErrorBusy": "Wait until the connection finishes starting or stopping.",
+   "updateErrorSafeMode": "Safe mode doesn't install updates.",
+   "updateErrorPermission": "Allow installing apps from this source, then tap Install again.",
+-  "updateErrorInstall": "The update couldn't be installed."
++  "updateErrorInstall": "The update couldn't be installed.",
++  "openPortal": "Open portal",
++  "closePortal": "Close portal",
++  "portalOff": "Portal is off",
++  "inPortal": "In the portal"
+ }
+diff --git a/arb/intl_ru.arb b/arb/intl_ru.arb
+index 4a42ed2a..89dac4cb 100644
+--- a/arb/intl_ru.arb
++++ b/arb/intl_ru.arb
+@@ -1037,5 +1037,9 @@
+   "updateErrorBusy": "Дождитесь, пока подключение запустится или остановится.",
+   "updateErrorSafeMode": "В безопасном режиме обновления не устанавливаются.",
+   "updateErrorPermission": "Разрешите установку приложений из этого источника и снова нажмите «Установить».",
+-  "updateErrorInstall": "Не удалось установить обновление."
++  "updateErrorInstall": "Не удалось установить обновление.",
++  "openPortal": "Открыть портал",
++  "closePortal": "Закрыть портал",
++  "portalOff": "Портал погашен",
++  "inPortal": "В портале"
+ }
+diff --git a/lib/l10n/intl/messages_en.dart b/lib/l10n/intl/messages_en.dart
+index ecadacd2..edafd0b0 100644
+--- a/lib/l10n/intl/messages_en.dart
++++ b/lib/l10n/intl/messages_en.dart
+@@ -511,6 +511,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "closeConnections": MessageLookupByLibrary.simpleMessage(
+       "Close connections",
+     ),
++    "closePortal": MessageLookupByLibrary.simpleMessage("Close portal"),
+     "color": MessageLookupByLibrary.simpleMessage("Color"),
+     "colorStyle": MessageLookupByLibrary.simpleMessage("Color style"),
+     "compact": MessageLookupByLibrary.simpleMessage("Compact"),
+@@ -932,6 +933,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "importFile": MessageLookupByLibrary.simpleMessage("Import from file"),
+     "importFromLink": MessageLookupByLibrary.simpleMessage("Import from link"),
+     "importUrl": MessageLookupByLibrary.simpleMessage("Import from URL"),
++    "inPortal": MessageLookupByLibrary.simpleMessage("In the portal"),
+     "inbound": MessageLookupByLibrary.simpleMessage("Inbound"),
+     "includeInterface": MessageLookupByLibrary.simpleMessage(
+       "Included interfaces",
+@@ -1275,6 +1277,7 @@ class MessageLookup extends MessageLookupByLibrary {
+       "Only count proxy traffic",
+     ),
+     "openLogsFolder": MessageLookupByLibrary.simpleMessage("Open logs folder"),
++    "openPortal": MessageLookupByLibrary.simpleMessage("Open portal"),
+     "openVpnSettings": MessageLookupByLibrary.simpleMessage(
+       "Open VPN settings",
+     ),
+@@ -1327,6 +1330,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "portHopping": MessageLookupByLibrary.simpleMessage("Port hopping"),
+     "portTip": m60,
+     "portValue": m61,
++    "portalOff": MessageLookupByLibrary.simpleMessage("Portal is off"),
+     "ports": MessageLookupByLibrary.simpleMessage("Ports"),
+     "preChannelTip": MessageLookupByLibrary.simpleMessage(
+       "This pre-release is a separate app and can\'t see FlClashX\'s profiles. To bring them over, make a backup in FlClashX under Backup and restore and restore it here, or add your subscriptions again by link.",
+diff --git a/lib/l10n/intl/messages_ru.dart b/lib/l10n/intl/messages_ru.dart
+index d758cdac..bf2dfd72 100644
+--- a/lib/l10n/intl/messages_ru.dart
++++ b/lib/l10n/intl/messages_ru.dart
+@@ -530,6 +530,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "closeConnections": MessageLookupByLibrary.simpleMessage(
+       "Закрыть соединения",
+     ),
++    "closePortal": MessageLookupByLibrary.simpleMessage("Закрыть портал"),
+     "color": MessageLookupByLibrary.simpleMessage("Цвет"),
+     "colorStyle": MessageLookupByLibrary.simpleMessage("Стиль палитры"),
+     "compact": MessageLookupByLibrary.simpleMessage("Компактный"),
+@@ -965,6 +966,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "importFile": MessageLookupByLibrary.simpleMessage("Импорт из файла"),
+     "importFromLink": MessageLookupByLibrary.simpleMessage("Импорт по ссылке"),
+     "importUrl": MessageLookupByLibrary.simpleMessage("Импорт по URL"),
++    "inPortal": MessageLookupByLibrary.simpleMessage("В портале"),
+     "inbound": MessageLookupByLibrary.simpleMessage("Входящие"),
+     "includeInterface": MessageLookupByLibrary.simpleMessage(
+       "Включённые интерфейсы",
+@@ -1332,6 +1334,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "openLogsFolder": MessageLookupByLibrary.simpleMessage(
+       "Открыть папку с логами",
+     ),
++    "openPortal": MessageLookupByLibrary.simpleMessage("Открыть портал"),
+     "openVpnSettings": MessageLookupByLibrary.simpleMessage(
+       "Открыть настройки VPN",
+     ),
+@@ -1394,6 +1397,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "portHopping": MessageLookupByLibrary.simpleMessage("Перескок портов"),
+     "portTip": m60,
+     "portValue": m61,
++    "portalOff": MessageLookupByLibrary.simpleMessage("Портал погашен"),
+     "ports": MessageLookupByLibrary.simpleMessage("Порты"),
+     "preChannelTip": MessageLookupByLibrary.simpleMessage(
+       "Это предварительная версия, она стоит отдельным приложением и не видит профили FlClashX. Чтобы перенести их, сделайте резервную копию в FlClashX в разделе «Резервное копирование и восстановление» и восстановите её здесь, или добавьте подписки заново по ссылке.",
+diff --git a/lib/l10n/l10n.dart b/lib/l10n/l10n.dart
+index 09ad5909..34757e2d 100644
+--- a/lib/l10n/l10n.dart
++++ b/lib/l10n/l10n.dart
+@@ -8750,6 +8750,31 @@ class AppLocalizations {
+       args: [],
+     );
+   }
++
++  /// `Open portal`
++  String get openPortal {
++    return Intl.message('Open portal', name: 'openPortal', desc: '', args: []);
++  }
++
++  /// `Close portal`
++  String get closePortal {
++    return Intl.message(
++      'Close portal',
++      name: 'closePortal',
++      desc: '',
++      args: [],
++    );
++  }
++
++  /// `Portal is off`
++  String get portalOff {
++    return Intl.message('Portal is off', name: 'portalOff', desc: '', args: []);
++  }
++
++  /// `In the portal`
++  String get inPortal {
++    return Intl.message('In the portal', name: 'inPortal', desc: '', args: []);
++  }
+ }
+ 
+ class AppLocalizationDelegate extends LocalizationsDelegate<AppLocalizations> {
+diff --git a/lib/views/dashboard/hero.dart b/lib/views/dashboard/hero.dart
+index bff7fb33..5ae55014 100644
+--- a/lib/views/dashboard/hero.dart
++++ b/lib/views/dashboard/hero.dart
+@@ -10,6 +10,7 @@ import 'package:fl_clash/providers/providers.dart';
+ import 'package:fl_clash/ui/icons/icons.dart';
+ import 'package:fl_clash/views/profiles/add.dart';
+ import 'package:fl_clash/widgets/widgets.dart';
++import 'portal_gateway.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:flutter_svg/flutter_svg.dart';
+ import 'package:material_ui/material_ui.dart';
+@@ -542,89 +543,47 @@ class _SignalBars extends StatelessWidget {
+ class _ConnectButton extends ConsumerWidget {
+   const _ConnectButton();
+ 
+-  static const _duration = Duration(milliseconds: 300);
+-
+   @override
+   Widget build(BuildContext context, WidgetRef ref) {
+     final appLocalizations = context.appLocalizations;
+-    final colorScheme = context.colorScheme;
+     final isStart = ref.watch(isStartProvider);
+     final suspended = isStart && ref.watch(suspendProvider);
+     final runTime = ref.watch(runTimeProvider);
+     final label = suspended
+         ? appLocalizations.suspended
+         : isStart
+-        ? appLocalizations.stop
+-        : appLocalizations.start;
+-    final duration = context.motionDuration(_duration);
++        ? appLocalizations.closePortal
++        : appLocalizations.openPortal;
+     void toggle() => ref.read(commonActionProvider.notifier).toggleRunning();
+-    return Tooltip(
+-      message: label,
+-      child: Semantics(
+-        button: true,
+-        label: label,
+-        child: RisingHold(
+-          enabled: system.isAndroid,
+-          onHeld: toggle,
+-          child: SizedBox(
+-            width: double.infinity,
+-            height: _connectHeight,
+-            child: TweenAnimationBuilder<double>(
+-              tween: Tween(end: isStart ? 1 : 0),
+-              duration: duration,
+-              curve: Curves.easeInOut,
+-              builder: (context, progress, _) {
+-                final ink = Color.lerp(
+-                  colorScheme.onPrimary,
+-                  colorScheme.primary,
+-                  progress,
+-                )!;
+-                final content = suspended
+-                    ? const GlyphIcon(AppGlyphs.wifiOff, size: 26, fill: 1)
+-                    : isStart
+-                    ? Row(
+-                        mainAxisSize: MainAxisSize.min,
+-                        spacing: 10,
+-                        children: [
+-                          const GlyphIcon(AppGlyphs.stop, size: 22, fill: 1),
+-                          Text(
+-                            getTimeText(runTime),
+-                            style: DashboardText.figure(
+-                              context,
+-                              AppTextStyle.headline,
+-                              color: ink,
+-                            ),
+-                          ),
+-                        ],
+-                      )
+-                    : GlyphIcon(AppGlyphs.playPause(0), size: 28, fill: 1);
+-                return FilledButton(
+-                  style: FilledButton.styleFrom(
+-                    backgroundColor: colorScheme.primary.withValues(
+-                      alpha: 1 - progress,
+-                    ),
+-                    foregroundColor: ink,
+-                    side: BorderSide(
+-                      color: colorScheme.primary.withValues(alpha: progress),
+-                      width: 1.5,
+-                    ),
+-                  ),
+-                  onPressed: toggle,
+-                  child: AnimatedSwitcher(
+-                    duration: duration,
+-                    switchInCurve: Curves.easeInOut,
+-                    switchOutCurve: Curves.easeInOut,
+-                    child: KeyedSubtree(
+-                      key: ValueKey((isStart, suspended)),
+-                      child: content,
+-                    ),
+-                  ),
+-                );
+-              },
++    return Column(
++      mainAxisSize: MainAxisSize.min,
++      children: [
++        Tooltip(
++          message: label,
++          child: Semantics(
++            button: true,
++            label: label,
++            child: RisingHold(
++              enabled: system.isAndroid,
++              onHeld: toggle,
++              child: GestureDetector(
++                behavior: HitTestBehavior.opaque,
++                onTap: toggle,
++                child: PortalGatewayCore(
++                  isStart: isStart,
++                  suspended: suspended,
++                  runTime: runTime,
++                ),
++              ),
+             ),
+           ),
+         ),
+-      ),
++        const SizedBox(height: 10),
++        Text(
++          label,
++          style: AppTextStyle.headline.of(context, emphasized: true),
++        ),
++      ],
+     );
+   }
+ }
+diff --git a/lib/views/dashboard/portal_gateway.dart b/lib/views/dashboard/portal_gateway.dart
+new file mode 100644
+index 00000000..40b360db
+--- /dev/null
++++ b/lib/views/dashboard/portal_gateway.dart
+@@ -0,0 +1,170 @@
++import 'dart:math' as math;
++
++import 'package:fl_clash/common/common.dart';
++import 'package:fl_clash/ui/icons/icons.dart';
++import 'package:fl_clash/ui/ui.dart';
++import 'package:material_ui/material_ui.dart';
++
++/// The portal itself, drawn the way the legacy PortalVPN gateway drew it: a
++/// breathing core with two rings turning in opposite directions.
++///
++/// It is only the visual layer and keeps no state of its own: the caller owns
++/// the toggle, the run time and the suspended flag, so the button behaves the
++/// same as the plain one it replaces.
++class PortalGatewayCore extends StatefulWidget {
++  const PortalGatewayCore({
++    super.key,
++    required this.isStart,
++    required this.suspended,
++    required this.runTime,
++    this.size = 168,
++  });
++
++  final bool isStart;
++  final bool suspended;
++  final int? runTime;
++  final double size;
++
++  @override
++  State<PortalGatewayCore> createState() => _PortalGatewayCoreState();
++}
++
++class _PortalGatewayCoreState extends State<PortalGatewayCore>
++    with SingleTickerProviderStateMixin {
++  late final AnimationController _controller = AnimationController(
++    vsync: this,
++    duration: const Duration(milliseconds: 9000),
++  )..repeat();
++
++  @override
++  void dispose() {
++    _controller.dispose();
++    super.dispose();
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final colorScheme = context.colorScheme;
++    final portal = colorScheme.primary;
++    final accent = colorScheme.tertiary;
++    final reduced = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
++    final core = widget.suspended
++        ? const GlyphIcon(AppGlyphs.wifiOff, size: 34, fill: 1)
++        : widget.isStart
++            ? Column(
++                mainAxisSize: MainAxisSize.min,
++                children: [
++                  const GlyphIcon(AppGlyphs.stop, size: 26, fill: 1),
++                  const SizedBox(height: 6),
++                  Text(
++                    getTimeText(widget.runTime),
++                    style: AppTextStyle.title3.of(context),
++                  ),
++                ],
++              )
++            : GlyphIcon(AppGlyphs.playPause(0), size: 40, fill: 1);
++    return SizedBox.square(
++      dimension: widget.size,
++      child: AnimatedBuilder(
++        animation: _controller,
++        builder: (context, child) {
++          final t = reduced ? 0.0 : _controller.value;
++          final pulse = reduced ? 1.0 : 0.95 + 0.11 * _pulseWave(t);
++          return Transform.scale(
++            scale: pulse,
++            child: CustomPaint(
++              painter: _GatewayPainter(
++                portal: portal,
++                accent: accent,
++                turn: t,
++                active: widget.isStart,
++              ),
++              child: Center(
++                child: IconTheme.merge(
++                  data: IconThemeData(color: portal),
++                  child: DefaultTextStyle.merge(
++                    style: TextStyle(color: portal),
++                    child: child!,
++                  ),
++                ),
++              ),
++            ),
++          );
++        },
++        child: core,
++      ),
++    );
++  }
++
++  /// 0 → 1 → 0 across the loop, so the breathing is symmetric.
++  double _pulseWave(double t) => math.sin(t * math.pi * 2).abs();
++}
++
++class _GatewayPainter extends CustomPainter {
++  const _GatewayPainter({
++    required this.portal,
++    required this.accent,
++    required this.turn,
++    required this.active,
++  });
++
++  final Color portal;
++  final Color accent;
++  final double turn;
++  final bool active;
++
++  @override
++  void paint(Canvas canvas, Size size) {
++    final center = size.center(Offset.zero);
++    final radius = size.shortestSide / 2;
++    final dim = active ? 1.0 : 0.45;
++
++    final glow = Paint()
++      ..shader = RadialGradient(
++        colors: [
++          portal.withValues(alpha: 0.32 * dim),
++          portal.withValues(alpha: 0.0),
++        ],
++      ).createShader(Rect.fromCircle(center: center, radius: radius));
++    canvas.drawCircle(center, radius, glow);
++
++    final outer = Paint()
++      ..style = PaintingStyle.stroke
++      ..strokeWidth = 2
++      ..strokeCap = StrokeCap.round
++      ..color = portal.withValues(alpha: 0.9 * dim);
++    canvas.drawArc(
++      Rect.fromCircle(center: center, radius: radius - 6),
++      turn * math.pi * 2,
++      math.pi * 1.25,
++      false,
++      outer,
++    );
++
++    final inner = Paint()
++      ..style = PaintingStyle.stroke
++      ..strokeWidth = 1.4
++      ..strokeCap = StrokeCap.round
++      ..color = accent.withValues(alpha: 0.75 * dim);
++    canvas.drawArc(
++      Rect.fromCircle(center: center, radius: radius - 18),
++      -turn * math.pi * 2 * 1.5,
++      math.pi * 0.9,
++      false,
++      inner,
++    );
++
++    final rim = Paint()
++      ..style = PaintingStyle.stroke
++      ..strokeWidth = 1
++      ..color = portal.withValues(alpha: 0.18 * dim);
++    canvas.drawCircle(center, radius - 30, rim);
++  }
++
++  @override
++  bool shouldRepaint(_GatewayPainter oldDelegate) =>
++      oldDelegate.turn != turn ||
++      oldDelegate.active != active ||
++      oldDelegate.portal != portal ||
++      oldDelegate.accent != accent;
++}
+-- 
+2.54.0 (Apple Git-157)
+

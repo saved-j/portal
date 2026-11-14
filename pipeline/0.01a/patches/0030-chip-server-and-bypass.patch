@@ -1,0 +1,72 @@
+From 621b3fd762ab4307a34225a6f7db19356e858161 Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 03:29:39 +0800
+Subject: [PATCH] ui: chips name their current server, shortcut to the bypass
+ list
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+An 'Auto' chip without its resolved node says nothing, so the chip now reads
+'Auto → Эстония'. The gear row gains an apps icon that opens per-app bypass in one
+tap, because that is the setting people reach for while looking at servers.
+---
+ lib/views/dashboard/hero.dart            | 15 +++++++++++++++
+ lib/views/dashboard/portal_controls.dart |  8 +++++++-
+ 2 files changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/lib/views/dashboard/hero.dart b/lib/views/dashboard/hero.dart
+index 7e801ffd..6adb287d 100644
+--- a/lib/views/dashboard/hero.dart
++++ b/lib/views/dashboard/hero.dart
+@@ -10,6 +10,7 @@ import 'package:fl_clash/providers/outbound_ip.dart';
+ import 'package:fl_clash/providers/providers.dart';
+ import 'package:fl_clash/ui/icons/icons.dart';
+ import 'package:fl_clash/views/profiles/add.dart';
++import 'package:fl_clash/views/access.dart';
+ import 'package:fl_clash/widgets/widgets.dart';
+ import 'portal_controls.dart';
+ import 'portal_gateway.dart';
+@@ -88,6 +89,20 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
+                   children: [
+                     Row(
+                       children: [
++                        IconButton(
++                          // Shortcut to the per-app bypass list: the one setting a
++                          // user reaches for while looking at the server list.
++                          tooltip: context.appLocalizations.accessControl,
++                          onPressed: () => Navigator.of(context).push(
++                            MaterialPageRoute(
++                              builder: (_) => const AccessView(),
++                            ),
++                          ),
++                          icon: const GlyphIcon(
++                            AppGlyphs.appsList,
++                            size: 22,
++                          ),
++                        ),
+                         IconButton(
+                           tooltip: context.appLocalizations.tools,
+                           onPressed: () => ref
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 1d1c69aa..0b65aa07 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -257,7 +257,13 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
+                           avatar: _showIcons
+                               ? GlyphIcon(_groupGlyph(item.name), size: 16)
+                               : null,
+-                          label: Text(item.name),
++                          // A selector says nothing useful without its current
++                          // server, so the chip carries the resolved node too.
++                          label: Text(
++                            item.now == null || item.now == item.name
++                                ? item.name
++                                : '${item.name} → ${item.now}',
++                          ),
+                           selected: item.name == active,
+                           onSelected: (_) => ref
+                               .read(portalGroupProvider.notifier)
+-- 
+2.54.0 (Apple Git-157)
+

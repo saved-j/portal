@@ -1,0 +1,871 @@
+From c8c3077bb0244c30f0ae4d5b318dfc827d58ecc4 Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 00:46:48 +0800
+Subject: [PATCH] brand: subscriptions instead of profiles, portal mode names,
+ no direct
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Profiles are subscriptions in the UI now (RU: подписки, EN: subscriptions):
+  the list entry, the added/updated tips and the age hint.
+- The two modes the user sees are ПРОСТОЙ ПОРТАЛ (global) and СЕТЬ ПОРТАЛОВ (rules);
+  the engine keeps its own names, only the labels changed.
+- DIRECT is gone from every place a user can reach it: the dashboard mode card,
+  the tray menu and the hotkey list. The enum stays so configs that mention it
+  still parse; the portal being off is the only untunnelled state we expose.
+---
+ arb/intl_en.arb                    | 26 +++++++-------
+ arb/intl_ru.arb                    | 32 ++++++++---------
+ lib/common/l10n_labels.dart        |  2 +-
+ lib/common/tray.dart               |  2 +-
+ lib/l10n/intl/messages_en.dart     | 33 +++++++++---------
+ lib/l10n/intl/messages_es.dart     |  7 ++--
+ lib/l10n/intl/messages_fr.dart     |  7 ++--
+ lib/l10n/intl/messages_ru.dart     | 39 ++++++++++-----------
+ lib/l10n/l10n.dart                 | 55 +++++++++++++++---------------
+ lib/providers/state/profile.dart   |  6 +++-
+ lib/providers/state/proxies.dart   | 30 ++++++++++++++--
+ lib/views/dashboard/dashboard.dart |  3 +-
+ lib/views/hotkey.dart              |  1 -
+ 13 files changed, 136 insertions(+), 107 deletions(-)
+
+diff --git a/arb/intl_en.arb b/arb/intl_en.arb
+index af3549a9..7c4b8b80 100644
+--- a/arb/intl_en.arb
++++ b/arb/intl_en.arb
+@@ -4,10 +4,10 @@
+   "global": "Global",
+   "direct": "Direct",
+   "dashboard": "Dashboard",
+-  "proxies": "Proxies",
+-  "profile": "Profile",
++  "proxies": "Portals",
++  "profile": "Subscription",
+   "announcement": "Announcement",
+-  "profiles": "Profiles",
++  "profiles": "Subscriptions",
+   "tools": "Settings",
+   "logs": "Logs",
+   "resources": "Resources",
+@@ -59,7 +59,7 @@
+   "menuBarMode": "Pin to menu bar",
+   "menuBarModeDesc": "The app lives in the menu bar: the window opens as a popover from its icon and there is no Dock icon. The zoom button pins it too.",
+   "autoRun": "Auto run",
+-  "autoRunDesc": "Auto run starts the proxy when the app opens.",
++  "autoRunDesc": "Auto connect opens the portal when the app starts.",
+   "openLogsFolder": "Open logs folder",
+   "resetApp": "Reset app",
+   "resetAppTip": "Every profile, setting and the app's working folder will be deleted, then the app closes. Continue?",
+@@ -76,7 +76,7 @@
+   "logcatDesc": "Turning off Logcat hides the logs entry.",
+   "autoCheckUpdate": "Auto check for updates",
+   "accessControl": "Access control",
+-  "accessControlDesc": "Access control picks which apps use the proxy.",
++  "accessControlDesc": "Access control decides which apps go through the portal.",
+   "edit": "Edit",
+   "confirm": "Confirm",
+   "update": "Update",
+@@ -102,7 +102,7 @@
+   "themeStyle": "Theme mode",
+   "themeStyleOriginal": "Original",
+   "themeStyleEnhanced": "Enhanced",
+-  "themeStyleDesc": "Enhanced puts the service logo, plan, server and a connect button on the home page in place of the widget grid.",
++  "themeStyleDesc": "Enhanced puts the service logo, plan, portal and a connect button on the home page in place of the widget grid.",
+   "website": "Website",
+   "support": "Support",
+   "themeColor": "Theme color",
+@@ -116,14 +116,14 @@
+   "sendFromPhoneNoNetwork": "This device is not connected to a local network",
+   "sendFromPhonePermissionDenied": "Receiving a link from your phone needs the Nearby devices permission, which lets FlClashX reach the local network. Turn it on in the app's settings.",
+   "sendFromPhonePageTitle": "Send a link to FlClashX",
+-  "sendFromPhonePageHint": "Subscription link or proxy share link",
++  "sendFromPhonePageHint": "Subscription link or portal link",
+   "send": "Send",
+   "sendFromPhonePageSent": "Sent. Confirm the import on the other device.",
+   "sendFromPhoneConfirmTitle": "Import the link from your phone?",
+   "shareQrcodeTip": "Scan with FlClashX on another device to import this profile.",
+   "qrcodeTooLongTip": "This link is too long for a QR code. Use Copy link instead.",
+   "submit": "Submit",
+-  "profileAddedTip": "Profile {name} added",
++  "profileAddedTip": "Subscription {name} added",
+   "create": "Create",
+   "pleaseUploadValidQrcode": "Please upload a valid QR code",
+   "blacklistMode": "Blacklist mode",
+@@ -148,8 +148,8 @@
+   "startVpn": "Starting VPN…",
+   "stopVpn": "Stopping VPN…",
+   "localNetworkDeniedTip": "Local network permission denied: using the gvisor stack, LAN is unreachable.",
+-  "notSelectedTip": "The current proxy group cannot be selected",
+-  "changeProxyFailedTip": "Failed to switch proxy; the previous selection has been restored",
++  "notSelectedTip": "This group has no portal to pick by hand",
++  "changeProxyFailedTip": "Could not switch the portal, the previous choice is back",
+   "databaseWriteFailedTip": "Failed to save the change; it has been rolled back",
+   "tip": "Tip",
+   "account": "Account",
+@@ -267,7 +267,7 @@
+   "ruleSetInvalidTip": "This mrs file cannot be read",
+   "subscriptionInfo": "Subscription info",
+   "ntpStatusDesc": "NTP takes the time from an NTP server instead of the system clock.",
+-  "server": "Server",
++  "server": "Portal",
+   "ntpInterval": "Sync interval (minutes)",
+   "dialerProxy": "Dialer proxy",
+   "dialerProxyDesc": "Dialer proxy is the outbound used to reach the NTP server.",
+@@ -395,7 +395,7 @@
+   "releaseMemoryFailed": "Failed to release memory",
+   "cancel": "Cancel",
+   "fileIsUpdate": "The file has been modified. Save the changes?",
+-  "profileHasUpdate": "The profile has been modified. Turn off auto update?",
++  "profileHasUpdate": "The subscription has been modified. Turn off auto update?",
+   "hasCacheChange": "Cache the changes?",
+   "copySuccess": "Copied successfully",
+   "copyLink": "Copy link",
+@@ -816,7 +816,7 @@
+   "large": "Large",
+   "extraLarge": "Extra large",
+   "switchProfile": "Switch profile",
+-  "changeServer": "Change server",
++  "changeServer": "Change portal",
+   "lastUpdated": "Last updated",
+   "filters": "Filters",
+   "label": "Label",
+diff --git a/arb/intl_ru.arb b/arb/intl_ru.arb
+index 3d421bbb..4a42ed2a 100644
+--- a/arb/intl_ru.arb
++++ b/arb/intl_ru.arb
+@@ -1,13 +1,13 @@
+ {
+   "rule": "Правило",
+-  "rules": "Правила",
+-  "global": "Глобальный",
++  "rules": "Сеть порталов",
++  "global": "Простой портал",
+   "direct": "Прямой",
+   "dashboard": "Панель",
+-  "proxies": "Прокси",
+-  "profile": "Профиль",
++  "proxies": "Порталы",
++  "profile": "Подписка",
+   "announcement": "Объявление",
+-  "profiles": "Профили",
++  "profiles": "Подписки",
+   "tools": "Настройки",
+   "logs": "Логи",
+   "resources": "Ресурсы",
+@@ -59,7 +59,7 @@
+   "menuBarMode": "Прикрепить к строке меню",
+   "menuBarModeDesc": "Приложение живёт в строке меню: окно открывается по клику на иконку, значка в Dock нет. Зелёная кнопка окна тоже прикрепляет.",
+   "autoRun": "Автовключение",
+-  "autoRunDesc": "Автовключение запускает прокси при открытии приложения.",
++  "autoRunDesc": "Автовключение открывает портал при запуске приложения.",
+   "openLogsFolder": "Открыть папку с логами",
+   "resetApp": "Сброс приложения",
+   "resetAppTip": "Будут удалены все профили, настройки и рабочая папка приложения, после чего приложение закроется. Продолжить?",
+@@ -76,7 +76,7 @@
+   "logcatDesc": "Если захват логов выключен, раздел логов скрыт.",
+   "autoCheckUpdate": "Автопроверка обновлений",
+   "accessControl": "Контроль доступа",
+-  "accessControlDesc": "Контроль доступа определяет, какие приложения идут через прокси.",
++  "accessControlDesc": "Контроль доступа определяет, какие приложения идут через портал.",
+   "edit": "Редактировать",
+   "confirm": "Подтвердить",
+   "update": "Обновить",
+@@ -102,7 +102,7 @@
+   "themeStyle": "Режим темы",
+   "themeStyleOriginal": "Оригинальный",
+   "themeStyleEnhanced": "Улучшенный",
+-  "themeStyleDesc": "Улучшенный показывает на главной логотип сервиса, тариф, сервер и кнопку подключения вместо сетки виджетов.",
++  "themeStyleDesc": "Улучшенный показывает на главной логотип сервиса, тариф, портал и кнопку подключения вместо сетки виджетов.",
+   "website": "Сайт",
+   "support": "Поддержка",
+   "themeColor": "Цвет темы",
+@@ -116,14 +116,14 @@
+   "sendFromPhoneNoNetwork": "Это устройство не подключено к локальной сети",
+   "sendFromPhonePermissionDenied": "Чтобы получить ссылку с телефона, FlClashX нужно разрешение «Устройства поблизости» для доступа к локальной сети. Включите его в настройках приложения.",
+   "sendFromPhonePageTitle": "Отправить ссылку в FlClashX",
+-  "sendFromPhonePageHint": "Ссылка на подписку или ссылка на прокси",
++  "sendFromPhonePageHint": "Ссылка на подписку или ссылка на портал",
+   "send": "Отправить",
+   "sendFromPhonePageSent": "Отправлено. Подтвердите импорт на другом устройстве.",
+   "sendFromPhoneConfirmTitle": "Импортировать ссылку с телефона?",
+   "shareQrcodeTip": "Отсканируйте в FlClashX на другом устройстве, чтобы импортировать этот профиль.",
+   "qrcodeTooLongTip": "Ссылка слишком длинная для QR-кода. Используйте «Копировать ссылку».",
+   "submit": "Применить",
+-  "profileAddedTip": "Профиль «{name}» добавлен",
++  "profileAddedTip": "Подписка «{name}» добавлена",
+   "create": "Создать",
+   "pleaseUploadValidQrcode": "Загрузите корректный QR-код",
+   "blacklistMode": "Режим чёрного списка",
+@@ -148,8 +148,8 @@
+   "startVpn": "Запуск VPN…",
+   "stopVpn": "Остановка VPN…",
+   "localNetworkDeniedTip": "Доступ к локальной сети запрещён: используется стек gvisor, локальная сеть недоступна.",
+-  "notSelectedTip": "В этой группе прокси нельзя выбрать вручную",
+-  "changeProxyFailedTip": "Не удалось переключить прокси, возвращён предыдущий выбор",
++  "notSelectedTip": "В этой группе порталов нельзя выбрать вручную",
++  "changeProxyFailedTip": "Не удалось переключить портал, возвращён предыдущий выбор",
+   "databaseWriteFailedTip": "Не удалось сохранить изменение, оно отменено",
+   "tip": "Подсказка",
+   "account": "Аккаунт",
+@@ -267,7 +267,7 @@
+   "ruleSetInvalidTip": "Не удаётся прочитать этот файл mrs",
+   "subscriptionInfo": "Информация о подписке",
+   "ntpStatusDesc": "NTP берёт время с NTP-сервера, а не из системных часов.",
+-  "server": "Сервер",
++  "server": "Портал",
+   "ntpInterval": "Интервал синхронизации (минуты)",
+   "dialerProxy": "Прокси для подключения",
+   "dialerProxyDesc": "Прокси для подключения — исходящий прокси, через который идёт обращение к NTP-серверу.",
+@@ -395,7 +395,7 @@
+   "releaseMemoryFailed": "Не удалось освободить память",
+   "cancel": "Отмена",
+   "fileIsUpdate": "Файл изменён. Сохранить изменения?",
+-  "profileHasUpdate": "Профиль изменён. Отключить автообновление?",
++  "profileHasUpdate": "Подписка изменена. Отключить автообновление?",
+   "hasCacheChange": "Сохранить изменения как черновик?",
+   "copySuccess": "Скопировано",
+   "copyLink": "Копировать ссылку",
+@@ -816,7 +816,7 @@
+   "large": "Крупный",
+   "extraLarge": "Очень крупный",
+   "switchProfile": "Сменить профиль",
+-  "changeServer": "Сменить сервер",
++  "changeServer": "Сменить портал",
+   "lastUpdated": "Последнее обновление",
+   "filters": "Фильтры",
+   "label": "Метка",
+@@ -922,7 +922,7 @@
+   "deviceIdUnsupportedTitle": "HWID не поддерживается",
+   "deviceIdNotSent": "Подписка требует HWID, но приложение его не отправило. Включите отправку HWID в настройках профиля.",
+   "ageEncryptedProfile": "Зашифрованный профиль",
+-  "ageSecretKeyRequiredTip": "Профиль зашифрован с помощью age, для расшифровки нужен секретный ключ age",
++  "ageSecretKeyRequiredTip": "Подписка зашифрована с помощью age, для расшифровки нужен секретный ключ age",
+   "currentOutboundDesc": "Здесь кнопка запуска, эту карточку нельзя убрать",
+   "trafficPeak": "Пик {value}",
+   "trafficTotal": "Всего {value}",
+diff --git a/lib/common/l10n_labels.dart b/lib/common/l10n_labels.dart
+index bec3867e..d78d2feb 100644
+--- a/lib/common/l10n_labels.dart
++++ b/lib/common/l10n_labels.dart
+@@ -49,7 +49,7 @@ extension ModeL10n on Mode {
+   String get label {
+     final appLocalizations = currentAppLocalizations;
+     return switch (this) {
+-      Mode.rule => appLocalizations.rule,
++      Mode.rule => appLocalizations.rules,
+       Mode.global => appLocalizations.global,
+       Mode.direct => appLocalizations.direct,
+     };
+diff --git a/lib/common/tray.dart b/lib/common/tray.dart
+index 08ef8e81..33cedf1f 100644
+--- a/lib/common/tray.dart
++++ b/lib/common/tray.dart
+@@ -182,7 +182,7 @@ class AppTray implements TrayPort {
+         ),
+       if (trayState.globalModeAllowed) ...[
+         const TrayMenuSeparator(),
+-        for (final mode in Mode.values)
++        for (final mode in Mode.values.where((mode) => mode != Mode.direct))
+           TrayMenuCheckbox(
+             label: mode.label,
+             checked: mode == trayState.mode,
+diff --git a/lib/l10n/intl/messages_en.dart b/lib/l10n/intl/messages_en.dart
+index 7490d2f9..ecadacd2 100644
+--- a/lib/l10n/intl/messages_en.dart
++++ b/lib/l10n/intl/messages_en.dart
+@@ -173,7 +173,7 @@ class MessageLookup extends MessageLookupByLibrary {
+ 
+   static String m61(port) => "Port ${port}";
+ 
+-  static String m62(name) => "Profile ${name} added";
++  static String m62(name) => "Subscription ${name} added";
+ 
+   static String m63(days) =>
+       "${Intl.plural(days, one: '1 day', other: '${days} days')}";
+@@ -274,7 +274,7 @@ class MessageLookup extends MessageLookupByLibrary {
+       "Only selected apps go through the VPN",
+     ),
+     "accessControlDesc": MessageLookupByLibrary.simpleMessage(
+-      "Access control picks which apps use the proxy.",
++      "Access control decides which apps go through the portal.",
+     ),
+     "accessControlDisabledDesc": MessageLookupByLibrary.simpleMessage(
+       "App access control is disabled",
+@@ -395,7 +395,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "autoLaunch": MessageLookupByLibrary.simpleMessage("Auto launch"),
+     "autoRun": MessageLookupByLibrary.simpleMessage("Auto run"),
+     "autoRunDesc": MessageLookupByLibrary.simpleMessage(
+-      "Auto run starts the proxy when the app opens.",
++      "Auto connect opens the portal when the app starts.",
+     ),
+     "autoSetSystemDns": MessageLookupByLibrary.simpleMessage(
+       "Auto-set system DNS",
+@@ -470,9 +470,9 @@ class MessageLookup extends MessageLookupByLibrary {
+     "cancelSelectAll": MessageLookupByLibrary.simpleMessage("Deselect all"),
+     "cannotSave": MessageLookupByLibrary.simpleMessage("Can\'t save"),
+     "changeProxyFailedTip": MessageLookupByLibrary.simpleMessage(
+-      "Failed to switch proxy; the previous selection has been restored",
++      "Could not switch the portal, the previous choice is back",
+     ),
+-    "changeServer": MessageLookupByLibrary.simpleMessage("Change server"),
++    "changeServer": MessageLookupByLibrary.simpleMessage("Change portal"),
+     "changelogBreaking": MessageLookupByLibrary.simpleMessage(
+       "Breaking changes",
+     ),
+@@ -957,9 +957,10 @@ class MessageLookup extends MessageLookupByLibrary {
+     "inputRuleContent": MessageLookupByLibrary.simpleMessage(
+       "Enter the rule content",
+     ),
+-    "installedAppsPermissionDeniedMessage": MessageLookupByLibrary.simpleMessage(
+-      "The app list permission was denied, so installed apps cannot be listed. Please grant it manually in system settings.",
+-    ),
++    "installedAppsPermissionDeniedMessage":
++        MessageLookupByLibrary.simpleMessage(
++          "The app list permission was denied, so installed apps cannot be listed. Please grant it manually in system settings.",
++        ),
+     "installedAppsPermissionDesc": MessageLookupByLibrary.simpleMessage(
+       "This system hides the installed app list until the permission is granted. Authorize it to configure the per-app proxy.",
+     ),
+@@ -1244,7 +1245,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     ),
+     "none": MessageLookupByLibrary.simpleMessage("None"),
+     "notSelectedTip": MessageLookupByLibrary.simpleMessage(
+-      "The current proxy group cannot be selected",
++      "This group has no portal to pick by hand",
+     ),
+     "ntpInterval": MessageLookupByLibrary.simpleMessage(
+       "Sync interval (minutes)",
+@@ -1344,7 +1345,7 @@ class MessageLookup extends MessageLookupByLibrary {
+       "Private key passphrase",
+     ),
+     "process": MessageLookupByLibrary.simpleMessage("Process"),
+-    "profile": MessageLookupByLibrary.simpleMessage("Profile"),
++    "profile": MessageLookupByLibrary.simpleMessage("Subscription"),
+     "profileAddedTip": m62,
+     "profileAutoUpdateIntervalInvalidValidationDesc":
+         MessageLookupByLibrary.simpleMessage("Please enter a valid interval"),
+@@ -1356,7 +1357,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "profileDetails": MessageLookupByLibrary.simpleMessage("Details"),
+     "profileExpired": MessageLookupByLibrary.simpleMessage("Expired"),
+     "profileHasUpdate": MessageLookupByLibrary.simpleMessage(
+-      "The profile has been modified. Turn off auto update?",
++      "The subscription has been modified. Turn off auto update?",
+     ),
+     "profileHoursFigure": m64,
+     "profileLeftOfTotal": m65,
+@@ -1386,7 +1387,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "profileUrlNullValidationDesc": MessageLookupByLibrary.simpleMessage(
+       "Please enter the profile URL",
+     ),
+-    "profiles": MessageLookupByLibrary.simpleMessage("Profiles"),
++    "profiles": MessageLookupByLibrary.simpleMessage("Subscriptions"),
+     "profilesSort": MessageLookupByLibrary.simpleMessage("Sort profiles"),
+     "project": MessageLookupByLibrary.simpleMessage("Project"),
+     "protocol": MessageLookupByLibrary.simpleMessage("Protocol"),
+@@ -1400,7 +1401,7 @@ class MessageLookup extends MessageLookupByLibrary {
+       "Only remote providers are supported",
+     ),
+     "providers": MessageLookupByLibrary.simpleMessage("External resources"),
+-    "proxies": MessageLookupByLibrary.simpleMessage("Proxies"),
++    "proxies": MessageLookupByLibrary.simpleMessage("Portals"),
+     "proxiesCount": m69,
+     "proxiesProfileLabel": m70,
+     "proxiesRemovedTip": m71,
+@@ -1723,7 +1724,7 @@ class MessageLookup extends MessageLookupByLibrary {
+       "This device is not connected to a local network",
+     ),
+     "sendFromPhonePageHint": MessageLookupByLibrary.simpleMessage(
+-      "Subscription link or proxy share link",
++      "Subscription link or portal link",
+     ),
+     "sendFromPhonePageSent": MessageLookupByLibrary.simpleMessage(
+       "Sent. Confirm the import on the other device.",
+@@ -1737,7 +1738,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "sendFromPhoneTip": MessageLookupByLibrary.simpleMessage(
+       "Scan the code with your phone\'s camera and paste the link on the page that opens. Both devices need to be on the same network. If the page does not open on Android 17 or later, give the phone\'s browser the Nearby devices permission.",
+     ),
+-    "server": MessageLookupByLibrary.simpleMessage("Server"),
++    "server": MessageLookupByLibrary.simpleMessage("Portal"),
+     "serviceAbnormalCount": m86,
+     "serviceAllAvailable": MessageLookupByLibrary.simpleMessage(
+       "All available",
+@@ -1912,7 +1913,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "themeMode": MessageLookupByLibrary.simpleMessage("Appearance"),
+     "themeStyle": MessageLookupByLibrary.simpleMessage("Theme mode"),
+     "themeStyleDesc": MessageLookupByLibrary.simpleMessage(
+-      "Enhanced puts the service logo, plan, server and a connect button on the home page in place of the widget grid.",
++      "Enhanced puts the service logo, plan, portal and a connect button on the home page in place of the widget grid.",
+     ),
+     "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("Enhanced"),
+     "themeStyleOriginal": MessageLookupByLibrary.simpleMessage("Original"),
+diff --git a/lib/l10n/intl/messages_es.dart b/lib/l10n/intl/messages_es.dart
+index f382e5cd..eb94a075 100644
+--- a/lib/l10n/intl/messages_es.dart
++++ b/lib/l10n/intl/messages_es.dart
+@@ -1022,9 +1022,10 @@ class MessageLookup extends MessageLookupByLibrary {
+     "inputRuleContent": MessageLookupByLibrary.simpleMessage(
+       "Introduce el contenido de la regla",
+     ),
+-    "installedAppsPermissionDeniedMessage": MessageLookupByLibrary.simpleMessage(
+-      "Se denegó el permiso de lista de apps, por lo que no se pueden mostrar las apps instaladas. Concédelo manualmente en los ajustes del sistema.",
+-    ),
++    "installedAppsPermissionDeniedMessage":
++        MessageLookupByLibrary.simpleMessage(
++          "Se denegó el permiso de lista de apps, por lo que no se pueden mostrar las apps instaladas. Concédelo manualmente en los ajustes del sistema.",
++        ),
+     "installedAppsPermissionDesc": MessageLookupByLibrary.simpleMessage(
+       "Este sistema oculta la lista de apps instaladas hasta que se concede el permiso. Autorízalo para configurar el proxy por app.",
+     ),
+diff --git a/lib/l10n/intl/messages_fr.dart b/lib/l10n/intl/messages_fr.dart
+index 6ac0473a..401e6726 100644
+--- a/lib/l10n/intl/messages_fr.dart
++++ b/lib/l10n/intl/messages_fr.dart
+@@ -1023,9 +1023,10 @@ class MessageLookup extends MessageLookupByLibrary {
+     "inputRuleContent": MessageLookupByLibrary.simpleMessage(
+       "Saisissez le contenu de la règle",
+     ),
+-    "installedAppsPermissionDeniedMessage": MessageLookupByLibrary.simpleMessage(
+-      "L’autorisation de la liste des apps a été refusée ; les apps installées ne peuvent donc pas être listées. Veuillez l’accorder manuellement dans les réglages du système.",
+-    ),
++    "installedAppsPermissionDeniedMessage":
++        MessageLookupByLibrary.simpleMessage(
++          "L’autorisation de la liste des apps a été refusée ; les apps installées ne peuvent donc pas être listées. Veuillez l’accorder manuellement dans les réglages du système.",
++        ),
+     "installedAppsPermissionDesc": MessageLookupByLibrary.simpleMessage(
+       "Ce système masque la liste des apps installées tant que l’autorisation n’est pas accordée. Accordez-la pour configurer le proxy par app.",
+     ),
+diff --git a/lib/l10n/intl/messages_ru.dart b/lib/l10n/intl/messages_ru.dart
+index ed61e54f..d758cdac 100644
+--- a/lib/l10n/intl/messages_ru.dart
++++ b/lib/l10n/intl/messages_ru.dart
+@@ -173,7 +173,7 @@ class MessageLookup extends MessageLookupByLibrary {
+ 
+   static String m61(port) => "Порт ${port}";
+ 
+-  static String m62(name) => "Профиль «${name}» добавлен";
++  static String m62(name) => "Подписка «${name}» добавлена";
+ 
+   static String m63(days) =>
+       "${Intl.plural(days, one: '${days} день', few: '${days} дня', many: '${days} дней', other: '${days} дня')}";
+@@ -275,7 +275,7 @@ class MessageLookup extends MessageLookupByLibrary {
+       "Через VPN проходят только выбранные приложения",
+     ),
+     "accessControlDesc": MessageLookupByLibrary.simpleMessage(
+-      "Контроль доступа определяет, какие приложения идут через прокси.",
++      "Контроль доступа определяет, какие приложения идут через портал.",
+     ),
+     "accessControlDisabledDesc": MessageLookupByLibrary.simpleMessage(
+       "Контроль доступа приложений отключён",
+@@ -352,7 +352,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     ),
+     "ageSecretKey": MessageLookupByLibrary.simpleMessage("Секретный ключ age"),
+     "ageSecretKeyRequiredTip": MessageLookupByLibrary.simpleMessage(
+-      "Профиль зашифрован с помощью age, для расшифровки нужен секретный ключ age",
++      "Подписка зашифрована с помощью age, для расшифровки нужен секретный ключ age",
+     ),
+     "agree": MessageLookupByLibrary.simpleMessage("Я согласен"),
+     "allReferencedProxies": MessageLookupByLibrary.simpleMessage(
+@@ -406,7 +406,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "autoLaunch": MessageLookupByLibrary.simpleMessage("Автозапуск"),
+     "autoRun": MessageLookupByLibrary.simpleMessage("Автовключение"),
+     "autoRunDesc": MessageLookupByLibrary.simpleMessage(
+-      "Автовключение запускает прокси при открытии приложения.",
++      "Автовключение открывает портал при запуске приложения.",
+     ),
+     "autoSetSystemDns": MessageLookupByLibrary.simpleMessage(
+       "Автонастройка системного DNS",
+@@ -487,9 +487,9 @@ class MessageLookup extends MessageLookupByLibrary {
+     "cancelSelectAll": MessageLookupByLibrary.simpleMessage("Снять выделение"),
+     "cannotSave": MessageLookupByLibrary.simpleMessage("Не удалось сохранить"),
+     "changeProxyFailedTip": MessageLookupByLibrary.simpleMessage(
+-      "Не удалось переключить прокси, возвращён предыдущий выбор",
++      "Не удалось переключить портал, возвращён предыдущий выбор",
+     ),
+-    "changeServer": MessageLookupByLibrary.simpleMessage("Сменить сервер"),
++    "changeServer": MessageLookupByLibrary.simpleMessage("Сменить портал"),
+     "changelogBreaking": MessageLookupByLibrary.simpleMessage(
+       "Важные изменения",
+     ),
+@@ -889,7 +889,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "geodataLoader": MessageLookupByLibrary.simpleMessage(
+       "Geo: экономия памяти",
+     ),
+-    "global": MessageLookupByLibrary.simpleMessage("Глобальный"),
++    "global": MessageLookupByLibrary.simpleMessage("Простой портал"),
+     "go": MessageLookupByLibrary.simpleMessage("Перейти"),
+     "goDownload": MessageLookupByLibrary.simpleMessage("Скачать"),
+     "goToConfigureAddedRules": MessageLookupByLibrary.simpleMessage(
+@@ -992,9 +992,10 @@ class MessageLookup extends MessageLookupByLibrary {
+     "inputRuleContent": MessageLookupByLibrary.simpleMessage(
+       "Введите содержимое правила",
+     ),
+-    "installedAppsPermissionDeniedMessage": MessageLookupByLibrary.simpleMessage(
+-      "Разрешение на список приложений отклонено, поэтому установленные приложения недоступны. Предоставьте его вручную в системных настройках.",
+-    ),
++    "installedAppsPermissionDeniedMessage":
++        MessageLookupByLibrary.simpleMessage(
++          "Разрешение на список приложений отклонено, поэтому установленные приложения недоступны. Предоставьте его вручную в системных настройках.",
++        ),
+     "installedAppsPermissionDesc": MessageLookupByLibrary.simpleMessage(
+       "Эта система не выдаёт список установленных приложений без разрешения. Предоставьте его, чтобы настроить прокси для отдельных приложений.",
+     ),
+@@ -1301,7 +1302,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     ),
+     "none": MessageLookupByLibrary.simpleMessage("Нет"),
+     "notSelectedTip": MessageLookupByLibrary.simpleMessage(
+-      "В этой группе прокси нельзя выбрать вручную",
++      "В этой группе порталов нельзя выбрать вручную",
+     ),
+     "ntpInterval": MessageLookupByLibrary.simpleMessage(
+       "Интервал синхронизации (минуты)",
+@@ -1415,7 +1416,7 @@ class MessageLookup extends MessageLookupByLibrary {
+       "Пароль закрытого ключа",
+     ),
+     "process": MessageLookupByLibrary.simpleMessage("Процесс"),
+-    "profile": MessageLookupByLibrary.simpleMessage("Профиль"),
++    "profile": MessageLookupByLibrary.simpleMessage("Подписка"),
+     "profileAddedTip": m62,
+     "profileAutoUpdateIntervalInvalidValidationDesc":
+         MessageLookupByLibrary.simpleMessage("Введите корректный интервал"),
+@@ -1425,7 +1426,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "profileDetails": MessageLookupByLibrary.simpleMessage("Подробнее"),
+     "profileExpired": MessageLookupByLibrary.simpleMessage("Истекла"),
+     "profileHasUpdate": MessageLookupByLibrary.simpleMessage(
+-      "Профиль изменён. Отключить автообновление?",
++      "Подписка изменена. Отключить автообновление?",
+     ),
+     "profileHoursFigure": m64,
+     "profileLeftOfTotal": m65,
+@@ -1451,7 +1452,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "profileUrlNullValidationDesc": MessageLookupByLibrary.simpleMessage(
+       "Введите URL профиля",
+     ),
+-    "profiles": MessageLookupByLibrary.simpleMessage("Профили"),
++    "profiles": MessageLookupByLibrary.simpleMessage("Подписки"),
+     "profilesSort": MessageLookupByLibrary.simpleMessage("Сортировка профилей"),
+     "project": MessageLookupByLibrary.simpleMessage("Проект"),
+     "protocol": MessageLookupByLibrary.simpleMessage("Протокол"),
+@@ -1465,7 +1466,7 @@ class MessageLookup extends MessageLookupByLibrary {
+       "Поддерживаются только удалённые ресурсы",
+     ),
+     "providers": MessageLookupByLibrary.simpleMessage("Внешние ресурсы"),
+-    "proxies": MessageLookupByLibrary.simpleMessage("Прокси"),
++    "proxies": MessageLookupByLibrary.simpleMessage("Порталы"),
+     "proxiesCount": m69,
+     "proxiesProfileLabel": m70,
+     "proxiesRemovedTip": m71,
+@@ -1763,7 +1764,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "ruleTextInvalid": MessageLookupByLibrary.simpleMessage(
+       "Правило должно начинаться с поддерживаемого типа, например DOMAIN,example.com,DIRECT",
+     ),
+-    "rules": MessageLookupByLibrary.simpleMessage("Правила"),
++    "rules": MessageLookupByLibrary.simpleMessage("Сеть порталов"),
+     "rulesCount": m82,
+     "runtimeConfig": MessageLookupByLibrary.simpleMessage(
+       "Рабочая конфигурация",
+@@ -1806,7 +1807,7 @@ class MessageLookup extends MessageLookupByLibrary {
+       "Это устройство не подключено к локальной сети",
+     ),
+     "sendFromPhonePageHint": MessageLookupByLibrary.simpleMessage(
+-      "Ссылка на подписку или ссылка на прокси",
++      "Ссылка на подписку или ссылка на портал",
+     ),
+     "sendFromPhonePageSent": MessageLookupByLibrary.simpleMessage(
+       "Отправлено. Подтвердите импорт на другом устройстве.",
+@@ -1820,7 +1821,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "sendFromPhoneTip": MessageLookupByLibrary.simpleMessage(
+       "Отсканируйте код камерой телефона и вставьте ссылку на открывшейся странице. Оба устройства должны быть в одной сети. Если страница не открывается на Android 17 и новее, дайте браузеру на телефоне разрешение «Устройства поблизости».",
+     ),
+-    "server": MessageLookupByLibrary.simpleMessage("Сервер"),
++    "server": MessageLookupByLibrary.simpleMessage("Портал"),
+     "serviceAbnormalCount": m86,
+     "serviceAllAvailable": MessageLookupByLibrary.simpleMessage("Все доступны"),
+     "serviceAvailable": MessageLookupByLibrary.simpleMessage("Доступен"),
+@@ -2007,7 +2008,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "themeMode": MessageLookupByLibrary.simpleMessage("Оформление"),
+     "themeStyle": MessageLookupByLibrary.simpleMessage("Режим темы"),
+     "themeStyleDesc": MessageLookupByLibrary.simpleMessage(
+-      "Улучшенный показывает на главной логотип сервиса, тариф, сервер и кнопку подключения вместо сетки виджетов.",
++      "Улучшенный показывает на главной логотип сервиса, тариф, портал и кнопку подключения вместо сетки виджетов.",
+     ),
+     "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("Улучшенный"),
+     "themeStyleOriginal": MessageLookupByLibrary.simpleMessage("Оригинальный"),
+diff --git a/lib/l10n/l10n.dart b/lib/l10n/l10n.dart
+index 40d2f7ad..09ad5909 100644
+--- a/lib/l10n/l10n.dart
++++ b/lib/l10n/l10n.dart
+@@ -80,14 +80,14 @@ class AppLocalizations {
+     return Intl.message('Dashboard', name: 'dashboard', desc: '', args: []);
+   }
+ 
+-  /// `Proxies`
++  /// `Portals`
+   String get proxies {
+-    return Intl.message('Proxies', name: 'proxies', desc: '', args: []);
++    return Intl.message('Portals', name: 'proxies', desc: '', args: []);
+   }
+ 
+-  /// `Profile`
++  /// `Subscription`
+   String get profile {
+-    return Intl.message('Profile', name: 'profile', desc: '', args: []);
++    return Intl.message('Subscription', name: 'profile', desc: '', args: []);
+   }
+ 
+   /// `Announcement`
+@@ -100,9 +100,9 @@ class AppLocalizations {
+     );
+   }
+ 
+-  /// `Profiles`
++  /// `Subscriptions`
+   String get profiles {
+-    return Intl.message('Profiles', name: 'profiles', desc: '', args: []);
++    return Intl.message('Subscriptions', name: 'profiles', desc: '', args: []);
+   }
+ 
+   /// `Settings`
+@@ -490,10 +490,10 @@ class AppLocalizations {
+     return Intl.message('Auto run', name: 'autoRun', desc: '', args: []);
+   }
+ 
+-  /// `Auto run starts the proxy when the app opens.`
++  /// `Auto connect opens the portal when the app starts.`
+   String get autoRunDesc {
+     return Intl.message(
+-      'Auto run starts the proxy when the app opens.',
++      'Auto connect opens the portal when the app starts.',
+       name: 'autoRunDesc',
+       desc: '',
+       args: [],
+@@ -645,10 +645,10 @@ class AppLocalizations {
+     );
+   }
+ 
+-  /// `Access control picks which apps use the proxy.`
++  /// `Access control decides which apps go through the portal.`
+   String get accessControlDesc {
+     return Intl.message(
+-      'Access control picks which apps use the proxy.',
++      'Access control decides which apps go through the portal.',
+       name: 'accessControlDesc',
+       desc: '',
+       args: [],
+@@ -825,10 +825,10 @@ class AppLocalizations {
+     );
+   }
+ 
+-  /// `Enhanced puts the service logo, plan, server and a connect button on the home page in place of the widget grid.`
++  /// `Enhanced puts the service logo, plan, portal and a connect button on the home page in place of the widget grid.`
+   String get themeStyleDesc {
+     return Intl.message(
+-      'Enhanced puts the service logo, plan, server and a connect button on the home page in place of the widget grid.',
++      'Enhanced puts the service logo, plan, portal and a connect button on the home page in place of the widget grid.',
+       name: 'themeStyleDesc',
+       desc: '',
+       args: [],
+@@ -930,10 +930,10 @@ class AppLocalizations {
+     );
+   }
+ 
+-  /// `Subscription link or proxy share link`
++  /// `Subscription link or portal link`
+   String get sendFromPhonePageHint {
+     return Intl.message(
+-      'Subscription link or proxy share link',
++      'Subscription link or portal link',
+       name: 'sendFromPhonePageHint',
+       desc: '',
+       args: [],
+@@ -990,10 +990,10 @@ class AppLocalizations {
+     return Intl.message('Submit', name: 'submit', desc: '', args: []);
+   }
+ 
+-  /// `Profile {name} added`
++  /// `Subscription {name} added`
+   String profileAddedTip(Object name) {
+     return Intl.message(
+-      'Profile $name added',
++      'Subscription $name added',
+       name: 'profileAddedTip',
+       desc: '',
+       args: [name],
+@@ -1191,20 +1191,20 @@ class AppLocalizations {
+     );
+   }
+ 
+-  /// `The current proxy group cannot be selected`
++  /// `This group has no portal to pick by hand`
+   String get notSelectedTip {
+     return Intl.message(
+-      'The current proxy group cannot be selected',
++      'This group has no portal to pick by hand',
+       name: 'notSelectedTip',
+       desc: '',
+       args: [],
+     );
+   }
+ 
+-  /// `Failed to switch proxy; the previous selection has been restored`
++  /// `Could not switch the portal, the previous choice is back`
+   String get changeProxyFailedTip {
+     return Intl.message(
+-      'Failed to switch proxy; the previous selection has been restored',
++      'Could not switch the portal, the previous choice is back',
+       name: 'changeProxyFailedTip',
+       desc: '',
+       args: [],
+@@ -2111,9 +2111,9 @@ class AppLocalizations {
+     );
+   }
+ 
+-  /// `Server`
++  /// `Portal`
+   String get server {
+-    return Intl.message('Server', name: 'server', desc: '', args: []);
++    return Intl.message('Portal', name: 'server', desc: '', args: []);
+   }
+ 
+   /// `Sync interval (minutes)`
+@@ -3201,10 +3201,10 @@ class AppLocalizations {
+     );
+   }
+ 
+-  /// `The profile has been modified. Turn off auto update?`
++  /// `The subscription has been modified. Turn off auto update?`
+   String get profileHasUpdate {
+     return Intl.message(
+-      'The profile has been modified. Turn off auto update?',
++      'The subscription has been modified. Turn off auto update?',
+       name: 'profileHasUpdate',
+       desc: '',
+       args: [],
+@@ -6779,10 +6779,10 @@ class AppLocalizations {
+     );
+   }
+ 
+-  /// `Change server`
++  /// `Change portal`
+   String get changeServer {
+     return Intl.message(
+-      'Change server',
++      'Change portal',
+       name: 'changeServer',
+       desc: '',
+       args: [],
+@@ -8097,8 +8097,7 @@ class AppLocalizations {
+   String customImportDroppedSubRules(num count, Object label) {
+     return Intl.plural(
+       count,
+-      one:
+-          '1 SUB-RULE rule was dropped, since custom profiles do not support sub-rules',
++      one: '1 SUB-RULE rule was dropped, since custom profiles do not support sub-rules',
+       other:
+           '$label SUB-RULE rules were dropped, since custom profiles do not support sub-rules',
+       name: 'customImportDroppedSubRules',
+diff --git a/lib/providers/state/profile.dart b/lib/providers/state/profile.dart
+index 1b93c8f9..d90e2ee4 100644
+--- a/lib/providers/state/profile.dart
++++ b/lib/providers/state/profile.dart
+@@ -133,12 +133,16 @@ bool widgetEditingDenied(Ref ref) {
+ }
+ 
+ /// The outbound modes the current panel leaves on offer.
++///
++/// Portal Connect has no user-facing "direct": the only way to get untunnelled
++/// traffic is to switch the portal off, so the mode is never offered here even
++/// though the engine still understands it.
+ @riverpod
+ List<Mode> availableModes(Ref ref) {
+   final globalAllowed = ref.watch(globalModeAllowedProvider);
+   return [
+     for (final mode in Mode.values)
+-      if (globalAllowed || mode != Mode.global) mode,
++      if (mode != Mode.direct && (globalAllowed || mode != Mode.global)) mode,
+   ];
+ }
+ 
+diff --git a/lib/providers/state/proxies.dart b/lib/providers/state/proxies.dart
+index b06ce18d..77c453fb 100644
+--- a/lib/providers/state/proxies.dart
++++ b/lib/providers/state/proxies.dart
+@@ -11,14 +11,26 @@ GroupsState currentGroupsState(Ref ref) {
+   final shown = switch (mode) {
+     Mode.direct => const <Group>[],
+     Mode.global when globalOverride => groups.where(isGlobal),
+-    Mode.global => groups,
++    Mode.global => groups.where(_selectable),
+     Mode.rule => groups.where(
+-      (item) => item.hidden == false && !(globalOverride && isGlobal(item)),
++      (item) =>
++          item.hidden == false &&
++          _selectable(item) &&
++          !(globalOverride && isGlobal(item)),
+     ),
+   };
+   return GroupsState(value: shown.map(_withoutSelection).toList());
+ }
+ 
++/// Portal Connect never shows the engine's built-in outbounds as choices: DIRECT
++/// and REJECT are routing targets, not portals, and picking one by hand is how a
++/// user silently ends up without a tunnel. GLOBAL stays: it is the mihomo
++/// selector the global mode relies on.
++bool _selectable(Group group) {
++  final name = group.name.toUpperCase();
++  return name != 'DIRECT' && name != 'REJECT';
++}
++
+ Group _withoutSelection(Group group) {
+   final all = group.all.any(_hasSelection)
+       ? [
+@@ -26,7 +38,19 @@ Group _withoutSelection(Group group) {
+             _hasSelection(proxy) ? proxy.copyWith(now: '') : proxy,
+         ]
+       : group.all;
+-  return group.copyWith(now: '', all: all);
++  // The GLOBAL group lists every outbound the engine knows, including the built-in
++  // DIRECT and REJECT. They are routing targets, not portals, so they never reach
++  // the picker even when they sit as members of a selectable group.
++  final selectable = [
++    for (final proxy in all)
++      if (_selectableMember(proxy)) proxy,
++  ];
++  return group.copyWith(now: '', all: selectable);
++}
++
++bool _selectableMember(Proxy proxy) {
++  final name = proxy.name.toUpperCase();
++  return name != 'DIRECT' && name != 'REJECT';
+ }
+ 
+ bool _hasSelection(Proxy proxy) => proxy.now?.isNotEmpty ?? false;
+diff --git a/lib/views/dashboard/dashboard.dart b/lib/views/dashboard/dashboard.dart
+index 66821acb..469d7113 100644
+--- a/lib/views/dashboard/dashboard.dart
++++ b/lib/views/dashboard/dashboard.dart
+@@ -88,8 +88,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
+           IconButtonData(
+             glyph: mode == Mode.global ? AppGlyphs.proxies : AppGlyphs.rules,
+             tooltip:
+-                '${appLocalizations.outboundMode}: '
+-                '${mode == Mode.global ? appLocalizations.global : appLocalizations.rule}',
++                '${appLocalizations.outboundMode}: ${mode.label}',
+             onPressed: () => ref
+                 .read(setupActionProvider.notifier)
+                 .pickMode(mode == Mode.global ? Mode.rule : Mode.global),
+diff --git a/lib/views/hotkey.dart b/lib/views/hotkey.dart
+index 460627c3..d8e346e6 100644
+--- a/lib/views/hotkey.dart
++++ b/lib/views/hotkey.dart
+@@ -38,7 +38,6 @@ List<(String, List<HotAction>)> _sections(AppLocalizations appLocalizations) {
+         HotAction.mode,
+         HotAction.ruleMode,
+         HotAction.globalMode,
+-        HotAction.directMode,
+       ],
+     ),
+     (
+-- 
+2.54.0 (Apple Git-157)
+

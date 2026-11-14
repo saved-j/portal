@@ -1,0 +1,92 @@
+From ca2052740b083b2f42ac32592b2dcf8e24ee7cc7 Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 04:45:08 +0800
+Subject: [PATCH] ui: one hub for the network mode
+
+The button beside the switch opens what that mode adds: the proxies dashboard, the sort
+order and the filter editor. Three separate controls for three related actions was one too
+many for a row that also carries a switch.
+---
+ lib/views/dashboard/portal_controls.dart | 58 ++++++++++++++++++++++--
+ 1 file changed, 55 insertions(+), 3 deletions(-)
+
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 4c12e94b..4e2a9bff 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -222,13 +222,15 @@ class PortalModeSwitch extends ConsumerWidget {
+               ),
+               if (mode == Mode.rule) ...[
+                 const SizedBox(width: 4),
++                // One hub for everything the network mode adds: the proxies
++                // dashboard, the sort order and the filter editor.
+                 IconButton(
+-                  tooltip: 'Фильтры',
++                  tooltip: 'Сеть порталов',
+                   onPressed: () {
+                     HapticFeedback.selectionClick();
+-                    showPortalFilterEditor(context);
++                    _showNetworkActions(context, ref);
+                   },
+-                  icon: const GlyphIcon(AppGlyphs.filter, size: 20),
++                  icon: const GlyphIcon(AppGlyphs.sliders, size: 20),
+                 ),
+               ],
+             ],
+@@ -877,3 +879,53 @@ final portalConnectionsBadgeProvider =
+     NotifierProvider<PortalBadgeNotifier, bool>(PortalBadgeNotifier.new);
+ 
+ 
++
++/// Everything the network mode adds, behind one button: the proxies dashboard, the
++/// order of the server list, and the editor for the filter strip.
++Future<void> _showNetworkActions(BuildContext context, WidgetRef ref) {
++  return showModalBottomSheet<void>(
++    context: context,
++    showDragHandle: true,
++    builder: (sheetContext) {
++      final sort = ref.read(portalSortProvider);
++      return SafeArea(
++        child: Column(
++          mainAxisSize: MainAxisSize.min,
++          children: [
++            ListTile(
++              leading: const GlyphIcon(AppGlyphs.proxies),
++              title: const Text('Порталы'),
++              subtitle: const Text('Зашборд прокси: группы, узлы, замеры'),
++              onTap: () {
++                Navigator.of(sheetContext).pop();
++                Navigator.of(context).push(
++                  MaterialPageRoute(builder: (_) => const ProxiesView()),
++                );
++              },
++            ),
++            ListTile(
++              leading: const GlyphIcon(AppGlyphs.sort),
++              title: const Text('Сортировка'),
++              subtitle: Text(
++                sort == PortalSort.ping ? 'сейчас: по пингу' : 'сейчас: по имени',
++              ),
++              onTap: () {
++                ref.read(portalSortProvider.notifier).toggle();
++                Navigator.of(sheetContext).pop();
++              },
++            ),
++            ListTile(
++              leading: const GlyphIcon(AppGlyphs.filter),
++              title: const Text('Фильтры'),
++              subtitle: const Text('Порядок и скрытие групп в ленте'),
++              onTap: () {
++                Navigator.of(sheetContext).pop();
++                showPortalFilterEditor(context);
++              },
++            ),
++          ],
++        ),
++      );
++    },
++  );
++}
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,147 @@
+From ad4e729f2d05dc38d0e3298a8a2fecfd0205b53b Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 05:01:55 +0800
+Subject: [PATCH] ui: the portal draws the engine's connections, not a loop
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The flow and the numbers come from the tracked connection list: open connections, their
+measured rate, and the share each filter carries. With nothing open the portal is still —
+that is the point of an indicator.
+---
+ lib/views/dashboard/hero.dart            | 14 ++++++---
+ lib/views/dashboard/portal_controls.dart | 37 ++++++++++++++++++++++++
+ lib/views/dashboard/portal_gateway.dart  | 22 +++++++++++++-
+ 3 files changed, 68 insertions(+), 5 deletions(-)
+
+diff --git a/lib/views/dashboard/hero.dart b/lib/views/dashboard/hero.dart
+index 668c3f73..2b8c92ee 100644
+--- a/lib/views/dashboard/hero.dart
++++ b/lib/views/dashboard/hero.dart
+@@ -660,10 +660,12 @@ class _ConnectButton extends ConsumerWidget {
+     final suspended = isStart && ref.watch(suspendProvider);
+     final runTime = ref.watch(runTimeProvider);
+     // Live traffic sets how busy the portal looks: 2 MB/s and above is a full flow.
+-    final traffics = ref.watch(trafficsProvider).list;
+-    final last = traffics.isEmpty ? null : traffics.last;
+-    final rate = last == null ? 0.0 : (last.up + last.down).toDouble();
+-    final intensity = (rate / (2 * 1024 * 1024)).clamp(0.0, 1.0);
++    final live = ref.watch(portalLiveProvider);
++    final rate = (live.up + live.down).toDouble();
++    // No connections, no motion: the animation is the wire, not a loop.
++    final intensity = live.connections == 0
++        ? 0.0
++        : (rate / (2 * 1024 * 1024)).clamp(0.08, 1.0);
+     final label = suspended
+         ? appLocalizations.suspended
+         : isStart
+@@ -690,6 +692,10 @@ class _ConnectButton extends ConsumerWidget {
+                   runTime: runTime,
+                   center: _connectedMark(ref),
+                   intensity: intensity,
++                  connections: live.connections,
++                  rateText: live.connections == 0
++                      ? null
++                      : '${(rate / 1024).toStringAsFixed(0)} КБ/с',
+                 ),
+               ),
+             ),
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index f10b7d2f..0c1a305e 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -107,6 +107,43 @@ class PortalDisplayNotifier extends Notifier<int> {
+ final portalDisplayProvider =
+     NotifierProvider<PortalDisplayNotifier, int>(PortalDisplayNotifier.new);
+ 
++
++/// What is actually crossing the wire right now, taken from the engine's own connection
++/// list: how many connections are open, how fast they move, and how much belongs to each
++/// filter. Nothing here is inferred or animated for show.
++typedef PortalLive = ({
++  int connections,
++  int down,
++  int up,
++  Map<String, int> byGroup,
++});
++
++final portalLiveProvider = Provider<PortalLive>((ref) {
++  final list = ref.watch(requestsProvider).list;
++  var down = 0;
++  var up = 0;
++  final byGroup = <String, int>{};
++  for (final request in list) {
++    final requestDown = request.downloadSpeed ?? 0;
++    final requestUp = request.uploadSpeed ?? 0;
++    down += requestDown;
++    up += requestUp;
++    if (request.chains.isNotEmpty) {
++      byGroup.update(
++        request.chains.first,
++        (value) => value + requestDown + requestUp,
++        ifAbsent: () => requestDown + requestUp,
++      );
++    }
++  }
++  return (
++    connections: list.length,
++    down: down,
++    up: up,
++    byGroup: byGroup,
++  );
++});
++
+ class PortalFiltersNotifier extends Notifier<({Set<String> hidden, List<String> order})> {
+   @override
+   ({Set<String> hidden, List<String> order}) build() =>
+diff --git a/lib/views/dashboard/portal_gateway.dart b/lib/views/dashboard/portal_gateway.dart
+index 7a5f0f7c..36fc3931 100644
+--- a/lib/views/dashboard/portal_gateway.dart
++++ b/lib/views/dashboard/portal_gateway.dart
+@@ -20,6 +20,8 @@ class PortalGatewayCore extends StatefulWidget {
+     this.size = 168,
+     this.center,
+     this.intensity = 0,
++    this.connections = 0,
++    this.rateText,
+   });
+ 
+   final bool isStart;
+@@ -34,6 +36,10 @@ class PortalGatewayCore extends StatefulWidget {
+   /// fast they move, so the picture follows the wire instead of a fixed loop.
+   final double intensity;
+ 
++  /// Open connections in the engine right now, and their measured rate.
++  final int connections;
++  final String? rateText;
++
+   @override
+   State<PortalGatewayCore> createState() => _PortalGatewayCoreState();
+ }
+@@ -62,7 +68,21 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
+       // The portal is off: nothing is drawn inside the hole.
+       core = const SizedBox.shrink();
+     } else if (widget.center != null) {
+-      core = widget.center!;
++      core = Column(
++        mainAxisSize: MainAxisSize.min,
++        children: [
++          widget.center!,
++          if (widget.rateText != null) ...[
++            const SizedBox(height: 4),
++            Text(
++              '${widget.connections} · ${widget.rateText}',
++              style: AppTextStyle.caption1.of(context).copyWith(
++                color: Colors.white.withValues(alpha: 0.7),
++              ),
++            ),
++          ],
++        ],
++      );
+     } else if (widget.suspended) {
+       core = const GlyphIcon(AppGlyphs.wifiOff, size: 34, fill: 1);
+     } else {
+-- 
+2.54.0 (Apple Git-157)
+

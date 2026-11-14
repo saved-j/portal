@@ -1,0 +1,336 @@
+From d272da3be01955c928ac0c1628ef6847aae0c4be Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 05:09:43 +0800
+Subject: [PATCH] ui: the portal is a porthole into space
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The rotating arcs are gone; when the portal is open its circle becomes a randomly generated
+sky — flat Material planets, stars that twinkle, comets with tapered tails. The scene is
+regenerated at every cycle, so the porthole never repeats itself.
+---
+ lib/views/dashboard/portal_gateway.dart | 260 ++++++++++++++++++++----
+ 1 file changed, 219 insertions(+), 41 deletions(-)
+
+diff --git a/lib/views/dashboard/portal_gateway.dart b/lib/views/dashboard/portal_gateway.dart
+index e36a8ec7..251b2185 100644
+--- a/lib/views/dashboard/portal_gateway.dart
++++ b/lib/views/dashboard/portal_gateway.dart
+@@ -51,6 +51,11 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
+     duration: const Duration(milliseconds: 9000),
+   )..repeat();
+ 
++  /// One randomly generated sky. Regenerated every cycle so the picture is never the
++  /// same twice, which is the point of a porthole.
++  _SpaceField _space = _SpaceField.generate(math.Random());
++  double _lastTurn = 0;
++
+   @override
+   void dispose() {
+     _controller.dispose();
+@@ -103,7 +108,11 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
+       child: AnimatedBuilder(
+         animation: _controller,
+         builder: (context, child) {
+-          final t = reduced ? 0.0 : _controller.value;
++          var t = reduced ? 0.0 : _controller.value;
++          if (!reduced && t < _lastTurn) {
++            _space = _SpaceField.generate(math.Random());
++          }
++          _lastTurn = t;
+           final pulse = reduced ? 1.0 : 0.95 + 0.11 * _pulseWave(t);
+           return Transform.scale(
+             scale: pulse,
+@@ -114,6 +123,7 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
+                 turn: t,
+                 active: widget.isStart,
+                 intensity: widget.intensity,
++                space: _space,
+               ),
+               child: Center(
+                 child: IconTheme.merge(
+@@ -143,6 +153,7 @@ class _GatewayPainter extends CustomPainter {
+     required this.turn,
+     required this.active,
+     required this.intensity,
++    required this.space,
+   });
+ 
+   final Color portal;
+@@ -150,12 +161,12 @@ class _GatewayPainter extends CustomPainter {
+   final double turn;
+   final bool active;
+   final double intensity;
++  final _SpaceField space;
+ 
+   @override
+   void paint(Canvas canvas, Size size) {
+     final center = size.center(Offset.zero);
+     final radius = size.shortestSide / 2;
+-    final dim = active ? 1.0 : 1.0;
+ 
+     if (!active) {
+       // A black hole: the portal is there, but nothing comes out of it.
+@@ -177,46 +188,128 @@ class _GatewayPainter extends CustomPainter {
+       return;
+     }
+ 
+-    final glow = Paint()
+-      ..shader = RadialGradient(
+-        colors: [
+-          portal.withValues(alpha: 0.32 * dim),
+-          portal.withValues(alpha: 0.0),
+-        ],
+-      ).createShader(Rect.fromCircle(center: center, radius: radius));
+-    canvas.drawCircle(center, radius, glow);
+-
+-    final outer = Paint()
+-      ..style = PaintingStyle.stroke
+-      ..strokeWidth = 2
+-      ..strokeCap = StrokeCap.round
+-      ..color = portal.withValues(alpha: 0.9 * dim);
+-    canvas.drawArc(
+-      Rect.fromCircle(center: center, radius: radius - 6),
+-      turn * math.pi * 2,
+-      math.pi * 1.25,
+-      false,
+-      outer,
+-    );
++    // A porthole into space: flat Material shapes, never the same sky twice.
++    final skyRect = Rect.fromCircle(center: center, radius: radius - 1);
++    canvas.save();
++    canvas.clipPath(Path()..addOval(skyRect));
+ 
+-    final inner = Paint()
+-      ..style = PaintingStyle.stroke
+-      ..strokeWidth = 1.4
+-      ..strokeCap = StrokeCap.round
+-      ..color = accent.withValues(alpha: 0.75 * dim);
+-    canvas.drawArc(
+-      Rect.fromCircle(center: center, radius: radius - 18),
+-      -turn * math.pi * 2 * 1.5,
+-      math.pi * 0.9,
+-      false,
+-      inner,
+-    );
++    final sky = Paint()
++      ..shader = const LinearGradient(
++        begin: Alignment.topLeft,
++        end: Alignment.bottomRight,
++        colors: [Color(0xFF080B18), Color(0xFF0D0A1E), Color(0xFF02030A)],
++      ).createShader(skyRect);
++    canvas.drawRect(skyRect, sky);
++
++    for (final nebula in space.nebulae) {
++      final spot = Offset(
++        center.dx + nebula.x * radius * 0.8,
++        center.dy + nebula.y * radius * 0.8,
++      );
++      final paint = Paint()
++        ..shader = RadialGradient(
++          colors: [
++            nebula.color.withValues(alpha: 0.22),
++            nebula.color.withValues(alpha: 0.0),
++          ],
++        ).createShader(Rect.fromCircle(center: spot, radius: nebula.radius * radius));
++      canvas.drawCircle(spot, nebula.radius * radius, paint);
++    }
++
++    for (final star in space.stars) {
++      final offset = Offset(
++        center.dx + star.x * radius * 0.94,
++        center.dy + star.y * radius * 0.94,
++      );
++      final twinkle = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(turn * math.pi * 2 + star.phase));
++      canvas.drawCircle(
++        offset,
++        star.radius,
++        Paint()..color = Colors.white.withValues(alpha: twinkle * 0.9),
++      );
++    }
++
++    for (final planet in space.planets) {
++      final centerPlanet = Offset(
++        center.dx + planet.x * radius * 0.62,
++        center.dy + planet.y * radius * 0.62,
++      );
++      final planetRadius = planet.radius * radius;
++      if (planet.ring) {
++        canvas.save();
++        canvas.translate(centerPlanet.dx, centerPlanet.dy);
++        canvas.rotate(-0.42);
++        canvas.drawOval(
++          Rect.fromCenter(
++            center: Offset.zero,
++            width: planetRadius * 3.4,
++            height: planetRadius * 1.1,
++          ),
++          Paint()
++            ..style = PaintingStyle.stroke
++            ..strokeWidth = 2
++            ..color = planet.color.withValues(alpha: 0.55),
++        );
++        canvas.restore();
++      }
++      canvas.drawCircle(
++        centerPlanet,
++        planetRadius,
++        Paint()..color = planet.color,
++      );
++      canvas.drawCircle(
++        centerPlanet,
++        planetRadius,
++        Paint()
++          ..style = PaintingStyle.stroke
++          ..strokeWidth = 1
++          ..color = Colors.white.withValues(alpha: 0.18),
++      );
++    }
++
++    for (final comet in space.comets) {
++      final progress = (turn * 1.6 + comet.offset) % 1.0;
++      final head = Offset(
++        center.dx + comet.x * radius + comet.dx * radius * progress,
++        center.dy + comet.y * radius + comet.dy * radius * progress,
++      );
++      final tail = Offset(
++        head.dx - comet.dx * radius * 0.22,
++        head.dy - comet.dy * radius * 0.22,
++      );
++      final fade = math.sin(progress * math.pi);
++      canvas.drawPath(
++        Path()
++          ..moveTo(tail.dx, tail.dy)
++          ..lineTo(head.dx, head.dy),
++        Paint()
++          ..strokeWidth = 2.4
++          ..strokeCap = StrokeCap.round
++          ..shader = LinearGradient(
++            colors: [
++              comet.color.withValues(alpha: 0.0),
++              comet.color.withValues(alpha: 0.85 * fade),
++            ],
++          ).createShader(Rect.fromPoints(tail, head)),
++      );
++      canvas.drawCircle(
++        head,
++        2.4,
++        Paint()..color = Colors.white.withValues(alpha: fade),
++      );
++    }
++
++    canvas.restore();
+ 
+-    final rim = Paint()
+-      ..style = PaintingStyle.stroke
+-      ..strokeWidth = 1
+-      ..color = portal.withValues(alpha: 0.18 * dim);
+-    canvas.drawCircle(center, radius - 30, rim);
++    // The porthole frame stays, so the sky still reads as the portal.
++    canvas.drawCircle(
++      center,
++      radius - 1,
++      Paint()
++        ..style = PaintingStyle.stroke
++        ..strokeWidth = 1.4
++        ..color = portal.withValues(alpha: 0.55),
++    );
+   }
+ 
+   @override
+@@ -224,5 +317,90 @@ class _GatewayPainter extends CustomPainter {
+       oldDelegate.turn != turn ||
+       oldDelegate.active != active ||
+       oldDelegate.portal != portal ||
+-      oldDelegate.accent != accent;
++      oldDelegate.accent != accent ||
++      oldDelegate.space != space;
++}
++
++
++typedef _Star = ({double x, double y, double radius, double phase});
++typedef _Planet = ({double x, double y, double radius, Color color, bool ring});
++typedef _Comet = ({double x, double y, double dx, double dy, double offset, Color color});
++typedef _Nebula = ({double x, double y, double radius, Color color});
++
++/// A randomly generated sky for the portal. Coordinates are in units of the portal
++/// radius, so the same scene fits any size.
++class _SpaceField {
++  const _SpaceField({
++    required this.stars,
++    required this.planets,
++    required this.comets,
++    required this.nebulae,
++  });
++
++  final List<_Star> stars;
++  final List<_Planet> planets;
++  final List<_Comet> comets;
++  final List<_Nebula> nebulae;
++
++  static const _palette = [
++    Color(0xFF7C6CF6),
++    Color(0xFF54C7E8),
++    Color(0xFFE8A25C),
++    Color(0xFF9BE8C4),
++    Color(0xFFE86C9B),
++  ];
++
++  static _SpaceField generate(math.Random random) {
++    double unit() => random.nextDouble() * 2 - 1;
++
++    final stars = <_Star>[
++      for (var i = 0; i < 46; i++)
++        (
++          x: unit(),
++          y: unit(),
++          radius: 0.5 + random.nextDouble() * 1.1,
++          phase: random.nextDouble() * math.pi * 2,
++        ),
++    ];
++
++    final planets = <_Planet>[
++      for (var i = 0; i < 1 + random.nextInt(2); i++)
++        (
++          x: unit() * 0.75,
++          y: unit() * 0.75,
++          radius: 0.13 + random.nextDouble() * 0.14,
++          color: _palette[random.nextInt(_palette.length)],
++          ring: random.nextDouble() < 0.45,
++        ),
++    ];
++
++    final comets = <_Comet>[
++      for (var i = 0; i < 2 + random.nextInt(2); i++)
++        (
++          x: unit() * 1.2,
++          y: unit() * 1.2,
++          dx: (random.nextDouble() * 1.4 + 0.6) * (random.nextBool() ? 1 : -1),
++          dy: (random.nextDouble() * 1.2 + 0.5) * (random.nextBool() ? 1 : -1),
++          offset: random.nextDouble(),
++          color: _palette[random.nextInt(_palette.length)],
++        ),
++    ];
++
++    final nebulae = <_Nebula>[
++      for (var i = 0; i < 2; i++)
++        (
++          x: unit() * 0.7,
++          y: unit() * 0.7,
++          radius: 0.35 + random.nextDouble() * 0.35,
++          color: _palette[random.nextInt(_palette.length)],
++        ),
++    ];
++
++    return _SpaceField(
++      stars: stars,
++      planets: planets,
++      comets: comets,
++      nebulae: nebulae,
++    );
++  }
+ }
+-- 
+2.54.0 (Apple Git-157)
+

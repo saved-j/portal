@@ -1,0 +1,116 @@
+From 2bb5827c24dcaf1486f916dcd72b0bc0fb76b257 Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 03:33:52 +0800
+Subject: [PATCH] ui: resolve the chip to a real server, connections in the
+ header
+
+'Auto' pointing at 'Auto Europe' pointing at a node told the user nothing: the chip now
+follows the chain to the node that carries traffic. The header gains a connections
+button on the right and swaps the gear with the bypass shortcut on the left, so the
+service name stays centred between two equal groups.
+---
+ lib/views/dashboard/hero.dart            | 30 ++++++++++++++++--------
+ lib/views/dashboard/portal_controls.dart | 25 +++++++++++++++-----
+ 2 files changed, 39 insertions(+), 16 deletions(-)
+
+diff --git a/lib/views/dashboard/hero.dart b/lib/views/dashboard/hero.dart
+index 6adb287d..0241469d 100644
+--- a/lib/views/dashboard/hero.dart
++++ b/lib/views/dashboard/hero.dart
+@@ -89,6 +89,16 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
+                   children: [
+                     Row(
+                       children: [
++                        IconButton(
++                          tooltip: context.appLocalizations.tools,
++                          onPressed: () => ref
++                              .read(currentPageLabelProvider.notifier)
++                              .toPage(PageLabel.tools),
++                          icon: const GlyphIcon(
++                            AppGlyphs.settings,
++                            size: 22,
++                          ),
++                        ),
+                         IconButton(
+                           // Shortcut to the per-app bypass list: the one setting a
+                           // user reaches for while looking at the server list.
+@@ -103,16 +113,6 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
+                             size: 22,
+                           ),
+                         ),
+-                        IconButton(
+-                          tooltip: context.appLocalizations.tools,
+-                          onPressed: () => ref
+-                              .read(currentPageLabelProvider.notifier)
+-                              .toPage(PageLabel.tools),
+-                          icon: const GlyphIcon(
+-                            AppGlyphs.settings,
+-                            size: 22,
+-                          ),
+-                        ),
+                         // No app icon and no app name here: the screen shows the
+                         // service the subscription belongs to, not the product that
+                         // opened the door.
+@@ -129,6 +129,16 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
+                             ),
+                           ),
+                         ),
++                        IconButton(
++                          tooltip: context.appLocalizations.connections,
++                          onPressed: () => ref
++                              .read(currentPageLabelProvider.notifier)
++                              .toPage(PageLabel.connections),
++                          icon: const GlyphIcon(
++                            AppGlyphs.connections,
++                            size: 22,
++                          ),
++                        ),
+                         IconButton(
+                           tooltip: context.appLocalizations.profiles,
+                           onPressed: () => ref
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 0b65aa07..816833b7 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -226,7 +226,18 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
+   @override
+   Widget build(BuildContext context) {
+     final theme = Theme.of(context);
+-    final groups = portalGroups(ref.watch(groupsProvider));
++    final allGroups = ref.watch(groupsProvider);
++    final groups = portalGroups(allGroups);
++    final byName = {for (final item in allGroups) item.name: item};
++    // A selector may point at another selector, so the chip has to follow the
++    // chain to the node that actually carries traffic.
++    String? resolve(String? name, [int depth = 0]) {
++      if (name == null || depth > 6) return null;
++      final next = byName[name];
++      if (next == null) return name;
++      return resolve(next.now, depth + 1);
++    }
++
+     final active = ref.watch(portalGroupProvider) ?? groups.firstOrNull?.name;
+     final hint = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7);
+     return Row(
+@@ -259,11 +270,13 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
+                               : null,
+                           // A selector says nothing useful without its current
+                           // server, so the chip carries the resolved node too.
+-                          label: Text(
+-                            item.now == null || item.now == item.name
+-                                ? item.name
+-                                : '${item.name} → ${item.now}',
+-                          ),
++                          label: Text(() {
++                            final node = resolve(item.now);
++                            if (node == null || node == item.name) {
++                              return item.name;
++                            }
++                            return '${item.name} → $node';
++                          }()),
+                           selected: item.name == active,
+                           onSelected: (_) => ref
+                               .read(portalGroupProvider.notifier)
+-- 
+2.54.0 (Apple Git-157)
+

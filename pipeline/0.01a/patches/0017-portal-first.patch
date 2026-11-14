@@ -1,0 +1,53 @@
+From 2c9ae0294fc824128922e09a53ef1044f53af19c Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 01:42:13 +0800
+Subject: [PATCH] ui: portal above the list, announcement below the choice
+
+The order now matches what people learnt from Happ and Incy: the button you press
+first, then the mode, then the servers, and only afterwards the announcement,
+which is read once and never again.
+---
+ lib/views/dashboard/hero.dart | 16 +++++++++-------
+ 1 file changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/lib/views/dashboard/hero.dart b/lib/views/dashboard/hero.dart
+index 2d211461..d219a3ab 100644
+--- a/lib/views/dashboard/hero.dart
++++ b/lib/views/dashboard/hero.dart
+@@ -129,13 +129,19 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
+                         ),
+                       ],
+                     ),
++                    const SizedBox(height: 8),
++                    // The portal comes first and the choice comes after it, the
++                    // order Happ and Incy taught people: the button you press
++                    // before the list you read.
++                    const _ConnectButton(),
+                     const SizedBox(height: 16),
+-                    const AnnouncementCard(),
+-                    if (ref.watch(announcementProvider) != null)
+-                      const SizedBox(height: _gap),
+                     const PortalModeSwitch(),
+                     const SizedBox(height: 8),
+                     const PortalServerList(),
++                    if (ref.watch(announcementProvider) != null) ...[
++                      const SizedBox(height: _gap),
++                      const AnnouncementCard(),
++                    ],
+                     const SizedBox(height: _gap),
+                     _ServerPanel(group: headers.serverGroup),
+                     const SizedBox(height: _gap),
+@@ -144,10 +150,6 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
+                 ),
+               ),
+             ),
+-            Padding(
+-              padding: padding.copyWith(top: 0),
+-              child: const _ConnectButton(),
+-            ),
+           ],
+         ),
+       ),
+-- 
+2.54.0 (Apple Git-157)
+

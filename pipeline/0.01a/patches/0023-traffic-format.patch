@@ -1,0 +1,31 @@
+From f957376586247c5c216b217861180ac33ebbe9b9 Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 02:44:51 +0800
+Subject: [PATCH] ui: print plan traffic as two figures, not a bad
+ interpolation
+
+The first version built the text by string substitution and shipped '0.00 GiB.00 GiB/0'
+to the screen; the card now formats used and total directly.
+---
+ lib/views/dashboard/portal_controls.dart | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index d48977c2..6288dc85 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -271,9 +271,9 @@ class PortalPlanCard extends ConsumerWidget {
+                     style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                   ),
+                 ),
+-                if (used != null)
++                if (used != null && total > 0)
+                   Text(
+-                    '$used/$total'.replaceFirst('$used', gb(used)).replaceFirst('$total', gb(total)),
++                    '${gb(used)} / ${gb(total)}',
+                     style: theme.textTheme.labelMedium
+                         ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                   ),
+-- 
+2.54.0 (Apple Git-157)
+

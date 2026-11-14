@@ -1,0 +1,43 @@
+From 3c2e46e3e9f16b838d6124ea2abbda351e8b9854 Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 03:43:17 +0800
+Subject: [PATCH] fix: the connections button pushes its page
+
+Switching the page index did nothing because connections left the phone navigation;
+the button opens ConnectionFeedsView as a route now.
+---
+ lib/views/dashboard/hero.dart | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/lib/views/dashboard/hero.dart b/lib/views/dashboard/hero.dart
+index 0241469d..b7a02080 100644
+--- a/lib/views/dashboard/hero.dart
++++ b/lib/views/dashboard/hero.dart
+@@ -11,6 +11,7 @@ import 'package:fl_clash/providers/providers.dart';
+ import 'package:fl_clash/ui/icons/icons.dart';
+ import 'package:fl_clash/views/profiles/add.dart';
+ import 'package:fl_clash/views/access.dart';
++import 'package:fl_clash/views/connection/connection_feeds.dart';
+ import 'package:fl_clash/widgets/widgets.dart';
+ import 'portal_controls.dart';
+ import 'portal_gateway.dart';
+@@ -131,9 +132,13 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
+                         ),
+                         IconButton(
+                           tooltip: context.appLocalizations.connections,
+-                          onPressed: () => ref
+-                              .read(currentPageLabelProvider.notifier)
+-                              .toPage(PageLabel.connections),
++                          // The connections page is not in the phone navigation any
++                          // more, so switching the page index did nothing: push it.
++                          onPressed: () => Navigator.of(context).push(
++                            MaterialPageRoute(
++                              builder: (_) => const ConnectionFeedsView(),
++                            ),
++                          ),
+                           icon: const GlyphIcon(
+                             AppGlyphs.connections,
+                             size: 22,
+-- 
+2.54.0 (Apple Git-157)
+

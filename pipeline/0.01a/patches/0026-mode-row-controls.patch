@@ -1,0 +1,449 @@
+From 8df75937b9bf28f9f41cb215e85b13faa33fd4bb Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 03:21:41 +0800
+Subject: [PATCH] ui: sort and delay beside the mode switch, arrows on the
+ group strip, no filters in the simple mode
+
+The two list controls belong to the mode row, not to the list header. The group strip
+scrolls with arrows because dragging chips while the list scrolls under the thumb is
+fiddly, and in the simple mode there is nothing to filter: one portal takes all traffic,
+so the strip disappears entirely.
+---
+ lib/views/dashboard/portal_controls.dart | 329 +++++++++++++----------
+ 1 file changed, 183 insertions(+), 146 deletions(-)
+
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 92abcf41..dc150fb3 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -6,174 +6,217 @@ import 'package:fl_clash/ui/icons/icons.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:material_ui/material_ui.dart';
+ 
+-/// Material 3 mode switch: the two modes Portal Connect actually has, with the
+-/// engine's own names kept out of the UI.
++/// How the server list is ordered; the switch sits next to the mode control.
++enum PortalSort { ping, alphabet }
++
++class PortalSortNotifier extends Notifier<PortalSort> {
++  @override
++  PortalSort build() => PortalSort.ping;
++
++  void toggle() =>
++      state = state == PortalSort.ping ? PortalSort.alphabet : PortalSort.ping;
++}
++
++final portalSortProvider =
++    NotifierProvider<PortalSortNotifier, PortalSort>(PortalSortNotifier.new);
++
++/// Which group the strip shows. Null means "the first one the panel offers",
++/// which survives subscription updates that reorder groups.
++class PortalGroupNotifier extends Notifier<String?> {
++  @override
++  String? build() => null;
++
++  void pick(String? name) => state = name;
++}
++
++final portalGroupProvider =
++    NotifierProvider<PortalGroupNotifier, String?>(PortalGroupNotifier.new);
++
++List<Group> portalGroups(List<Group> all) => [
++      for (final item in all)
++        if (item.hidden != true &&
++            !{'DIRECT', 'REJECT'}.contains(item.name.toUpperCase()))
++          item,
++    ];
++
++/// Mode control with the two list controls beside it: sorting and the delay test.
+ class PortalModeSwitch extends ConsumerWidget {
+   const PortalModeSwitch({super.key});
+ 
+   @override
+   Widget build(BuildContext context, WidgetRef ref) {
+-    final mode = ref.watch(
+-      patchClashConfigProvider.select((state) => state.mode),
+-    );
++    final theme = Theme.of(context);
++    final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
+     final modes = ref.watch(availableModesProvider);
++    final running = ref.watch(runTimeProvider) != null;
++    final groups = portalGroups(ref.watch(groupsProvider));
++    final groupName = ref.watch(portalGroupProvider);
++    final group = groups.where((g) => g.name == groupName).firstOrNull ??
++        groups.firstOrNull;
++    final sort = ref.watch(portalSortProvider);
+     if (modes.length < 2) return const SizedBox.shrink();
+-    return SegmentedButton<Mode>(
+-      segments: [
+-        for (final item in modes)
+-          ButtonSegment<Mode>(
+-            value: item,
+-            label: Text(item.label),
++    return Row(
++      children: [
++        Expanded(
++          child: SegmentedButton<Mode>(
++            segments: [
++              for (final item in modes)
++                ButtonSegment<Mode>(value: item, label: Text(item.label)),
++            ],
++            selected: {mode},
++            showSelectedIcon: false,
++            onSelectionChanged: (selection) {
++              final next = selection.firstOrNull;
++              if (next == null || next == mode) return;
++              ref.read(setupActionProvider.notifier).pickMode(next);
++            },
+           ),
++        ),
++        const SizedBox(width: 4),
++        IconButton(
++          tooltip: sort == PortalSort.ping ? 'Сортировка: пинг' : 'Сортировка: A-Z',
++          onPressed: () => ref.read(portalSortProvider.notifier).toggle(),
++          icon: GlyphIcon(
++            sort == PortalSort.ping ? AppGlyphs.sort : AppGlyphs.textShort,
++            size: 18,
++          ),
++        ),
++        IconButton(
++          tooltip: running
++              ? context.appLocalizations.delayTest
++              : context.appLocalizations.openPortal,
++          onPressed: running && group != null
++              ? () => ref
++                  .read(proxiesActionProvider.notifier)
++                  .delayTest(group.all)
++              : null,
++          icon: GlyphIcon(AppGlyphs.bolt, size: 18, color: theme.colorScheme.onSurfaceVariant),
++        ),
+       ],
+-      selected: {mode},
+-      showSelectedIcon: false,
+-      onSelectionChanged: (selection) {
+-        final next = selection.firstOrNull;
+-        if (next == null || next == mode) return;
+-        ref.read(setupActionProvider.notifier).pickMode(next);
+-      },
+     );
+   }
+ }
+ 
+-/// The working screen's server list: name on the left, delay on the right, a
+-/// marker on the row that is actually in use, and a sort switch between ping and
+-/// alphabetical order.
+-class PortalServerList extends ConsumerStatefulWidget {
++/// The working screen's server list: a group strip with arrows (network mode only),
++/// a tinted row for the chosen server, name left and delay right.
++class PortalServerList extends ConsumerWidget {
+   const PortalServerList({super.key});
+ 
+   @override
+-  ConsumerState<PortalServerList> createState() => _PortalServerListState();
+-}
+-
+-enum _SortOrder { ping, alphabet }
+-
+-class _PortalServerListState extends ConsumerState<PortalServerList> {
+-  var _order = _SortOrder.ping;
+-
+-  /// The row the user picked. Before the portal is open the choice is only
+-  /// visual: it is applied the moment the tunnel comes up.
+-  String? _picked;
+-
+-  /// Which group the strip shows; the list follows it.
+-  String? _groupName;
+-
+-  @override
+-  Widget build(BuildContext context) {
+-    final allGroups = ref.watch(groupsProvider);
+-    final groups = allGroups.where((item) {
+-      if (item.hidden == true) return false;
+-      final name = item.name.toUpperCase();
+-      return name != 'DIRECT' && name != 'REJECT';
+-    }).toList();
+-    final group = groups
+-            .where((item) => item.name == _groupName)
+-            .firstOrNull ??
++  Widget build(BuildContext context, WidgetRef ref) {
++    final theme = Theme.of(context);
++    final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
++    final simple = mode == Mode.global;
++    final groups = portalGroups(ref.watch(groupsProvider));
++    final groupName = ref.watch(portalGroupProvider);
++    final group = groups.where((g) => g.name == groupName).firstOrNull ??
+         groups.firstOrNull;
+     if (group == null) {
+       return Padding(
+         padding: const EdgeInsets.all(16),
+         child: Text(
+           context.appLocalizations.proxyGroupEmpty,
+-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+-              ),
++          style: theme.textTheme.bodyMedium
++              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+         ),
+       );
+     }
+-
+-    final theme = Theme.of(context);
+-    final running = ref.watch(runTimeProvider) != null;
+-    if (running && _picked != null && group.now != _picked) {
+-      final pending = _picked!;
+-      _picked = null;
+-      WidgetsBinding.instance.addPostFrameCallback((_) {
+-        ref.read(proxiesActionProvider.notifier).changeProxy(
+-              groupName: group.name,
+-              proxyName: pending,
+-            );
+-      });
+-    }
+-    final selectedName = _picked ?? group.now;
++    final sort = ref.watch(portalSortProvider);
+     final members = [
+       for (final proxy in group.all)
+         if (!{'DIRECT', 'REJECT'}.contains(proxy.name.toUpperCase())) proxy,
+     ];
+-    if (_order == _SortOrder.alphabet) {
++    if (sort == PortalSort.alphabet) {
+       members.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+     } else {
+       int rank(Proxy p) => ref.watch(delayProvider(proxyName: p.name)) ?? 1 << 30;
+       members.sort((a, b) => rank(a).compareTo(rank(b)));
+     }
+-
+     return Column(
+       crossAxisAlignment: CrossAxisAlignment.stretch,
+       children: [
+-        Row(
+-          children: [
+-            if (groups.length <= 1)
+-              Text(
+-                group.name,
+-                style: theme.textTheme.labelLarge?.copyWith(
+-                  color: theme.colorScheme.onSurfaceVariant,
+-                ),
+-              )
+-            else
+-              Expanded(
+-                child: SingleChildScrollView(
+-                  scrollDirection: Axis.horizontal,
+-                  child: Row(
+-                    children: [
+-                      for (final item in groups)
+-                        Padding(
+-                          padding: const EdgeInsets.only(right: 6),
+-                          child: ChoiceChip(
+-                            label: Text(item.name),
+-                            selected: item.name == group.name,
+-                            onSelected: (_) =>
+-                                setState(() => _groupName = item.name),
+-                          ),
+-                        ),
+-                    ],
+-                  ),
+-                ),
+-              ),
+-            IconButton(
+-              // Delay is measured through the running core, so the button stays
+-              // disabled until the portal is open instead of answering -1 ms.
+-              tooltip: running
+-                  ? context.appLocalizations.delayTest
+-                  : context.appLocalizations.openPortal,
+-              onPressed: running
+-                  ? () => ref
+-                      .read(proxiesActionProvider.notifier)
+-                      .delayTest(group.all)
+-                  : null,
+-              icon: const GlyphIcon(AppGlyphs.bolt, size: 18),
+-            ),
+-            IconButton(
+-              tooltip: '${context.appLocalizations.sort}: '
+-                  '${_order == _SortOrder.ping ? 'пинг' : 'A-Z'}',
+-              onPressed: () => setState(() {
+-                _order = _order == _SortOrder.ping
+-                    ? _SortOrder.alphabet
+-                    : _SortOrder.ping;
+-              }),
+-              icon: GlyphIcon(
+-                _order == _SortOrder.ping ? AppGlyphs.sort : AppGlyphs.proxies,
+-                size: 18,
+-              ),
++        if (!simple && groups.length > 1) const _GroupStrip(),
++        if (!simple && groups.length == 1)
++          Padding(
++            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
++            child: Text(
++              group.name,
++              style: theme.textTheme.labelLarge
++                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+             ),
+-          ],
+-        ),
++          ),
+         for (final proxy in members)
+-          _ServerRow(
+-            group: group,
+-            proxy: proxy,
+-            selected: selectedName == proxy.name,
+-            onPick: (name) => setState(() => _picked = name),
++          _ServerRow(group: group, proxy: proxy, selected: group.now == proxy.name),
++      ],
++    );
++  }
++}
++
++/// Horizontal group filter with arrows: a long panel can offer a dozen groups, and
++/// dragging a chip strip with a thumb while the list scrolls underneath is fiddly.
++class _GroupStrip extends ConsumerStatefulWidget {
++  const _GroupStrip();
++
++  @override
++  ConsumerState<_GroupStrip> createState() => _GroupStripState();
++}
++
++class _GroupStripState extends ConsumerState<_GroupStrip> {
++  final _controller = ScrollController();
++
++  @override
++  void dispose() {
++    _controller.dispose();
++    super.dispose();
++  }
++
++  void _nudge(double delta) {
++    if (!_controller.hasClients) return;
++    final target = (_controller.offset + delta)
++        .clamp(0.0, _controller.position.maxScrollExtent);
++    _controller.animateTo(
++      target,
++      duration: const Duration(milliseconds: 220),
++      curve: Curves.easeOut,
++    );
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final groups = portalGroups(ref.watch(groupsProvider));
++    final active = ref.watch(portalGroupProvider) ?? groups.firstOrNull?.name;
++    return Row(
++      children: [
++        IconButton(
++          visualDensity: VisualDensity.compact,
++          onPressed: () => _nudge(-140),
++          icon: const GlyphIcon(AppGlyphs.chevronBack, size: 16),
++        ),
++        Expanded(
++          child: SingleChildScrollView(
++            controller: _controller,
++            scrollDirection: Axis.horizontal,
++            child: Row(
++              children: [
++                for (final item in groups)
++                  Padding(
++                    padding: const EdgeInsets.symmetric(horizontal: 3),
++                    child: ChoiceChip(
++                      label: Text(item.name),
++                      selected: item.name == active,
++                      onSelected: (_) =>
++                          ref.read(portalGroupProvider.notifier).pick(item.name),
++                    ),
++                  ),
++              ],
++            ),
+           ),
++        ),
++        IconButton(
++          visualDensity: VisualDensity.compact,
++          onPressed: () => _nudge(140),
++          icon: const GlyphIcon(AppGlyphs.chevronForward, size: 16),
++        ),
+       ],
+     );
+   }
+@@ -184,23 +227,21 @@ class _ServerRow extends ConsumerWidget {
+     required this.group,
+     required this.proxy,
+     required this.selected,
+-    required this.onPick,
+   });
+ 
+   final Group group;
+   final Proxy proxy;
+   final bool selected;
+-  final ValueChanged<String> onPick;
+ 
+   @override
+   Widget build(BuildContext context, WidgetRef ref) {
+     final theme = Theme.of(context);
+     final delay = ref.watch(delayProvider(proxyName: proxy.name));
+-    final color = selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant;
++    final color =
++        selected ? theme.colorScheme.onPrimaryContainer : theme.colorScheme.onSurfaceVariant;
+     return ListTile(
+       dense: true,
+       selected: selected,
+-      // Colour, not just the marker: a tinted row is what the eye finds first.
+       tileColor: selected ? theme.colorScheme.primaryContainer : null,
+       selectedTileColor: theme.colorScheme.primaryContainer,
+       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+@@ -215,7 +256,7 @@ class _ServerRow extends ConsumerWidget {
+         maxLines: 1,
+         overflow: TextOverflow.ellipsis,
+         style: theme.textTheme.bodyLarge?.copyWith(
+-          color: selected ? theme.colorScheme.primary : null,
++          color: selected ? theme.colorScheme.onPrimaryContainer : null,
+           fontWeight: selected ? FontWeight.w600 : null,
+         ),
+       ),
+@@ -223,21 +264,15 @@ class _ServerRow extends ConsumerWidget {
+         delay == null ? '—' : '$delay ms',
+         style: theme.textTheme.labelMedium?.copyWith(color: color),
+       ),
+-      onTap: () {
+-        onPick(proxy.name);
+-        ref.read(proxiesActionProvider.notifier).changeProxy(
+-              groupName: group.name,
+-              proxyName: proxy.name,
+-            );
+-      },
++      onTap: () => ref.read(proxiesActionProvider.notifier).changeProxy(
++            groupName: group.name,
++            proxyName: proxy.name,
++          ),
+     );
+   }
+ }
+ 
+-
+-/// Plan status and the provider's announcement in one card: the thing you glance
+-/// at, not the thing you operate. Kept deliberately small so the server list stays
+-/// the centre of the screen.
++/// Plan status and the provider's announcement in one card.
+ class PortalPlanCard extends ConsumerWidget {
+   const PortalPlanCard({super.key});
+ 
+@@ -256,7 +291,8 @@ class PortalPlanCard extends ConsumerWidget {
+             .difference(DateTime.now())
+             .inDays
+         : null;
+-    String gb(int bytes) => '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GiB';
++    String gb(int bytes) =>
++        '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GiB';
+ 
+     return Card(
+       margin: EdgeInsets.zero,
+@@ -275,7 +311,8 @@ class PortalPlanCard extends ConsumerWidget {
+                     name,
+                     maxLines: 1,
+                     overflow: TextOverflow.ellipsis,
+-                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
++                    style: theme.textTheme.titleSmall
++                        ?.copyWith(fontWeight: FontWeight.w600),
+                   ),
+                 ),
+                 if (used != null && total > 0)
+-- 
+2.54.0 (Apple Git-157)
+

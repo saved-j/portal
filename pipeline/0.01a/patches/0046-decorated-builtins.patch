@@ -1,0 +1,54 @@
+From e4e85185787e5a45adb659ee693b38426f44c490 Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 04:29:22 +0800
+Subject: [PATCH] fix: built-in outbounds come decorated
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The panel started shipping groups named 'DIRECT 🇷🇺' and 'DIRECT ' — an exact match on the
+name let them through and the strip filled with DIRECT chips. The check is on the leading
+word now, for groups and for rows.
+---
+ lib/views/dashboard/portal_controls.dart | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 7143cdac..2e09bed6 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -115,11 +115,19 @@ class PortalFiltersNotifier extends Notifier<({Set<String> hidden, List<String>
+ final portalFiltersProvider = NotifierProvider<PortalFiltersNotifier,
+     ({Set<String> hidden, List<String> order})>(PortalFiltersNotifier.new);
+ 
++/// The engine's built-in outbounds sometimes arrive decorated ('DIRECT 🇷🇺',
++/// 'Direct '), so the check is on the leading word, not on an exact match.
++bool _isBuiltinOutbound(String name) {
++  final upper = name.trim().toUpperCase();
++  return upper == 'DIRECT' ||
++      upper == 'REJECT' ||
++      upper.startsWith('DIRECT ') ||
++      upper.startsWith('REJECT ');
++}
++
+ List<Group> portalGroups(List<Group> all) => [
+       for (final item in all)
+-        if (item.hidden != true &&
+-            !{'DIRECT', 'REJECT'}.contains(item.name.toUpperCase()))
+-          item,
++        if (item.hidden != true && !_isBuiltinOutbound(item.name)) item,
+     ];
+ 
+ /// Same list, after the user's own order and hidden set.
+@@ -282,7 +290,7 @@ class PortalServerList extends ConsumerWidget {
+     final selectedName = pending ?? group.now;
+     final members = [
+       for (final proxy in group.all)
+-        if (!{'DIRECT', 'REJECT'}.contains(proxy.name.toUpperCase())) proxy,
++        if (!_isBuiltinOutbound(proxy.name)) proxy,
+     ];
+     if (sort == PortalSort.alphabet) {
+       members.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+-- 
+2.54.0 (Apple Git-157)
+

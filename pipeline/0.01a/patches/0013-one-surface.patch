@@ -1,0 +1,135 @@
+From a18cda5b7a008c9ae142c488e9197ca777bfc69f Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 01:24:32 +0800
+Subject: [PATCH] =?UTF-8?q?ui:=20one=20surface=20=E2=80=94=20dock=20retire?=
+ =?UTF-8?q?d,=20settings=20and=20subscriptions=20in=20the=20corners?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The bottom dock split the app into four rooms while every user came to do one
+thing. It is gone; the working screen keeps a settings button on the left and a
+subscriptions button with a count on the right, and PORTAL_SHOW_DOCK brings the
+old dock back for debugging.
+---
+ lib/pages/home.dart           | 11 +++++--
+ lib/views/dashboard/hero.dart | 58 ++++++++++++++++++++++++++---------
+ 2 files changed, 53 insertions(+), 16 deletions(-)
+
+diff --git a/lib/pages/home.dart b/lib/pages/home.dart
+index d4e913ba..40e929b1 100644
+--- a/lib/pages/home.dart
++++ b/lib/pages/home.dart
+@@ -55,6 +55,10 @@ class HomePage extends ConsumerWidget {
+ class _HomeShell extends ConsumerWidget {
+   const _HomeShell({required this.child});
+ 
++  /// Portal Connect ships without the bottom dock; `--dart-define=PORTAL_SHOW_DOCK=true`
++  /// brings it back for debugging the old navigation.
++  static final bool _showDock = bool.fromEnvironment('PORTAL_SHOW_DOCK');
++
+   final Widget child;
+ 
+   void _handleToPage(PageLabel pageLabel, WidgetRef ref) {
+@@ -92,7 +96,10 @@ class _HomeShell extends ConsumerWidget {
+                   end: 0,
+                   bottom: 0,
+                   child: AnimatedVisibility.bottomNavigation(
+-                    visible: isMobile && floating,
++                    // Portal Connect is one surface: the dock is retired, the corners
++                    // of the page carry settings and subscriptions instead. The
++                    // environment flag keeps the old dock reachable for debugging.
++                    visible: _showDock && isMobile && floating,
+                     child: _NavigationPadding(
+                       child: NavigationDock(
+                         destinations: [
+@@ -114,7 +121,7 @@ class _HomeShell extends ConsumerWidget {
+             ),
+           ),
+           AnimatedVisibility.bottomNavigation(
+-            visible: isMobile && !floating,
++            visible: _showDock && isMobile && !floating,
+             child: _NavigationPadding(
+               child: NavigationBar(
+                 destinations: [
+diff --git a/lib/views/dashboard/hero.dart b/lib/views/dashboard/hero.dart
+index 5ae55014..04019ef8 100644
+--- a/lib/views/dashboard/hero.dart
++++ b/lib/views/dashboard/hero.dart
+@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
+ import 'package:fl_clash/common/common.dart';
+ import 'package:fl_clash/common/service_probe.dart' show routedOutbound;
+ import 'package:fl_clash/features/features.dart';
++import 'package:fl_clash/enum/enum.dart';
+ import 'package:fl_clash/models/models.dart';
+ import 'package:fl_clash/providers/outbound_ip.dart';
+ import 'package:fl_clash/providers/providers.dart';
+@@ -85,22 +86,51 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
+                   crossAxisAlignment: CrossAxisAlignment.stretch,
+                   children: [
+                     Row(
+-                      mainAxisAlignment: MainAxisAlignment.center,
+-                      spacing: 12,
+                       children: [
+-                        _ServiceLogo(
+-                          url: headers.serviceLogo,
+-                          size: _inlineLogoSize,
+-                          radius: AppRadius.md,
++                        IconButton(
++                          tooltip: context.appLocalizations.tools,
++                          onPressed: () => ref
++                              .read(currentPageLabelProvider.notifier)
++                              .toPage(PageLabel.tools),
++                          icon: const GlyphIcon(
++                            AppGlyphs.settings,
++                            size: 22,
++                          ),
++                        ),
++                        Expanded(
++                          child: Row(
++                            mainAxisAlignment: MainAxisAlignment.center,
++                            spacing: 10,
++                            children: [
++                              _ServiceLogo(
++                                url: headers.serviceLogo,
++                                size: _inlineLogoSize,
++                                radius: AppRadius.md,
++                              ),
++                              Flexible(
++                                child: EmojiText(
++                                  headers.serviceName ?? appName,
++                                  maxLines: 1,
++                                  overflow: TextOverflow.ellipsis,
++                                  style: AppTextStyle.title2.of(
++                                    context,
++                                    emphasized: true,
++                                  ),
++                                ),
++                              ),
++                            ],
++                          ),
+                         ),
+-                        Flexible(
+-                          child: EmojiText(
+-                            headers.serviceName ?? appName,
+-                            maxLines: 1,
+-                            overflow: TextOverflow.ellipsis,
+-                            style: AppTextStyle.title2.of(
+-                              context,
+-                              emphasized: true,
++                        IconButton(
++                          tooltip: context.appLocalizations.profiles,
++                          onPressed: () => ref
++                              .read(currentPageLabelProvider.notifier)
++                              .toPage(PageLabel.profiles),
++                          icon: Badge(
++                            label: Text('${ref.watch(profilesProvider).length}'),
++                            child: const GlyphIcon(
++                              AppGlyphs.profiles,
++                              size: 22,
+                             ),
+                           ),
+                         ),
+-- 
+2.54.0 (Apple Git-157)
+

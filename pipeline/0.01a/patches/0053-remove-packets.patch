@@ -1,0 +1,45 @@
+From 37172839889fa91df1a1ecb07033ce406c83c01c Mon Sep 17 00:00:00 2001
+From: Elara <elara@portal.local>
+Date: Sun, 15 Nov 2026 05:03:11 +0800
+Subject: [PATCH] ui: take the flying sticks out of the portal
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Dots on golden-angle radii read as debris, not as traffic. The portal stays still until
+the cartoon pass replaces it — an honest empty frame beats a bad ornament.
+---
+ lib/views/dashboard/portal_gateway.dart | 17 -----------------
+ 1 file changed, 17 deletions(-)
+
+diff --git a/lib/views/dashboard/portal_gateway.dart b/lib/views/dashboard/portal_gateway.dart
+index 36fc3931..e36a8ec7 100644
+--- a/lib/views/dashboard/portal_gateway.dart
++++ b/lib/views/dashboard/portal_gateway.dart
+@@ -155,23 +155,6 @@ class _GatewayPainter extends CustomPainter {
+   void paint(Canvas canvas, Size size) {
+     final center = size.center(Offset.zero);
+     final radius = size.shortestSide / 2;
+-    // Traffic crossing the portal: packets run from the rim to the core, their
+-    // number and speed taken from the live rate.
+-    final count = (2 + (intensity.clamp(0.0, 1.0) * 10)).round();
+-    for (var i = 0; i < count; i++) {
+-      final phase = (turn * (1.0 + intensity * 2.5) + i / count) % 1.0;
+-      final packetRadius = (radius - 12) * (1.0 - phase);
+-      if (packetRadius < 26) continue;
+-      final angle = i * 2.39996 + turn * 6.28318; // golden-angle spread
+-      final offset = Offset(
+-        center.dx + packetRadius * math.cos(angle),
+-        center.dy + packetRadius * math.sin(angle),
+-      );
+-      final packet = Paint()
+-        ..color = portal.withValues(alpha: 0.55 * (1 - phase) * (0.4 + intensity));
+-      canvas.drawCircle(offset, 1.6 + 1.6 * intensity, packet);
+-    }
+-
+     final dim = active ? 1.0 : 1.0;
+ 
+     if (!active) {
+-- 
+2.54.0 (Apple Git-157)
+
