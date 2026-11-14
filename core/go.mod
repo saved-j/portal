@@ -5,6 +5,9 @@ go 1.27.0
 // v0.4.29 plus the darwin dscacheutil reap, see third_party/README.md.
 replace github.com/metacubex/sing-tun => ./third_party/sing-tun
 
+// Portal: single core = Prizrak-Core (mihomo fork with finalmask, XHTTP, ML-DSA, prizrak-utls).
+replace github.com/metacubex/mihomo => github.com/legiz-ru/Prizrak-Core v1.19.34-r1
+
 require (
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/dlclark/regexp2 v1.12.0
@@ -124,6 +127,7 @@ require (
 	github.com/tailscale/peercred v0.0.0-20250107143737-35a0c7bd7edc // indirect
 	github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
+	github.com/vernesong/leaves v0.0.0-20260629081247-2a1c022f37d0 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
@@ -156,3 +160,5 @@ godebug (
 	rsa1024min=0
 	x509negativeserial=1
 )
+
+replace github.com/metacubex/utls => github.com/legiz-ru/prizrak-utls v0.0.0-20261111074409-d32f4d9296cf
