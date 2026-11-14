@@ -115,11 +115,19 @@ class PortalFiltersNotifier extends Notifier<({Set<String> hidden, List<String> 
 final portalFiltersProvider = NotifierProvider<PortalFiltersNotifier,
     ({Set<String> hidden, List<String> order})>(PortalFiltersNotifier.new);
 
+/// The engine's built-in outbounds sometimes arrive decorated ('DIRECT 🇷🇺',
+/// 'Direct '), so the check is on the leading word, not on an exact match.
+bool _isBuiltinOutbound(String name) {
+  final upper = name.trim().toUpperCase();
+  return upper == 'DIRECT' ||
+      upper == 'REJECT' ||
+      upper.startsWith('DIRECT ') ||
+      upper.startsWith('REJECT ');
+}
+
 List<Group> portalGroups(List<Group> all) => [
       for (final item in all)
-        if (item.hidden != true &&
-            !{'DIRECT', 'REJECT'}.contains(item.name.toUpperCase()))
-          item,
+        if (item.hidden != true && !_isBuiltinOutbound(item.name)) item,
     ];
 
 /// Same list, after the user's own order and hidden set.
@@ -282,7 +290,7 @@ class PortalServerList extends ConsumerWidget {
     final selectedName = pending ?? group.now;
     final members = [
       for (final proxy in group.all)
-        if (!{'DIRECT', 'REJECT'}.contains(proxy.name.toUpperCase())) proxy,
+        if (!_isBuiltinOutbound(proxy.name)) proxy,
     ];
     if (sort == PortalSort.alphabet) {
       members.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
