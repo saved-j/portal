@@ -80,11 +80,14 @@ verify() {
   local v=$1 dir; dir=$(series_dir "$v")
   [[ "$v" == "0.02" ]] || die "$v is an archive; only 0.02 is replayable"
   gate "$dir"
-  local sha base tmp
+  local sha base
   sha=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json'))['base']['sha'])")
   base=$(git -C "$REPO" rev-parse --verify --quiet "${sha}^{commit}") || die "base $sha is not in this repo — git fetch upstream"
-  tmp=$(mktemp -d "${TMPDIR:-/tmp}/portal-verify.XXXXXX")
-  trap 'rm -rf "$tmp"' EXIT
+  # A global, not a local: the EXIT trap runs after the function's scope is gone, and
+  # `set -u` then fails on an unbound local.
+  VERIFY_TMP=$(mktemp -d "${TMPDIR:-/tmp}/portal-verify.XXXXXX")
+  trap 'rm -rf "${VERIFY_TMP:-}"' EXIT
+  local tmp=$VERIFY_TMP
   git clone -q --no-hardlinks "$REPO" "$tmp/w"
   git -C "$tmp/w" checkout -q -B verify-0.02 "$base"
   local applied=0
@@ -105,7 +108,7 @@ verify() {
   local wt idx
   idx="$tmp/index"
   GIT_INDEX_FILE="$idx" git -C "$REPO" read-tree HEAD
-  GIT_INDEX_FILE="$idx" git -C "$REPO" rm -r --cached --ignore-unmatch pipeline >/dev/null
+  GIT_INDEX_FILE="$idx" git -C "$REPO" rm -r --cached --ignore-unmatch pipeline apply.sh >/dev/null
   wt=$(GIT_INDEX_FILE="$idx" git -C "$REPO" write-tree)
   local got; got=$(git -C "$tmp/w" rev-parse 'HEAD^{tree}')
   if [[ "$wt" == "$got" ]]; then
