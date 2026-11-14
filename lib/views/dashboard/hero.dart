@@ -10,6 +10,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/views/profiles/add.dart';
 import 'package:fl_clash/widgets/widgets.dart';
+import 'portal_gateway.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
@@ -542,89 +543,47 @@ class _SignalBars extends StatelessWidget {
 class _ConnectButton extends ConsumerWidget {
   const _ConnectButton();
 
-  static const _duration = Duration(milliseconds: 300);
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appLocalizations = context.appLocalizations;
-    final colorScheme = context.colorScheme;
     final isStart = ref.watch(isStartProvider);
     final suspended = isStart && ref.watch(suspendProvider);
     final runTime = ref.watch(runTimeProvider);
     final label = suspended
         ? appLocalizations.suspended
         : isStart
-        ? appLocalizations.stop
-        : appLocalizations.start;
-    final duration = context.motionDuration(_duration);
+        ? appLocalizations.closePortal
+        : appLocalizations.openPortal;
     void toggle() => ref.read(commonActionProvider.notifier).toggleRunning();
-    return Tooltip(
-      message: label,
-      child: Semantics(
-        button: true,
-        label: label,
-        child: RisingHold(
-          enabled: system.isAndroid,
-          onHeld: toggle,
-          child: SizedBox(
-            width: double.infinity,
-            height: _connectHeight,
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(end: isStart ? 1 : 0),
-              duration: duration,
-              curve: Curves.easeInOut,
-              builder: (context, progress, _) {
-                final ink = Color.lerp(
-                  colorScheme.onPrimary,
-                  colorScheme.primary,
-                  progress,
-                )!;
-                final content = suspended
-                    ? const GlyphIcon(AppGlyphs.wifiOff, size: 26, fill: 1)
-                    : isStart
-                    ? Row(
-                        mainAxisSize: MainAxisSize.min,
-                        spacing: 10,
-                        children: [
-                          const GlyphIcon(AppGlyphs.stop, size: 22, fill: 1),
-                          Text(
-                            getTimeText(runTime),
-                            style: DashboardText.figure(
-                              context,
-                              AppTextStyle.headline,
-                              color: ink,
-                            ),
-                          ),
-                        ],
-                      )
-                    : GlyphIcon(AppGlyphs.playPause(0), size: 28, fill: 1);
-                return FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: colorScheme.primary.withValues(
-                      alpha: 1 - progress,
-                    ),
-                    foregroundColor: ink,
-                    side: BorderSide(
-                      color: colorScheme.primary.withValues(alpha: progress),
-                      width: 1.5,
-                    ),
-                  ),
-                  onPressed: toggle,
-                  child: AnimatedSwitcher(
-                    duration: duration,
-                    switchInCurve: Curves.easeInOut,
-                    switchOutCurve: Curves.easeInOut,
-                    child: KeyedSubtree(
-                      key: ValueKey((isStart, suspended)),
-                      child: content,
-                    ),
-                  ),
-                );
-              },
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Tooltip(
+          message: label,
+          child: Semantics(
+            button: true,
+            label: label,
+            child: RisingHold(
+              enabled: system.isAndroid,
+              onHeld: toggle,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: toggle,
+                child: PortalGatewayCore(
+                  isStart: isStart,
+                  suspended: suspended,
+                  runTime: runTime,
+                ),
+              ),
             ),
           ),
         ),
-      ),
+        const SizedBox(height: 10),
+        Text(
+          label,
+          style: AppTextStyle.headline.of(context, emphasized: true),
+        ),
+      ],
     );
   }
 }

@@ -8750,6 +8750,31 @@ class AppLocalizations {
       args: [],
     );
   }
+
+  /// `Open portal`
+  String get openPortal {
+    return Intl.message('Open portal', name: 'openPortal', desc: '', args: []);
+  }
+
+  /// `Close portal`
+  String get closePortal {
+    return Intl.message(
+      'Close portal',
+      name: 'closePortal',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Portal is off`
+  String get portalOff {
+    return Intl.message('Portal is off', name: 'portalOff', desc: '', args: []);
+  }
+
+  /// `In the portal`
+  String get inPortal {
+    return Intl.message('In the portal', name: 'inPortal', desc: '', args: []);
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<AppLocalizations> {

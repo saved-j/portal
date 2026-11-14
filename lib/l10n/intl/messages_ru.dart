@@ -530,6 +530,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "closeConnections": MessageLookupByLibrary.simpleMessage(
       "Закрыть соединения",
     ),
+    "closePortal": MessageLookupByLibrary.simpleMessage("Закрыть портал"),
     "color": MessageLookupByLibrary.simpleMessage("Цвет"),
     "colorStyle": MessageLookupByLibrary.simpleMessage("Стиль палитры"),
     "compact": MessageLookupByLibrary.simpleMessage("Компактный"),
@@ -965,6 +966,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "importFile": MessageLookupByLibrary.simpleMessage("Импорт из файла"),
     "importFromLink": MessageLookupByLibrary.simpleMessage("Импорт по ссылке"),
     "importUrl": MessageLookupByLibrary.simpleMessage("Импорт по URL"),
+    "inPortal": MessageLookupByLibrary.simpleMessage("В портале"),
     "inbound": MessageLookupByLibrary.simpleMessage("Входящие"),
     "includeInterface": MessageLookupByLibrary.simpleMessage(
       "Включённые интерфейсы",
@@ -1332,6 +1334,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "openLogsFolder": MessageLookupByLibrary.simpleMessage(
       "Открыть папку с логами",
     ),
+    "openPortal": MessageLookupByLibrary.simpleMessage("Открыть портал"),
     "openVpnSettings": MessageLookupByLibrary.simpleMessage(
       "Открыть настройки VPN",
     ),
@@ -1394,6 +1397,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "portHopping": MessageLookupByLibrary.simpleMessage("Перескок портов"),
     "portTip": m60,
     "portValue": m61,
+    "portalOff": MessageLookupByLibrary.simpleMessage("Портал погашен"),
     "ports": MessageLookupByLibrary.simpleMessage("Порты"),
     "preChannelTip": MessageLookupByLibrary.simpleMessage(
       "Это предварительная версия, она стоит отдельным приложением и не видит профили FlClashX. Чтобы перенести их, сделайте резервную копию в FlClashX в разделе «Резервное копирование и восстановление» и восстановите её здесь, или добавьте подписки заново по ссылке.",

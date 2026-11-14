@@ -511,6 +511,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "closeConnections": MessageLookupByLibrary.simpleMessage(
       "Close connections",
     ),
+    "closePortal": MessageLookupByLibrary.simpleMessage("Close portal"),
     "color": MessageLookupByLibrary.simpleMessage("Color"),
     "colorStyle": MessageLookupByLibrary.simpleMessage("Color style"),
     "compact": MessageLookupByLibrary.simpleMessage("Compact"),
@@ -932,6 +933,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "importFile": MessageLookupByLibrary.simpleMessage("Import from file"),
     "importFromLink": MessageLookupByLibrary.simpleMessage("Import from link"),
     "importUrl": MessageLookupByLibrary.simpleMessage("Import from URL"),
+    "inPortal": MessageLookupByLibrary.simpleMessage("In the portal"),
     "inbound": MessageLookupByLibrary.simpleMessage("Inbound"),
     "includeInterface": MessageLookupByLibrary.simpleMessage(
       "Included interfaces",
@@ -1275,6 +1277,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Only count proxy traffic",
     ),
     "openLogsFolder": MessageLookupByLibrary.simpleMessage("Open logs folder"),
+    "openPortal": MessageLookupByLibrary.simpleMessage("Open portal"),
     "openVpnSettings": MessageLookupByLibrary.simpleMessage(
       "Open VPN settings",
     ),
@@ -1327,6 +1330,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "portHopping": MessageLookupByLibrary.simpleMessage("Port hopping"),
     "portTip": m60,
     "portValue": m61,
+    "portalOff": MessageLookupByLibrary.simpleMessage("Portal is off"),
     "ports": MessageLookupByLibrary.simpleMessage("Ports"),
     "preChannelTip": MessageLookupByLibrary.simpleMessage(
       "This pre-release is a separate app and can\'t see FlClashX\'s profiles. To bring them over, make a backup in FlClashX under Backup and restore and restore it here, or add your subscriptions again by link.",
