@@ -136,32 +136,53 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                             ),
                           ),
                         ),
-                        IconButton(
-                          tooltip: context.appLocalizations.connections,
+                        GestureDetector(
+                          onDoubleTap: () => ref
+                              .read(portalConnectionsBadgeProvider.notifier)
+                              .toggle(),
+                          child: IconButton(
+                            tooltip: context.appLocalizations.connections,
                           // The connections page is not in the phone navigation any
                           // more, so switching the page index did nothing: push it.
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const ConnectionFeedsView(),
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ConnectionFeedsView(),
+                              ),
                             ),
-                          ),
-                          icon: const GlyphIcon(
-                            AppGlyphs.connections,
-                            size: 22,
+                            icon: Badge(
+                              isLabelVisible:
+                                  ref.watch(portalConnectionsBadgeProvider),
+                              label: Text(
+                                '${ref.watch(requestsProvider).list.length}',
+                              ),
+                              child: const GlyphIcon(
+                                AppGlyphs.connections,
+                                size: 22,
+                              ),
+                            ),
                           ),
                         ),
-                        IconButton(
-                          tooltip: context.appLocalizations.profiles,
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const ProfilesView(),
+                        GestureDetector(
+                          onDoubleTap: () => ref
+                              .read(portalProfilesBadgeProvider.notifier)
+                              .toggle(),
+                          child: IconButton(
+                            tooltip: context.appLocalizations.profiles,
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ProfilesView(),
+                              ),
                             ),
-                          ),
-                          icon: Badge(
-                            label: Text('${ref.watch(profilesProvider).length}'),
-                            child: const GlyphIcon(
-                              AppGlyphs.profiles,
-                              size: 22,
+                            icon: Badge(
+                              isLabelVisible:
+                                  ref.watch(portalProfilesBadgeProvider),
+                              label: Text(
+                                '${ref.watch(profilesProvider).length}',
+                              ),
+                              child: const GlyphIcon(
+                                AppGlyphs.profiles,
+                                size: 22,
+                              ),
                             ),
                           ),
                         ),
