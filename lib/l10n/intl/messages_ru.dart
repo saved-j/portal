@@ -707,7 +707,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Отказ от ответственности",
     ),
     "disclaimerDesc": MessageLookupByLibrary.simpleMessage(
-      "FlClashX — бесплатный клиент с открытым исходным кодом на ядре Mihomo. Ниже коротко о том, что он делает, чего не делает и какие данные собирает. Нажимая «Я согласен», вы принимаете эти условия.",
+      "Portal — бесплатный клиент с открытым исходным кодом, собранный на базе FlClashX с ядром Prizrak. Ниже коротко о том, что он делает, чего не делает и какие данные собирает. Нажимая «Согласен», вы принимаете эти условия.",
     ),
     "disclaimerLicenseContent": MessageLookupByLibrary.simpleMessage(
       "Исходный код открыт и распространяется по лицензии GPL-3.0. Ядро Mihomo и другие сторонние компоненты имеют собственные лицензии. За изменённые или распространяемые третьими лицами сборки авторы не отвечают.",
@@ -1313,7 +1313,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "NTP берёт время с NTP-сервера, а не из системных часов.",
     ),
     "nullProfileDesc": MessageLookupByLibrary.simpleMessage(
-      "Добавьте профиль, чтобы начать",
+      "Добавьте подписку, чтобы начать",
     ),
     "nullTip": m57,
     "numberRangeTip": m58,
@@ -1436,7 +1436,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "profileLeftOfTotal": m65,
     "profileMinutesFigure": m66,
     "profileNameNullValidationDesc": MessageLookupByLibrary.simpleMessage(
-      "Введите название профиля",
+      "Введите название подписки",
     ),
     "profileNoExpiry": MessageLookupByLibrary.simpleMessage("Бессрочно"),
     "profileSettingsDesc": MessageLookupByLibrary.simpleMessage(
@@ -1451,10 +1451,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "profileTypeSubscription": MessageLookupByLibrary.simpleMessage("Подписка"),
     "profileUntil": m67,
     "profileUrlInvalidValidationDesc": MessageLookupByLibrary.simpleMessage(
-      "Введите корректный URL профиля",
+      "Введите корректный URL подписки",
     ),
     "profileUrlNullValidationDesc": MessageLookupByLibrary.simpleMessage(
-      "Введите URL профиля",
+      "Введите URL подписки",
     ),
     "profiles": MessageLookupByLibrary.simpleMessage("Подписки"),
     "profilesSort": MessageLookupByLibrary.simpleMessage("Сортировка профилей"),
@@ -1519,7 +1519,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "pureBlackMode": MessageLookupByLibrary.simpleMessage("Чисто чёрный режим"),
     "qrcode": MessageLookupByLibrary.simpleMessage("QR-код"),
     "qrcodeDesc": MessageLookupByLibrary.simpleMessage(
-      "Сканируйте QR-код, чтобы получить профиль",
+      "Сканируйте QR-код, чтобы получить подписку",
     ),
     "qrcodeTooLongTip": MessageLookupByLibrary.simpleMessage(
       "Ссылка слишком длинная для QR-кода. Используйте «Копировать ссылку».",
@@ -1558,7 +1558,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "reset": MessageLookupByLibrary.simpleMessage("Сброс"),
     "resetApp": MessageLookupByLibrary.simpleMessage("Сброс приложения"),
     "resetAppTip": MessageLookupByLibrary.simpleMessage(
-      "Будут удалены все профили, настройки и рабочая папка приложения, после чего приложение закроется. Продолжить?",
+      "Будут удалены все подписки, настройки и рабочая папка приложения, после чего приложение закроется. Продолжить?",
     ),
     "resetPageChangesTip": MessageLookupByLibrary.simpleMessage(
       "На этой странице есть изменения. Сбросить их?",

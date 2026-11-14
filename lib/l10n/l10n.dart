@@ -315,10 +315,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Add a profile to get started`
+  /// `Add a subscription to get started`
   String get nullProfileDesc {
     return Intl.message(
-      'Add a profile to get started',
+      'Add a subscription to get started',
       name: 'nullProfileDesc',
       desc: '',
       args: [],
@@ -725,10 +725,10 @@ class AppLocalizations {
     return Intl.message('Name', name: 'name', desc: '', args: []);
   }
 
-  /// `Please enter the profile name`
+  /// `Please enter the subscription name`
   String get profileNameNullValidationDesc {
     return Intl.message(
-      'Please enter the profile name',
+      'Please enter the subscription name',
       name: 'profileNameNullValidationDesc',
       desc: '',
       args: [],
@@ -740,20 +740,20 @@ class AppLocalizations {
     return Intl.message('Rename', name: 'rename', desc: '', args: []);
   }
 
-  /// `Please enter the profile URL`
+  /// `Please enter the subscription URL`
   String get profileUrlNullValidationDesc {
     return Intl.message(
-      'Please enter the profile URL',
+      'Please enter the subscription URL',
       name: 'profileUrlNullValidationDesc',
       desc: '',
       args: [],
     );
   }
 
-  /// `Please enter a valid profile URL`
+  /// `Please enter a valid subscription URL`
   String get profileUrlInvalidValidationDesc {
     return Intl.message(
-      'Please enter a valid profile URL',
+      'Please enter a valid subscription URL',
       name: 'profileUrlInvalidValidationDesc',
       desc: '',
       args: [],
@@ -2651,10 +2651,10 @@ class AppLocalizations {
     return Intl.message('Disclaimer', name: 'disclaimer', desc: '', args: []);
   }
 
-  /// `FlClashX is a free, open-source client built on the Mihomo core. Here is a short note on what it does, what it does not do and what data it collects. By tapping “I agree” you accept these terms.`
+  /// `Portal is a free, open-source client built on FlClashX with the Prizrak core. Below is a short note on what it does, what it does not do, and what data it collects. Tapping Agree means you accept these terms.`
   String get disclaimerDesc {
     return Intl.message(
-      'FlClashX is a free, open-source client built on the Mihomo core. Here is a short note on what it does, what it does not do and what data it collects. By tapping “I agree” you accept these terms.',
+      'Portal is a free, open-source client built on FlClashX with the Prizrak core. Below is a short note on what it does, what it does not do, and what data it collects. Tapping Agree means you accept these terms.',
       name: 'disclaimerDesc',
       desc: '',
       args: [],

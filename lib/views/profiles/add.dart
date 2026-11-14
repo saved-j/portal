@@ -68,21 +68,21 @@ class AddProfileMenu extends ConsumerWidget {
       case null:
         return;
       case [final single]:
-        unawaited(
-          profilesAction.addProfileFromLink(
-            single.url,
-            label: single.label,
-            ageSecretKey: single.ageSecretKey,
-            sendDeviceHeaders: single.sendDeviceHeaders,
-          ),
+        await profilesAction.addProfileFromLink(
+          single.url,
+          label: single.label,
+          ageSecretKey: single.ageSecretKey,
+          sendDeviceHeaders: single.sendDeviceHeaders,
         );
       default:
-        unawaited(
-          profilesAction.addProfilesFromLinks([
-            for (final item in res) item.url,
-          ]),
-        );
+        await profilesAction.addProfilesFromLinks([
+          for (final item in res) item.url,
+        ]);
     }
+    // The subscription is in: land on the working screen, not on the list of
+    // subscriptions, and leave nothing on the stack that Back would exit from.
+    if (!context.mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _toSendFromPhone(WidgetRef ref) async {

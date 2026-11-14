@@ -77,18 +77,34 @@ class PortalBypassNotifier extends Notifier<Map<String, String?>> {
   @override
   Map<String, String?> build() => const {};
 
-  Future<void> toggle(WidgetRef ref, Group group) async {
+  /// Drops the remembered state without touching the proxy — used when the user picks a
+  /// portal by hand for a filter that was out of the portal from the start.
+  void forget(String name) {
+    if (!state.containsKey(name)) return;
+    state = {...state}..remove(name);
+  }
+
+  /// The press answers in the UI at once; the engine is told afterwards and its answer
+  /// is not waited for. A chip that greys only when the core confirms reads as a dead
+  /// control, and the user's job is not to watch the tunnel.
+  void toggle(WidgetRef ref, Group group) {
     final action = ref.read(proxiesActionProvider.notifier);
     if (state.containsKey(group.name)) {
       final restore = state[group.name];
       state = {...state}..remove(group.name);
       if (restore != null) {
-        await action.changeProxy(groupName: group.name, proxyName: restore);
+        action.changeProxy(groupName: group.name, proxyName: restore);
       }
       return;
     }
+    // Bypass routes to the engine's own built-in, whatever the panel calls it.
+    final target = group.all
+            .where((proxy) => _isBuiltinOutbound(proxy.name))
+            .map((proxy) => proxy.name)
+            .firstOrNull ??
+        'DIRECT';
     state = {...state, group.name: group.now};
-    await action.changeProxy(groupName: group.name, proxyName: 'DIRECT');
+    action.changeProxy(groupName: group.name, proxyName: target);
   }
 }
 
@@ -213,17 +229,19 @@ class PortalModeSwitch extends ConsumerWidget {
         // and a switch that reads as a switch. The editor button only exists in the
         // network mode, so 'Сеть порталов' has somewhere obvious to lead.
         GestureDetector(
-          onDoubleTap: () => showPortalFilterEditor(context),
-          onLongPress: () => Navigator.of(context).push(
+          // A plain tap on 'Сеть порталов' opens the proxies dashboard: that is what
+          // the network mode is for. The double tap still edits the filter strip.
+          onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const ProxiesView()),
           ),
+
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Switch(
                 value: mode == Mode.rule,
-                activeThumbColor: const Color(0xFF00F5A0),
-                activeTrackColor: const Color(0xFF00F5A0).withValues(alpha: 0.4),
+                activeThumbColor: _liveGreen(context),
+                activeTrackColor: _liveGreen(context).withValues(alpha: 0.4),
                 onChanged: (value) {
                   HapticFeedback.selectionClick();
                   ref
@@ -236,7 +254,7 @@ class PortalModeSwitch extends ConsumerWidget {
                 context.appLocalizations.rules,
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: mode == Mode.rule
-                      ? const Color(0xFF00F5A0)
+                      ? _liveGreen(context)
                       : theme.colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
                 ),
@@ -324,7 +342,14 @@ class PortalServerList extends ConsumerWidget {
         ref.read(portalPendingProvider.notifier).clear(group.name);
       });
     }
-    final selectedName = pending ?? group.now;
+    // One source for "what is chosen": the profile's own selection, which changeProxy
+    // writes optimistically. No per-filter special cases — if a server was picked, it is
+    // picked, whether the group is RF services, Chinese services or YouTube. When the
+    // group routes to a built-in, its name is not in the member list, so nothing lights
+    // up without needing a second rule.
+    final bypassedGroup = ref.watch(portalBypassProvider).containsKey(group.name);
+    final chosenName = ref.watch(selectedProxyNameProvider(group.name));
+    final selectedName = bypassedGroup ? null : (pending ?? chosenName);
     final members = [
       for (final proxy in group.all)
         if (!_isBuiltinOutbound(proxy.name)) proxy,
@@ -416,6 +441,7 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
     final display = ref.watch(portalDisplayProvider);
     final active = ref.watch(portalGroupProvider) ?? groups.firstOrNull?.name;
     final bypassedNames = ref.watch(portalBypassProvider).keys.toSet();
+    final pendingByGroup = ref.watch(portalPendingProvider);
     final hint = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7);
     return Row(
       children: [
@@ -445,7 +471,17 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
         ),
         Expanded(
           child: GestureDetector(
-            onDoubleTap: () => ref.read(portalDisplayProvider.notifier).cycle(),
+            onDoubleTap: () {
+              // Changing the layout re-measures every chip; keep the strip where the
+              // user left it instead of snapping back to the first one.
+              final offset = _controller.hasClients ? _controller.offset : 0.0;
+              ref.read(portalDisplayProvider.notifier).cycle();
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!_controller.hasClients) return;
+                final max = _controller.position.maxScrollExtent;
+                _controller.jumpTo(offset.clamp(0.0, max));
+              });
+            },
             child: NotificationListener<ScrollMetricsNotification>(
               onNotification: (_) {
                 _syncEdges();
@@ -460,8 +496,12 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                       Builder(builder: (context) {
                         // A filter the panel already routes to DIRECT is a bypass by
                         // definition: it should look that way before anyone touches it.
+                        // A hand-picked server wins over the panel's DIRECT at once:
+                        // the chip colours the moment the user chooses, without
+                        // waiting for the engine to confirm the route.
+                        final picked = pendingByGroup[item.name] != null;
                         final bypassed = bypassedNames.contains(item.name) ||
-                            _isBuiltinOutbound(item.now ?? '');
+                            (_isBuiltinOutbound(item.now ?? '') && !picked);
                         return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 3),
                         child: GestureDetector(
@@ -495,7 +535,14 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                   fallback: GroupMonogram(item.name),
                                 ),
                               );
-                              final server = item.now;
+                              // A bypassed filter has no server on screen at all:
+                              // the user should see "nothing goes through here", not
+                              // the word DIRECT.
+                              // What the user just picked wins over what the engine
+                              // has confirmed: the chip must name the chosen server
+                              // in the same frame as the tap.
+                              final server =
+                                  bypassed ? null : (picked ? pendingByGroup[item.name] : item.now);
                               final text = [
                                 if (showName) item.name,
                                 if (showServer &&
@@ -548,6 +595,13 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
 }
 
 /// The legacy palette's three traffic lights: fast, tolerable, bad.
+/// The live green of the portal controls. The neon version is right on the dark screen
+/// and reads as "salad" on white, so light theme gets a deeper emerald instead.
+Color _liveGreen(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF00F5A0)
+        : const Color(0xFF0E9F6E);
+
 const _delayFast = Color(0xFF00F5A0);
 const _delaySlow = Color(0xFFFFC107);
 const _delayBad = Color(0xFFFF4B6E);
@@ -700,6 +754,9 @@ class _ServerRowState extends ConsumerState<_ServerRow>
         ),
         onTap: () {
           HapticFeedback.selectionClick();
+          // Picking a portal by hand is also the way out of a bypass: the filter stops
+          // being grey, because it is no longer routed around the portal.
+          ref.read(portalBypassProvider.notifier).forget(widget.group.name);
           ref
               .read(portalPendingProvider.notifier)
               .pick(widget.group.name, widget.proxy.name);
@@ -906,6 +963,4 @@ final portalProfilesBadgeProvider =
     NotifierProvider<PortalBadgeNotifier, bool>(PortalBadgeNotifier.new);
 final portalConnectionsBadgeProvider =
     NotifierProvider<PortalBadgeNotifier, bool>(PortalBadgeNotifier.new);
-
-
 

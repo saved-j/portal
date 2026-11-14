@@ -22,6 +22,7 @@ import 'package:material_ui/material_ui.dart';
 import 'style.dart';
 import 'widgets/widgets.dart';
 import 'package:fl_clash/common/outbound.dart';
+import 'package:flutter/services.dart';
 
 const heroMaxWidth = 520.0;
 
@@ -147,6 +148,10 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                               ),
                             ),
                             icon: Badge(
+                              // Fixed colours: the hero is dark in both themes, so a
+                              // theme-derived label turned black-on-black on white.
+                              backgroundColor: const Color(0xFF00F5A0),
+                              textColor: const Color(0xFF07110C),
                               isLabelVisible:
                                   ref.watch(portalConnectionsBadgeProvider),
                               label: Text(
@@ -171,6 +176,8 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                               ),
                             ),
                             icon: Badge(
+                              backgroundColor: const Color(0xFF00F5A0),
+                              textColor: const Color(0xFF07110C),
                               isLabelVisible:
                                   ref.watch(portalProfilesBadgeProvider),
                               label: Text(
@@ -303,7 +310,27 @@ class _ServiceLogo extends ConsumerWidget {
 /// Full width: filled with a play glyph while stopped, easing into an
 /// outline in the primary color with a stop glyph and the run time while
 /// running.
+/// When the portal was switched off, in wall-clock milliseconds. A top-level notifier
+/// because the closing animation outlives the widget that started it.
+final ValueNotifier<int?> portalClosedAtMs = ValueNotifier<int?>(null);
+
+/// When the portal was switched on. The ignition runs from the press, not from the
+/// moment the engine reports a tunnel — the picture must lead, the task follows.
+final ValueNotifier<int?> portalOpenedAtMs = ValueNotifier<int?>(null);
+
 class _ConnectButton extends ConsumerWidget {
+
+  /// The press answers with its own rhythm: opening is a heavier double beat, closing a
+  /// softer pair — the hand should feel which way the portal is going.
+  void _portalHaptics({required bool starting}) {
+    if (starting) {
+      HapticFeedback.heavyImpact();
+      Future<void>.delayed(const Duration(milliseconds: 130), HapticFeedback.mediumImpact);
+    } else {
+      HapticFeedback.mediumImpact();
+      Future<void>.delayed(const Duration(milliseconds: 150), HapticFeedback.lightImpact);
+    }
+  }
 
   /// The mark of whatever is carrying traffic right now: the group's own icon when
   /// the panel ships one, its monogram otherwise.
@@ -360,12 +387,30 @@ class _ConnectButton extends ConsumerWidget {
             label: label,
             child: RisingHold(
               enabled: system.isAndroid,
-              onHeld: toggle,
+              onHeld: () {
+                _portalHaptics(starting: !isStart);
+                if (isStart) {
+                  portalClosedAtMs.value = DateTime.now().millisecondsSinceEpoch;
+                } else {
+                  portalOpenedAtMs.value = DateTime.now().millisecondsSinceEpoch;
+                }
+                toggle();
+              },
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: toggle,
+                onTap: () {
+                  _portalHaptics(starting: !isStart);
+                  if (isStart) {
+                    portalClosedAtMs.value = DateTime.now().millisecondsSinceEpoch;
+                  } else {
+                    portalOpenedAtMs.value = DateTime.now().millisecondsSinceEpoch;
+                  }
+                  toggle();
+                },
                 child: PortalGatewayCore(
                   isStart: isStart,
+                  closedAtMs: portalClosedAtMs.value,
+                  openedAtMs: portalOpenedAtMs.value,
                   suspended: suspended,
                   runTime: runTime,
                   center: _connectedMark(ref),

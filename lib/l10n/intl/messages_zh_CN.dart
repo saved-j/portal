@@ -527,7 +527,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "discardChanges": MessageLookupByLibrary.simpleMessage("是否放弃更改？"),
     "disclaimer": MessageLookupByLibrary.simpleMessage("免责声明"),
     "disclaimerDesc": MessageLookupByLibrary.simpleMessage(
-      "FlClashX 是基于 Mihomo 内核的免费开源客户端。下面简要说明它做什么、不做什么以及收集哪些数据。点击“我同意”即表示接受这些条款。",
+      "Portal 是基于 FlClashX、搭载 Prizrak 内核的免费开源客户端。下面简要说明它做什么、不做什么以及收集哪些数据。点击“我同意”即表示接受这些条款。",
     ),
     "disclaimerLicenseContent": MessageLookupByLibrary.simpleMessage(
       "源代码以 GPL-3.0 许可证开放。Mihomo 内核及其他第三方组件使用各自的许可证。作者不对经修改或由第三方分发的版本负责。",
@@ -977,7 +977,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "ntpStatusDesc": MessageLookupByLibrary.simpleMessage(
       "开启 NTP 后从 NTP 服务器获取时间，而非系统时钟。",
     ),
-    "nullProfileDesc": MessageLookupByLibrary.simpleMessage("添加一个配置文件后即可开始使用"),
+    "nullProfileDesc": MessageLookupByLibrary.simpleMessage("添加一个订阅后即可开始使用"),
     "nullTip": m57,
     "numberRangeTip": m58,
     "numberTip": m59,
@@ -1047,7 +1047,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "privateKey": MessageLookupByLibrary.simpleMessage("私钥"),
     "privateKeyPassphrase": MessageLookupByLibrary.simpleMessage("私钥密码"),
     "process": MessageLookupByLibrary.simpleMessage("进程"),
-    "profile": MessageLookupByLibrary.simpleMessage("配置"),
+    "profile": MessageLookupByLibrary.simpleMessage("订阅"),
     "profileAddedTip": m62,
     "profileAutoUpdateIntervalInvalidValidationDesc":
         MessageLookupByLibrary.simpleMessage("请输入有效间隔时间格式"),
@@ -1063,7 +1063,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "profileLeftOfTotal": m65,
     "profileMinutesFigure": m66,
     "profileNameNullValidationDesc": MessageLookupByLibrary.simpleMessage(
-      "请输入配置名称",
+      "请输入订阅名称",
     ),
     "profileNoExpiry": MessageLookupByLibrary.simpleMessage("无期限"),
     "profileSettingsDesc": MessageLookupByLibrary.simpleMessage(
@@ -1081,9 +1081,9 @@ class MessageLookup extends MessageLookupByLibrary {
       "请输入有效配置URL",
     ),
     "profileUrlNullValidationDesc": MessageLookupByLibrary.simpleMessage(
-      "请输入配置URL",
+      "请输入订阅链接",
     ),
-    "profiles": MessageLookupByLibrary.simpleMessage("配置"),
+    "profiles": MessageLookupByLibrary.simpleMessage("订阅"),
     "profilesSort": MessageLookupByLibrary.simpleMessage("配置排序"),
     "project": MessageLookupByLibrary.simpleMessage("项目"),
     "protocol": MessageLookupByLibrary.simpleMessage("协议"),
@@ -1139,7 +1139,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "pureBlack": MessageLookupByLibrary.simpleMessage("纯黑"),
     "pureBlackMode": MessageLookupByLibrary.simpleMessage("纯黑模式"),
     "qrcode": MessageLookupByLibrary.simpleMessage("二维码"),
-    "qrcodeDesc": MessageLookupByLibrary.simpleMessage("扫描二维码获取配置文件"),
+    "qrcodeDesc": MessageLookupByLibrary.simpleMessage("扫描二维码获取订阅"),
     "qrcodeTooLongTip": MessageLookupByLibrary.simpleMessage(
       "链接过长，无法生成二维码，请改用“复制链接”。",
     ),

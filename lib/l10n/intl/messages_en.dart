@@ -680,7 +680,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "disclaimer": MessageLookupByLibrary.simpleMessage("Disclaimer"),
     "disclaimerDesc": MessageLookupByLibrary.simpleMessage(
-      "FlClashX is a free, open-source client built on the Mihomo core. Here is a short note on what it does, what it does not do and what data it collects. By tapping “I agree” you accept these terms.",
+      "Portal is a free, open-source client built on FlClashX with the Prizrak core. Below is a short note on what it does, what it does not do, and what data it collects. Tapping Agree means you accept these terms.",
     ),
     "disclaimerLicenseContent": MessageLookupByLibrary.simpleMessage(
       "The source code is open under the GPL-3.0 license. The Mihomo core and other third-party components carry their own licenses. The authors are not responsible for modified builds or builds distributed by third parties.",
@@ -1256,7 +1256,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "NTP takes the time from an NTP server instead of the system clock.",
     ),
     "nullProfileDesc": MessageLookupByLibrary.simpleMessage(
-      "Add a profile to get started",
+      "Add a subscription to get started",
     ),
     "nullTip": m57,
     "numberRangeTip": m58,
@@ -1367,7 +1367,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "profileLeftOfTotal": m65,
     "profileMinutesFigure": m66,
     "profileNameNullValidationDesc": MessageLookupByLibrary.simpleMessage(
-      "Please enter the profile name",
+      "Please enter the subscription name",
     ),
     "profileNoExpiry": MessageLookupByLibrary.simpleMessage("No expiry"),
     "profileSettingsDesc": MessageLookupByLibrary.simpleMessage(
@@ -1386,10 +1386,10 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "profileUntil": m67,
     "profileUrlInvalidValidationDesc": MessageLookupByLibrary.simpleMessage(
-      "Please enter a valid profile URL",
+      "Please enter a valid subscription URL",
     ),
     "profileUrlNullValidationDesc": MessageLookupByLibrary.simpleMessage(
-      "Please enter the profile URL",
+      "Please enter the subscription URL",
     ),
     "profiles": MessageLookupByLibrary.simpleMessage("Subscriptions"),
     "profilesSort": MessageLookupByLibrary.simpleMessage("Sort profiles"),
