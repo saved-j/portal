@@ -626,6 +626,28 @@ class _SignalBars extends StatelessWidget {
 /// outline in the primary color with a stop glyph and the run time while
 /// running.
 class _ConnectButton extends ConsumerWidget {
+
+  /// The mark of whatever is carrying traffic right now: the group's own icon when
+  /// the panel ships one, its monogram otherwise.
+  Widget? _connectedMark(WidgetRef ref) {
+    final groups = ref.watch(groupsProvider);
+    if (groups.isEmpty) return null;
+    final current = ref.watch(
+      currentProfileProvider.select((profile) => profile?.currentGroupName),
+    );
+    final group = groups.where((g) => g.name == current).firstOrNull ??
+        groups.firstWhere(
+          (g) => !{'DIRECT', 'REJECT'}.contains(g.name.toUpperCase()),
+          orElse: () => groups.first,
+        );
+    return SizedBox.square(
+      dimension: 56,
+      child: CommonTargetIcon(
+        src: group.icon,
+        fallback: GroupMonogram(group.name),
+      ),
+    );
+  }
   const _ConnectButton();
 
   @override
@@ -658,6 +680,7 @@ class _ConnectButton extends ConsumerWidget {
                   isStart: isStart,
                   suspended: suspended,
                   runTime: runTime,
+                  center: _connectedMark(ref),
                 ),
               ),
             ),

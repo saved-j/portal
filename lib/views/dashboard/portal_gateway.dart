@@ -18,12 +18,16 @@ class PortalGatewayCore extends StatefulWidget {
     required this.suspended,
     required this.runTime,
     this.size = 168,
+    this.center,
   });
 
   final bool isStart;
   final bool suspended;
   final int? runTime;
   final double size;
+
+  /// The connected server's mark, shown inside a lit portal.
+  final Widget? center;
 
   @override
   State<PortalGatewayCore> createState() => _PortalGatewayCoreState();
@@ -48,21 +52,27 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
     final portal = colorScheme.primary;
     final accent = colorScheme.tertiary;
     final reduced = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    final core = widget.suspended
-        ? const GlyphIcon(AppGlyphs.wifiOff, size: 34, fill: 1)
-        : widget.isStart
-            ? Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const GlyphIcon(AppGlyphs.stop, size: 26, fill: 1),
-                  const SizedBox(height: 6),
-                  Text(
-                    getTimeText(widget.runTime),
-                    style: AppTextStyle.title3.of(context),
-                  ),
-                ],
-              )
-            : GlyphIcon(AppGlyphs.playPause(0), size: 40, fill: 1);
+    final Widget core;
+    if (!widget.isStart) {
+      // The portal is off: nothing is drawn inside the hole.
+      core = const SizedBox.shrink();
+    } else if (widget.center != null) {
+      core = widget.center!;
+    } else if (widget.suspended) {
+      core = const GlyphIcon(AppGlyphs.wifiOff, size: 34, fill: 1);
+    } else {
+      core = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const GlyphIcon(AppGlyphs.stop, size: 26, fill: 1),
+          const SizedBox(height: 6),
+          Text(
+            getTimeText(widget.runTime),
+            style: AppTextStyle.title3.of(context),
+          ),
+        ],
+      );
+    }
     return SizedBox.square(
       dimension: widget.size,
       child: AnimatedBuilder(
@@ -117,7 +127,27 @@ class _GatewayPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
     final radius = size.shortestSide / 2;
-    final dim = active ? 1.0 : 0.45;
+    final dim = active ? 1.0 : 1.0;
+
+    if (!active) {
+      // A black hole: the portal is there, but nothing comes out of it.
+      final hole = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFF000000),
+            const Color(0xFF06070B),
+            portal.withValues(alpha: 0.10),
+          ],
+          stops: const [0.0, 0.72, 1.0],
+        ).createShader(Rect.fromCircle(center: center, radius: radius));
+      canvas.drawCircle(center, radius, hole);
+      final horizon = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..color = portal.withValues(alpha: 0.22);
+      canvas.drawCircle(center, radius - 2, horizon);
+      return;
+    }
 
     final glow = Paint()
       ..shader = RadialGradient(

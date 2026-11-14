@@ -187,8 +187,10 @@ class PortalModeSwitch extends ConsumerWidget {
     if (modes.length < 2) return const SizedBox.shrink();
     return Row(
       children: [
-        // One word and one switch: 'Сеть порталов' on means rules, off means the
-        // single-portal mode. A two-segment control made the pair look equal.
+        const Spacer(),
+        // Centred pair: a larger label in the legacy green while the network is on,
+        // and a switch that reads as a switch. The editor button only exists in the
+        // network mode, so 'Сеть порталов' has somewhere obvious to lead.
         GestureDetector(
           onDoubleTap: () => showPortalFilterEditor(context),
           onLongPress: () => Navigator.of(context).push(
@@ -199,16 +201,18 @@ class PortalModeSwitch extends ConsumerWidget {
             children: [
               Text(
                 context.appLocalizations.rules,
-                style: theme.textTheme.labelLarge?.copyWith(
+                style: theme.textTheme.titleMedium?.copyWith(
                   color: mode == Mode.rule
-                      ? theme.colorScheme.primary
+                      ? const Color(0xFF00F5A0)
                       : theme.colorScheme.onSurfaceVariant,
-                  fontWeight: mode == Mode.rule ? FontWeight.w600 : null,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Switch(
                 value: mode == Mode.rule,
+                activeThumbColor: const Color(0xFF00F5A0),
+                activeTrackColor: const Color(0xFF00F5A0).withValues(alpha: 0.4),
                 onChanged: (value) {
                   HapticFeedback.selectionClick();
                   ref
@@ -216,6 +220,17 @@ class PortalModeSwitch extends ConsumerWidget {
                       .pickMode(value ? Mode.rule : Mode.global);
                 },
               ),
+              if (mode == Mode.rule) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  tooltip: 'Фильтры',
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    showPortalFilterEditor(context);
+                  },
+                  icon: const GlyphIcon(AppGlyphs.filter, size: 20),
+                ),
+              ],
             ],
           ),
         ),
