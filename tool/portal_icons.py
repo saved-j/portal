@@ -60,12 +60,41 @@ def write(img, path, size):
 
 SOURCE = ROOT / "tool/branding/portal_icon_source.jpg"
 
+def cut_white_corners(image):
+    """The source was exported inside a rounded square on a white sheet. Launchers
+    draw their own mask, so the white outside that square has to go: flood-fill it
+    from the four corners and make it transparent."""
+    img = image.convert("RGBA").copy()
+    w, h = img.size
+    # mask: 255 where the pixel is near-white
+    mask = Image.new("L", (w, h), 0)
+    src = img.convert("RGB").load()
+    mp = mask.load()
+    for y in range(h):
+        for x in range(w):
+            r, g, b = src[x, y]
+            if r > 240 and g > 240 and b > 240:
+                mp[x, y] = 255
+    for corner in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
+        if mask.getpixel(corner) == 255:
+            ImageDraw.floodfill(mask, corner, 128, thresh=20)
+    px = img.load()
+    for y in range(h):
+        for x in range(w):
+            if mask.getpixel((x, y)) == 128:
+                px[x, y] = (0, 0, 0, 0)
+    return img
+
+
 if SOURCE.exists():
     # The owner's mark (a lit door inside a nest of cables) is the brand; the drawn
     # fallback stays only for a checkout that lost the source file.
-    base = Image.open(SOURCE).convert("RGBA").resize((S, S), Image.LANCZOS)
+    cleaned = cut_white_corners(Image.open(SOURCE)).resize((S, S), Image.LANCZOS)
+    # Launcher icons have no transparency to lean on: put the mark on the void.
+    base = Image.new("RGBA", (S, S), VOID)
+    base.alpha_composite(cleaned)
     master_square = base
-    master_fg = base
+    master_fg = cleaned
     grey = base.convert("L")
     mono = Image.new("RGBA", (S, S), (255, 255, 255, 0))
     mono.putalpha(grey.point(lambda v: 0 if v < 40 else 255))
