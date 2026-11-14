@@ -23,12 +23,16 @@ export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export ANDROID_USER_HOME="${ANDROID_USER_HOME:-$HOME/.work/.android}"
 export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.work/.gradle}"
 export PUB_CACHE="${PUB_CACHE:-$HOME/.work/.pub-cache}"
-export PUB_HOSTED_URL="${PUB_HOSTED_URL:-https://pub.flutter-io.cn}"
+# Do NOT point PUB_HOSTED_URL at pub.flutter-io.cn: a different hosted URL invalidates
+# pubspec.lock and re-resolves packages upward (material_ui 1.5.0 -> 1.11.0 breaks the
+# build with "MaterialShapes is imported from both"). pub.dev answers from here; only the
+# Flutter engine artifacts need the mirror.
 export FLUTTER_STORAGE_BASE_URL="${FLUTTER_STORAGE_BASE_URL:-https://storage.flutter-io.cn}"
 export RUSTUP_DIST_SERVER="${RUSTUP_DIST_SERVER:-https://mirrors.ustc.edu.cn/rust-static}"
 export RUSTUP_UPDATE_ROOT="${RUSTUP_UPDATE_ROOT:-https://mirrors.ustc.edu.cn/rust-static/rustup}"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
-export PATH="/opt/homebrew/opt/flutter/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
+# ~/.work/toolchain/bin first: create-dmg shim maps the npm --dmg-title onto --volname
+export PATH="$HOME/.work/toolchain/bin:/opt/homebrew/opt/flutter/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
 
 mkdir -p "$ANDROID_USER_HOME" "$GRADLE_USER_HOME" "$PUB_CACHE"
 
@@ -45,10 +49,12 @@ host_guard() {
 
 case "${1:-get}" in
   get)        flutter --version; flutter pub get ;;
-  macos)      flutter build macos --release; ls -lh build/macos/Build/Products/Release/*.app 2>/dev/null || true ;;
-  apk)        flutter build apk --release; ls -lh build/app/outputs/flutter-apk/*.apk 2>/dev/null || true ;;
-  linux)      host_guard linux;   flutter build linux --release;   ls -lh build/linux/*/release/bundle 2>/dev/null || true ;;
-  windows)    host_guard windows; flutter build windows --release; ls -lh build/windows/*/runner/Release 2>/dev/null || true ;;
+  macos)      APP_ENV=stable; dart setup.dart macos --env "$APP_ENV"
+              ls -lh build/macos/Build/Products/Release/*.dmg 2>/dev/null || true ;;
+  apk)        dart setup.dart android --env stable
+              ls -lh build/app/outputs/flutter-apk/*.apk 2>/dev/null || true ;;
+  linux)      host_guard linux;   dart setup.dart linux --env stable ;;
+  windows)    host_guard windows; dart setup.dart windows --env stable ;;
   ios)        cat >&2 <<'EOF'
 error: this tree has no ios/ target — FlClashX ships android/macos/linux/windows only.
 

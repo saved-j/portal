@@ -18,12 +18,37 @@ PATCH_DIR="$REPO/patches"
 
 die() { echo "error: $*" >&2; exit 1; }
 
+MANIFEST="$PATCH_DIR/patches.json"
+ONLY="${ONLY:-}"      # comma list of patch prefixes, e.g. ONLY=0010,0012
+WITHOUT="${WITHOUT:-}" # comma list of patch prefixes to skip
+
+# Print the enabled patch files, in manifest order, honouring ONLY/WITHOUT.
+patch_series() {
+  [[ -f "$MANIFEST" ]] || die "manifest not found: $MANIFEST"
+  python3 - "$MANIFEST" "$PATCH_DIR" "$ONLY" "$WITHOUT" <<'PY'
+import json, sys
+manifest, patch_dir, only, without = sys.argv[1:5]
+data = json.load(open(manifest))
+only = [p.strip() for p in only.split(',') if p.strip()]
+without = [p.strip() for p in without.split(',') if p.strip()]
+for entry in data.get('patches', []):
+    name = entry['file']
+    if not entry.get('enabled', True):
+        continue
+    if only and not any(name.startswith(p) for p in only):
+        continue
+    if without and any(name.startswith(p) for p in without):
+        continue
+    print(f"{patch_dir}/{name}")
+PY
+}
+
 apply_series() {
   local dir="$1" mode="$2"
   local applied=0
-  shopt -s nullglob
-  local patches=("$PATCH_DIR"/*.patch)
-  [[ ${#patches[@]} -gt 0 ]] || die "no patches in $PATCH_DIR"
+  local patches=()
+  while IFS= read -r line; do patches+=("$line"); done < <(patch_series)
+  [[ ${#patches[@]} -gt 0 ]] || die "no enabled patches in $MANIFEST"
   for p in "${patches[@]}"; do
     local name; name=$(basename "$p")
     if [[ "$mode" == "check" ]]; then
@@ -48,10 +73,12 @@ case "$cmd" in
     echo "fetching upstream..."
     git -C "$REPO" fetch --quiet upstream
     ref="${UPSTREAM_REF:-$(git -C "$REPO" symbolic-ref --short refs/remotes/upstream/HEAD 2>/dev/null || echo upstream/main)}"
+    # A fresh clone only carries origin's refs, so resolve the upstream ref to a SHA here.
+    ref_sha=$(git -C "$REPO" rev-parse "$ref")
     echo "base: $ref ($(git -C "$REPO" log -1 --format='%h %s' "$ref"))"
     rm -rf "$WORK" 2>/dev/null || die "$WORK exists and cannot be removed — move it away first"
     git clone --quiet --no-hardlinks "$REPO" "$WORK"
-    git -C "$WORK" checkout --quiet -B portal "$ref"
+    git -C "$WORK" checkout --quiet -B portal "$ref_sha"
     apply_series "$WORK" apply
     echo "ready: $WORK (branch portal)"
     ;;
@@ -63,10 +90,11 @@ case "$cmd" in
     # ignoring the pipeline's own files (patches/, apply.sh, docs/PIPELINE.md).
     git -C "$REPO" fetch --quiet upstream
     ref="${UPSTREAM_REF:-upstream/main}"
+    ref_sha=$(git -C "$REPO" rev-parse "$ref")
     tmp=$(mktemp -d)
     git clone --quiet --no-hardlinks "$REPO" "$tmp/v"
-    git -C "$tmp/v" checkout --quiet -B verify "$ref"
-    for p in "$PATCH_DIR"/*.patch; do git -C "$tmp/v" am --3way --quiet "$p"; done
+    git -C "$tmp/v" checkout --quiet -B verify "$ref_sha"
+    while IFS= read -r p; do git -C "$tmp/v" am --3way --quiet "$p"; done < <(patch_series)
     infra=(':!patches' ':!apply.sh' ':!build.sh' ':!release.sh' ':!docs/PIPELINE.md')
     if git -C "$tmp/v" diff --quiet HEAD "$(git -C "$REPO" rev-parse HEAD)" -- . "${infra[@]}"; then
       echo "OK: patches reproduce the fork tree (ignoring pipeline files)"
@@ -82,7 +110,17 @@ case "$cmd" in
     echo "--- our patches ---"
     ls -1 "$PATCH_DIR"/*.patch | xargs -n1 basename
     ;;
+  list)
+    python3 - "$MANIFEST" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+print(f"{'patch':46} {'version':8} {'state':4} title")
+for entry in data.get('patches', []):
+    state = 'on' if entry.get('enabled', True) else 'off'
+    print(f"{entry['file'][:46]:46} {entry.get('version','-'):8} {state:4} {entry.get('title','')}")
+PY
+    ;;
   *)
-    die "usage: $0 {apply|check|verify|upstream-log}"
+    die "usage: $0 {apply|check|verify|upstream-log|list}   [ONLY=0010,0012] [WITHOUT=0012]"
     ;;
 esac
