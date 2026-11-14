@@ -257,7 +257,13 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                           avatar: _showIcons
                               ? GlyphIcon(_groupGlyph(item.name), size: 16)
                               : null,
-                          label: Text(item.name),
+                          // A selector says nothing useful without its current
+                          // server, so the chip carries the resolved node too.
+                          label: Text(
+                            item.now == null || item.now == item.name
+                                ? item.name
+                                : '${item.name} → ${item.now}',
+                          ),
                           selected: item.name == active,
                           onSelected: (_) => ref
                               .read(portalGroupProvider.notifier)

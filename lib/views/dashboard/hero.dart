@@ -10,6 +10,7 @@ import 'package:fl_clash/providers/outbound_ip.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/views/profiles/add.dart';
+import 'package:fl_clash/views/access.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'portal_controls.dart';
 import 'portal_gateway.dart';
@@ -88,6 +89,20 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                   children: [
                     Row(
                       children: [
+                        IconButton(
+                          // Shortcut to the per-app bypass list: the one setting a
+                          // user reaches for while looking at the server list.
+                          tooltip: context.appLocalizations.accessControl,
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const AccessView(),
+                            ),
+                          ),
+                          icon: const GlyphIcon(
+                            AppGlyphs.appsList,
+                            size: 22,
+                          ),
+                        ),
                         IconButton(
                           tooltip: context.appLocalizations.tools,
                           onPressed: () => ref
