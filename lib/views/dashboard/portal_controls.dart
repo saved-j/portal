@@ -222,13 +222,15 @@ class PortalModeSwitch extends ConsumerWidget {
               ),
               if (mode == Mode.rule) ...[
                 const SizedBox(width: 4),
+                // One hub for everything the network mode adds: the proxies
+                // dashboard, the sort order and the filter editor.
                 IconButton(
-                  tooltip: 'Фильтры',
+                  tooltip: 'Сеть порталов',
                   onPressed: () {
                     HapticFeedback.selectionClick();
-                    showPortalFilterEditor(context);
+                    _showNetworkActions(context, ref);
                   },
-                  icon: const GlyphIcon(AppGlyphs.filter, size: 20),
+                  icon: const GlyphIcon(AppGlyphs.sliders, size: 20),
                 ),
               ],
             ],
@@ -877,3 +879,53 @@ final portalConnectionsBadgeProvider =
     NotifierProvider<PortalBadgeNotifier, bool>(PortalBadgeNotifier.new);
 
 
+
+/// Everything the network mode adds, behind one button: the proxies dashboard, the
+/// order of the server list, and the editor for the filter strip.
+Future<void> _showNetworkActions(BuildContext context, WidgetRef ref) {
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) {
+      final sort = ref.read(portalSortProvider);
+      return SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const GlyphIcon(AppGlyphs.proxies),
+              title: const Text('Порталы'),
+              subtitle: const Text('Зашборд прокси: группы, узлы, замеры'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ProxiesView()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const GlyphIcon(AppGlyphs.sort),
+              title: const Text('Сортировка'),
+              subtitle: Text(
+                sort == PortalSort.ping ? 'сейчас: по пингу' : 'сейчас: по имени',
+              ),
+              onTap: () {
+                ref.read(portalSortProvider.notifier).toggle();
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+            ListTile(
+              leading: const GlyphIcon(AppGlyphs.filter),
+              title: const Text('Фильтры'),
+              subtitle: const Text('Порядок и скрытие групп в ленте'),
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                showPortalFilterEditor(context);
+              },
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
