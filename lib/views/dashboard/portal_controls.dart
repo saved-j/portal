@@ -156,8 +156,8 @@ class PortalServerList extends ConsumerWidget {
   }
 }
 
-/// Horizontal group filter with arrows: a long panel can offer a dozen groups, and
-/// dragging a chip strip with a thumb while the list scrolls underneath is fiddly.
+/// Horizontal group filter. The chevrons are hints, not buttons: they say the strip
+/// can be dragged and hide themselves once that direction is exhausted.
 class _GroupStrip extends ConsumerStatefulWidget {
   const _GroupStrip();
 
@@ -167,59 +167,82 @@ class _GroupStrip extends ConsumerStatefulWidget {
 
 class _GroupStripState extends ConsumerState<_GroupStrip> {
   final _controller = ScrollController();
+  var _canBack = false;
+  var _canForward = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_syncEdges);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncEdges());
+  }
 
   @override
   void dispose() {
+    _controller.removeListener(_syncEdges);
     _controller.dispose();
     super.dispose();
   }
 
-  void _nudge(double delta) {
-    if (!_controller.hasClients) return;
-    final target = (_controller.offset + delta)
-        .clamp(0.0, _controller.position.maxScrollExtent);
-    _controller.animateTo(
-      target,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-    );
+  void _syncEdges() {
+    if (!mounted || !_controller.hasClients) return;
+    final position = _controller.position;
+    final back = position.pixels > position.minScrollExtent + 1;
+    final forward = position.pixels < position.maxScrollExtent - 1;
+    if (back != _canBack || forward != _canForward) {
+      setState(() {
+        _canBack = back;
+        _canForward = forward;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final groups = portalGroups(ref.watch(groupsProvider));
     final active = ref.watch(portalGroupProvider) ?? groups.firstOrNull?.name;
+    final hint = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7);
     return Row(
       children: [
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          onPressed: () => _nudge(-140),
-          icon: const GlyphIcon(AppGlyphs.chevronBack, size: 16),
+        SizedBox(
+          width: 18,
+          child: _canBack
+              ? GlyphIcon(AppGlyphs.chevronBack, size: 14, color: hint)
+              : null,
         ),
         Expanded(
-          child: SingleChildScrollView(
-            controller: _controller,
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final item in groups)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                    child: ChoiceChip(
-                      label: Text(item.name),
-                      selected: item.name == active,
-                      onSelected: (_) =>
-                          ref.read(portalGroupProvider.notifier).pick(item.name),
+          child: NotificationListener<ScrollMetricsNotification>(
+            onNotification: (_) {
+              _syncEdges();
+              return false;
+            },
+            child: SingleChildScrollView(
+              controller: _controller,
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final item in groups)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: ChoiceChip(
+                        label: Text(item.name),
+                        selected: item.name == active,
+                        onSelected: (_) => ref
+                            .read(portalGroupProvider.notifier)
+                            .pick(item.name),
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-        IconButton(
-          visualDensity: VisualDensity.compact,
-          onPressed: () => _nudge(140),
-          icon: const GlyphIcon(AppGlyphs.chevronForward, size: 16),
+        SizedBox(
+          width: 18,
+          child: _canForward
+              ? GlyphIcon(AppGlyphs.chevronForward, size: 14, color: hint)
+              : null,
         ),
       ],
     );
