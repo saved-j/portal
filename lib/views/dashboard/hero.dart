@@ -90,6 +90,16 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                     Row(
                       children: [
                         IconButton(
+                          tooltip: context.appLocalizations.tools,
+                          onPressed: () => ref
+                              .read(currentPageLabelProvider.notifier)
+                              .toPage(PageLabel.tools),
+                          icon: const GlyphIcon(
+                            AppGlyphs.settings,
+                            size: 22,
+                          ),
+                        ),
+                        IconButton(
                           // Shortcut to the per-app bypass list: the one setting a
                           // user reaches for while looking at the server list.
                           tooltip: context.appLocalizations.accessControl,
@@ -100,16 +110,6 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                           ),
                           icon: const GlyphIcon(
                             AppGlyphs.appsList,
-                            size: 22,
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: context.appLocalizations.tools,
-                          onPressed: () => ref
-                              .read(currentPageLabelProvider.notifier)
-                              .toPage(PageLabel.tools),
-                          icon: const GlyphIcon(
-                            AppGlyphs.settings,
                             size: 22,
                           ),
                         ),
@@ -127,6 +127,16 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                                 emphasized: true,
                               ),
                             ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: context.appLocalizations.connections,
+                          onPressed: () => ref
+                              .read(currentPageLabelProvider.notifier)
+                              .toPage(PageLabel.connections),
+                          icon: const GlyphIcon(
+                            AppGlyphs.connections,
+                            size: 22,
                           ),
                         ),
                         IconButton(
