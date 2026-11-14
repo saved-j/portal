@@ -5,8 +5,8 @@ import 'package:args/args.dart';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
-const _appName = 'FlClashX';
-const _bundleId = 'com.follow.clashx';
+const _appName = 'PortalVPN';
+const _bundleId = 'io.portal.xfc';
 const _distDir = 'dist';
 
 const _allTargets = <String, String>{
@@ -183,7 +183,7 @@ String createPackageTargets(String platform, String? customTargets) {
 /// pre-release gets its own bundle id and name, so it installs beside the
 /// stable app; null for every other build, which goes without the file.
 String? macosChannelConfig(String env) => env == 'pre'
-    ? 'PRODUCT_BUNDLE_IDENTIFIER = com.follow.clashx.pre\n'
+    ? 'PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.pre\n'
           'APP_DISPLAY_NAME = $_appName Pre\n'
     : null;
 
@@ -226,7 +226,7 @@ const stableDesktop = DesktopIdentity(
   packageName: 'flclashx',
   installDir: _appName,
   helperUnit: 'flclashx-helper',
-  windowsDataDir: r'com.follow\clashx',
+  windowsDataDir: r'io.portal\xfc',
 );
 
 const preDesktop = DesktopIdentity(
@@ -238,7 +238,7 @@ const preDesktop = DesktopIdentity(
   packageName: 'flclashx-pre',
   installDir: 'FlClashXPre',
   helperUnit: 'flclashx-pre-helper',
-  windowsDataDir: r'com.follow\clashx.pre',
+  windowsDataDir: r'io.portal\xfc.pre',
 );
 
 const _preWindowsAppId = '3B6E2F0A-9C41-4D57-8A2E-7F1D5C0B9E63';

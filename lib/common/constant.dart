@@ -9,7 +9,7 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:material_ui/material_ui.dart';
 
-const appName = 'FlClashX';
+const appName = 'PortalVPN';
 final appHelperService = helperServiceFor(pre: isPreDesktopApp);
 final appSystemName = isPreDesktopApp ? '$appName Pre' : appName;
 const coreManifestName = 'manifest.json';

@@ -12,16 +12,16 @@ void main() {
 
       expect(
         config,
-        contains('PRODUCT_BUNDLE_IDENTIFIER = com.follow.clashx.pre'),
+        contains('PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.pre'),
       );
-      expect(config, contains('APP_DISPLAY_NAME = FlClashX Pre'));
-      expect(setup.macosBundleName('pre'), 'FlClashX Pre.app');
+      expect(config, contains('APP_DISPLAY_NAME = PortalVPN Pre'));
+      expect(setup.macosBundleName('pre'), 'PortalVPN Pre.app');
     });
 
     test('stable and dev builds of macOS keep the stable identity', () {
       for (final env in ['stable', 'dev']) {
         expect(setup.macosChannelConfig(env), isNull);
-        expect(setup.macosBundleName(env), 'FlClashX.app');
+        expect(setup.macosBundleName(env), 'PortalVPN.app');
       }
     });
 
@@ -48,7 +48,7 @@ void main() {
 
       expect(check, isNonNegative);
       expect(check, lessThan(sources));
-      expect(project, contains(r'expected=com.follow.clashx.pre'));
+      expect(project, contains(r'expected=io.portal.xfc.pre'));
       expect(
         project,
         contains(r'[ \"$CONFIGURATION\" = \"Debug\" ] && exit 0'),
@@ -131,18 +131,18 @@ hooks:
     test('names artifacts by platform and architecture', () {
       expect(
         setup.artifactName('windows', 'amd64', '-setup.exe'),
-        'FlClashX-windows-amd64-setup.exe',
+        'PortalVPN-windows-amd64-setup.exe',
       );
       expect(
         setup.artifactName('android', 'arm64-v8a', '.apk'),
-        'FlClashX-android-arm64-v8a.apk',
+        'PortalVPN-android-arm64-v8a.apk',
       );
     });
 
     test('signs the code inside the macOS app before the app', () {
       final root = Directory.systemTemp.createTempSync('setup_sign');
       addTearDown(() => root.deleteSync(recursive: true));
-      final app = p.join(root.path, 'FlClashX.app');
+      final app = p.join(root.path, 'PortalVPN.app');
       String at(String path) => p.joinAll([app, ...path.split('/')]);
       for (final dir in [
         'Contents/Frameworks/FlutterMacOS.framework',
@@ -153,7 +153,7 @@ hooks:
         Directory(at(dir)).createSync(recursive: true);
       }
       for (final file in [
-        'Contents/MacOS/FlClashX',
+        'Contents/MacOS/PortalVPN',
         'Contents/MacOS/FlClashCore',
         'Contents/Frameworks/Info.plist',
       ]) {
@@ -208,7 +208,7 @@ hooks:
         template,
         config: {
           'app_id': 'ABC',
-          'display_name': 'FlClashX',
+          'display_name': 'PortalVPN',
           'publisher': 'pluralplay',
           'locales': [
             {'lang': 'ru'},
@@ -222,7 +222,7 @@ hooks:
         arch: 'amd64',
         sourceDir: r'C:\build',
         outputDir: r'C:\dist',
-        outputBaseName: 'FlClashX-windows-amd64-setup',
+        outputBaseName: 'PortalVPN-windows-amd64-setup',
         rootDir: r'C:\repo',
       );
       expect(script, contains('AppId=ABC'));
@@ -320,7 +320,7 @@ hooks:
       );
     });
 
-    test('the installer takes over a 0.4 FlClashX registration in place', () {
+    test('the installer takes over a 0.4 PortalVPN registration in place', () {
       final script = File(
         'windows/packaging/exe/inno_setup.iss',
       ).readAsStringSync();
@@ -329,7 +329,7 @@ hooks:
         script,
         contains(r'Uninstall\728B3532-C74B-4870-9068-BE70FE12A3E6_is1'),
       );
-      expect(script, contains("(Pos('FlClashX', Name) = 1)"));
+      expect(script, contains("(Pos('PortalVPN', Name) = 1)"));
       expect(script, contains('WizardForm.DirEdit.Text := LegacyDir;'));
       expect(
         script,
@@ -344,8 +344,8 @@ hooks:
       ).readAsStringSync();
       final config = {
         'app_id': 'D915C0D1-2F5B-4676-97D5-6D55F3EF45A4',
-        'display_name': 'FlClashX',
-        'executable_name': 'FlClashX.exe',
+        'display_name': 'PortalVPN',
+        'executable_name': 'PortalVPN.exe',
       };
 
       String render(setup.DesktopIdentity identity) => setup.renderInnoSetup(
@@ -355,7 +355,7 @@ hooks:
         arch: 'amd64',
         sourceDir: r'C:\build',
         outputDir: r'C:\dist',
-        outputBaseName: 'FlClashX-windows-amd64-setup',
+        outputBaseName: 'PortalVPN-windows-amd64-setup',
         rootDir: r'C:\repo',
         identity: identity,
       );
@@ -363,11 +363,11 @@ hooks:
       test('installs under its own id, name, Helper and data', () {
         final pre = render(setup.preDesktop);
         expect(pre, isNot(contains('D915C0D1-2F5B-4676-97D5-6D55F3EF45A4')));
-        expect(pre, contains(r'DefaultDirName={autopf}\FlClashX Pre'));
-        expect(pre, contains("HelperService = 'FlClashXPreHelperService';"));
+        expect(pre, contains(r'DefaultDirName={autopf}\PortalVPN Pre'));
+        expect(pre, contains("HelperService = 'PortalVPNPreHelperService';"));
         expect(pre, contains('AdoptLegacy = False;'));
-        expect(pre, contains("KillProcess('FlClashXPre.exe');"));
-        expect(pre, contains(r'{userappdata}\com.follow\clashx.pre'));
+        expect(pre, contains("KillProcess('PortalVPNPre.exe');"));
+        expect(pre, contains(r'{userappdata}\io.portal\xfc.pre'));
         expect(
           RegExp(r'\{\{([A-Z_]+)\}\}').allMatches(pre).map((m) => m[1]),
           everyElement('NAME'),
@@ -377,11 +377,11 @@ hooks:
       test('leaves the stable installer as it was', () {
         final stable = render(setup.stableDesktop);
         expect(stable, contains('AppId=D915C0D1-2F5B-4676-97D5-6D55F3EF45A4'));
-        expect(stable, contains(r'DefaultDirName={autopf}\FlClashX'));
-        expect(stable, contains("HelperService = 'FlClashXHelperService';"));
+        expect(stable, contains(r'DefaultDirName={autopf}\PortalVPN'));
+        expect(stable, contains("HelperService = 'PortalVPNHelperService';"));
         expect(stable, contains('AdoptLegacy = True;'));
-        expect(stable, contains("KillProcess('FlClashX.exe');"));
-        expect(stable, contains(r"{userappdata}\com.follow\clashx')"));
+        expect(stable, contains("KillProcess('PortalVPN.exe');"));
+        expect(stable, contains(r"{userappdata}\io.portal\xfc')"));
       });
 
       test('stops only the Core started from its own install', () {
@@ -392,8 +392,8 @@ hooks:
 
       test('packages for Linux under its own names', () {
         final linuxConfig = {
-          'display_name': 'FlClashX',
-          'startup_wm_class': 'com.follow.clashx',
+          'display_name': 'PortalVPN',
+          'startup_wm_class': 'io.portal.xfc',
           'maintainer': {'name': 'pluralplay', 'email': 'x@example.com'},
           'postuninstall_scripts': [
             'rm -f /etc/systemd/system/flclashx-helper.service',
@@ -406,19 +406,19 @@ hooks:
           arch: 'amd64',
         );
         expect(control, contains('Package: flclashx-pre'));
-        expect(control, contains('Description: FlClashX Pre'));
+        expect(control, contains('Description: PortalVPN Pre'));
         final spec = setup.rpmSpecOf(
           linuxConfig,
           setup.preDesktop,
           version: '0.5.1',
         );
         expect(spec, contains('Name: flclashx-pre'));
-        expect(spec, contains('/opt/FlClashXPre/*'));
+        expect(spec, contains('/opt/PortalVPNPre/*'));
         expect(
           spec,
-          contains('/usr/share/applications/com.follow.clashx.pre.desktop'),
+          contains('/usr/share/applications/io.portal.xfc.pre.desktop'),
         );
-        expect(spec, contains('apps/FlClashXPre.png'));
+        expect(spec, contains('apps/PortalVPNPre.png'));
         expect(spec, contains('flclashx-pre-helper.service'));
         expect(spec, isNot(contains('/flclashx-helper.service')));
         final entry = setup.desktopEntry(
@@ -426,10 +426,10 @@ hooks:
           exec: setup.linuxExecOf(setup.preDesktop),
           identity: setup.preDesktop,
         );
-        expect(entry, contains('Name=FlClashX Pre'));
-        expect(entry, contains('Exec=/opt/FlClashXPre/FlClashXPre %u'));
-        expect(entry, contains('Icon=FlClashXPre'));
-        expect(entry, contains('StartupWMClass=com.follow.clashx.pre'));
+        expect(entry, contains('Name=PortalVPN Pre'));
+        expect(entry, contains('Exec=/opt/PortalVPNPre/PortalVPNPre %u'));
+        expect(entry, contains('Icon=PortalVPNPre'));
+        expect(entry, contains('StartupWMClass=io.portal.xfc.pre'));
         expect(
           setup.debControlOf(
             linuxConfig,
@@ -440,10 +440,10 @@ hooks:
           contains('Package: flclashx\n'),
         );
         expect(
-          setup.desktopEntry(linuxConfig, exec: '/opt/FlClashX/FlClashX'),
+          setup.desktopEntry(linuxConfig, exec: '/opt/PortalVPN/PortalVPN'),
           allOf(
-            contains('Icon=FlClashX\n'),
-            contains('StartupWMClass=com.follow.clashx\n'),
+            contains('Icon=PortalVPN\n'),
+            contains('StartupWMClass=io.portal.xfc\n'),
           ),
         );
       });
@@ -451,24 +451,24 @@ hooks:
       test('renames the app and Helper in the staged bundle only for pre', () {
         final dir = Directory.systemTemp.createTempSync('channel_bundle');
         addTearDown(() => dir.deleteSync(recursive: true));
-        for (final name in ['FlClashX.exe', 'FlClashXHelperService.exe']) {
+        for (final name in ['PortalVPN.exe', 'PortalVPNHelperService.exe']) {
           File('${dir.path}/$name').writeAsStringSync('x');
         }
         setup.renameForChannel(dir.path, setup.stableDesktop, ext: '.exe');
-        expect(File('${dir.path}/FlClashX.exe').existsSync(), isTrue);
+        expect(File('${dir.path}/PortalVPN.exe').existsSync(), isTrue);
         setup.renameForChannel(dir.path, setup.preDesktop, ext: '.exe');
-        expect(File('${dir.path}/FlClashXPre.exe').existsSync(), isTrue);
+        expect(File('${dir.path}/PortalVPNPre.exe').existsSync(), isTrue);
         expect(
-          File('${dir.path}/FlClashXPreHelperService.exe').existsSync(),
+          File('${dir.path}/PortalVPNPreHelperService.exe').existsSync(),
           isTrue,
         );
-        expect(File('${dir.path}/FlClashX.exe').existsSync(), isFalse);
+        expect(File('${dir.path}/PortalVPN.exe').existsSync(), isFalse);
       });
 
       test('refuses a pre build the channel never reached', () {
         final dir = Directory.systemTemp.createTempSync('channel_marker');
         addTearDown(() => dir.deleteSync(recursive: true));
-        final binary = File('${dir.path}/FlClashX.exe')
+        final binary = File('${dir.path}/PortalVPN.exe')
           ..writeAsBytesSync([0, ...setup.utf16le('clashx.pre'), 0]);
         setup.requireChannelMarker(binary.path, setup.utf16le('clashx.pre'));
         binary.writeAsBytesSync(setup.utf16le('clashx'));

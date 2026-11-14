@@ -408,7 +408,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# The bundle id comes from Channel.xcconfig, which setup.dart writes for\n# APP_ENV=pre; a build whose defines disagree would ship the wrong app.\n[ \"$CONFIGURATION\" = \"Debug\" ] && exit 0\nenv=pre\nfor define in $(echo \"$DART_DEFINES\" | tr ',' ' '); do\n  pair=$(echo \"$define\" | base64 --decode 2>/dev/null)\n  case \"$pair\" in APP_ENV=*) env=\"${pair#APP_ENV=}\" ;; esac\ndone\nexpected=com.follow.clashx\n[ \"$env\" = \"pre\" ] && expected=com.follow.clashx.pre\nif [ \"$PRODUCT_BUNDLE_IDENTIFIER\" != \"$expected\" ]; then\n  echo \"error: APP_ENV=$env needs bundle id $expected, not $PRODUCT_BUNDLE_IDENTIFIER; build with dart setup.dart macos --env $env\"\n  exit 1\nfi\n";
+			shellScript = "# The bundle id comes from Channel.xcconfig, which setup.dart writes for\n# APP_ENV=pre; a build whose defines disagree would ship the wrong app.\n[ \"$CONFIGURATION\" = \"Debug\" ] && exit 0\nenv=pre\nfor define in $(echo \"$DART_DEFINES\" | tr ',' ' '); do\n  pair=$(echo \"$define\" | base64 --decode 2>/dev/null)\n  case \"$pair\" in APP_ENV=*) env=\"${pair#APP_ENV=}\" ;; esac\ndone\nexpected=io.portal.xfc\n[ \"$env\" = \"pre\" ] && expected=io.portal.xfc.pre\nif [ \"$PRODUCT_BUNDLE_IDENTIFIER\" != \"$expected\" ]; then\n  echo \"error: APP_ENV=$env needs bundle id $expected, not $PRODUCT_BUNDLE_IDENTIFIER; build with dart setup.dart macos --env $env\"\n  exit 1\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -466,7 +466,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.follow.flClashX.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fl_clash.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fl_clash";
@@ -480,7 +480,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.follow.flClashX.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fl_clash.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fl_clash";
@@ -494,7 +494,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.follow.flClashX.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fl_clash.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fl_clash";
@@ -701,7 +701,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.follow.clashx.debug;
+				PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.debug;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
