@@ -5,7 +5,7 @@ import 'package:args/args.dart';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
-const _appName = 'PortalVPN';
+const _appName = 'Portal';
 const _bundleId = 'io.portal.xfc';
 const _distDir = 'dist';
 
@@ -220,7 +220,7 @@ class DesktopIdentity {
 const stableDesktop = DesktopIdentity(
   pre: false,
   executable: _appName,
-  helper: 'FlClashXHelperService',
+  helper: 'PortalHelperService',
   displayName: _appName,
   bundleId: _bundleId,
   packageName: 'flclashx',
@@ -231,12 +231,12 @@ const stableDesktop = DesktopIdentity(
 
 const preDesktop = DesktopIdentity(
   pre: true,
-  executable: 'FlClashXPre',
-  helper: 'FlClashXPreHelperService',
+  executable: 'PortalPre',
+  helper: 'PortalPreHelperService',
   displayName: '$_appName Pre',
   bundleId: '$_bundleId.pre',
   packageName: 'flclashx-pre',
-  installDir: 'FlClashXPre',
+  installDir: 'PortalPre',
   helperUnit: 'flclashx-pre-helper',
   windowsDataDir: r'io.portal\xfc.pre',
 );
