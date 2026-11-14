@@ -243,11 +243,38 @@ class _GatewayPainter extends CustomPainter {
       );
       final edge = math.min(1.0, (1.0 - z) / 0.08);
       final twinkle = 0.55 + 0.45 * math.sin(turn * 7.0 + star.angle * 9);
-      final alpha = (0.15 + 0.85 * z) * edge * twinkle;
+      final alpha = ((0.15 + 0.85 * z) * edge * twinkle).clamp(0.0, 1.0);
+
+      // Motion blur: the trail is the distance the star covered in the last instant,
+      // so fast near stars streak and slow far ones stay points.
+      final zBefore = (star.z + (flow - 0.06) * star.speed) % 1.0;
+      if (zBefore < z) {
+        final trail = radius * 0.98 * (z * z - zBefore * zBefore);
+        if (trail > 0.6) {
+          final tail = Offset(
+            center.dx + math.cos(star.angle) * (distance - trail),
+            center.dy + math.sin(star.angle) * (distance - trail),
+          );
+          canvas.drawLine(
+            tail,
+            offset,
+            Paint()
+              ..strokeWidth = star.size * (0.3 + z * 1.3)
+              ..strokeCap = StrokeCap.round
+              ..shader = LinearGradient(
+                colors: [
+                  Colors.white.withValues(alpha: 0),
+                  Colors.white.withValues(alpha: alpha * 0.75),
+                ],
+              ).createShader(Rect.fromPoints(tail, offset)),
+          );
+        }
+      }
+
       canvas.drawCircle(
         offset,
         star.size * (0.35 + z * 1.7),
-        Paint()..color = Colors.white.withValues(alpha: alpha.clamp(0.0, 1.0)),
+        Paint()..color = Colors.white.withValues(alpha: alpha),
       );
     }
 

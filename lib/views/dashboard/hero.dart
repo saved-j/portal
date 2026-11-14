@@ -3,8 +3,6 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/service_probe.dart' show routedOutbound;
-import 'package:fl_clash/features/features.dart';
-import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/outbound_ip.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -22,7 +20,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'style.dart';
-import 'widgets/card.dart';
 import 'widgets/widgets.dart';
 import 'package:fl_clash/common/outbound.dart';
 
@@ -300,107 +297,8 @@ class _ServiceLogo extends ConsumerWidget {
 /// with its flag, the exit address while running and its delay; a tap
 /// opens the picker.
 /// countries.
-class _FlagBadge extends StatelessWidget {
-  const _FlagBadge({
-    required this.code,
-    required this.count,
-    required this.active,
-    required this.checking,
-    required this.onRefresh,
-  });
-
-  final String? code;
-  final int count;
-  final bool active;
-  final bool checking;
-  final VoidCallback onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = context.colorScheme;
-    final colors = DashboardColors.of(context);
-    return SizedBox.square(
-      dimension: _flagSize + 6,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Center(
-            child: CountryBadge(
-              countryCode: code,
-              size: _flagSize,
-              active: active,
-              checking: checking,
-              onRefresh: onRefresh,
-            ),
-          ),
-          if (count > 0)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: ShapeDecoration(
-                  color: colorScheme.primary,
-                  shape: AppShape.full.copyWith(
-                    side: BorderSide(color: colors.card, width: 1.5),
-                  ),
-                ),
-                child: Text(
-                  '+$count',
-                  style: DashboardText.figure(
-                    context,
-                    AppTextStyle.caption2,
-                    color: colorScheme.onPrimary,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
 
 /// Four bars, as a phone shows its signal, lit by how low the delay is.
-class _SignalBars extends StatelessWidget {
-  const _SignalBars({required this.delay});
-
-  static const _heights = [8.0, 12.0, 16.0, 20.0];
-
-  final int? delay;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = context.colorScheme;
-    final dim = colorScheme.onSurfaceVariant.withValues(alpha: 0.25);
-    final delay = this.delay;
-    final level = switch (delay) {
-      null || 0 => 0,
-      < 0 => 0,
-      < 150 => 4,
-      < 300 => 3,
-      < 600 => 2,
-      _ => 1,
-    };
-    final lit = colorScheme.delayColor(delay) ?? dim;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      spacing: 3,
-      children: [
-        for (final (index, height) in _heights.indexed)
-          Container(
-            width: 4,
-            height: height,
-            decoration: ShapeDecoration(
-              color: index < level ? lit : dim,
-              shape: AppShape.full,
-            ),
-          ),
-      ],
-    );
-  }
-}
 
 /// Full width: filled with a play glyph while stopped, easing into an
 /// outline in the primary color with a stop glyph and the run time while

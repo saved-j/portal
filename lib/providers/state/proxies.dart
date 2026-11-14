@@ -1,5 +1,4 @@
 part of '../state.dart';
-import 'package:fl_clash/common/outbound.dart';
 
 @riverpod
 GroupsState currentGroupsState(Ref ref) {

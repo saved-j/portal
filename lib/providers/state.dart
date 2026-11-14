@@ -21,6 +21,7 @@ import 'app.dart';
 import 'config.dart';
 import 'core.dart';
 import 'database.dart';
+import 'package:fl_clash/common/outbound.dart';
 
 part 'generated/state.g.dart';
 part 'state/proxies.dart';
