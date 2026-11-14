@@ -19,6 +19,7 @@ class PortalGatewayCore extends StatefulWidget {
     required this.runTime,
     this.size = 168,
     this.center,
+    this.intensity = 0,
   });
 
   final bool isStart;
@@ -28,6 +29,10 @@ class PortalGatewayCore extends StatefulWidget {
 
   /// The connected server's mark, shown inside a lit portal.
   final Widget? center;
+
+  /// Live traffic pressure 0..1: it decides how many packets cross the portal and how
+  /// fast they move, so the picture follows the wire instead of a fixed loop.
+  final double intensity;
 
   @override
   State<PortalGatewayCore> createState() => _PortalGatewayCoreState();
@@ -88,6 +93,7 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
                 accent: accent,
                 turn: t,
                 active: widget.isStart,
+                intensity: widget.intensity,
               ),
               child: Center(
                 child: IconTheme.merge(
@@ -116,17 +122,36 @@ class _GatewayPainter extends CustomPainter {
     required this.accent,
     required this.turn,
     required this.active,
+    required this.intensity,
   });
 
   final Color portal;
   final Color accent;
   final double turn;
   final bool active;
+  final double intensity;
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
     final radius = size.shortestSide / 2;
+    // Traffic crossing the portal: packets run from the rim to the core, their
+    // number and speed taken from the live rate.
+    final count = (2 + (intensity.clamp(0.0, 1.0) * 10)).round();
+    for (var i = 0; i < count; i++) {
+      final phase = (turn * (1.0 + intensity * 2.5) + i / count) % 1.0;
+      final packetRadius = (radius - 12) * (1.0 - phase);
+      if (packetRadius < 26) continue;
+      final angle = i * 2.39996 + turn * 6.28318; // golden-angle spread
+      final offset = Offset(
+        center.dx + packetRadius * math.cos(angle),
+        center.dy + packetRadius * math.sin(angle),
+      );
+      final packet = Paint()
+        ..color = portal.withValues(alpha: 0.55 * (1 - phase) * (0.4 + intensity));
+      canvas.drawCircle(offset, 1.6 + 1.6 * intensity, packet);
+    }
+
     final dim = active ? 1.0 : 1.0;
 
     if (!active) {

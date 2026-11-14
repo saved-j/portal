@@ -659,6 +659,11 @@ class _ConnectButton extends ConsumerWidget {
     final isStart = ref.watch(isStartProvider);
     final suspended = isStart && ref.watch(suspendProvider);
     final runTime = ref.watch(runTimeProvider);
+    // Live traffic sets how busy the portal looks: 2 MB/s and above is a full flow.
+    final traffics = ref.watch(trafficsProvider).list;
+    final last = traffics.isEmpty ? null : traffics.last;
+    final rate = last == null ? 0.0 : (last.up + last.down).toDouble();
+    final intensity = (rate / (2 * 1024 * 1024)).clamp(0.0, 1.0);
     final label = suspended
         ? appLocalizations.suspended
         : isStart
@@ -684,6 +689,7 @@ class _ConnectButton extends ConsumerWidget {
                   suspended: suspended,
                   runTime: runTime,
                   center: _connectedMark(ref),
+                  intensity: intensity,
                 ),
               ),
             ),

@@ -437,7 +437,10 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                   children: [
                     for (final item in groups)
                       Builder(builder: (context) {
-                        final bypassed = bypassedNames.contains(item.name);
+                        // A filter the panel already routes to DIRECT is a bypass by
+                        // definition: it should look that way before anyone touches it.
+                        final bypassed = bypassedNames.contains(item.name) ||
+                            _isBuiltinOutbound(item.now ?? '');
                         return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 3),
                         child: GestureDetector(
