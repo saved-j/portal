@@ -173,7 +173,7 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m61(port) => "Port ${port}";
 
-  static String m62(name) => "Profile ${name} added";
+  static String m62(name) => "Subscription ${name} added";
 
   static String m63(days) =>
       "${Intl.plural(days, one: '1 day', other: '${days} days')}";
@@ -274,7 +274,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Only selected apps go through the VPN",
     ),
     "accessControlDesc": MessageLookupByLibrary.simpleMessage(
-      "Access control picks which apps use the proxy.",
+      "Access control decides which apps go through the portal.",
     ),
     "accessControlDisabledDesc": MessageLookupByLibrary.simpleMessage(
       "App access control is disabled",
@@ -395,7 +395,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "autoLaunch": MessageLookupByLibrary.simpleMessage("Auto launch"),
     "autoRun": MessageLookupByLibrary.simpleMessage("Auto run"),
     "autoRunDesc": MessageLookupByLibrary.simpleMessage(
-      "Auto run starts the proxy when the app opens.",
+      "Auto connect opens the portal when the app starts.",
     ),
     "autoSetSystemDns": MessageLookupByLibrary.simpleMessage(
       "Auto-set system DNS",
@@ -470,9 +470,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "cancelSelectAll": MessageLookupByLibrary.simpleMessage("Deselect all"),
     "cannotSave": MessageLookupByLibrary.simpleMessage("Can\'t save"),
     "changeProxyFailedTip": MessageLookupByLibrary.simpleMessage(
-      "Failed to switch proxy; the previous selection has been restored",
+      "Could not switch the portal, the previous choice is back",
     ),
-    "changeServer": MessageLookupByLibrary.simpleMessage("Change server"),
+    "changeServer": MessageLookupByLibrary.simpleMessage("Change portal"),
     "changelogBreaking": MessageLookupByLibrary.simpleMessage(
       "Breaking changes",
     ),
@@ -957,9 +957,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "inputRuleContent": MessageLookupByLibrary.simpleMessage(
       "Enter the rule content",
     ),
-    "installedAppsPermissionDeniedMessage": MessageLookupByLibrary.simpleMessage(
-      "The app list permission was denied, so installed apps cannot be listed. Please grant it manually in system settings.",
-    ),
+    "installedAppsPermissionDeniedMessage":
+        MessageLookupByLibrary.simpleMessage(
+          "The app list permission was denied, so installed apps cannot be listed. Please grant it manually in system settings.",
+        ),
     "installedAppsPermissionDesc": MessageLookupByLibrary.simpleMessage(
       "This system hides the installed app list until the permission is granted. Authorize it to configure the per-app proxy.",
     ),
@@ -1244,7 +1245,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "none": MessageLookupByLibrary.simpleMessage("None"),
     "notSelectedTip": MessageLookupByLibrary.simpleMessage(
-      "The current proxy group cannot be selected",
+      "This group has no portal to pick by hand",
     ),
     "ntpInterval": MessageLookupByLibrary.simpleMessage(
       "Sync interval (minutes)",
@@ -1344,7 +1345,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Private key passphrase",
     ),
     "process": MessageLookupByLibrary.simpleMessage("Process"),
-    "profile": MessageLookupByLibrary.simpleMessage("Profile"),
+    "profile": MessageLookupByLibrary.simpleMessage("Subscription"),
     "profileAddedTip": m62,
     "profileAutoUpdateIntervalInvalidValidationDesc":
         MessageLookupByLibrary.simpleMessage("Please enter a valid interval"),
@@ -1356,7 +1357,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "profileDetails": MessageLookupByLibrary.simpleMessage("Details"),
     "profileExpired": MessageLookupByLibrary.simpleMessage("Expired"),
     "profileHasUpdate": MessageLookupByLibrary.simpleMessage(
-      "The profile has been modified. Turn off auto update?",
+      "The subscription has been modified. Turn off auto update?",
     ),
     "profileHoursFigure": m64,
     "profileLeftOfTotal": m65,
@@ -1386,7 +1387,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "profileUrlNullValidationDesc": MessageLookupByLibrary.simpleMessage(
       "Please enter the profile URL",
     ),
-    "profiles": MessageLookupByLibrary.simpleMessage("Profiles"),
+    "profiles": MessageLookupByLibrary.simpleMessage("Subscriptions"),
     "profilesSort": MessageLookupByLibrary.simpleMessage("Sort profiles"),
     "project": MessageLookupByLibrary.simpleMessage("Project"),
     "protocol": MessageLookupByLibrary.simpleMessage("Protocol"),
@@ -1400,7 +1401,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Only remote providers are supported",
     ),
     "providers": MessageLookupByLibrary.simpleMessage("External resources"),
-    "proxies": MessageLookupByLibrary.simpleMessage("Proxies"),
+    "proxies": MessageLookupByLibrary.simpleMessage("Portals"),
     "proxiesCount": m69,
     "proxiesProfileLabel": m70,
     "proxiesRemovedTip": m71,
@@ -1723,7 +1724,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "This device is not connected to a local network",
     ),
     "sendFromPhonePageHint": MessageLookupByLibrary.simpleMessage(
-      "Subscription link or proxy share link",
+      "Subscription link or portal link",
     ),
     "sendFromPhonePageSent": MessageLookupByLibrary.simpleMessage(
       "Sent. Confirm the import on the other device.",
@@ -1737,7 +1738,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "sendFromPhoneTip": MessageLookupByLibrary.simpleMessage(
       "Scan the code with your phone\'s camera and paste the link on the page that opens. Both devices need to be on the same network. If the page does not open on Android 17 or later, give the phone\'s browser the Nearby devices permission.",
     ),
-    "server": MessageLookupByLibrary.simpleMessage("Server"),
+    "server": MessageLookupByLibrary.simpleMessage("Portal"),
     "serviceAbnormalCount": m86,
     "serviceAllAvailable": MessageLookupByLibrary.simpleMessage(
       "All available",
@@ -1912,7 +1913,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "themeMode": MessageLookupByLibrary.simpleMessage("Appearance"),
     "themeStyle": MessageLookupByLibrary.simpleMessage("Theme mode"),
     "themeStyleDesc": MessageLookupByLibrary.simpleMessage(
-      "Enhanced puts the service logo, plan, server and a connect button on the home page in place of the widget grid.",
+      "Enhanced puts the service logo, plan, portal and a connect button on the home page in place of the widget grid.",
     ),
     "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("Enhanced"),
     "themeStyleOriginal": MessageLookupByLibrary.simpleMessage("Original"),

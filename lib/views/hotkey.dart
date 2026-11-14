@@ -38,7 +38,6 @@ List<(String, List<HotAction>)> _sections(AppLocalizations appLocalizations) {
         HotAction.mode,
         HotAction.ruleMode,
         HotAction.globalMode,
-        HotAction.directMode,
       ],
     ),
     (

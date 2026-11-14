@@ -173,7 +173,7 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m61(port) => "Порт ${port}";
 
-  static String m62(name) => "Профиль «${name}» добавлен";
+  static String m62(name) => "Подписка «${name}» добавлена";
 
   static String m63(days) =>
       "${Intl.plural(days, one: '${days} день', few: '${days} дня', many: '${days} дней', other: '${days} дня')}";
@@ -275,7 +275,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Через VPN проходят только выбранные приложения",
     ),
     "accessControlDesc": MessageLookupByLibrary.simpleMessage(
-      "Контроль доступа определяет, какие приложения идут через прокси.",
+      "Контроль доступа определяет, какие приложения идут через портал.",
     ),
     "accessControlDisabledDesc": MessageLookupByLibrary.simpleMessage(
       "Контроль доступа приложений отключён",
@@ -352,7 +352,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "ageSecretKey": MessageLookupByLibrary.simpleMessage("Секретный ключ age"),
     "ageSecretKeyRequiredTip": MessageLookupByLibrary.simpleMessage(
-      "Профиль зашифрован с помощью age, для расшифровки нужен секретный ключ age",
+      "Подписка зашифрована с помощью age, для расшифровки нужен секретный ключ age",
     ),
     "agree": MessageLookupByLibrary.simpleMessage("Я согласен"),
     "allReferencedProxies": MessageLookupByLibrary.simpleMessage(
@@ -406,7 +406,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "autoLaunch": MessageLookupByLibrary.simpleMessage("Автозапуск"),
     "autoRun": MessageLookupByLibrary.simpleMessage("Автовключение"),
     "autoRunDesc": MessageLookupByLibrary.simpleMessage(
-      "Автовключение запускает прокси при открытии приложения.",
+      "Автовключение открывает портал при запуске приложения.",
     ),
     "autoSetSystemDns": MessageLookupByLibrary.simpleMessage(
       "Автонастройка системного DNS",
@@ -487,9 +487,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "cancelSelectAll": MessageLookupByLibrary.simpleMessage("Снять выделение"),
     "cannotSave": MessageLookupByLibrary.simpleMessage("Не удалось сохранить"),
     "changeProxyFailedTip": MessageLookupByLibrary.simpleMessage(
-      "Не удалось переключить прокси, возвращён предыдущий выбор",
+      "Не удалось переключить портал, возвращён предыдущий выбор",
     ),
-    "changeServer": MessageLookupByLibrary.simpleMessage("Сменить сервер"),
+    "changeServer": MessageLookupByLibrary.simpleMessage("Сменить портал"),
     "changelogBreaking": MessageLookupByLibrary.simpleMessage(
       "Важные изменения",
     ),
@@ -889,7 +889,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "geodataLoader": MessageLookupByLibrary.simpleMessage(
       "Geo: экономия памяти",
     ),
-    "global": MessageLookupByLibrary.simpleMessage("Глобальный"),
+    "global": MessageLookupByLibrary.simpleMessage("Простой портал"),
     "go": MessageLookupByLibrary.simpleMessage("Перейти"),
     "goDownload": MessageLookupByLibrary.simpleMessage("Скачать"),
     "goToConfigureAddedRules": MessageLookupByLibrary.simpleMessage(
@@ -992,9 +992,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "inputRuleContent": MessageLookupByLibrary.simpleMessage(
       "Введите содержимое правила",
     ),
-    "installedAppsPermissionDeniedMessage": MessageLookupByLibrary.simpleMessage(
-      "Разрешение на список приложений отклонено, поэтому установленные приложения недоступны. Предоставьте его вручную в системных настройках.",
-    ),
+    "installedAppsPermissionDeniedMessage":
+        MessageLookupByLibrary.simpleMessage(
+          "Разрешение на список приложений отклонено, поэтому установленные приложения недоступны. Предоставьте его вручную в системных настройках.",
+        ),
     "installedAppsPermissionDesc": MessageLookupByLibrary.simpleMessage(
       "Эта система не выдаёт список установленных приложений без разрешения. Предоставьте его, чтобы настроить прокси для отдельных приложений.",
     ),
@@ -1301,7 +1302,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "none": MessageLookupByLibrary.simpleMessage("Нет"),
     "notSelectedTip": MessageLookupByLibrary.simpleMessage(
-      "В этой группе прокси нельзя выбрать вручную",
+      "В этой группе порталов нельзя выбрать вручную",
     ),
     "ntpInterval": MessageLookupByLibrary.simpleMessage(
       "Интервал синхронизации (минуты)",
@@ -1415,7 +1416,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Пароль закрытого ключа",
     ),
     "process": MessageLookupByLibrary.simpleMessage("Процесс"),
-    "profile": MessageLookupByLibrary.simpleMessage("Профиль"),
+    "profile": MessageLookupByLibrary.simpleMessage("Подписка"),
     "profileAddedTip": m62,
     "profileAutoUpdateIntervalInvalidValidationDesc":
         MessageLookupByLibrary.simpleMessage("Введите корректный интервал"),
@@ -1425,7 +1426,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "profileDetails": MessageLookupByLibrary.simpleMessage("Подробнее"),
     "profileExpired": MessageLookupByLibrary.simpleMessage("Истекла"),
     "profileHasUpdate": MessageLookupByLibrary.simpleMessage(
-      "Профиль изменён. Отключить автообновление?",
+      "Подписка изменена. Отключить автообновление?",
     ),
     "profileHoursFigure": m64,
     "profileLeftOfTotal": m65,
@@ -1451,7 +1452,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "profileUrlNullValidationDesc": MessageLookupByLibrary.simpleMessage(
       "Введите URL профиля",
     ),
-    "profiles": MessageLookupByLibrary.simpleMessage("Профили"),
+    "profiles": MessageLookupByLibrary.simpleMessage("Подписки"),
     "profilesSort": MessageLookupByLibrary.simpleMessage("Сортировка профилей"),
     "project": MessageLookupByLibrary.simpleMessage("Проект"),
     "protocol": MessageLookupByLibrary.simpleMessage("Протокол"),
@@ -1465,7 +1466,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Поддерживаются только удалённые ресурсы",
     ),
     "providers": MessageLookupByLibrary.simpleMessage("Внешние ресурсы"),
-    "proxies": MessageLookupByLibrary.simpleMessage("Прокси"),
+    "proxies": MessageLookupByLibrary.simpleMessage("Порталы"),
     "proxiesCount": m69,
     "proxiesProfileLabel": m70,
     "proxiesRemovedTip": m71,
@@ -1763,7 +1764,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "ruleTextInvalid": MessageLookupByLibrary.simpleMessage(
       "Правило должно начинаться с поддерживаемого типа, например DOMAIN,example.com,DIRECT",
     ),
-    "rules": MessageLookupByLibrary.simpleMessage("Правила"),
+    "rules": MessageLookupByLibrary.simpleMessage("Сеть порталов"),
     "rulesCount": m82,
     "runtimeConfig": MessageLookupByLibrary.simpleMessage(
       "Рабочая конфигурация",
@@ -1806,7 +1807,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Это устройство не подключено к локальной сети",
     ),
     "sendFromPhonePageHint": MessageLookupByLibrary.simpleMessage(
-      "Ссылка на подписку или ссылка на прокси",
+      "Ссылка на подписку или ссылка на портал",
     ),
     "sendFromPhonePageSent": MessageLookupByLibrary.simpleMessage(
       "Отправлено. Подтвердите импорт на другом устройстве.",
@@ -1820,7 +1821,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "sendFromPhoneTip": MessageLookupByLibrary.simpleMessage(
       "Отсканируйте код камерой телефона и вставьте ссылку на открывшейся странице. Оба устройства должны быть в одной сети. Если страница не открывается на Android 17 и новее, дайте браузеру на телефоне разрешение «Устройства поблизости».",
     ),
-    "server": MessageLookupByLibrary.simpleMessage("Сервер"),
+    "server": MessageLookupByLibrary.simpleMessage("Портал"),
     "serviceAbnormalCount": m86,
     "serviceAllAvailable": MessageLookupByLibrary.simpleMessage("Все доступны"),
     "serviceAvailable": MessageLookupByLibrary.simpleMessage("Доступен"),
@@ -2007,7 +2008,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "themeMode": MessageLookupByLibrary.simpleMessage("Оформление"),
     "themeStyle": MessageLookupByLibrary.simpleMessage("Режим темы"),
     "themeStyleDesc": MessageLookupByLibrary.simpleMessage(
-      "Улучшенный показывает на главной логотип сервиса, тариф, сервер и кнопку подключения вместо сетки виджетов.",
+      "Улучшенный показывает на главной логотип сервиса, тариф, портал и кнопку подключения вместо сетки виджетов.",
     ),
     "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("Улучшенный"),
     "themeStyleOriginal": MessageLookupByLibrary.simpleMessage("Оригинальный"),

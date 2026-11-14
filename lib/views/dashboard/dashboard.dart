@@ -88,8 +88,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
           IconButtonData(
             glyph: mode == Mode.global ? AppGlyphs.proxies : AppGlyphs.rules,
             tooltip:
-                '${appLocalizations.outboundMode}: '
-                '${mode == Mode.global ? appLocalizations.global : appLocalizations.rule}',
+                '${appLocalizations.outboundMode}: ${mode.label}',
             onPressed: () => ref
                 .read(setupActionProvider.notifier)
                 .pickMode(mode == Mode.global ? Mode.rule : Mode.global),

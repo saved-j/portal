@@ -133,12 +133,16 @@ bool widgetEditingDenied(Ref ref) {
 }
 
 /// The outbound modes the current panel leaves on offer.
+///
+/// Portal Connect has no user-facing "direct": the only way to get untunnelled
+/// traffic is to switch the portal off, so the mode is never offered here even
+/// though the engine still understands it.
 @riverpod
 List<Mode> availableModes(Ref ref) {
   final globalAllowed = ref.watch(globalModeAllowedProvider);
   return [
     for (final mode in Mode.values)
-      if (globalAllowed || mode != Mode.global) mode,
+      if (mode != Mode.direct && (globalAllowed || mode != Mode.global)) mode,
   ];
 }
 

@@ -11,12 +11,24 @@ GroupsState currentGroupsState(Ref ref) {
   final shown = switch (mode) {
     Mode.direct => const <Group>[],
     Mode.global when globalOverride => groups.where(isGlobal),
-    Mode.global => groups,
+    Mode.global => groups.where(_selectable),
     Mode.rule => groups.where(
-      (item) => item.hidden == false && !(globalOverride && isGlobal(item)),
+      (item) =>
+          item.hidden == false &&
+          _selectable(item) &&
+          !(globalOverride && isGlobal(item)),
     ),
   };
   return GroupsState(value: shown.map(_withoutSelection).toList());
+}
+
+/// Portal Connect never shows the engine's built-in outbounds as choices: DIRECT
+/// and REJECT are routing targets, not portals, and picking one by hand is how a
+/// user silently ends up without a tunnel. GLOBAL stays: it is the mihomo
+/// selector the global mode relies on.
+bool _selectable(Group group) {
+  final name = group.name.toUpperCase();
+  return name != 'DIRECT' && name != 'REJECT';
 }
 
 Group _withoutSelection(Group group) {
@@ -26,7 +38,19 @@ Group _withoutSelection(Group group) {
             _hasSelection(proxy) ? proxy.copyWith(now: '') : proxy,
         ]
       : group.all;
-  return group.copyWith(now: '', all: all);
+  // The GLOBAL group lists every outbound the engine knows, including the built-in
+  // DIRECT and REJECT. They are routing targets, not portals, so they never reach
+  // the picker even when they sit as members of a selectable group.
+  final selectable = [
+    for (final proxy in all)
+      if (_selectableMember(proxy)) proxy,
+  ];
+  return group.copyWith(now: '', all: selectable);
+}
+
+bool _selectableMember(Proxy proxy) {
+  final name = proxy.name.toUpperCase();
+  return name != 'DIRECT' && name != 'REJECT';
 }
 
 bool _hasSelection(Proxy proxy) => proxy.now?.isNotEmpty ?? false;

@@ -49,7 +49,7 @@ extension ModeL10n on Mode {
   String get label {
     final appLocalizations = currentAppLocalizations;
     return switch (this) {
-      Mode.rule => appLocalizations.rule,
+      Mode.rule => appLocalizations.rules,
       Mode.global => appLocalizations.global,
       Mode.direct => appLocalizations.direct,
     };

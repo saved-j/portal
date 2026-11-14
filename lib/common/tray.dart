@@ -182,7 +182,7 @@ class AppTray implements TrayPort {
         ),
       if (trayState.globalModeAllowed) ...[
         const TrayMenuSeparator(),
-        for (final mode in Mode.values)
+        for (final mode in Mode.values.where((mode) => mode != Mode.direct))
           TrayMenuCheckbox(
             label: mode.label,
             checked: mode == trayState.mode,

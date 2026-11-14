@@ -80,14 +80,14 @@ class AppLocalizations {
     return Intl.message('Dashboard', name: 'dashboard', desc: '', args: []);
   }
 
-  /// `Proxies`
+  /// `Portals`
   String get proxies {
-    return Intl.message('Proxies', name: 'proxies', desc: '', args: []);
+    return Intl.message('Portals', name: 'proxies', desc: '', args: []);
   }
 
-  /// `Profile`
+  /// `Subscription`
   String get profile {
-    return Intl.message('Profile', name: 'profile', desc: '', args: []);
+    return Intl.message('Subscription', name: 'profile', desc: '', args: []);
   }
 
   /// `Announcement`
@@ -100,9 +100,9 @@ class AppLocalizations {
     );
   }
 
-  /// `Profiles`
+  /// `Subscriptions`
   String get profiles {
-    return Intl.message('Profiles', name: 'profiles', desc: '', args: []);
+    return Intl.message('Subscriptions', name: 'profiles', desc: '', args: []);
   }
 
   /// `Settings`
@@ -490,10 +490,10 @@ class AppLocalizations {
     return Intl.message('Auto run', name: 'autoRun', desc: '', args: []);
   }
 
-  /// `Auto run starts the proxy when the app opens.`
+  /// `Auto connect opens the portal when the app starts.`
   String get autoRunDesc {
     return Intl.message(
-      'Auto run starts the proxy when the app opens.',
+      'Auto connect opens the portal when the app starts.',
       name: 'autoRunDesc',
       desc: '',
       args: [],
@@ -645,10 +645,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Access control picks which apps use the proxy.`
+  /// `Access control decides which apps go through the portal.`
   String get accessControlDesc {
     return Intl.message(
-      'Access control picks which apps use the proxy.',
+      'Access control decides which apps go through the portal.',
       name: 'accessControlDesc',
       desc: '',
       args: [],
@@ -825,10 +825,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Enhanced puts the service logo, plan, server and a connect button on the home page in place of the widget grid.`
+  /// `Enhanced puts the service logo, plan, portal and a connect button on the home page in place of the widget grid.`
   String get themeStyleDesc {
     return Intl.message(
-      'Enhanced puts the service logo, plan, server and a connect button on the home page in place of the widget grid.',
+      'Enhanced puts the service logo, plan, portal and a connect button on the home page in place of the widget grid.',
       name: 'themeStyleDesc',
       desc: '',
       args: [],
@@ -930,10 +930,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Subscription link or proxy share link`
+  /// `Subscription link or portal link`
   String get sendFromPhonePageHint {
     return Intl.message(
-      'Subscription link or proxy share link',
+      'Subscription link or portal link',
       name: 'sendFromPhonePageHint',
       desc: '',
       args: [],
@@ -990,10 +990,10 @@ class AppLocalizations {
     return Intl.message('Submit', name: 'submit', desc: '', args: []);
   }
 
-  /// `Profile {name} added`
+  /// `Subscription {name} added`
   String profileAddedTip(Object name) {
     return Intl.message(
-      'Profile $name added',
+      'Subscription $name added',
       name: 'profileAddedTip',
       desc: '',
       args: [name],
@@ -1191,20 +1191,20 @@ class AppLocalizations {
     );
   }
 
-  /// `The current proxy group cannot be selected`
+  /// `This group has no portal to pick by hand`
   String get notSelectedTip {
     return Intl.message(
-      'The current proxy group cannot be selected',
+      'This group has no portal to pick by hand',
       name: 'notSelectedTip',
       desc: '',
       args: [],
     );
   }
 
-  /// `Failed to switch proxy; the previous selection has been restored`
+  /// `Could not switch the portal, the previous choice is back`
   String get changeProxyFailedTip {
     return Intl.message(
-      'Failed to switch proxy; the previous selection has been restored',
+      'Could not switch the portal, the previous choice is back',
       name: 'changeProxyFailedTip',
       desc: '',
       args: [],
@@ -2111,9 +2111,9 @@ class AppLocalizations {
     );
   }
 
-  /// `Server`
+  /// `Portal`
   String get server {
-    return Intl.message('Server', name: 'server', desc: '', args: []);
+    return Intl.message('Portal', name: 'server', desc: '', args: []);
   }
 
   /// `Sync interval (minutes)`
@@ -3201,10 +3201,10 @@ class AppLocalizations {
     );
   }
 
-  /// `The profile has been modified. Turn off auto update?`
+  /// `The subscription has been modified. Turn off auto update?`
   String get profileHasUpdate {
     return Intl.message(
-      'The profile has been modified. Turn off auto update?',
+      'The subscription has been modified. Turn off auto update?',
       name: 'profileHasUpdate',
       desc: '',
       args: [],
@@ -6779,10 +6779,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Change server`
+  /// `Change portal`
   String get changeServer {
     return Intl.message(
-      'Change server',
+      'Change portal',
       name: 'changeServer',
       desc: '',
       args: [],
@@ -8097,8 +8097,7 @@ class AppLocalizations {
   String customImportDroppedSubRules(num count, Object label) {
     return Intl.plural(
       count,
-      one:
-          '1 SUB-RULE rule was dropped, since custom profiles do not support sub-rules',
+      one: '1 SUB-RULE rule was dropped, since custom profiles do not support sub-rules',
       other:
           '$label SUB-RULE rules were dropped, since custom profiles do not support sub-rules',
       name: 'customImportDroppedSubRules',
