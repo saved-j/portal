@@ -134,18 +134,22 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                     // order Happ and Incy taught people: the button you press
                     // before the list you read.
                     const _ConnectButton(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+                    // Announcement and subscription sit together right under the
+                    // button, the way Happ and Incy put plan status next to the
+                    // switch: visible, but out of the way of choosing a server.
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (ref.watch(announcementProvider) != null)
+                          const AnnouncementCard(),
+                        const ProfilesCard(),
+                      ],
+                    ),
+                    const SizedBox(height: _gap),
                     const PortalModeSwitch(),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                     const PortalServerList(),
-                    if (ref.watch(announcementProvider) != null) ...[
-                      const SizedBox(height: _gap),
-                      const AnnouncementCard(),
-                    ],
-                    const SizedBox(height: _gap),
-                    _ServerPanel(group: headers.serverGroup),
-                    const SizedBox(height: _gap),
-                    const ProfilesCard(),
                   ],
                 ),
               ),

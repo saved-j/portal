@@ -70,6 +70,21 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     final editing = _editing;
     final gap = cardSpacingOf(context, ref.watch(viewModeProvider));
     final appLocalizations = context.appLocalizations;
+    if (hero) {
+      // No app bar at all on the working screen: an empty bar still reserves its
+      // height and reads as a hole above the portal.
+      return Material(
+        color: DashboardColors.of(context).page,
+        child: SafeArea(
+          bottom: false,
+          child: DashboardDensityScope(
+            density: DashboardDensity.mobile,
+            scale: scale,
+            child: const HeroDashboard(),
+          ),
+        ),
+      );
+    }
     return CommonScaffold(
       backgroundColor: DashboardColors.of(context).page,
       // The hero screen carries its own header: a title bar with the page name,
