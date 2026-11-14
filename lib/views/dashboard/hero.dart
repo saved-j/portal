@@ -138,14 +138,7 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                     // Announcement and subscription sit together right under the
                     // button, the way Happ and Incy put plan status next to the
                     // switch: visible, but out of the way of choosing a server.
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (ref.watch(announcementProvider) != null)
-                          const AnnouncementCard(),
-                        const ProfilesCard(),
-                      ],
-                    ),
+                    const PortalPlanCard(),
                     const SizedBox(height: _gap),
                     const PortalModeSwitch(),
                     const SizedBox(height: 4),

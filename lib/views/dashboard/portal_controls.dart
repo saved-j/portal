@@ -52,6 +52,10 @@ enum _SortOrder { ping, alphabet }
 class _PortalServerListState extends ConsumerState<PortalServerList> {
   var _order = _SortOrder.ping;
 
+  /// The row the user picked. Before the portal is open the choice is only
+  /// visual: it is applied the moment the tunnel comes up.
+  String? _picked;
+
   @override
   Widget build(BuildContext context) {
     final groups = ref.watch(groupsProvider);
@@ -74,6 +78,18 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
     }
 
     final theme = Theme.of(context);
+    final running = ref.watch(runTimeProvider) != null;
+    if (running && _picked != null && group.now != _picked) {
+      final pending = _picked!;
+      _picked = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(proxiesActionProvider.notifier).changeProxy(
+              groupName: group.name,
+              proxyName: pending,
+            );
+      });
+    }
+    final selectedName = _picked ?? group.now;
     final members = [...group.all];
     if (_order == _SortOrder.alphabet) {
       members.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -113,7 +129,8 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
           _ServerRow(
             group: group,
             proxy: proxy,
-            selected: group.now == proxy.name,
+            selected: selectedName == proxy.name,
+            onPick: (name) => setState(() => _picked = name),
           ),
       ],
     );
@@ -125,11 +142,13 @@ class _ServerRow extends ConsumerWidget {
     required this.group,
     required this.proxy,
     required this.selected,
+    required this.onPick,
   });
 
   final Group group;
   final Proxy proxy;
   final bool selected;
+  final ValueChanged<String> onPick;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -139,6 +158,12 @@ class _ServerRow extends ConsumerWidget {
     return ListTile(
       dense: true,
       selected: selected,
+      // Colour, not just the marker: a tinted row is what the eye finds first.
+      tileColor: selected
+          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.45)
+          : null,
+      selectedTileColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.45),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 8),
       leading: GlyphIcon(
         selected ? AppGlyphs.check : AppGlyphs.proxies,
@@ -158,10 +183,92 @@ class _ServerRow extends ConsumerWidget {
         delay == null ? '—' : '$delay ms',
         style: theme.textTheme.labelMedium?.copyWith(color: color),
       ),
-      onTap: () => ref.read(proxiesActionProvider.notifier).changeProxy(
-            groupName: group.name,
-            proxyName: proxy.name,
-          ),
+      onTap: () {
+        onPick(proxy.name);
+        ref.read(proxiesActionProvider.notifier).changeProxy(
+              groupName: group.name,
+              proxyName: proxy.name,
+            );
+      },
+    );
+  }
+}
+
+
+/// Plan status and the provider's announcement in one card: the thing you glance
+/// at, not the thing you operate. Kept deliberately small so the server list stays
+/// the centre of the screen.
+class PortalPlanCard extends ConsumerWidget {
+  const PortalPlanCard({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final profile = ref.watch(currentProfileProvider);
+    final announcement = ref.watch(announcementProvider);
+    final info = profile?.subscriptionInfo;
+    final name = profile?.headers.serviceName ?? profile?.label ?? '';
+    final used = info == null ? null : info.upload + info.download;
+    final total = info?.total ?? 0;
+    final expire = info?.expire ?? 0;
+    final daysLeft = expire > 0
+        ? DateTime.fromMillisecondsSinceEpoch(expire * 1000)
+            .difference(DateTime.now())
+            .inDays
+        : null;
+    String gb(int bytes) => '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GiB';
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                if (used != null)
+                  Text(
+                    '$used/$total'.replaceFirst('$used', gb(used)).replaceFirst('$total', gb(total)),
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                if (daysLeft != null) ...[
+                  const SizedBox(width: 10),
+                  Text(
+                    '$daysLeft д',
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(color: theme.colorScheme.primary),
+                  ),
+                ],
+              ],
+            ),
+            if (announcement != null && announcement.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Divider(height: 1, color: theme.colorScheme.outlineVariant),
+              const SizedBox(height: 8),
+              Text(
+                announcement,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
