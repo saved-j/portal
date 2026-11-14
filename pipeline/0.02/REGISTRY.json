@@ -74,8 +74,8 @@
     {
       "group": "50-build-pipeline",
       "file": "patches/50-build-pipeline.mbox",
-      "bytes": 10397,
-      "sha256": "18800515b3fb1e6c8a511530a326937dbe442931aef2875faaa8cc088e828e10",
+      "bytes": 16204,
+      "sha256": "6fd5364f29b64518c8df85927010a69a83d105c7882aa0560023da8b143fae77",
       "paths": [
         "build.sh",
         "release.sh",
