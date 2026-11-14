@@ -1,0 +1,42 @@
+From 7176183a6a687e804286a817f7dd3f50656b3e39 Mon Sep 17 00:00:00 2001
+From: elara <elara@local>
+Date: Sat, 14 Nov 2026 19:26:43 +0800
+Subject: [PATCH] client: present as mihomo in the subscription User-Agent
+
+Remnawave picks the response format from the User-Agent; a 'mihomo/v<core>' UA makes
+it serve the Mihomo YAML template, which is what this client reads. Device headers
+(x-hwid, x-device-os) are unchanged, so the HWID device limit still applies.
+---
+ lib/common/package.dart | 15 ++++++---------
+ 1 file changed, 6 insertions(+), 9 deletions(-)
+
+diff --git a/lib/common/package.dart b/lib/common/package.dart
+index 2d92cec4..d90cf963 100644
+--- a/lib/common/package.dart
++++ b/lib/common/package.dart
+@@ -1,5 +1,3 @@
+-import 'dart:io';
+-
+ import 'package:package_info_plus/package_info_plus.dart';
+ 
+ import 'common.dart';
+@@ -8,13 +6,12 @@ extension PackageInfoExtension on PackageInfo {
+   String get displayVersion =>
+       appVersionDefine.isNotEmpty ? appVersionDefine : version;
+ 
+-  /// `FlClashX/v<app> core/<mihomo> Platform/<os>`; the core token is left
+-  /// out until a version is known.
+-  String uaWith(String coreVersion) => [
+-    '$appName/v$displayVersion',
+-    if (coreVersion.isNotEmpty) 'core/$coreVersion',
+-    'Platform/${Platform.operatingSystem}',
+-  ].join(' ');
++  /// Presents the client as mihomo so panels serve the Mihomo YAML template:
++  /// `mihomo/v<core>`. Without a core version yet, the app version stands in.
++  String uaWith(String coreVersion) {
++    final version = coreVersion.replaceFirst(RegExp('^v'), '');
++    return 'mihomo/v${version.isNotEmpty ? version : displayVersion}';
++  }
+ }
+ 
+ int compareVersions(String version1, String version2) {
