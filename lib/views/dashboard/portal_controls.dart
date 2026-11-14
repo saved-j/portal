@@ -156,8 +156,33 @@ class PortalServerList extends ConsumerWidget {
   }
 }
 
+Glyph _groupGlyph(String name) {
+  final lower = name.toLowerCase();
+  if (lower.contains('auto') || lower.contains('авто')) return AppGlyphs.bolt;
+  if (lower.contains('vk') ||
+      lower.contains('yandex') ||
+      lower.contains('sber')) {
+    return AppGlyphs.globe;
+  }
+  if (lower.contains('media') || lower.contains('медиа')) {
+    return AppGlyphs.target;
+  }
+  if (lower.contains('всё') ||
+      lower.contains('все') ||
+      lower.contains('all')) {
+    return AppGlyphs.layers;
+  }
+  if (lower.contains('asia') ||
+      lower.contains('европ') ||
+      lower.contains('europe')) {
+    return AppGlyphs.proxies;
+  }
+  return AppGlyphs.filter;
+}
+
 /// Horizontal group filter. The chevrons are hints, not buttons: they say the strip
-/// can be dragged and hide themselves once that direction is exhausted.
+/// can be dragged and hide themselves once that direction is exhausted. A double tap
+/// reveals an icon on every filter — a hidden trick, not a visible control.
 class _GroupStrip extends ConsumerStatefulWidget {
   const _GroupStrip();
 
@@ -169,6 +194,7 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
   final _controller = ScrollController();
   var _canBack = false;
   var _canForward = false;
+  var _showIcons = false;
 
   @override
   void initState() {
@@ -212,28 +238,34 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
               : null,
         ),
         Expanded(
-          child: NotificationListener<ScrollMetricsNotification>(
-            onNotification: (_) {
-              _syncEdges();
-              return false;
-            },
-            child: SingleChildScrollView(
-              controller: _controller,
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final item in groups)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      child: ChoiceChip(
-                        label: Text(item.name),
-                        selected: item.name == active,
-                        onSelected: (_) => ref
-                            .read(portalGroupProvider.notifier)
-                            .pick(item.name),
+          child: GestureDetector(
+            onDoubleTap: () => setState(() => _showIcons = !_showIcons),
+            child: NotificationListener<ScrollMetricsNotification>(
+              onNotification: (_) {
+                _syncEdges();
+                return false;
+              },
+              child: SingleChildScrollView(
+                controller: _controller,
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final item in groups)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: ChoiceChip(
+                          avatar: _showIcons
+                              ? GlyphIcon(_groupGlyph(item.name), size: 16)
+                              : null,
+                          label: Text(item.name),
+                          selected: item.name == active,
+                          onSelected: (_) => ref
+                              .read(portalGroupProvider.notifier)
+                              .pick(item.name),
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -257,8 +289,8 @@ const _delayBad = Color(0xFFFF4B6E);
 Color _delayColor(int? value) {
   if (value == null) return const Color(0xFF7C8699);
   if (value <= 0) return _delayBad; // timeout
-  if (value <= 120) return _delayFast;
-  if (value <= 350) return _delaySlow;
+  if (value <= 399) return _delayFast;
+  if (value <= 1499) return _delaySlow;
   return _delayBad;
 }
 
