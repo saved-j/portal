@@ -11,6 +11,8 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/views/profiles/add.dart';
 import 'package:fl_clash/views/access.dart';
+import 'package:fl_clash/views/profiles/profiles.dart';
+import 'package:fl_clash/views/tools.dart';
 import 'package:fl_clash/views/connection/connection_feeds.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'portal_controls.dart';
@@ -92,9 +94,13 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                       children: [
                         IconButton(
                           tooltip: context.appLocalizations.tools,
-                          onPressed: () => ref
-                              .read(currentPageLabelProvider.notifier)
-                              .toPage(PageLabel.tools),
+                          // Pushed, not page-switched: a page index has no history, so
+                          // Back walked out of the app instead of returning here.
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ToolsView(),
+                            ),
+                          ),
                           icon: const GlyphIcon(
                             AppGlyphs.settings,
                             size: 22,
@@ -146,9 +152,11 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                         ),
                         IconButton(
                           tooltip: context.appLocalizations.profiles,
-                          onPressed: () => ref
-                              .read(currentPageLabelProvider.notifier)
-                              .toPage(PageLabel.profiles),
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ProfilesView(),
+                            ),
+                          ),
                           icon: Badge(
                             label: Text('${ref.watch(profilesProvider).length}'),
                             child: const GlyphIcon(
