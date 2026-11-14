@@ -1,0 +1,223 @@
+From portal-groups Mon Sep 17 00:00:00 2001
+From: Portal patch pipeline <noreply@portal.local>
+Date: Sun, 15 Nov 2026 06:00:00 +0800
+Subject: [PATCH] 50-build-pipeline
+
+diff --git a/build.sh b/build.sh
+new file mode 100755
+index 0000000000000000000000000000000000000000..5eb16bc9860964fc9f2c5f8644ab89e4a13ea640
+--- /dev/null
++++ b/build.sh
+@@ -0,0 +1,70 @@
++#!/bin/bash
++# Portal build driver. One place for the environment; nothing lands in $HOME.
++#
++#   ./build.sh get        flutter pub get
++#   ./build.sh macos      macOS .app (host: macOS + Xcode)
++#   ./build.sh apk        Android .apk (host: any OS with SDK+NDK)
++#   ./build.sh linux      Linux bundle (host: Linux only)
++#   ./build.sh windows    Windows bundle (host: Windows only)
++#   ./build.sh ios        iOS — not available, see below
++#   ./build.sh run-macos  open the built .app
++#
++# Toolchain used on Mark's Mac: Flutter in /opt/homebrew/opt/flutter, JDK 17 keg-only,
++# Xcode via DEVELOPER_DIR, Rust toolchain 1.99.0 pinned by plugins/rust_api/rust/rust-toolchain.toml.
++# China mirrors: pub/flutter engine (flutter-io.cn), rustup (USTC), crates.io (USTC via ~/.cargo/config.toml).
++set -euo pipefail
++
++REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++cd "$REPO"
++
++export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
++export ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
++export ANDROID_SDK_ROOT="$ANDROID_HOME"
++export ANDROID_USER_HOME="${ANDROID_USER_HOME:-$HOME/.work/.android}"
++export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.work/.gradle}"
++export PUB_CACHE="${PUB_CACHE:-$HOME/.work/.pub-cache}"
++# Do NOT point PUB_HOSTED_URL at pub.flutter-io.cn: a different hosted URL invalidates
++# pubspec.lock and re-resolves packages upward (material_ui 1.5.0 -> 1.11.0 breaks the
++# build with "MaterialShapes is imported from both"). pub.dev answers from here; only the
++# Flutter engine artifacts need the mirror.
++export FLUTTER_STORAGE_BASE_URL="${FLUTTER_STORAGE_BASE_URL:-https://storage.flutter-io.cn}"
++export RUSTUP_DIST_SERVER="${RUSTUP_DIST_SERVER:-https://mirrors.ustc.edu.cn/rust-static}"
++export RUSTUP_UPDATE_ROOT="${RUSTUP_UPDATE_ROOT:-https://mirrors.ustc.edu.cn/rust-static/rustup}"
++export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
++# ~/.work/toolchain/bin first: create-dmg shim maps the npm --dmg-title onto --volname
++export PATH="$HOME/.work/toolchain/bin:/opt/homebrew/opt/flutter/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
++
++mkdir -p "$ANDROID_USER_HOME" "$GRADLE_USER_HOME" "$PUB_CACHE"
++
++host_guard() {
++  # Flutter desktop builds are host-native: no cross-compiling for linux/windows.
++  local want="$1" os
++  os=$(uname -s)
++  case "$want:$os" in
++    linux:Linux|windows:*MINGW*|windows:*MSYS*|windows:CYGWIN*) ;;
++    linux:*)   echo "error: Linux bundles must be built on Linux (Flutter has no cross-compile). Use CI." >&2; exit 1 ;;
++    windows:*) echo "error: Windows bundles must be built on Windows. Use CI." >&2; exit 1 ;;
++  esac
++}
++
++case "${1:-get}" in
++  get)        flutter --version; flutter pub get ;;
++  macos)      APP_ENV=stable; dart setup.dart macos --env "$APP_ENV"
++              ls -lh build/macos/Build/Products/Release/*.dmg 2>/dev/null || true ;;
++  apk)        dart setup.dart android --env stable
++              ls -lh build/app/outputs/flutter-apk/*.apk 2>/dev/null || true ;;
++  linux)      host_guard linux;   dart setup.dart linux --env stable ;;
++  windows)    host_guard windows; dart setup.dart windows --env stable ;;
++  ios)        cat >&2 <<'EOF'
++error: this tree has no ios/ target — FlClashX ships android/macos/linux/windows only.
++
++To enable iOS:
++  1. flutter create --platforms=ios .
++  2. verify every plugin has an iOS implementation (rust_api helper and the gomobile core are the risk)
++  3. build on macOS:  flutter build ios --release   (needs an Apple Developer account for signing)
++Unsigned builds do not install on non-jailbroken devices; TestFlight is the realistic distribution.
++EOF
++              exit 1 ;;
++  run-macos)  APP=$(ls -d build/macos/Build/Products/Release/*.app | head -1); open "$APP" ;;
++  *) echo "usage: $0 {get|macos|apk|linux|windows|ios|run-macos}" >&2; exit 2 ;;
++esac
+diff --git a/docs/PIPELINE.md b/docs/PIPELINE.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..4e4bc7cfcade0e025aa820b3644ab5da822897f9
+--- /dev/null
++++ b/docs/PIPELINE.md
+@@ -0,0 +1,87 @@
++# Portal pipeline: patches in, installers out
++
++Portal is **FlClashX upstream + a numbered patch set**. Patches are public; users are not
++expected to build anything — CI produces installers and attaches them to the GitHub release.
++
++## Why patches, not a drifting fork
++
++FlClashX moves. A fork that accumulates its own commits has to be merged by hand every time
++upstream changes. A numbered patch set gives:
++
++- one-command upstream update (`fetch upstream` → `./apply.sh` → build);
++- a reviewable diff: every difference from stock FlClashX is a file you can read;
++- a hard failure when a patch no longer applies, instead of a silently wrong merge.
++
++`patches/*.patch` is the source of truth. Never edit the working tree and forget the patch.
++
++## Layout
++
++```
++portal/                    working tree (fork remote: saved-j/portal)
++├── apply.sh               apply / check / verify / upstream-log
++├── release.sh             tag → push → CI builds installers
++├── patches/               the whole difference from upstream
++│   └── 0001-core-*.patch
++└── docs/
++    ├── PIPELINE.md        this file
++    └── DPI.md             DPI evasion design
++```
++
++## Daily loop
++
++```bash
++cd ~/.work/portal
++./apply.sh check          # do the patches still apply to the current tree?
++./apply.sh                # clean upstream checkout + every patch → ~/.work/portal-work
++./apply.sh verify         # prove patches reproduce this tree (ignores pipeline files)
++./build.sh get && ./build.sh macos
++```
++
++Updating from upstream:
++
++```bash
++git fetch upstream
++git checkout -B portal upstream/main
++./apply.sh check          # if a patch conflicts, rebase it here — not in the tree
++```
++
++## Building per platform
++
++| Target | Command | Where it can run |
++|---|---|---|
++| macOS | `./build.sh macos` | any Mac with Xcode |
++| Android | `./build.sh apk` | any Mac with SDK + NDK (NDK is only needed by the gomobile core) |
++| Linux | `flutter build linux --release` | **Linux host only** — Flutter desktop builds are host-native |
++| Windows | `flutter build windows --release` | **Windows host only** |
++| iOS | — | no `ios/` target exists in the tree yet; needs `flutter create --platforms=ios` plus signing |
++
++Cross-building Linux from macOS or Windows from macOS is not supported by Flutter. That is why
++the release matrix runs on CI runners (`ubuntu-24.04`, `windows-2022`, `macos-26`), not on one Mac.
++
++## Release
++
++```bash
++./release.sh v0.1.0        # tags, pushes, CI builds linux/windows/macos/android
++```
++
++CI (`build.yaml`) runs `dart`, `plugins`, `go`, `rust`, `android`, `desktop` (linux/windows/macos)
++and `upload`. The `upload` job has `contents: write` and attaches every artifact to the release,
++then `publish.yaml` can re-run AUR/announcement steps without rebuilding.
++
++Result for a user: open Releases, download the file for their OS, run it. No toolchain, no patches,
++no build steps. The patch set stays public for review and for anyone who prefers to rebuild.
++
++## iOS
++
++There is no `ios/` directory: FlClashX ships android/macos/linux/windows only. Adding iOS means
++creating the platform target, checking every plugin for an iOS implementation (the Rust helper and
++the gomobile core are the risky ones), and an Apple Developer account for signing. Unsigned builds
++cannot be installed on a non-jailbroken device, so "download and run" is not possible for iOS —
++TestFlight is the realistic distribution path.
++
++## Rules that keep this reproducible
++
++1. Do not commit `pubspec.lock` churn caused by the China mirror (`pub.flutter-io.cn`). It rewrites
++   hosted URLs and would break upstream CI. Revert it before committing.
++2. `core/go.sum` must carry the checksums of the replaced modules; a build without them fails.
++3. Machine-level mirrors (rustup, crates.io) belong in tool config, not in the repo.
+diff --git a/release.sh b/release.sh
+new file mode 100755
+index 0000000000000000000000000000000000000000..fb86a4e368a2bb3c7cf7046867e56bada33b498b
+--- /dev/null
++++ b/release.sh
+@@ -0,0 +1,43 @@
++#!/bin/bash
++# Publish a Portal release: tag → push → CI builds every platform → assets land in the
++# GitHub release. Users download installers; nobody has to build anything.
++#
++#   ./release.sh v0.1.0            real release
++#   ./release.sh v0.1.0 --draft    draft release (CI still uploads assets)
++#
++# Requires: gh authenticated (gh auth status), clean working tree, CI green on the commit.
++set -euo pipefail
++
++VERSION="${1:-}"
++MODE="${2:-}"
++[[ -n "$VERSION" ]] || { echo "usage: $0 vX.Y.Z [--draft]" >&2; exit 2; }
++[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "error: tag must look like v1.2.3" >&2; exit 2; }
++
++REPO_DIR="${REPO_DIR:-$HOME/.work/portal}"
++cd "$REPO_DIR"
++
++git fetch --quiet origin
++[[ -z "$(git status --porcelain)" ]] || { echo "error: working tree is dirty — commit or stash first" >&2; exit 1; }
++git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null && { echo "error: tag $VERSION already exists" >&2; exit 1; }
++
++# The patch set must reproduce this tree, otherwise the release is not reproducible.
++./apply.sh check
++
++echo "tagging $VERSION on $(git log -1 --format='%h %s')"
++git tag -a "$VERSION" -m "Portal $VERSION"
++git push --quiet origin HEAD "$VERSION"
++echo "pushed. CI: $(gh repo view --json nameWithOwner -q .nameWithOwner) → Actions → build"
++
++if [[ "$MODE" == "--draft" ]]; then
++  echo "note: CI creates the release; mark it draft afterwards in the web UI if needed"
++fi
++
++cat <<EOF
++
++What users download from the release page (built by CI, not by them):
++  macOS    FlClashX-*-macos-*.dmg        (or .zip)
++  Windows  FlClashX-*-windows-*.zip      (or -setup.exe)
++  Linux    FlClashX-*-linux-*.AppImage   (+ .deb/.rpm when packaged)
++  Android  FlClashX-*-android-*.apk
++  iOS      not built — the tree has no ios/ target yet
++EOF

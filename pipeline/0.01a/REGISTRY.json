@@ -289,5 +289,13 @@
       "version": "0.1.0",
       "enabled": true
     }
-  ]
+  ],
+  "state": "archived",
+  "note": "Frozen history: 48 sequential patches. Kept for audit only — the series is not replayable (0019 conflicts on binary icons). Both apply modes were tried in a clean clone and fail there; use pipeline/0.02 for anything real.",
+  "base": {
+    "remote": "upstream",
+    "url": "https://github.com/pluralplay/FlClashX.git",
+    "ref": "main",
+    "sha": "5b4d0669cd0105a7eb41078b17c36944bde7f044"
+  }
 }

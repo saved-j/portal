@@ -1,126 +1,146 @@
 #!/bin/bash
-# Portal = FlClashX upstream + our patches, applied in one pass.
+# Portal patch dispatcher.
 #
-#   ./apply.sh                 apply patches onto a clean upstream checkout (~/.work/portal-work)
-#   ./apply.sh check           dry-run patches against the fork's working tree
-#   ./apply.sh verify          prove patches/*.patch reproduce the fork's HEAD tree exactly
-#   ./apply.sh upstream-log    show which upstream commits we are currently based on
+#   ./apply.sh list                 what series exist
+#   ./apply.sh 0.02 verify          apply the groups to pristine FlClashX and prove the result
+#   ./apply.sh 0.02 apply [dir]     materialise a working copy (default ~/.work/portal-0.02)
 #
-# Source of truth is patches/*.patch, never the working tree. Updating upstream is:
-#   git -C ~/.work/portal fetch upstream && ./apply.sh && ./build.sh macos
+# 0.02 is a grouped series: each group is a binary diff of the product tree against the pinned
+# base and the groups are path-disjoint, so plain `git am` applies them in any order with no
+# --3way. 0.01a is the frozen 48-patch history: kept for audit, NOT replayable (its icon
+# patches conflict with each other), so the dispatcher refuses to apply it and says why.
 set -euo pipefail
 
-REPO="${REPO:-$HOME/.work/portal}"
-WORK="${WORK:-$HOME/.work/portal-work}"
-UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/pluralplay/FlClashX.git}"
-UPSTREAM_REF="${UPSTREAM_REF:-}"          # empty = upstream's default branch
-PATCH_DIR="$REPO/patches"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PIPELINE="$REPO/pipeline"
+CURRENT="$(cat "$PIPELINE/CURRENT" 2>/dev/null || echo 0.02)"
+die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
-die() { echo "error: $*" >&2; exit 1; }
-
-MANIFEST="$PATCH_DIR/patches.json"
-ONLY="${ONLY:-}"      # comma list of patch prefixes, e.g. ONLY=0010,0012
-WITHOUT="${WITHOUT:-}" # comma list of patch prefixes to skip
-
-# Print the enabled patch files, in manifest order, honouring ONLY/WITHOUT.
-patch_series() {
-  [[ -f "$MANIFEST" ]] || die "manifest not found: $MANIFEST"
-  python3 - "$MANIFEST" "$PATCH_DIR" "$ONLY" "$WITHOUT" <<'PY'
-import json, sys
-manifest, patch_dir, only, without = sys.argv[1:5]
-data = json.load(open(manifest))
-only = [p.strip() for p in only.split(',') if p.strip()]
-without = [p.strip() for p in without.split(',') if p.strip()]
-for entry in data.get('patches', []):
-    name = entry['file']
-    if not entry.get('enabled', True):
-        continue
-    if only and not any(name.startswith(p) for p in only):
-        continue
-    if without and any(name.startswith(p) for p in without):
-        continue
-    print(f"{patch_dir}/{name}")
+list_series() {
+  echo "current: $CURRENT"
+  for d in "$PIPELINE"/*/; do
+    [[ -f "$d/REGISTRY.json" ]] || continue
+    python3 - "$d" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+r = json.load(open(os.path.join(d, 'REGISTRY.json')))
+base = (r.get('base') or {}).get('sha', '-')[:8]
+items = r.get('groups') or r.get('patches') or []
+state = r.get('state', 'live')
+print(f"  {os.path.basename(d.rstrip('/')):8s} base {base}  items {len(items):3d}  {state}")
 PY
+  done
+}
+
+series_dir() {
+  local v=$1
+  [[ -d "$PIPELINE/$v" ]] || die "no such series: $v (see ./apply.sh list)"
+  echo "$PIPELINE/$v"
+}
+
+gate() {
+  local dir=$1
+  [[ -f "$dir/REGISTRY.json" ]] || die "missing REGISTRY.json in $dir"
+  python3 - "$dir" <<'PY'
+import hashlib, json, os, sys
+d = sys.argv[1]
+r = json.load(open(os.path.join(d, 'REGISTRY.json')))
+items = r.get('groups') or r.get('patches') or []
+if not items:
+    raise SystemExit('registry lists no items')
+for it in items:
+    p = os.path.join(d, it['file'])
+    if not os.path.isfile(p):
+        raise SystemExit(f"missing patch: {p}")
+    if os.path.getsize(p) == 0:
+        raise SystemExit(f"empty patch: {p}")
+    want = it.get('sha256')
+    got = hashlib.sha256(open(p, 'rb').read()).hexdigest()
+    if want and got != want:
+        raise SystemExit(f"sha256 mismatch for {p}\n  registry {want}\n  on disk  {got}")
+    head = open(p, 'rb').read(4)
+    if not head.startswith(b'From'):
+        raise SystemExit(f"not an mbox: {p}")
+print(f"gate ok: {len(items)} item(s), checksums match")
+PY
+}
+
+group_patches() { # prints full paths, in registry order
+  local dir=$1
+  python3 - "$dir" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+r = json.load(open(os.path.join(d, 'REGISTRY.json')))
+for it in r.get('groups') or r.get('patches') or []:
+    print(os.path.join(d, it['file']))
+PY
+}
+
+verify() {
+  local v=$1 dir; dir=$(series_dir "$v")
+  [[ "$v" == "0.02" ]] || die "$v is an archive; only 0.02 is replayable"
+  gate "$dir"
+  local sha base tmp
+  sha=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json'))['base']['sha'])")
+  base=$(git -C "$REPO" rev-parse --verify --quiet "${sha}^{commit}") || die "base $sha is not in this repo — git fetch upstream"
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/portal-verify.XXXXXX")
+  trap 'rm -rf "$tmp"' EXIT
+  git clone -q --no-hardlinks "$REPO" "$tmp/w"
+  git -C "$tmp/w" checkout -q -B verify-0.02 "$base"
+  local applied=0
+  while IFS= read -r patch; do
+    if git -C "$tmp/w" am --quiet "$patch"; then
+      echo "  am ok: $(basename "$patch")"
+      applied=$((applied + 1))
+    else
+      git -C "$tmp/w" am --abort 2>/dev/null || true
+      die "does not apply to pristine FlClashX: $patch"
+    fi
+  done < <(group_patches "$dir")
+  [[ $applied -gt 0 ]] || die "no groups applied"
+  # Exact equality, not a file walk: hash the committed product tree of this repo with the
+  # pipeline directory removed, and compare it with the tree the groups produced. Build
+  # artefacts (build/, dist/, gradlew, local.properties, .DS_Store) never enter a commit,
+  # so they cannot make this comparison lie.
+  local wt idx
+  idx="$tmp/index"
+  GIT_INDEX_FILE="$idx" git -C "$REPO" read-tree HEAD
+  GIT_INDEX_FILE="$idx" git -C "$REPO" rm -r --cached --ignore-unmatch pipeline >/dev/null
+  wt=$(GIT_INDEX_FILE="$idx" git -C "$REPO" write-tree)
+  local got; got=$(git -C "$tmp/w" rev-parse 'HEAD^{tree}')
+  if [[ "$wt" == "$got" ]]; then
+    echo "OK: $applied group(s) reproduce the committed product tree ($wt)"
+  else
+    echo "MISMATCH: groups produced $got, the repository has $wt" >&2
+    git -C "$tmp/w" diff --stat "$wt" "$got" 2>/dev/null | head -20 >&2 || true
+    exit 1
+  fi
 }
 
 apply_series() {
-  local dir="$1" mode="$2"
-  local applied=0
-  local patches=()
-  while IFS= read -r line; do patches+=("$line"); done < <(patch_series)
-  [[ ${#patches[@]} -gt 0 ]] || die "no enabled patches in $MANIFEST"
-  for p in "${patches[@]}"; do
-    local name; name=$(basename "$p")
-    if [[ "$mode" == "check" ]]; then
-      git -C "$dir" apply --check --3way "$p" && echo "ok   $name" || { echo "FAIL $name"; return 1; }
-    else
-      git -C "$dir" am --3way --quiet "$p" && echo "applied $name" || {
-        git -C "$dir" am --abort 2>/dev/null || true
-        die "$name did not apply cleanly — rebase it against the new upstream"
-      }
-    fi
-    applied=$((applied + 1))
-  done
-  echo "total: $applied patch(es)"
+  local v=$1 dest=${2:-} dir; dir=$(series_dir "$v")
+  [[ "$v" == "0.02" ]] || die "$v is an archive and cannot be applied"
+  gate "$dir"
+  dest=${dest:-$HOME/.work/portal-$v}
+  local sha; sha=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json'))['base']['sha'])")
+  [[ -e "$dest" ]] && die "destination exists: $dest (move it away first)"
+  git clone -q --no-hardlinks "$REPO" "$dest"
+  git -C "$dest" checkout -q -B "portal-$v" "$sha"
+  while IFS= read -r patch; do
+    git -C "$dest" am --quiet "$patch" || die "does not apply: $patch"
+  done < <(group_patches "$dir")
+  echo "ready: $dest (branch portal-$v, base ${sha:0:8})"
 }
 
-cmd="${1:-apply}"
-case "$cmd" in
-  apply)
-    [[ -d "$REPO/.git" ]] || die "fork repo not found at $REPO"
-    git -C "$REPO" remote get-url upstream >/dev/null 2>&1 || \
-      git -C "$REPO" remote add upstream "$UPSTREAM_URL"
-    echo "fetching upstream..."
-    git -C "$REPO" fetch --quiet upstream
-    ref="${UPSTREAM_REF:-$(git -C "$REPO" symbolic-ref --short refs/remotes/upstream/HEAD 2>/dev/null || echo upstream/main)}"
-    # A fresh clone only carries origin's refs, so resolve the upstream ref to a SHA here.
-    ref_sha=$(git -C "$REPO" rev-parse "$ref")
-    echo "base: $ref ($(git -C "$REPO" log -1 --format='%h %s' "$ref"))"
-    rm -rf "$WORK" 2>/dev/null || die "$WORK exists and cannot be removed — move it away first"
-    git clone --quiet --no-hardlinks "$REPO" "$WORK"
-    git -C "$WORK" checkout --quiet -B portal "$ref_sha"
-    apply_series "$WORK" apply
-    echo "ready: $WORK (branch portal)"
-    ;;
-  check)
-    apply_series "$REPO" check
-    ;;
-  verify)
-    # Rebuild the branch from upstream + patches and prove it matches the fork HEAD,
-    # ignoring the pipeline's own files (patches/, apply.sh, docs/PIPELINE.md).
-    git -C "$REPO" fetch --quiet upstream
-    ref="${UPSTREAM_REF:-upstream/main}"
-    ref_sha=$(git -C "$REPO" rev-parse "$ref")
-    tmp=$(mktemp -d)
-    git clone --quiet --no-hardlinks "$REPO" "$tmp/v"
-    git -C "$tmp/v" checkout --quiet -B verify "$ref_sha"
-    while IFS= read -r p; do git -C "$tmp/v" am --3way --quiet "$p"; done < <(patch_series)
-    infra=(':!patches' ':!apply.sh' ':!build.sh' ':!release.sh' ':!docs/PIPELINE.md')
-    if git -C "$tmp/v" diff --quiet HEAD "$(git -C "$REPO" rev-parse HEAD)" -- . "${infra[@]}"; then
-      echo "OK: patches reproduce the fork tree (ignoring pipeline files)"
-    else
-      echo "MISMATCH: patches do not reproduce the fork tree" >&2
-      git -C "$tmp/v" diff --stat HEAD "$(git -C "$REPO" rev-parse HEAD)" -- . "${infra[@]}" >&2
-      exit 1
-    fi
-    ;;
-  upstream-log)
-    git -C "$REPO" fetch --quiet upstream
-    git -C "$REPO" log --oneline -5 upstream/main
-    echo "--- our patches ---"
-    ls -1 "$PATCH_DIR"/*.patch | xargs -n1 basename
-    ;;
-  list)
-    python3 - "$MANIFEST" <<'PY'
-import json, sys
-data = json.load(open(sys.argv[1]))
-print(f"{'patch':46} {'version':8} {'state':4} title")
-for entry in data.get('patches', []):
-    state = 'on' if entry.get('enabled', True) else 'off'
-    print(f"{entry['file'][:46]:46} {entry.get('version','-'):8} {state:4} {entry.get('title','')}")
-PY
-    ;;
+case "${1:-}" in
+  list|'') list_series ;;
+  -h|--help|help) sed -n '2,12p' "$0" ;;
   *)
-    die "usage: $0 {apply|check|verify|upstream-log|list}   [ONLY=0010,0012] [WITHOUT=0012]"
+    v=$1; cmd=${2:-verify}
+    case "$cmd" in
+      verify) verify "$v" ;;
+      apply)  apply_series "$v" "${3:-}" ;;
+      *) die "unknown command: $cmd (verify|apply)" ;;
+    esac
     ;;
 esac
