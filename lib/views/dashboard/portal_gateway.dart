@@ -48,13 +48,13 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 9000),
+    // A porthole does not loop; time runs long enough that nothing ever "cuts".
+    duration: const Duration(seconds: 1000),
   )..repeat();
 
   /// One randomly generated sky. Regenerated every cycle so the picture is never the
   /// same twice, which is the point of a porthole.
-  _SpaceField _space = _SpaceField.generate(math.Random());
-  double _lastTurn = 0;
+  final _SpaceField _space = _SpaceField.generate(math.Random());
 
   @override
   void dispose() {
@@ -108,11 +108,7 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
       child: AnimatedBuilder(
         animation: _controller,
         builder: (context, child) {
-          var t = reduced ? 0.0 : _controller.value;
-          if (!reduced && t < _lastTurn) {
-            _space = _SpaceField.generate(math.Random());
-          }
-          _lastTurn = t;
+          final t = reduced ? 0.0 : _controller.value;
           final pulse = reduced ? 1.0 : 0.95 + 0.11 * _pulseWave(t);
           return Transform.scale(
             scale: pulse,
@@ -216,29 +212,45 @@ class _GatewayPainter extends CustomPainter {
       canvas.drawCircle(spot, nebula.radius * radius, paint);
     }
 
+    // Everything drifts outward from the centre: depth maps to radius, so the sky
+    // flies at the viewer instead of cutting to another frame.
+    final flow = turn * 200.0;
+
     for (final star in space.stars) {
+      final z = (star.z + flow * star.speed) % 1.0;
+      final distance = radius * 0.98 * z * z;
       final offset = Offset(
-        center.dx + star.x * radius * 0.94,
-        center.dy + star.y * radius * 0.94,
+        center.dx + math.cos(star.angle) * distance,
+        center.dy + math.sin(star.angle) * distance,
       );
-      final twinkle = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(turn * math.pi * 2 + star.phase));
+      final edge = math.min(1.0, (1.0 - z) / 0.08);
+      final twinkle = 0.55 + 0.45 * math.sin(turn * math.pi * 400 + star.angle * 9);
+      final alpha = (0.15 + 0.85 * z) * edge * twinkle;
       canvas.drawCircle(
         offset,
-        star.radius,
-        Paint()..color = Colors.white.withValues(alpha: twinkle * 0.9),
+        star.size * (0.35 + z * 1.7),
+        Paint()..color = Colors.white.withValues(alpha: alpha.clamp(0.0, 1.0)),
       );
     }
 
     for (final planet in space.planets) {
-      final centerPlanet = Offset(
-        center.dx + planet.x * radius * 0.62,
-        center.dy + planet.y * radius * 0.62,
+      final z = (planet.z + flow * 0.15 * planet.speed) % 1.0;
+      final distance = radius * 0.9 * z * z;
+      final planetCenter = Offset(
+        center.dx + math.cos(planet.angle) * distance,
+        center.dy + math.sin(planet.angle) * distance,
       );
-      final planetRadius = planet.radius * radius;
+      final planetRadius = radius * planet.radius * (0.35 + z * 2.1);
+      // Grow in and out of the frame instead of appearing at full size.
+      final fadeIn = (z / 0.12).clamp(0.0, 1.0);
+      final fadeOut = ((1.0 - z) / 0.12).clamp(0.0, 1.0);
+      final alpha = fadeIn * fadeOut;
+      if (alpha <= 0.01) continue;
+
       if (planet.ring) {
         canvas.save();
-        canvas.translate(centerPlanet.dx, centerPlanet.dy);
-        canvas.rotate(-0.42);
+        canvas.translate(planetCenter.dx, planetCenter.dy);
+        canvas.rotate(-0.42 + planet.angle);
         canvas.drawOval(
           Rect.fromCenter(
             center: Offset.zero,
@@ -247,23 +259,23 @@ class _GatewayPainter extends CustomPainter {
           ),
           Paint()
             ..style = PaintingStyle.stroke
-            ..strokeWidth = 2
-            ..color = planet.color.withValues(alpha: 0.55),
+            ..strokeWidth = 1.6
+            ..color = planet.color.withValues(alpha: 0.5 * alpha),
         );
         canvas.restore();
       }
       canvas.drawCircle(
-        centerPlanet,
+        planetCenter,
         planetRadius,
-        Paint()..color = planet.color,
+        Paint()..color = planet.color.withValues(alpha: alpha),
       );
       canvas.drawCircle(
-        centerPlanet,
+        planetCenter,
         planetRadius,
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1
-          ..color = Colors.white.withValues(alpha: 0.18),
+          ..color = Colors.white.withValues(alpha: 0.16 * alpha),
       );
     }
 
@@ -322,13 +334,21 @@ class _GatewayPainter extends CustomPainter {
 }
 
 
-typedef _Star = ({double x, double y, double radius, double phase});
-typedef _Planet = ({double x, double y, double radius, Color color, bool ring});
+typedef _Star = ({double angle, double z, double speed, double size});
+typedef _Planet = ({
+  double angle,
+  double z,
+  double speed,
+  double radius,
+  Color color,
+  bool ring,
+});
 typedef _Comet = ({double x, double y, double dx, double dy, double offset, Color color});
 typedef _Nebula = ({double x, double y, double radius, Color color});
 
-/// A randomly generated sky for the portal. Coordinates are in units of the portal
-/// radius, so the same scene fits any size.
+/// A randomly generated sky for the portal. Stars and planets carry their own depth and
+/// speed and travel toward the viewer, so the picture flows instead of cutting to a new
+/// frame. Coordinates are in units of the portal radius.
 class _SpaceField {
   const _SpaceField({
     required this.stars,
@@ -352,34 +372,37 @@ class _SpaceField {
 
   static _SpaceField generate(math.Random random) {
     double unit() => random.nextDouble() * 2 - 1;
+    double angle() => random.nextDouble() * math.pi * 2;
 
     final stars = <_Star>[
-      for (var i = 0; i < 46; i++)
+      for (var i = 0; i < 70; i++)
         (
-          x: unit(),
-          y: unit(),
-          radius: 0.5 + random.nextDouble() * 1.1,
-          phase: random.nextDouble() * math.pi * 2,
+          angle: angle(),
+          z: random.nextDouble(),
+          speed: 0.25 + random.nextDouble() * 0.85,
+          size: 0.4 + random.nextDouble() * 1.2,
         ),
     ];
 
     final planets = <_Planet>[
-      for (var i = 0; i < 1 + random.nextInt(2); i++)
+      for (var i = 0; i < 3; i++)
         (
-          x: unit() * 0.75,
-          y: unit() * 0.75,
-          radius: 0.13 + random.nextDouble() * 0.14,
+          angle: angle(),
+          // Staggered so one is always on its way in while another passes by.
+          z: i / 3 + random.nextDouble() * 0.12,
+          speed: 0.5 + random.nextDouble() * 0.5,
+          radius: 0.05 + random.nextDouble() * 0.06,
           color: _palette[random.nextInt(_palette.length)],
-          ring: random.nextDouble() < 0.45,
+          ring: random.nextDouble() < 0.5,
         ),
     ];
 
     final comets = <_Comet>[
-      for (var i = 0; i < 2 + random.nextInt(2); i++)
+      for (var i = 0; i < 2; i++)
         (
-          x: unit() * 1.2,
-          y: unit() * 1.2,
-          dx: (random.nextDouble() * 1.4 + 0.6) * (random.nextBool() ? 1 : -1),
+          x: unit() * 0.9,
+          y: unit() * 0.9,
+          dx: (random.nextDouble() * 1.2 + 0.5) * (random.nextBool() ? 1 : -1),
           dy: (random.nextDouble() * 1.2 + 0.5) * (random.nextBool() ? 1 : -1),
           offset: random.nextDouble(),
           color: _palette[random.nextInt(_palette.length)],
