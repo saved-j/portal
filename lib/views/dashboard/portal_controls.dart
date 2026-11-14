@@ -6,6 +6,7 @@ import 'package:fl_clash/views/proxies/proxies.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// How the server list is ordered; the switch sits next to the mode control.
@@ -33,6 +34,18 @@ class PortalGroupNotifier extends Notifier<String?> {
 
 final portalGroupProvider =
     NotifierProvider<PortalGroupNotifier, String?>(PortalGroupNotifier.new);
+
+/// The row the user just tapped. The engine may take a moment to switch, so the
+/// highlight moves at once and this clears when the group reports the same choice.
+class PortalPendingNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void pick(String? name) => state = name;
+}
+
+final portalPendingProvider =
+    NotifierProvider<PortalPendingNotifier, String?>(PortalPendingNotifier.new);
 
 class PortalFiltersNotifier extends Notifier<({Set<String> hidden, List<String> order})> {
   @override
@@ -99,6 +112,10 @@ class PortalModeSwitch extends ConsumerWidget {
     final group = groups.where((g) => g.name == groupName).firstOrNull ??
         groups.firstOrNull;
     final sort = ref.watch(portalSortProvider);
+    final testing = group != null &&
+        ref.watch(
+          delayTestingGroupsProvider.select((s) => s.contains(group.name)),
+        );
     if (modes.length < 2) return const SizedBox.shrink();
     return Row(
       children: [
@@ -126,6 +143,7 @@ class PortalModeSwitch extends ConsumerWidget {
                           : null,
                       onTap: () {
                         if (item == mode) return;
+                        HapticFeedback.selectionClick();
                         ref.read(setupActionProvider.notifier).pickMode(item);
                       },
                     ),
@@ -137,7 +155,10 @@ class PortalModeSwitch extends ConsumerWidget {
         const SizedBox(width: 4),
         IconButton(
           tooltip: sort == PortalSort.ping ? 'Сортировка: пинг' : 'Сортировка: A-Z',
-          onPressed: () => ref.read(portalSortProvider.notifier).toggle(),
+          onPressed: () {
+            HapticFeedback.selectionClick();
+            ref.read(portalSortProvider.notifier).toggle();
+          },
           icon: GlyphIcon(
             sort == PortalSort.ping ? AppGlyphs.sort : AppGlyphs.textShort,
             size: 18,
@@ -148,11 +169,25 @@ class PortalModeSwitch extends ConsumerWidget {
               ? context.appLocalizations.delayTest
               : context.appLocalizations.openPortal,
           onPressed: running && group != null
-              ? () => ref
-                  .read(proxiesActionProvider.notifier)
-                  .delayTest(group.all)
+              ? () {
+                  HapticFeedback.mediumImpact();
+                  ref.read(proxiesActionProvider.notifier).delayTest(group.all);
+                }
               : null,
-          icon: GlyphIcon(AppGlyphs.bolt, size: 18, color: theme.colorScheme.onSurfaceVariant),
+          // A test in flight spins instead of pretending nothing is happening.
+          icon: testing
+              ? SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: theme.colorScheme.primary,
+                  ),
+                )
+              : GlyphIcon(
+                  AppGlyphs.bolt,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
         ),
       ],
     );
@@ -189,6 +224,14 @@ class PortalServerList extends ConsumerWidget {
       );
     }
     final sort = ref.watch(portalSortProvider);
+    final pending = ref.watch(portalPendingProvider);
+    if (pending != null && group.now == pending) {
+      // Applied for real: drop the optimistic marker on the next frame.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(portalPendingProvider.notifier).pick(null);
+      });
+    }
+    final selectedName = pending ?? group.now;
     final members = [
       for (final proxy in group.all)
         if (!{'DIRECT', 'REJECT'}.contains(proxy.name.toUpperCase())) proxy,
@@ -217,7 +260,11 @@ class PortalServerList extends ConsumerWidget {
             ),
           ),
         for (final proxy in members)
-          _ServerRow(group: group, proxy: proxy, selected: group.now == proxy.name),
+          _ServerRow(
+            group: group,
+            proxy: proxy,
+            selected: selectedName == proxy.name,
+          ),
       ],
     );
   }
@@ -321,9 +368,12 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                             ],
                           ),
                           selected: item.name == active,
-                          onSelected: (_) => ref
-                              .read(portalGroupProvider.notifier)
-                              .pick(item.name),
+                          onSelected: (_) {
+                            HapticFeedback.selectionClick();
+                            ref
+                                .read(portalGroupProvider.notifier)
+                                .pick(item.name);
+                          },
                         ),
 
                       ),
@@ -363,7 +413,7 @@ String _delayText(int? value) {
   return '$value ms';
 }
 
-class _ServerRow extends ConsumerWidget {
+class _ServerRow extends ConsumerStatefulWidget {
   const _ServerRow({
     required this.group,
     required this.proxy,
@@ -375,10 +425,39 @@ class _ServerRow extends ConsumerWidget {
   final bool selected;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ServerRow> createState() => _ServerRowState();
+}
+
+class _ServerRowState extends ConsumerState<_ServerRow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 420),
+    value: widget.selected ? 1 : 0,
+  );
+
+  @override
+  void didUpdateWidget(_ServerRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selected != oldWidget.selected) {
+      if (widget.selected) {
+        _controller.forward(from: 0);
+      } else {
+        _controller.reverse();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // A selector row says nothing useful without the node behind it: 'Auto' alone
-    // hides which server carries the traffic and what it costs.
+    final scheme = theme.colorScheme;
     final allGroups = ref.watch(groupsProvider);
     final byName = {for (final item in allGroups) item.name: item};
     String? resolve(String? name, [int depth = 0]) {
@@ -388,44 +467,75 @@ class _ServerRow extends ConsumerWidget {
       return resolve(next.now, depth + 1);
     }
 
-    final node = byName.containsKey(proxy.name) ? resolve(proxy.name) : null;
-    final delay = ref.watch(delayProvider(proxyName: node ?? proxy.name));
-    final color =
-        selected ? theme.colorScheme.onPrimaryContainer : theme.colorScheme.onSurfaceVariant;
-    return ListTile(
-      dense: true,
-      selected: selected,
-      tileColor: selected ? theme.colorScheme.primaryContainer : null,
-      selectedTileColor: theme.colorScheme.primaryContainer,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-      leading: GlyphIcon(
-        selected ? AppGlyphs.check : AppGlyphs.proxies,
-        size: 20,
-        color: color,
-      ),
-      title: Text(
-        node == null || node == proxy.name
-            ? proxy.name
-            : '${proxy.name} · $node',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.bodyLarge?.copyWith(
-          color: selected ? theme.colorScheme.onPrimaryContainer : null,
-          fontWeight: selected ? FontWeight.w600 : null,
-        ),
-      ),
-      trailing: Text(
-        _delayText(delay),
-        style: theme.textTheme.labelMedium?.copyWith(
-          color: _delayColor(delay),
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      onTap: () => ref.read(proxiesActionProvider.notifier).changeProxy(
-            groupName: group.name,
-            proxyName: proxy.name,
+    final node = byName.containsKey(widget.proxy.name)
+        ? resolve(widget.proxy.name)
+        : null;
+    final delay = ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
+    final color = widget.selected
+        ? scheme.onPrimaryContainer
+        : scheme.onSurfaceVariant;
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final t = Curves.easeOutCubic.transform(_controller.value);
+        // The highlight arrives as a wave: a bright edge sweeps in from the left and
+        // settles into the row's tint, so the eye can follow the switch.
+        final sweep = widget.selected ? (1 - t) : 0.0;
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 1),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            color: scheme.primaryContainer.withValues(alpha: 0.16 + 0.84 * t),
+            gradient: sweep <= 0
+                ? null
+                : LinearGradient(
+                    begin: Alignment(-1 + 2 * t, 0),
+                    end: Alignment(0.4 + 2 * t, 0),
+                    colors: [
+                      scheme.primary.withValues(alpha: 0),
+                      scheme.primary.withValues(alpha: 0.45 * sweep),
+                      scheme.primary.withValues(alpha: 0),
+                    ],
+                  ),
           ),
+          child: child,
+        );
+      },
+      child: ListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+        leading: GlyphIcon(
+          widget.selected ? AppGlyphs.check : AppGlyphs.proxies,
+          size: 20,
+          color: color,
+        ),
+        title: Text(
+          node == null || node == widget.proxy.name
+              ? widget.proxy.name
+              : '${widget.proxy.name} · $node',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: widget.selected ? scheme.onPrimaryContainer : null,
+            fontWeight: widget.selected ? FontWeight.w600 : null,
+          ),
+        ),
+        trailing: Text(
+          _delayText(delay),
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: _delayColor(delay),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          ref.read(portalPendingProvider.notifier).pick(widget.proxy.name);
+          ref.read(proxiesActionProvider.notifier).changeProxy(
+                groupName: widget.group.name,
+                proxyName: widget.proxy.name,
+              );
+        },
+      ),
     );
   }
 }
