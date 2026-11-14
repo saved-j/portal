@@ -20,6 +20,8 @@ class PortalGatewayCore extends StatefulWidget {
     this.size = 168,
     this.center,
     this.intensity = 0,
+    this.connections = 0,
+    this.rateText,
   });
 
   final bool isStart;
@@ -33,6 +35,10 @@ class PortalGatewayCore extends StatefulWidget {
   /// Live traffic pressure 0..1: it decides how many packets cross the portal and how
   /// fast they move, so the picture follows the wire instead of a fixed loop.
   final double intensity;
+
+  /// Open connections in the engine right now, and their measured rate.
+  final int connections;
+  final String? rateText;
 
   @override
   State<PortalGatewayCore> createState() => _PortalGatewayCoreState();
@@ -62,7 +68,21 @@ class _PortalGatewayCoreState extends State<PortalGatewayCore>
       // The portal is off: nothing is drawn inside the hole.
       core = const SizedBox.shrink();
     } else if (widget.center != null) {
-      core = widget.center!;
+      core = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          widget.center!,
+          if (widget.rateText != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              '${widget.connections} · ${widget.rateText}',
+              style: AppTextStyle.caption1.of(context).copyWith(
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
+        ],
+      );
     } else if (widget.suspended) {
       core = const GlyphIcon(AppGlyphs.wifiOff, size: 34, fill: 1);
     } else {

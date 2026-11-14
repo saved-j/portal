@@ -107,6 +107,43 @@ class PortalDisplayNotifier extends Notifier<int> {
 final portalDisplayProvider =
     NotifierProvider<PortalDisplayNotifier, int>(PortalDisplayNotifier.new);
 
+
+/// What is actually crossing the wire right now, taken from the engine's own connection
+/// list: how many connections are open, how fast they move, and how much belongs to each
+/// filter. Nothing here is inferred or animated for show.
+typedef PortalLive = ({
+  int connections,
+  int down,
+  int up,
+  Map<String, int> byGroup,
+});
+
+final portalLiveProvider = Provider<PortalLive>((ref) {
+  final list = ref.watch(requestsProvider).list;
+  var down = 0;
+  var up = 0;
+  final byGroup = <String, int>{};
+  for (final request in list) {
+    final requestDown = request.downloadSpeed ?? 0;
+    final requestUp = request.uploadSpeed ?? 0;
+    down += requestDown;
+    up += requestUp;
+    if (request.chains.isNotEmpty) {
+      byGroup.update(
+        request.chains.first,
+        (value) => value + requestDown + requestUp,
+        ifAbsent: () => requestDown + requestUp,
+      );
+    }
+  }
+  return (
+    connections: list.length,
+    down: down,
+    up: up,
+    byGroup: byGroup,
+  );
+});
+
 class PortalFiltersNotifier extends Notifier<({Set<String> hidden, List<String> order})> {
   @override
   ({Set<String> hidden, List<String> order}) build() =>
