@@ -129,7 +129,11 @@ class PortalServerList extends ConsumerWidget {
     if (sort == PortalSort.alphabet) {
       members.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     } else {
-      int rank(Proxy p) => ref.watch(delayProvider(proxyName: p.name)) ?? 1 << 30;
+      int rank(Proxy p) {
+        final value = ref.watch(delayProvider(proxyName: p.name));
+        // -1 is mihomo's timeout marker, not a fast server.
+        return value == null || value <= 0 ? 1 << 30 : value;
+      }
       members.sort((a, b) => rank(a).compareTo(rank(b)));
     }
     return Column(
@@ -222,6 +226,25 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
   }
 }
 
+/// The legacy palette's three traffic lights: fast, tolerable, bad.
+const _delayFast = Color(0xFF00F5A0);
+const _delaySlow = Color(0xFFFFC107);
+const _delayBad = Color(0xFFFF4B6E);
+
+Color _delayColor(int? value) {
+  if (value == null) return const Color(0xFF7C8699);
+  if (value <= 0) return _delayBad; // timeout
+  if (value <= 120) return _delayFast;
+  if (value <= 350) return _delaySlow;
+  return _delayBad;
+}
+
+String _delayText(int? value) {
+  if (value == null) return '—';
+  if (value <= 0) return 'таймаут';
+  return '$value ms';
+}
+
 class _ServerRow extends ConsumerWidget {
   const _ServerRow({
     required this.group,
@@ -261,8 +284,11 @@ class _ServerRow extends ConsumerWidget {
         ),
       ),
       trailing: Text(
-        delay == null ? '—' : '$delay ms',
-        style: theme.textTheme.labelMedium?.copyWith(color: color),
+        _delayText(delay),
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: _delayColor(delay),
+          fontWeight: FontWeight.w600,
+        ),
       ),
       onTap: () => ref.read(proxiesActionProvider.notifier).changeProxy(
             groupName: group.name,
