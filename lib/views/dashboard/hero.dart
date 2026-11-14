@@ -129,13 +129,19 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    // The portal comes first and the choice comes after it, the
+                    // order Happ and Incy taught people: the button you press
+                    // before the list you read.
+                    const _ConnectButton(),
                     const SizedBox(height: 16),
-                    const AnnouncementCard(),
-                    if (ref.watch(announcementProvider) != null)
-                      const SizedBox(height: _gap),
                     const PortalModeSwitch(),
                     const SizedBox(height: 8),
                     const PortalServerList(),
+                    if (ref.watch(announcementProvider) != null) ...[
+                      const SizedBox(height: _gap),
+                      const AnnouncementCard(),
+                    ],
                     const SizedBox(height: _gap),
                     _ServerPanel(group: headers.serverGroup),
                     const SizedBox(height: _gap),
@@ -143,10 +149,6 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                   ],
                 ),
               ),
-            ),
-            Padding(
-              padding: padding.copyWith(top: 0),
-              child: const _ConnectButton(),
             ),
           ],
         ),
