@@ -301,25 +301,31 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 3),
                         child: ChoiceChip(
-                          avatar: _display == 0
-                              ? null
-                              : SizedBox.square(
+                          showCheckmark: false,
+                          // No avatar anywhere: an avatar plus an empty or short label
+                          // never centres. The mark and the name are one centred row.
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (_display >= 1)
+                                SizedBox.square(
                                   dimension: 16,
                                   child: CommonTargetIcon(
                                     src: item.icon,
                                     fallback: GroupMonogram(item.name),
                                   ),
                                 ),
-                          // A selector says nothing useful without its current
-                          // server, so the chip carries the resolved node too.
-                          // The strip names the filter only. Which server sits behind
-                          // 'Auto' is the list's job, not the strip's.
-                          label: Text(_display == 2 ? '' : item.name),
+                              if (_display == 1) const SizedBox(width: 6),
+                              if (_display != 2) Text(item.name),
+                            ],
+                          ),
                           selected: item.name == active,
                           onSelected: (_) => ref
                               .read(portalGroupProvider.notifier)
                               .pick(item.name),
                         ),
+
                       ),
                   ],
                 ),
