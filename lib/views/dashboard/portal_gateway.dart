@@ -155,23 +155,6 @@ class _GatewayPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
     final radius = size.shortestSide / 2;
-    // Traffic crossing the portal: packets run from the rim to the core, their
-    // number and speed taken from the live rate.
-    final count = (2 + (intensity.clamp(0.0, 1.0) * 10)).round();
-    for (var i = 0; i < count; i++) {
-      final phase = (turn * (1.0 + intensity * 2.5) + i / count) % 1.0;
-      final packetRadius = (radius - 12) * (1.0 - phase);
-      if (packetRadius < 26) continue;
-      final angle = i * 2.39996 + turn * 6.28318; // golden-angle spread
-      final offset = Offset(
-        center.dx + packetRadius * math.cos(angle),
-        center.dy + packetRadius * math.sin(angle),
-      );
-      final packet = Paint()
-        ..color = portal.withValues(alpha: 0.55 * (1 - phase) * (0.4 + intensity));
-      canvas.drawCircle(offset, 1.6 + 1.6 * intensity, packet);
-    }
-
     final dim = active ? 1.0 : 1.0;
 
     if (!active) {
