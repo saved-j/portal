@@ -13,6 +13,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'xray_subscription.dart';
 
@@ -88,9 +89,11 @@ Map<String, Object?>? _firstOutbound(Object? config) {
 
 /// One node's round trip, measured by asking it through its own socks port.
 ///
-/// The request is the app's own test URL, so the number is comparable with the engine's
-/// URLTEST; the clock starts before the socks handshake because that handshake is the node's
-/// own work. No answer within [timeout] is no number at all.
+/// One subscription to the socket carries the whole conversation — greeting reply, connect
+/// reply, the request, then the first byte back. Listening twice is what a first version did,
+/// and a single-subscription socket cannot be listened to twice: every row came back empty
+/// while the core's own log showed it dialling the node. The clock starts before the handshake
+/// because that handshake is the node's own work.
 Future<int?> measureNode({
   required int port,
   required String url,
@@ -100,24 +103,66 @@ Future<int?> measureNode({
   if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
   final targetPort = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
   final path = uri.path.isEmpty ? '/' : uri.path;
-  final watch = Stopwatch()..start();
-  Socket? socket;
-  try {
-    socket = await Socket.connect('127.0.0.1', port, timeout: timeout);
-    socket.add(_socks5Connect(uri.host, targetPort));
-    final answer = await _readSocksReply(socket, timeout);
-    if (!answer) return null;
-    socket.write(
-      'GET $path HTTP/1.1\r\n'
+  final request = 'GET $path HTTP/1.1\r\n'
       'Host: ${uri.host}\r\n'
       'User-Agent: portal-delay\r\n'
       'Accept: */*\r\n'
-      'Connection: close\r\n\r\n',
+      'Connection: close\r\n\r\n';
+  Socket? socket;
+  StreamSubscription<Uint8List>? subscription;
+  Timer? watchdog;
+  final done = Completer<int?>();
+  final watch = Stopwatch()..start();
+  final buffer = <int>[];
+  var stage = 0; // 0 greeting, 1 connect, 2 request sent
+  try {
+    socket = await Socket.connect('127.0.0.1', port, timeout: timeout);
+    watchdog = Timer(timeout, () {
+      if (!done.isCompleted) done.complete(null);
+    });
+    void finish(int? value) {
+      if (!done.isCompleted) done.complete(value);
+    }
+
+    final open = socket;
+    subscription = open.listen(
+      (chunk) {
+        buffer.addAll(chunk);
+        if (stage == 0) {
+          if (buffer.length < 2) return;
+          if (buffer[0] != 0x05 || buffer[1] != 0x00) {
+            finish(null);
+            return;
+          }
+          buffer.clear();
+          stage = 1;
+          open.write(_socksConnect(uri.host, targetPort));
+          open.flush().catchError((_) {});
+          return;
+        }
+        if (stage == 1) {
+          final end = _socksReplyEnd(buffer);
+          if (end == 0) return;
+          if (end < 0) {
+            finish(null);
+            return;
+          }
+          buffer.clear();
+          stage = 2;
+          open.write(request);
+          open.flush().catchError((_) {});
+          return;
+        }
+        // The first byte back through the node is the number.
+        finish(buffer.isEmpty ? null : watch.elapsedMilliseconds);
+      },
+      onError: (_) => finish(null),
+      onDone: () => finish(null),
+      cancelOnError: true,
     );
-    await socket.flush();
-    final first = await socket.first.timeout(timeout);
-    watch.stop();
-    return first.isEmpty ? null : watch.elapsedMilliseconds;
+    open.write([0x05, 0x01, 0x00]);
+    await open.flush();
+    return await done.future;
   } on TimeoutException {
     return null;
   } on SocketException {
@@ -125,39 +170,33 @@ Future<int?> measureNode({
   } catch (_) {
     return null;
   } finally {
+    watchdog?.cancel();
+    await subscription?.cancel();
     socket?.destroy();
   }
 }
 
-/// A socks5 greeting and a CONNECT to [host]:[port], with no authentication.
-List<int> _socks5Connect(String host, int port) {
+/// A socks5 CONNECT to [host]:[port] with no authentication, after the greeting was answered.
+List<int> _socksConnect(String host, int port) {
   final name = utf8.encode(host);
   return [
-    0x05, 0x01, 0x00, // version, one method, "no authentication"
     0x05, 0x01, 0x00, // version, CONNECT, reserved
     0x03, name.length, ...name, // domain name
     (port >> 8) & 0xFF, port & 0xFF,
   ];
 }
 
-/// Reads the socks reply; true when the node accepted the connection.
-Future<bool> _readSocksReply(Socket socket, Duration timeout) async {
-  final buffer = <int>[];
-  await for (final chunk in socket.timeout(timeout)) {
-    buffer.addAll(chunk);
-    if (buffer.length < 2) continue;
-    if (buffer[0] != 0x05) return false;
-    if (buffer[1] != 0x00) return false;
-    // The bound address follows the status byte: read it so the request starts on a clean
-    // stream, then let the caller write.
-    final addressType = buffer.length > 3 ? buffer[3] : -1;
-    final needed = switch (addressType) {
-      0x01 => 10,
-      0x03 => buffer.length > 4 ? 7 + buffer[4] : -1,
-      0x04 => 22,
-      _ => -1,
-    };
-    if (needed > 0 && buffer.length >= needed) return true;
-  }
-  return false;
+/// Where the connect reply ends in [buffer]: its length, 0 while it is still arriving, -1 when
+/// the node refused the connection.
+int _socksReplyEnd(List<int> buffer) {
+  if (buffer.length < 5) return 0;
+  if (buffer[0] != 0x05 || buffer[1] != 0x00) return -1;
+  final total = switch (buffer[3]) {
+    0x01 => 10,
+    0x03 => buffer.length > 4 ? 7 + buffer[4] : 0,
+    0x04 => 22,
+    _ => -1,
+  };
+  if (total <= 0) return total;
+  return buffer.length >= total ? total : 0;
 }

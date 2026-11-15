@@ -4,6 +4,7 @@ import com.follow.clashx.PortalOutcome
 import com.follow.clashx.PortalRuntimeCoordinator
 import com.follow.clashx.common.Components
 import com.follow.clashx.common.GlobalState
+import com.follow.clashx.common.PortalMeasureBridge
 import com.follow.clashx.common.PortalOwner
 import com.follow.clashx.common.PortalRuntimeState
 import com.follow.clashx.common.PortalTelemetry

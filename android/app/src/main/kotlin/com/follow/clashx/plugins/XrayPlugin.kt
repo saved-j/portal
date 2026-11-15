@@ -10,6 +10,7 @@ import com.follow.clashx.PortalRuntimeCoordinator
 import com.follow.clashx.common.Components
 import com.follow.clashx.common.GlobalState
 import com.follow.clashx.common.PortalRuntimeState
+import com.follow.clashx.common.PortalMeasureBridge
 import com.follow.clashx.common.XrayChildControl
 import com.follow.clashx.common.XrayTun
 import com.follow.clashx.common.XrayTunHolder
