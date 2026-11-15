@@ -119,9 +119,17 @@ class Request {
     }
   }
 
-  Future<Response<String>> getTextResponseForUrl(String url) async {
+  Future<Response<String>> getTextResponseForUrl(
+    String url, {
+    Map<String, String> headers = const {},
+  }) async {
     try {
-      return await _download<String>(url, ResponseType.plain);
+      return await _download<String>(
+        url,
+        ResponseType.plain,
+        headers: headers,
+        userAgent: headers['User-Agent'],
+      );
     } catch (e) {
       commonPrint.log(
         'getTextResponseForUrl error ${compactError(e)}',

@@ -11,10 +11,11 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
 import 'package:fl_clash/core/xray_config.dart';
 import 'package:fl_clash/core/subscription_availability.dart';
-import 'package:fl_clash/core/subscription_formats.dart';
+import 'package:fl_clash/core/xray_subscription.dart';
 import 'package:fl_clash/core/xray_switch.dart';
 import 'package:fl_clash/plugins/xray.dart';
 import 'dart:async';
+import 'dart:convert';
 
 /// How the server list is ordered; the switch sits next to the mode control.
 enum PortalSort { ping, alphabet }
@@ -203,20 +204,25 @@ List<Group> portalVisibleGroups(List<Group> all, Set<String> hidden, List<String
   return visible;
 }
 
-/// The servers the second core offers, in the shape the list already renders.
+/// The servers the second core offers.
 ///
-/// In the simple portal the strip must show the compiled Xray nodes instead of the engine's:
-/// the two builds of one subscription name different servers, and the Xray build carries
-/// extras the engine build does not have. An empty result means "keep showing the engine's
-/// list", which is what happens when the panel served only YAML.
-final xrayServersProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+/// The subscription body is an array of full xray configurations and each element is one
+/// server, so the list is built from those elements — name, description and the config that
+/// would be started if it were chosen.
+final xrayServersProvider =
+    FutureProvider.autoDispose<List<XrayServerConfig>>((ref) async {
   final profile = ref.read(currentProfileProvider);
   if (profile == null) return const [];
   final body = await profile.readXrayFormat();
   if (body == null) return const [];
-  final config = decodeClientConfig(body);
-  if (config == null) return const [];
-  return xrayConfigServers(config);
+  final servers = parseXraySubscription(body);
+  if (servers.isNotEmpty) {
+    commonPrint.log(
+      'xray subscription: ${servers.length} servers, '
+      'first=${servers.take(3).map((s) => s.label).join(' | ')}',
+    );
+  }
+  return servers;
 });
 
 /// Whether the current subscription carries the engine's own format.
@@ -255,18 +261,22 @@ Future<void> _enterSimplePortal(WidgetRef ref) async {
   final profile = ref.read(currentProfileProvider);
   if (profile != null) {
     final body = await profile.readXrayFormat();
-    if (body != null && decodeClientConfig(body) != null) {
-      // The panel wrote the config itself: Happ and Incy are served a ready Xray document.
-      // Nothing to convert — only the socks port is ours to set.
-      final started = await XrayCore.instance.start(withSocksInbound(body));
-      if (started['ok'] != true) return;
-      await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
-      await ref
-          .read(proxiesActionProvider.notifier)
-          .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
-      return;
-    }
     if (body != null) {
+      final servers = parseXraySubscription(body);
+      final server = xrayServerFor(servers, chosen);
+      if (server != null) {
+        // Each server is its own full configuration; the chosen one is what the core runs.
+        // Only the socks entry point is ours to set.
+        final started = await XrayCore.instance.start(
+          withSocksInbound(jsonEncode(server.config)),
+        );
+        if (started['ok'] != true) return;
+        await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
+        await ref
+            .read(proxiesActionProvider.notifier)
+            .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
+        return;
+      }
       node = xrayNodeFor(parseShareLinks(body), chosen);
     }
   }
@@ -378,15 +388,25 @@ class PortalModeSwitch extends ConsumerWidget {
           ),
         ),
         IconButton(
-          tooltip: running
-              ? context.appLocalizations.delayTest
-              : context.appLocalizations.openPortal,
-          onPressed: running && group != null
-              ? () {
+          tooltip: context.appLocalizations.delayTest,
+          // A delay test says which servers answer, so it must not depend on the portal
+          // being open: the test wakes the engine for its duration and closes it again.
+          onPressed: group == null || testing
+              ? null
+              : () {
                   HapticFeedback.mediumImpact();
-                  ref.read(proxiesActionProvider.notifier).delayTest(group.all);
-                }
-              : null,
+                  unawaited(
+                    _testDelayWithEngine(
+                      ref,
+                      [
+                        for (final proxy in group.all)
+                          if (!_isBuiltinOutbound(proxy.name)) proxy,
+                      ],
+                      testUrl: group.testUrl,
+                      wasRunning: running,
+                    ),
+                  );
+                },
           // A test in flight spins instead of pretending nothing is happening.
           icon: testing
               ? SizedBox.square(
@@ -448,8 +468,8 @@ class PortalServerList extends ConsumerWidget {
     // names its own servers. Showing the engine's list here would offer nodes the running
     // core does not have — and hide the extras it does.
     final xrayServers = simple
-        ? (ref.watch(xrayServersProvider).value ?? const <Map<String, dynamic>>[])
-        : const <Map<String, dynamic>>[];
+        ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
+        : const <XrayServerConfig>[];
     // One source for "what is chosen": the profile's own selection, which changeProxy
     // writes optimistically. No per-filter special cases — if a server was picked, it is
     // picked, whether the group is RF services, Chinese services or YouTube. When the
@@ -464,9 +484,9 @@ class PortalServerList extends ConsumerWidget {
         ? [
             for (final server in xrayServers)
               Proxy(
-                name: '${server['name']}',
-                type: '${server['type']}',
-                serverDescription: server['serverDescription'] as String?,
+                name: server.name,
+                type: 'xray',
+                serverDescription: server.label,
               ),
           ]
         : [
@@ -509,6 +529,44 @@ class PortalServerList extends ConsumerWidget {
   }
 }
 
+
+/// Waits until the engine reports a running proxy, so the first test is not queued into a
+/// core that has not applied its config yet.
+Future<void> _waitForEngine(WidgetRef ref) async {
+  for (var attempt = 0; attempt < 40; attempt++) {
+    if (ref.read(runTimeProvider) != null) return;
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+  }
+}
+
+/// Runs a delay test, opening the engine for it when the portal is closed.
+///
+/// The engine answers a delay test for any proxy in its applied config, but it needs to be
+/// running to have that config and to reach the nodes. So a closed portal is opened for the
+/// duration of the test, without any of the portal's own animation or state, and closed
+/// again afterwards. If the portal was already open, nothing is toggled.
+Future<void> _testDelayWithEngine(
+  WidgetRef ref,
+  List<Proxy> proxies, {
+  String? testUrl,
+  required bool wasRunning,
+}) async {
+  if (proxies.isEmpty) return;
+  if (wasRunning) {
+    await ref.read(proxiesActionProvider.notifier).delayTest(proxies, testUrl);
+    return;
+  }
+  final testing = ref.read(delayTestingGroupsProvider.notifier);
+  try {
+    // Opened behind the scenes: the portal's own button and timer never see this state.
+    await ref.read(setupActionProvider.notifier).setRunning(true);
+    await _waitForEngine(ref);
+    await ref.read(proxiesActionProvider.notifier).delayTest(proxies, testUrl);
+  } finally {
+    await ref.read(setupActionProvider.notifier).setRunning(false);
+    testing.stop('');
+  }
+}
 
 /// Horizontal group filter. The chevrons are hints, not buttons: they say the strip
 /// can be dragged and hide themselves once that direction is exhausted. A double tap

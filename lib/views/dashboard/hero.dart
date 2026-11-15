@@ -14,9 +14,9 @@ import 'package:fl_clash/views/tools.dart';
 import 'package:fl_clash/views/connection/connection_feeds.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'portal_controls.dart';
+import '../profiles/subscription_facts.dart';
 import 'portal_gateway.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:fl_clash/common/outbound.dart';
@@ -120,14 +120,50 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                         // opened the door.
                         Expanded(
                           child: Center(
-                            child: EmojiText(
-                              headers.serviceName ?? 'portal-connect',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyle.title3.of(
-                                context,
-                                emphasized: true,
-                              ),
+                            child: Consumer(
+                              // The working screen says the same two facts the list does:
+                              // name, then traffic, then expiry, in one column.
+                              builder: (context, ref, _) {
+                                final profile = ref.watch(currentProfileProvider);
+                                final facts = profile == null
+                                    ? null
+                                    : SubscriptionFacts.of(profile);
+                                final dim = AppTextStyle.footnote
+                                    .of(context)
+                                    .copyWith(
+                                      color: Colors.white.withValues(alpha: 0.62),
+                                    );
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Flexible(
+                                          child: EmojiText(
+                                            headers.serviceName ?? 'portal-connect',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppTextStyle.title3.of(
+                                              context,
+                                              emphasized: true,
+                                            ),
+                                          ),
+                                        ),
+                                        if (facts != null) ...[
+                                          const SizedBox(width: 6),
+                                          Text(facts.mark, style: dim),
+                                        ],
+                                      ],
+                                    ),
+                                    if (facts != null) ...[
+                                      const SizedBox(height: 2),
+                                      Text(facts.trafficLine, style: dim),
+                                      Text(facts.expiryLine, style: dim),
+                                    ],
+                                  ],
+                                );
+                              },
                             ),
                           ),
                         ),

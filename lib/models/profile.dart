@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -5,6 +6,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/core/subscription_availability.dart';
+import 'package:fl_clash/core/panel_api.dart';
 import 'package:fl_clash/core/subscription_formats.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -298,6 +300,22 @@ extension ProfileExtension on Profile {
     final disposition = response.headers.value('content-disposition');
     final userinfo = response.headers.value('subscription-userinfo');
     final providerHeaders = providerHeadersOf(response.headers.map);
+    // The row can only show traffic and an expiry if the panel sends them; this line says
+    // which of the two shapes arrived, since a missing header and a mis-parsed one look the
+    // same from the screen.
+    commonPrint.log(
+      'sub headers: userinfo=[$userinfo] provider=${providerHeaders.entries.map((e) => '${e.key}=${e.value.length > 40 ? '${e.value.substring(0, 40)}…' : e.value}').join(', ')}',
+    );
+    for (final entry in providerHeaders.entries) {
+      if (!entry.value.startsWith('base64:')) continue;
+      final decoded = _decodeProviderBase64(entry.value);
+      if (decoded != null) {
+        commonPrint.log('sub header ${entry.key} decoded=[$decoded]');
+      }
+    }
+    // The panel names its servers behind its own API, so the same link is asked once for the
+    // names. A failure here is normal (a panel without that endpoint) and changes nothing.
+    unawaited(_probePanelNames(url));
     return copyWith(
       label: label.takeFirstValid([
         ProviderHeaders(providerHeaders).title,
@@ -358,6 +376,35 @@ extension ProfileExtension on Profile {
     return parseShareLinks(text).isNotEmpty;
   }
 
+
+  /// Asks the panel's own API for the names it gives its servers, and logs what arrives.
+  ///
+  /// This is how the panel's own clients do it: same link, client identified by the user
+  /// agent, JSON back. A failure changes nothing — the app still has its nodes.
+  static Future<PanelSubscription?> _probePanelNames(String subscriptionUrl) async {
+    try {
+      final api = PanelApi(
+        subscriptionUrl: subscriptionUrl,
+        get: (url, headers) async {
+          final response = await request.getTextResponseForUrl(url, headers: headers);
+          return response.data;
+        },
+      );
+      final panel = await api.fetch();
+      if (panel == null) {
+        commonPrint.log('panel resolve: no json at ${api.endpoint}');
+        return null;
+      }
+      commonPrint.log(
+        'panel resolve: ${panel.servers.length} servers, '
+        'first=${panel.servers.take(3).map((s) => s.label).join(' | ')}',
+      );
+      return panel;
+    } catch (error) {
+      commonPrint.log('panel resolve failed: ${compactError(error)}');
+      return null;
+    }
+  }
   /// The second core's body lives beside the profile, named after it.
   ///
   /// It is a sibling rather than a field in the profile record because it is a large
@@ -465,4 +512,14 @@ Map<String, String> providerHeadersOf(Map<String, List<String>> headers) {
             key.toLowerCase().startsWith(providerHeaderPrefix))
           key.toLowerCase(): value.first,
   };
+}
+
+/// The panel base64-encodes some headers so they survive any transport; this decodes one.
+String? _decodeProviderBase64(String value) {
+  try {
+    final payload = value.substring('base64:'.length).trim();
+    return utf8.decode(base64Decode(base64Url.normalize(payload)));
+  } catch (_) {
+    return null;
+  }
 }

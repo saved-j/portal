@@ -33,8 +33,12 @@ const subscriptionUserAgents = <SubscriptionFormat, String>{
 /// rest — so which name works is the panel's decision, not ours. Asking as the popular
 /// ones in turn is the only reliable way to find out without the panel's API.
 const xrayUserAgentCandidates = <String>[
-  'Happ/2.9.1',
+  // Incy first: the panel recognises its current version and answers with the named JSON
+  // subscription. Both clients are accepted; the first body that parses wins.
+  'Incy/3.9.9',
   'Incy/2.0.0',
+  'Happ/3.9.9',
+  'Happ/2.9.1',
   'v2rayTun/1.6.0',
   'v2rayNG/1.8.5',
   'Streisand/1.0',

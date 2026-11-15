@@ -17,14 +17,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'add.dart';
 import 'edit.dart';
+import 'subscription_facts.dart';
 import 'subscription_lights.dart';
 import 'preview.dart';
 
 const _infoGap = 4.0;
 
+/// Tall enough for the name and both facts, since every subscription row carries three
+/// lines by design; a two-line height clipped the expiry.
 double get _profileItemHeight {
   final measure = globalState.measure;
   return measure.textHeight(AppTextStyle.headline) +
+      _infoGap +
+      measure.textHeight(AppTextStyle.footnote) +
       _infoGap +
       measure.textHeight(AppTextStyle.footnote) +
       2 * listRowVerticalPadding;
@@ -328,35 +333,25 @@ class ProfileItem extends ConsumerWidget {
   SubscriptionInfo? get _subscriptionInfo =>
       profile.type == ProfileType.url ? profile.subscriptionInfo : null;
 
-  /// One line for traffic, one for the expiry, so the row reads as three facts instead of
-  /// a sentence: what it is, how much is left, until when.
+  /// Three lines, always the same three: what it is, how much is used, until when.
+  /// A panel that sends no numbers still gets the shape — with dashes, never a missing line.
   List<String> _subtitle(BuildContext context) {
-    final info = _subscriptionInfo;
-    if (info != null && info.usage != null) {
-      final used = info.upload + info.download;
-      final total = info.total > 0 ? info.total.traffic.show : '♾️';
-      final expire = info.expireDate;
+    if (_subscriptionInfo == null) {
+      final appLocalizations = context.appLocalizations;
       return [
-        'Трафик: ${used.traffic.show} / $total',
-        if (expire != null) 'Истекает: ${_dayMonthYear(expire)}',
+        switch (profile.type) {
+          ProfileType.url => appLocalizations.profileTypeSubscription,
+          ProfileType.file => appLocalizations.profileTypeFile,
+          ProfileType.custom => appLocalizations.profileTypeCustom,
+        },
       ];
     }
-    final appLocalizations = context.appLocalizations;
-    return [
-      switch (profile.type) {
-        ProfileType.url => appLocalizations.profileTypeSubscription,
-        ProfileType.file => appLocalizations.profileTypeFile,
-        ProfileType.custom => appLocalizations.profileTypeCustom,
-      },
-    ];
+    final facts = SubscriptionFacts.of(profile);
+    return [facts.trafficLine, facts.expiryLine];
   }
 
-  /// ✅ while the plan is alive, ❌ once it is not; nothing when there is no date to judge.
-  String _statusMark() {
-    final expire = _subscriptionInfo?.expireDate;
-    if (expire == null) return '';
-    return expire.isAfter(DateTime.now()) ? '✅' : '❌';
-  }
+  /// ✅ while the plan is alive, ❌ once it is not, ⏳ when the panel gave no date.
+  String _statusMark() => SubscriptionFacts.of(profile).mark;
 
   Widget _buildTrailing(BuildContext context, {required bool isUpdating}) {
     return AnimatedSwitcher(
@@ -480,14 +475,10 @@ class ProfileItem extends ConsumerWidget {
                 _handlePreview(context);
               },
             ),
-            if (isUrl)
-              CommonPopupMenuItem(
-                glyph: AppGlyphs.copy,
-                label: appLocalizations.copyLink,
-                onPressed: () {
-                  _handleCopyLink(context);
-                },
-              ),
+            // The QR is how a subscription moves to another device without the link ever
+            // being readable on screen: it stays for subscriptions. Copying the link as
+            // text and exporting the file are gone — those hand out a credential in the
+            // clear. A hand-built profile keeps both, since its content is the owner's own.
             if (isUrl)
               CommonPopupMenuItem(
                 glyph: AppGlyphs.qrCode,
@@ -499,14 +490,23 @@ class ProfileItem extends ConsumerWidget {
                     message: appLocalizations.shareQrcodeTip,
                   );
                 },
+              )
+            else ...[
+              CommonPopupMenuItem(
+                glyph: AppGlyphs.copy,
+                label: appLocalizations.copyLink,
+                onPressed: () {
+                  _handleCopyLink(context);
+                },
               ),
-            CommonPopupMenuItem(
-              glyph: AppGlyphs.export,
-              label: appLocalizations.exportFile,
-              onPressed: () {
-                _handleExportFile(context);
-              },
-            ),
+              CommonPopupMenuItem(
+                glyph: AppGlyphs.export,
+                label: appLocalizations.exportFile,
+                onPressed: () {
+                  _handleExportFile(context);
+                },
+              ),
+            ],
           ],
         ),
       CommonPopupMenuItem(
@@ -565,11 +565,6 @@ class ProfileItem extends ConsumerWidget {
   }
 }
 
-/// 25.12.2026 — the shape the owner reads at a glance, without a locale library.
-String _dayMonthYear(DateTime date) =>
-    '${date.day.toString().padLeft(2, '0')}.'
-    '${date.month.toString().padLeft(2, '0')}.${date.year}';
-
 class _ProfileCardTitle extends StatelessWidget {
   const _ProfileCardTitle({
     required this.profile,
@@ -593,7 +588,7 @@ class _ProfileCardTitle extends StatelessWidget {
           children: [
             Flexible(
               child: Text(
-                profile.realLabel,
+                profile.headers.displayName ?? profile.realLabel,
                 style: AppTextStyle.headline.of(context),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

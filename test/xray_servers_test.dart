@@ -52,6 +52,41 @@ void main() {
     expect(servers.map((s) => s['name']), isNot(contains('Auto Europa')));
   });
 
+  test('a panel tag like auto-2 is replaced by its hostname', () {
+    final servers = xrayConfigServers({
+      'outbounds': [
+        {
+          'tag': 'auto-3',
+          'protocol': 'vless',
+          'settings': {
+            'vnext': [
+              {'address': 'de-3.bb800.info', 'port': 443},
+            ],
+          },
+        },
+      ],
+    });
+    expect(servers.single['name'], 'DE-3');
+    expect(servers.single['server'], 'de-3.bb800.info');
+  });
+
+  test('a tag that already reads like a name stays', () {
+    final servers = xrayConfigServers({
+      'outbounds': [
+        {
+          'tag': 'Австралия',
+          'protocol': 'vless',
+          'settings': {
+            'vnext': [
+              {'address': 'au-1.example.net', 'port': 443},
+            ],
+          },
+        },
+      ],
+    });
+    expect(servers.single['name'], 'Австралия');
+  });
+
   test('a config without outbounds yields nothing instead of throwing', () {
     expect(xrayConfigServers(const {}), isEmpty);
     expect(xrayConfigGroups(const {'outbounds': 'nonsense'}), isEmpty);

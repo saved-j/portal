@@ -28,6 +28,34 @@ class ProviderHeaders {
 
   String? get title => _plainOrBase64(text('profile-title'));
 
+  /// The traffic the panel prints in its own title, e.g. `163.76 GiB`.
+  ///
+  /// There is no `subscription-userinfo` header from this panel, so the number in the title
+  /// is the only usage it ever states. Returned as written; the caller adds the total.
+  String? get trafficText {
+    final raw = title;
+    if (raw == null) return null;
+    final match = RegExp(r'([\d.,]+\s*(?:[KMGT]i?B|[KMGT]B)\b)').firstMatch(raw);
+    return match?.group(1)?.trim();
+  }
+
+  /// The title without the panel's own status sentence.
+  ///
+  /// Panels pack `portal-connect Статус Active 163.70 GiB | 0` into profile-title, and that
+  /// whole line is not a name. The part before the first marker is.
+  String? get displayName {
+    final raw = title?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    const markers = [' Статус', ' Статус:', ' Status', ' ·', ' |'];
+    var cut = raw.length;
+    for (final marker in markers) {
+      final index = raw.indexOf(marker);
+      if (index > 0 && index < cut) cut = index;
+    }
+    final name = raw.substring(0, cut).trim();
+    return name.isEmpty ? raw : name;
+  }
+
   String? get webPageUrl {
     final url = text('profile-web-page-url');
     return url != null && url.isUrl ? url : null;

@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:typed_data';
 
 import 'package:fl_clash/core/subscription_formats.dart';
@@ -222,6 +224,23 @@ List<Map<String, dynamic>> xrayConfigServers(Map<String, dynamic> config) {
     if (protocol == 'freedom' || protocol == 'blackhole') continue;
     nodes[tag] = proxyShapeFor(item);
   }
+  // The shape of the panel's config decides what the list can show, and it differs per
+  // panel; without this line a wrong list is indistinguishable from a wrong parse.
+  debugPrint(
+    'xray outbounds: ${[
+      for (final item in outbounds)
+        if (item is Map) '${item['protocol']}:${item['tag']}',
+    ].join(', ')}',
+  );
+  // A panel may tag its nodes 'auto-N' and put the only readable name inside the
+  // outbound; this line says where to look.
+  for (final item in outbounds) {
+    if (item is Map && '${item['protocol']}' == 'vless') {
+      final text = jsonEncode(item);
+      debugPrint('xray first node: ${text.length > 400 ? text.substring(0, 400) : text}');
+      break;
+    }
+  }
   return nodes.values.toList();
 }
 
@@ -266,9 +285,26 @@ Map<String, dynamic> proxyShapeFor(Map item) {
   }
   final stream = item['streamSettings'];
   final transport = stream is Map ? '${stream['network'] ?? 'tcp'}' : 'tcp';
+  final tag = '${item['tag'] ?? ''}';
   return {
-    'name': '${item['tag'] ?? ''}',
+    // The panel tags its nodes `auto`, `auto-2`, … which says nothing about the server.
+    // The hostname does: `de-3.bb800.info` is the third German node, so that is what the
+    // row is called. A tag that already reads like a name is kept as it is.
+    'name': _looksAutomatic(tag) ? _nameFromHost(server, tag) : tag,
     'type': '${item['protocol'] ?? 'proxy'}',
+    'server': server,
+    'port': port,
     'serverDescription': server.isEmpty ? transport : '$server:$port · $transport',
   };
+}
+
+/// True for the panel's placeholder tags: `auto`, `auto-2`, `auto_3`, `node-1`.
+bool _looksAutomatic(String tag) =>
+    RegExp(r'^(auto|node|proxy|server)([-_ ]?\d+)?$', caseSensitive: false).hasMatch(tag);
+
+/// A readable name out of a hostname: `de-3.bb800.info` becomes `DE-3`.
+String _nameFromHost(String host, String fallback) {
+  if (host.isEmpty) return fallback;
+  final first = host.split('.').first;
+  return first.isEmpty ? host : first.toUpperCase();
 }

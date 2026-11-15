@@ -59,3 +59,25 @@ String? _memberOf(Map document, String name, int depth) {
   }
   return null;
 }
+
+/// The names the subscription uses for its servers, keyed by address.
+///
+/// A panel may tag its Xray nodes `auto-N` and keep the readable name only in the engine's
+/// build of the same subscription. Both builds point at the same servers, so the address is
+/// what joins them.
+Future<Map<String, String>> serverNamesByAddress(String configPath) async {
+  final file = File(configPath);
+  if (!file.existsSync()) return const {};
+  final document = loadYaml(await file.readAsString());
+  if (document is! Map) return const {};
+  final proxies = document['proxies'];
+  if (proxies is! List) return const {};
+  final names = <String, String>{};
+  for (final item in proxies) {
+    if (item is! Map) continue;
+    final server = '${item['server'] ?? ''}';
+    final name = '${item['name'] ?? ''}';
+    if (server.isNotEmpty && name.isNotEmpty) names[server] = name;
+  }
+  return names;
+}
