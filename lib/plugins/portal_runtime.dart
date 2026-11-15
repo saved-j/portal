@@ -266,6 +266,37 @@ class PortalRuntime {
     }
   }
 
+  /// A delay test that had to raise a core, for the transitions file.
+  ///
+  /// The test is a measurement, not a connection: [raised] names the core it raised (`child`,
+  /// `engine` or `none`), [durationMs] is the whole test from the tap to the restored state,
+  /// and [stoppedAfter] says whether that core was put back down — the audit line for "the
+  /// portal ended where it started".
+  Future<void> noteTest({
+    required String mode,
+    required String raised,
+    required int durationMs,
+    required bool stoppedAfter,
+    String detail = '',
+  }) async {
+    try {
+      await _channel.invokeMethod<void>('testNote', {
+        'mode': mode,
+        'raised': raised,
+        'durationMs': durationMs,
+        'stoppedAfter': stoppedAfter,
+        'detail': detail,
+      });
+    } on MissingPluginException {
+      // No portal runtime here: nothing to write.
+    } on PlatformException catch (error) {
+      commonPrint.log(
+        'portal test note failed: ${error.message}',
+        logLevel: LogLevel.warning,
+      );
+    }
+  }
+
   Future<PortalRuntimeStatus> refresh() async {
     try {
       final result = await _channel.invokeMethod<Map<Object?, Object?>>('status');

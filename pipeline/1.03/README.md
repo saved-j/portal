@@ -268,6 +268,15 @@ the device, not a redesign.
   reason to every other, and no number at all when no child is running. Version
   0.5.3-portal-duo-2e+2026111405.
 
+- `30-a-test-raises-the-tunnel-and-puts-it-back` — TEST is a request for a measurement, so it now
+  owns the tunnel for its own duration: if the mode's core is down it is raised on the normal
+  transactional path (`setRunning(true)`), the sweep runs through it (`probeThroughPortal`), and
+  it is put down again, so `owner=Off` is what the record shows afterwards; a portal that was
+  already open stays open. Both modes follow the same rule (the engine's own delay API for its
+  rows), nothing new appears on screen, and one line per test is written:
+  `kind=test mode=global raised=child duration_ms=… stopped_after=true node=… generate_204 214 ms`.
+  No version change: 0.5.3-portal-duo-2e+2026111405, set by patch 29, is the build that ships it.
+
 Apply (to a tree that does not already carry the 01..02 commit):
 ```
 git -C <clone> checkout -B work <1.02a commit>   # tree f8044d71

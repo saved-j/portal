@@ -1,0 +1,329 @@
+# portal 1.03 patch 30 — a test raises the tunnel, measures it, and puts it back
+#
+# Pressing TEST is a request for a measurement, and in the simple portal a measurement needs the
+# child to be carrying traffic: the previous build answered "no tunnel, no number" to a tap that
+# was himself a request to open one. Now the test owns the tunnel for its own duration:
+#
+#   * the mode's own transactional path raises the core when it is down — `setRunning(true)`,
+#     the same entry a switch uses, so the record's generation, owner and `portal0 up` are the
+#     normal ones;
+#   * the sweep runs through that tunnel (`probeThroughPortal`, one request to the app's test
+#     URL, first response byte);
+#   * the core is put back down if this test raised it, so `owner=Off` is what the record shows
+#     afterwards; a portal that was already open stays open and is not rebuilt;
+#   * one line per test, with no new UI on screen:
+#
+#     kind=test mode=global raised=child duration_ms=2410 stopped_after=true node=… generate_204 214 ms
+#     kind=test mode=rule raised=engine duration_ms=1180 stopped_after=true result=tests
+#
+# The same rule covers both modes: the engine's delay API is used for its rows, the engine is
+# raised only for the duration of the sweep, and the portal state and its caption end where they
+# started. A failed raise is the one case a dash is about the tunnel: the child's own reason is
+# logged and reported, with `result=failed` in the same line.
+#
+# Version: 0.5.3-portal-duo-2e+2026111405 (set by patch 29; this is the build that ships it).
+diff --git a/BUILD.md b/BUILD.md
+index cff38af3..092d2c93 100644
+--- a/BUILD.md
++++ b/BUILD.md
+@@ -247,8 +247,16 @@ time them. The simple portal's rows are timed through the running child: one rea
+ app's own test URL (`generate_204`), from the connect to the first response byte, and that number
+ belongs to the node the tunnel is on. A handshake to a node's own address is gone — with a tun up
+ this process's sockets are routed into it, the core accepts locally and answers in 3–4 ms to
+-Estonia. No child, no tunnel: every row is a dash, and the log says
+-`portal delay: no child is carrying the tunnel, so there is nothing to measure through`.
++Estonia.
++
++Pressing TEST is a request for a measurement, not for a connection: if the portal is closed the
++core is raised on the normal transactional path, the sweep runs through the tunnel, and the core
++is put down again — the portal ends where it started. One line per test says how it went:
++
++```
++time=... kind=test mode=global raised=child duration_ms=2410 stopped_after=true node=🇫🇮 Финляндия generate_204 214 ms
++time=... kind=test mode=rule raised=engine duration_ms=1180 stopped_after=true result=tests
++```
+ 
+ A delay is measured by the core that holds the server, and by nothing else. The engine's rows
+ carry the engine's own delay, taken through the tunnel it built; the simple portal's rows carry
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
+index 03b72a80..10dc39a0 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
+@@ -97,6 +97,18 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+                 result.success(null)
+             }
+ 
++            // A delay test that raised a core: which one, and how long the raise took.
++            "testNote" -> {
++                PortalTelemetry.noteTest(
++                    mode = call.argument<String>("mode") ?: "",
++                    raised = call.argument<String>("raised") ?: "",
++                    durationMs = (call.argument<Number>("durationMs") ?: 0).toLong(),
++                    stoppedAfter = call.argument<Boolean>("stoppedAfter") ?: false,
++                    detail = call.argument<String>("detail") ?: "",
++                )
++                result.success(null)
++            }
++
+             // One attempt at a mode's own feed. The app counts these; the record writes the
+             // line, so the count can be read off the phone instead of off a screenshot.
+             "availabilityNote" -> {
+diff --git a/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt b/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt
+index 3895cd8a..2ba81187 100644
+--- a/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt
++++ b/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt
+@@ -202,6 +202,27 @@ object PortalTelemetry {
+         lastEgress = value
+     }
+ 
++    /// A delay test that had to raise a tunnel, and how long that took.
++    ///
++    /// The test is a measurement, and a measurement needs a tunnel to be carried through: the
++    /// owner pressing TEST on a closed portal is asking for the portal to be opened long enough
++    /// to answer. The line says which core was raised and how long the raise took, so a slow
++    /// test can be told apart from a slow node.
++    fun noteTest(
++        mode: String,
++        raised: String,
++        durationMs: Long,
++        stoppedAfter: Boolean,
++        detail: String,
++    ) {
++        append(
++            transitionsFile,
++            "time=${stamp.format(Date())} kind=test mode=$mode raised=$raised " +
++                "duration_ms=$durationMs stopped_after=$stoppedAfter" +
++                (if (detail.isEmpty()) "" else " $detail"),
++        )
++    }
++
+     /// One attempt at a mode's own feed, and what the counter said afterwards.
+     ///
+     /// The app counts failures in a row for the two documents a panel serves, and a mode is
+diff --git a/lib/plugins/portal_runtime.dart b/lib/plugins/portal_runtime.dart
+index bf321803..0884f117 100644
+--- a/lib/plugins/portal_runtime.dart
++++ b/lib/plugins/portal_runtime.dart
+@@ -266,6 +266,37 @@ class PortalRuntime {
+     }
+   }
+ 
++  /// A delay test that had to raise a core, for the transitions file.
++  ///
++  /// The test is a measurement, not a connection: [raised] names the core it raised (`child`,
++  /// `engine` or `none`), [durationMs] is the whole test from the tap to the restored state,
++  /// and [stoppedAfter] says whether that core was put back down — the audit line for "the
++  /// portal ended where it started".
++  Future<void> noteTest({
++    required String mode,
++    required String raised,
++    required int durationMs,
++    required bool stoppedAfter,
++    String detail = '',
++  }) async {
++    try {
++      await _channel.invokeMethod<void>('testNote', {
++        'mode': mode,
++        'raised': raised,
++        'durationMs': durationMs,
++        'stoppedAfter': stoppedAfter,
++        'detail': detail,
++      });
++    } on MissingPluginException {
++      // No portal runtime here: nothing to write.
++    } on PlatformException catch (error) {
++      commonPrint.log(
++        'portal test note failed: ${error.message}',
++        logLevel: LogLevel.warning,
++      );
++    }
++  }
++
+   Future<PortalRuntimeStatus> refresh() async {
+     try {
+       final result = await _channel.invokeMethod<Map<Object?, Object?>>('status');
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 8440d72e..da8d79b0 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -207,47 +207,98 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+     );
+   }
+ 
++  /// Times the nodes by carrying a real request through the portal, and puts the portal back.
++  ///
++  /// A test is a measurement, not a connection: if the portal is closed, the child is raised on
++  /// the same transactional path a switch uses, the sweep runs through the tunnel, and the child
++  /// is put down again — the owner asked for a number, and the portal ends exactly where it
++  /// started. If it was already open, it stays open and nothing is rebuilt. One line per test in
++  /// `portal-transitions.log` says which core was raised and whether it was stopped again.
+   Future<void> measureAll(List<(String, String, int)> targets) async {
+     if (targets.isEmpty) return;
+     // A newer sweep owns the state from here on; the older one stops at its next answer.
+     final generation = ++_generation;
+     state = {...state, for (final t in targets) t.$1: null};
++    final subject = ref.read(portalGroupProvider) ?? '';
++    final spinner = ref.read(delayTestingGroupsProvider.notifier);
++    final setup = ref.read(setupActionProvider.notifier);
++    final mode = ref.read(patchClashConfigProvider.select((s) => s.mode));
++    final modeName = mode == Mode.global ? 'global' : 'rule';
++    final wasRunning = _runningNode != null;
++    final watch = Stopwatch()..start();
++    if (!wasRunning) {
++      if (subject.isNotEmpty) spinner.start(subject);
++      final started = await setup.setRunning(true);
++      if (!started) {
++        watch.stop();
++        if (subject.isNotEmpty) spinner.stop(subject);
++        final reason = setup.lastPortalFailure;
++        commonPrint.log(
++          'portal test: the child did not start'
++          '${reason.isEmpty ? '' : ': $reason'}',
++          logLevel: LogLevel.warning,
++        );
++        unawaited(
++          portalRuntime.noteTest(
++            mode: modeName,
++            raised: 'child',
++            durationMs: watch.elapsedMilliseconds,
++            stoppedAfter: false,
++            detail: 'result=failed${reason.isEmpty ? '' : ' reason=$reason'}',
++          ),
++        );
++        return;
++      }
++    }
+     final running = _runningNode;
+-    if (running == null) {
+-      // No child, no tunnel: a handshake from this process would be a measurement of the
+-      // phone's own route, and a dash is the honest row.
+-      commonPrint.log(
+-        'portal delay: no child is carrying the tunnel, so there is nothing to measure '
+-        'through — every row is a dash',
+-        logLevel: LogLevel.warning,
+-      );
+-      return;
++    PortalDelay? probe;
++    if (running != null) {
++      probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
++    }
++    var stopped = false;
++    if (!wasRunning) {
++      // Back to the state he was in: a closed portal is closed again, and the tunnel that
++      // existed only for this measurement is gone with it.
++      stopped = await setup.setRunning(false);
+     }
+-    final probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
++    watch.stop();
++    if (subject.isNotEmpty) spinner.stop(subject);
++    commonPrint.log(
++      'portal test: ${wasRunning ? 'the portal was already open' : 'raised the child and '
++          'closed it again'} in ${watch.elapsedMilliseconds} ms'
++      '${running == null ? '' : ' on $running: ${probe?.describe() ?? ''}'}',
++    );
++    unawaited(
++      portalRuntime.noteTest(
++        mode: modeName,
++        raised: wasRunning ? 'none' : 'child',
++        durationMs: watch.elapsedMilliseconds,
++        stoppedAfter: stopped,
++        detail: running == null ? '' : 'node=$running ${probe?.describe() ?? ''}',
++      ),
++    );
+     if (generation != _generation) return;
+-    // One tunnel runs one node: a request through it measures that node and no other. The
+-    // number belongs to the row the child is on; every other row keeps its dash, because a
+-    // node this tunnel is not carrying has no number this app can honestly produce.
+-    commonPrint.log('portal delay $running: ${probe.describe()}');
+-    state = {...state, running: probe.ms};
++    // One tunnel runs one node: the number belongs to the row the child was on, and with the
++    // portal back to closed there is no other row that could honestly carry one.
++    if (running != null) state = {...state, running: probe?.ms};
+   }
+ 
+   Future<void> measureOne(String name, String host, int port) async {
+-    final generation = _generation;
+-    state = {...state, name: null};
+     final running = _runningNode;
+-    if (running == null || running != name) {
+-      commonPrint.log(
+-        'portal delay $name: '
+-        '${running == null ? 'no tunnel is carrying traffic' : 'the tunnel is on $running'}, '
+-        'no number',
+-      );
++    final picked = portalXrayPickFor(
++      ref.read(appSettingProvider),
++      ref.read(currentProfileIdProvider),
++    );
++    if (running != null && running != name) {
++      commonPrint.log('portal delay $name: the tunnel is on $running, no number');
+       return;
+     }
+-    final probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
+-    if (generation != _generation) return;
+-    commonPrint.log('portal delay $name: ${probe.describe()}');
+-    state = {...state, name: probe.ms};
++    if (running == null && picked != name) {
++      // Raising the portal would come up on another node, so this row has no measurement.
++      commonPrint.log('portal delay $name: the portal would come up on $picked, no number');
++      return;
++    }
++    await measureAll([(name, host, port)]);
+   }
+ 
+   /// Revokes every sweep in flight, for a list that is gone or has been replaced.
+@@ -1331,14 +1382,50 @@ Future<void> _testDelayWithEngine(
+     return;
+   }
+   final testing = ref.read(delayTestingGroupsProvider.notifier);
++  final subject = ref.read(portalGroupProvider) ?? '';
++  if (subject.isNotEmpty) testing.start(subject);
++  final watch = Stopwatch()..start();
++  // Raised for the test and put down again: the engine's delay API answers whenever it runs,
++  // and the owner asked for a measurement, not for a portal that stays open behind his back.
++  final started = await ref.read(setupActionProvider.notifier).setRunning(true);
++  var stopped = false;
+   try {
+-    // Opened behind the scenes: the portal's own button and timer never see this state.
+-    await ref.read(setupActionProvider.notifier).setRunning(true);
++    if (!started) {
++      final reason = ref.read(setupActionProvider.notifier).lastPortalFailure;
++      commonPrint.log(
++        'portal test: could not raise the engine${reason.isEmpty ? '' : ': $reason'}',
++        logLevel: LogLevel.warning,
++      );
++      unawaited(
++        portalRuntime.noteTest(
++          mode: 'rule',
++          raised: 'engine',
++          durationMs: watch.elapsedMilliseconds,
++          stoppedAfter: false,
++          detail: 'result=failed${reason.isEmpty ? '' : ' reason=$reason'}',
++        ),
++      );
++      return;
++    }
+     await _waitForEngine(ref);
+     await ref.read(proxiesActionProvider.notifier).delayTest(proxies, testUrl);
+   } finally {
+-    await ref.read(setupActionProvider.notifier).setRunning(false);
+-    testing.stop('');
++    if (started) {
++      stopped = await ref.read(setupActionProvider.notifier).setRunning(false);
++    }
++    watch.stop();
++    if (subject.isNotEmpty) testing.stop(subject);
++    if (started) {
++      unawaited(
++        portalRuntime.noteTest(
++          mode: 'rule',
++          raised: 'engine',
++          durationMs: watch.elapsedMilliseconds,
++          stoppedAfter: stopped,
++          detail: 'result=tests',
++        ),
++      );
++    }
+   }
+ }
+ 

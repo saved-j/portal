@@ -97,6 +97,18 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 result.success(null)
             }
 
+            // A delay test that raised a core: which one, and how long the raise took.
+            "testNote" -> {
+                PortalTelemetry.noteTest(
+                    mode = call.argument<String>("mode") ?: "",
+                    raised = call.argument<String>("raised") ?: "",
+                    durationMs = (call.argument<Number>("durationMs") ?: 0).toLong(),
+                    stoppedAfter = call.argument<Boolean>("stoppedAfter") ?: false,
+                    detail = call.argument<String>("detail") ?: "",
+                )
+                result.success(null)
+            }
+
             // One attempt at a mode's own feed. The app counts these; the record writes the
             // line, so the count can be read off the phone instead of off a screenshot.
             "availabilityNote" -> {

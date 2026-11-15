@@ -247,8 +247,16 @@ time them. The simple portal's rows are timed through the running child: one rea
 app's own test URL (`generate_204`), from the connect to the first response byte, and that number
 belongs to the node the tunnel is on. A handshake to a node's own address is gone — with a tun up
 this process's sockets are routed into it, the core accepts locally and answers in 3–4 ms to
-Estonia. No child, no tunnel: every row is a dash, and the log says
-`portal delay: no child is carrying the tunnel, so there is nothing to measure through`.
+Estonia.
+
+Pressing TEST is a request for a measurement, not for a connection: if the portal is closed the
+core is raised on the normal transactional path, the sweep runs through the tunnel, and the core
+is put down again — the portal ends where it started. One line per test says how it went:
+
+```
+time=... kind=test mode=global raised=child duration_ms=2410 stopped_after=true node=🇫🇮 Финляндия generate_204 214 ms
+time=... kind=test mode=rule raised=engine duration_ms=1180 stopped_after=true result=tests
+```
 
 A delay is measured by the core that holds the server, and by nothing else. The engine's rows
 carry the engine's own delay, taken through the tunnel it built; the simple portal's rows carry

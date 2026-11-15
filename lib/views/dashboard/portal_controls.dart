@@ -207,47 +207,98 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
     );
   }
 
+  /// Times the nodes by carrying a real request through the portal, and puts the portal back.
+  ///
+  /// A test is a measurement, not a connection: if the portal is closed, the child is raised on
+  /// the same transactional path a switch uses, the sweep runs through the tunnel, and the child
+  /// is put down again — the owner asked for a number, and the portal ends exactly where it
+  /// started. If it was already open, it stays open and nothing is rebuilt. One line per test in
+  /// `portal-transitions.log` says which core was raised and whether it was stopped again.
   Future<void> measureAll(List<(String, String, int)> targets) async {
     if (targets.isEmpty) return;
     // A newer sweep owns the state from here on; the older one stops at its next answer.
     final generation = ++_generation;
     state = {...state, for (final t in targets) t.$1: null};
-    final running = _runningNode;
-    if (running == null) {
-      // No child, no tunnel: a handshake from this process would be a measurement of the
-      // phone's own route, and a dash is the honest row.
-      commonPrint.log(
-        'portal delay: no child is carrying the tunnel, so there is nothing to measure '
-        'through — every row is a dash',
-        logLevel: LogLevel.warning,
-      );
-      return;
+    final subject = ref.read(portalGroupProvider) ?? '';
+    final spinner = ref.read(delayTestingGroupsProvider.notifier);
+    final setup = ref.read(setupActionProvider.notifier);
+    final mode = ref.read(patchClashConfigProvider.select((s) => s.mode));
+    final modeName = mode == Mode.global ? 'global' : 'rule';
+    final wasRunning = _runningNode != null;
+    final watch = Stopwatch()..start();
+    if (!wasRunning) {
+      if (subject.isNotEmpty) spinner.start(subject);
+      final started = await setup.setRunning(true);
+      if (!started) {
+        watch.stop();
+        if (subject.isNotEmpty) spinner.stop(subject);
+        final reason = setup.lastPortalFailure;
+        commonPrint.log(
+          'portal test: the child did not start'
+          '${reason.isEmpty ? '' : ': $reason'}',
+          logLevel: LogLevel.warning,
+        );
+        unawaited(
+          portalRuntime.noteTest(
+            mode: modeName,
+            raised: 'child',
+            durationMs: watch.elapsedMilliseconds,
+            stoppedAfter: false,
+            detail: 'result=failed${reason.isEmpty ? '' : ' reason=$reason'}',
+          ),
+        );
+        return;
+      }
     }
-    final probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
+    final running = _runningNode;
+    PortalDelay? probe;
+    if (running != null) {
+      probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
+    }
+    var stopped = false;
+    if (!wasRunning) {
+      // Back to the state he was in: a closed portal is closed again, and the tunnel that
+      // existed only for this measurement is gone with it.
+      stopped = await setup.setRunning(false);
+    }
+    watch.stop();
+    if (subject.isNotEmpty) spinner.stop(subject);
+    commonPrint.log(
+      'portal test: ${wasRunning ? 'the portal was already open' : 'raised the child and '
+          'closed it again'} in ${watch.elapsedMilliseconds} ms'
+      '${running == null ? '' : ' on $running: ${probe?.describe() ?? ''}'}',
+    );
+    unawaited(
+      portalRuntime.noteTest(
+        mode: modeName,
+        raised: wasRunning ? 'none' : 'child',
+        durationMs: watch.elapsedMilliseconds,
+        stoppedAfter: stopped,
+        detail: running == null ? '' : 'node=$running ${probe?.describe() ?? ''}',
+      ),
+    );
     if (generation != _generation) return;
-    // One tunnel runs one node: a request through it measures that node and no other. The
-    // number belongs to the row the child is on; every other row keeps its dash, because a
-    // node this tunnel is not carrying has no number this app can honestly produce.
-    commonPrint.log('portal delay $running: ${probe.describe()}');
-    state = {...state, running: probe.ms};
+    // One tunnel runs one node: the number belongs to the row the child was on, and with the
+    // portal back to closed there is no other row that could honestly carry one.
+    if (running != null) state = {...state, running: probe?.ms};
   }
 
   Future<void> measureOne(String name, String host, int port) async {
-    final generation = _generation;
-    state = {...state, name: null};
     final running = _runningNode;
-    if (running == null || running != name) {
-      commonPrint.log(
-        'portal delay $name: '
-        '${running == null ? 'no tunnel is carrying traffic' : 'the tunnel is on $running'}, '
-        'no number',
-      );
+    final picked = portalXrayPickFor(
+      ref.read(appSettingProvider),
+      ref.read(currentProfileIdProvider),
+    );
+    if (running != null && running != name) {
+      commonPrint.log('portal delay $name: the tunnel is on $running, no number');
       return;
     }
-    final probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
-    if (generation != _generation) return;
-    commonPrint.log('portal delay $name: ${probe.describe()}');
-    state = {...state, name: probe.ms};
+    if (running == null && picked != name) {
+      // Raising the portal would come up on another node, so this row has no measurement.
+      commonPrint.log('portal delay $name: the portal would come up on $picked, no number');
+      return;
+    }
+    await measureAll([(name, host, port)]);
   }
 
   /// Revokes every sweep in flight, for a list that is gone or has been replaced.
@@ -1331,14 +1382,50 @@ Future<void> _testDelayWithEngine(
     return;
   }
   final testing = ref.read(delayTestingGroupsProvider.notifier);
+  final subject = ref.read(portalGroupProvider) ?? '';
+  if (subject.isNotEmpty) testing.start(subject);
+  final watch = Stopwatch()..start();
+  // Raised for the test and put down again: the engine's delay API answers whenever it runs,
+  // and the owner asked for a measurement, not for a portal that stays open behind his back.
+  final started = await ref.read(setupActionProvider.notifier).setRunning(true);
+  var stopped = false;
   try {
-    // Opened behind the scenes: the portal's own button and timer never see this state.
-    await ref.read(setupActionProvider.notifier).setRunning(true);
+    if (!started) {
+      final reason = ref.read(setupActionProvider.notifier).lastPortalFailure;
+      commonPrint.log(
+        'portal test: could not raise the engine${reason.isEmpty ? '' : ': $reason'}',
+        logLevel: LogLevel.warning,
+      );
+      unawaited(
+        portalRuntime.noteTest(
+          mode: 'rule',
+          raised: 'engine',
+          durationMs: watch.elapsedMilliseconds,
+          stoppedAfter: false,
+          detail: 'result=failed${reason.isEmpty ? '' : ' reason=$reason'}',
+        ),
+      );
+      return;
+    }
     await _waitForEngine(ref);
     await ref.read(proxiesActionProvider.notifier).delayTest(proxies, testUrl);
   } finally {
-    await ref.read(setupActionProvider.notifier).setRunning(false);
-    testing.stop('');
+    if (started) {
+      stopped = await ref.read(setupActionProvider.notifier).setRunning(false);
+    }
+    watch.stop();
+    if (subject.isNotEmpty) testing.stop(subject);
+    if (started) {
+      unawaited(
+        portalRuntime.noteTest(
+          mode: 'rule',
+          raised: 'engine',
+          durationMs: watch.elapsedMilliseconds,
+          stoppedAfter: stopped,
+          detail: 'result=tests',
+        ),
+      );
+    }
   }
 }
 

@@ -202,6 +202,27 @@ object PortalTelemetry {
         lastEgress = value
     }
 
+    /// A delay test that had to raise a tunnel, and how long that took.
+    ///
+    /// The test is a measurement, and a measurement needs a tunnel to be carried through: the
+    /// owner pressing TEST on a closed portal is asking for the portal to be opened long enough
+    /// to answer. The line says which core was raised and how long the raise took, so a slow
+    /// test can be told apart from a slow node.
+    fun noteTest(
+        mode: String,
+        raised: String,
+        durationMs: Long,
+        stoppedAfter: Boolean,
+        detail: String,
+    ) {
+        append(
+            transitionsFile,
+            "time=${stamp.format(Date())} kind=test mode=$mode raised=$raised " +
+                "duration_ms=$durationMs stopped_after=$stoppedAfter" +
+                (if (detail.isEmpty()) "" else " $detail"),
+        )
+    }
+
     /// One attempt at a mode's own feed, and what the counter said afterwards.
     ///
     /// The app counts failures in a row for the two documents a panel serves, and a mode is
