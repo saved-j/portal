@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/core/subscription_availability.dart';
 import 'package:fl_clash/core/panel_api.dart';
+import 'package:fl_clash/core/proxy_endpoints.dart';
 import 'package:fl_clash/core/subscription_formats.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -160,7 +161,13 @@ extension ProfilesExt on List<Profile> {
 }
 
 extension ProfileExtension on Profile {
-  String get realLabel => label.takeFirstValid([defaultLabel]);
+  /// The name a person reads: the panel's title without its status sentence.
+  ///
+  /// Panels pack `portal-connect Статус Active 163.76 GiB | 0` into the title header, and
+  /// that becomes the profile's label; showing it whole made the header and the card look
+  /// broken. One getter cleans it for every screen at once.
+  String get realLabel =>
+      label.takeFirstValid([headers.displayName, defaultLabel]);
 
   String get defaultLabel => url.webUri?.host ?? id.toString();
 
@@ -342,6 +349,12 @@ extension ProfileExtension on Profile {
     Uint8List? xrayBody,
   }) async {
     final target = await _getFile(false);
+    // The engine never reveals addresses, so remember them while the body is here: this is
+    // what lets the server row time a TCP handshake later, with no engine involved.
+    final endpoints = parseProxyEndpoints(
+      utf8.decode(bytes, allowMalformed: true),
+    );
+    unawaited(saveProxyEndpoints(target.path, endpoints));
     final staging = File('${target.path}.$uniqueId.tmp');
     try {
       await staging.safeWriteAsBytes(bytes);

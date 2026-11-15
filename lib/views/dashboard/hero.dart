@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:fl_clash/common/common.dart';
@@ -124,44 +123,19 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                               // The working screen says the same two facts the list does:
                               // name, then traffic, then expiry, in one column.
                               builder: (context, ref, _) {
-                                final profile = ref.watch(currentProfileProvider);
-                                final facts = profile == null
-                                    ? null
-                                    : SubscriptionFacts.of(profile);
-                                final dim = AppTextStyle.footnote
-                                    .of(context)
-                                    .copyWith(
-                                      color: Colors.white.withValues(alpha: 0.62),
-                                    );
-                                return Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Flexible(
-                                          child: EmojiText(
-                                            headers.serviceName ?? 'portal-connect',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: AppTextStyle.title3.of(
-                                              context,
-                                              emphasized: true,
-                                            ),
-                                          ),
-                                        ),
-                                        if (facts != null) ...[
-                                          const SizedBox(width: 6),
-                                          Text(facts.mark, style: dim),
-                                        ],
-                                      ],
-                                    ),
-                                    if (facts != null) ...[
-                                      const SizedBox(height: 2),
-                                      Text(facts.trafficLine, style: dim),
-                                      Text(facts.expiryLine, style: dim),
-                                    ],
-                                  ],
+                                // Only the name lives in the header. Traffic, expiry and the
+                                // state mark belong to the subscription card, which is where a
+                                // person looks for them.
+                                return EmojiText(
+                                  headers.displayName ??
+                                      headers.serviceName ??
+                                      'portal-connect',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyle.title3.of(
+                                    context,
+                                    emphasized: true,
+                                  ),
                                 );
                               },
                             ),

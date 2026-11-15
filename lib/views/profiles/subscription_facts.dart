@@ -36,9 +36,8 @@ class SubscriptionFacts {
     return SubscriptionFacts._(traffic, expire == null ? '—' : _dayMonthYear(expire), mark);
   }
 
-  String get trafficLine => 'Трафик: $traffic';
-
-  String get expiryLine => 'Истекает: $expiry';
+  /// Words for the two facts live in the ARB files, not here: a hardcoded Russian label
+  /// spilled into the English and Chinese interface.
 }
 
 /// 25.12.2026 — the shape the owner reads at a glance, without a locale library.

@@ -2089,7 +2089,7 @@ final class CurrentGroupsStateProvider
 }
 
 String _$currentGroupsStateHash() =>
-    r'b334885e3b790e3c5f70bf05addff9d98cb93178';
+    r'ee0289ead2087c2f0cc724081400c79fa981eefc';
 
 @ProviderFor(proxyState)
 final proxyStateProvider = ProxyStateProvider._();
@@ -3991,16 +3991,28 @@ String _$widgetEditingDeniedHash() =>
     r'7b80292720b5fa889e0e8a79cebaf93e2208ad1a';
 
 /// The outbound modes the current panel leaves on offer.
+///
+/// Portal Connect has no user-facing "direct": the only way to get untunnelled
+/// traffic is to switch the portal off, so the mode is never offered here even
+/// though the engine still understands it.
 
 @ProviderFor(availableModes)
 final availableModesProvider = AvailableModesProvider._();
 
 /// The outbound modes the current panel leaves on offer.
+///
+/// Portal Connect has no user-facing "direct": the only way to get untunnelled
+/// traffic is to switch the portal off, so the mode is never offered here even
+/// though the engine still understands it.
 
 final class AvailableModesProvider
     extends $FunctionalProvider<List<Mode>, List<Mode>, List<Mode>>
     with $Provider<List<Mode>> {
   /// The outbound modes the current panel leaves on offer.
+  ///
+  /// Portal Connect has no user-facing "direct": the only way to get untunnelled
+  /// traffic is to switch the portal off, so the mode is never offered here even
+  /// though the engine still understands it.
   AvailableModesProvider._()
     : super(
         from: null,
@@ -4034,7 +4046,7 @@ final class AvailableModesProvider
   }
 }
 
-String _$availableModesHash() => r'd62b18b7ed38014dc69828fbf893ba404bfa0a77';
+String _$availableModesHash() => r'dc4dd8b2ea972aaf80083b422a1c1d8b5578d239';
 
 @ProviderFor(announcement)
 final announcementProvider = AnnouncementProvider._();

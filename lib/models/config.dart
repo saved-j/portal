@@ -260,6 +260,11 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default(RequestFeed.live) RequestFeed requestFeed,
     @Default(defaultTestUrl) String testUrl,
     @Default(defaultDelayTestTimeout) int delayTestTimeout,
+
+    /// The server-list order in each mode, stored separately: the rules list and the simple
+    /// portal show different builds of one subscription and are ordered for different reasons.
+    @Default('') String portalSortRules,
+    @Default('') String portalSortXray,
     @Default(TabAnimation.fade)
     @JsonKey(readValue: _readTabAnimation)
     TabAnimation tabAnimation,

@@ -123,7 +123,7 @@ class AboutView extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           generateSection(
-            title: 'Портал',
+            title: context.appLocalizations.aboutPortal,
             items: [
               _buildLinkItem(
                 glyph: AppGlyphs.link,
@@ -158,13 +158,13 @@ class AboutView extends ConsumerWidget {
             ],
           ),
           generateSection(
-            title: 'Ядра',
+            title: context.appLocalizations.aboutCores,
             items: [
               _buildLinkItem(
                 glyph: AppGlyphs.cpu,
                 title: 'Prizrak-Core',
                 url: 'https://github.com/$_coreRepository',
-                label: 'ядро сети порталов',
+                label: context.appLocalizations.aboutPortalNetworkCore,
               ),
               _buildLinkItem(
                 glyph: AppGlyphs.cpu,
@@ -175,11 +175,11 @@ class AboutView extends ConsumerWidget {
             ],
           ),
           generateSection(
-            title: 'Контрибуторы',
+            title: context.appLocalizations.aboutContributors,
             items: const [_PeopleRow(people: _contributors)],
           ),
           generateSection(
-            title: 'На чём построено',
+            title: context.appLocalizations.aboutBuiltOn,
             items: [
               _buildLinkItem(
                 glyph: AppGlyphs.code,
@@ -234,8 +234,7 @@ class _AboutHero extends ConsumerWidget {
     required this.onEasterEgg,
   });
 
-  static const _logoSize = 96.0;
-  static const _logoInset = 14.0;
+  static const _logoSize = 148.0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -250,18 +249,16 @@ class _AboutHero extends ConsumerWidget {
           _TapCounter(
             onEnterDeveloperMode: onEnterDeveloperMode,
             onEasterEgg: onEasterEgg,
-            child: DecoratedBox(
-              decoration: ShapeDecoration(
-                color: raised,
-                shape: AppShape.all(AppCorner.fit(_logoSize)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(_logoInset),
-                child: Image.asset(
-                  'assets/images/icon.png',
-                  width: _logoSize - _logoInset * 2,
-                  height: _logoSize - _logoInset * 2,
-                ),
+            // The mark fills the plate and is cropped by its rounding: no inset, no
+            // frame of background colour around it.
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(_logoSize * 0.24),
+              child: Image.asset(
+                'assets/images/icon.png',
+                width: _logoSize,
+                height: _logoSize,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium,
               ),
             ),
           ),

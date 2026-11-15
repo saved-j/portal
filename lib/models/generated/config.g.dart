@@ -38,6 +38,8 @@ _AppSettingProps _$AppSettingPropsFromJson(
   testUrl: json['testUrl'] as String? ?? defaultTestUrl,
   delayTestTimeout:
       (json['delayTestTimeout'] as num?)?.toInt() ?? defaultDelayTestTimeout,
+  portalSortRules: json['portalSortRules'] as String? ?? '',
+  portalSortXray: json['portalSortXray'] as String? ?? '',
   tabAnimation:
       $enumDecodeNullable(
         _$TabAnimationEnumMap,
@@ -126,6 +128,8 @@ Map<String, dynamic> _$AppSettingPropsToJson(_AppSettingProps instance) =>
       'requestFeed': _$RequestFeedEnumMap[instance.requestFeed]!,
       'testUrl': instance.testUrl,
       'delayTestTimeout': instance.delayTestTimeout,
+      'portalSortRules': instance.portalSortRules,
+      'portalSortXray': instance.portalSortXray,
       'tabAnimation': _$TabAnimationEnumMap[instance.tabAnimation]!,
       'floatingNavigationBar': instance.floatingNavigationBar,
       'autoCheckUpdate': instance.autoCheckUpdate,

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// The rules here come from the Incy developer docs: an array of full xray configurations,
 /// where each element is a separate server, named after its first proxy outbound.
 void main() {
+  group('endpoint', _endpointCases);
   Map<String, dynamic> config(String tag, {String description = '', String remarks = ''}) => {
         if (remarks.isNotEmpty) 'remarks': remarks,
         'meta': {'serverDescription': description},
@@ -62,8 +63,41 @@ void main() {
     expect(server.description, 'Максимальная скорость');
   });
 
+  test('the pipe separator the docs show is understood too', () {
+    final server = parseXraySubscription(
+      jsonEncode(config('proxy', remarks: '🇵🇱 Poland | TCP')),
+    ).single;
+    expect(server.name, '🇵🇱 Poland');
+    expect(server.description, 'TCP');
+  });
+
   test('without remarks the first proxy outbound still names the server', () {
     expect(parseXraySubscription(jsonEncode(config('KR-1'))).single.name, 'KR-1');
+  });
+
+  test('the protocol comes from the config, not from the core', () {
+    final vless = parseXraySubscription(jsonEncode(config('EE'))).single;
+    expect(vless.protocol, 'vless');
+
+    final hy2 = {
+      'remarks': '🇫🇮 Финляндия',
+      'outbounds': [
+        {'tag': 'direct', 'protocol': 'freedom'},
+        {'tag': 'hy', 'protocol': 'hysteria2', 'settings': {}},
+      ],
+    };
+    expect(parseXraySubscription(jsonEncode(hy2)).single.protocol, 'hysteria2');
+  });
+
+  test('without meta a transport still describes the server', () {
+    final item = config('DE');
+    (item['outbounds'] as List)[1] = {
+      'tag': 'de',
+      'protocol': 'vless',
+      'settings': {},
+      'streamSettings': {'network': 'xhttp'},
+    };
+    expect(parseXraySubscription(jsonEncode(item)).single.description, 'XHTTP');
   });
 
   test('a body that is not a configuration yields nothing', () {
@@ -71,5 +105,53 @@ void main() {
     expect(parseXraySubscription('<html>502</html>'), isEmpty);
     expect(parseXraySubscription('{"hasMihomo":true}'), isEmpty);
     expect(parseXraySubscription('[]'), isEmpty);
+  });
+}
+
+void _endpointCases() {
+  test('endpoint comes from the transport outbound, not the routers', () {
+    final servers = parseXraySubscription(jsonEncode([
+      {
+        'remarks': '🇪🇪 Эстония · Максимальная скорость',
+        'outbounds': [
+          {'tag': 'direct', 'protocol': 'freedom'},
+          {
+            'tag': 'proxy',
+            'protocol': 'vless',
+            'settings': {
+              'vnext': [
+                {'address': 'ee1.example.com', 'port': 443},
+              ],
+            },
+          },
+        ],
+      },
+      {
+        'remarks': '🇫🇮 Финляндия',
+        'outbounds': [
+          {
+            'tag': 'proxy',
+            'protocol': 'trojan',
+            'settings': {
+              'servers': [
+                {'address': 'fi.example.net', 'port': '8443'},
+              ],
+            },
+          },
+        ],
+      },
+      {
+        'remarks': 'пустой',
+        'outbounds': [
+          {'tag': 'direct', 'protocol': 'freedom'},
+        ],
+      },
+    ]));
+    expect(servers[0].address, 'ee1.example.com');
+    expect(servers[0].port, 443);
+    expect(servers[1].address, 'fi.example.net');
+    expect(servers[1].port, 8443, reason: 'a port written as text still parses');
+    expect(servers[2].address, isEmpty);
+    expect(servers[2].port, 0);
   });
 }

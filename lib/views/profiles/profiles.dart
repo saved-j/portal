@@ -347,7 +347,8 @@ class ProfileItem extends ConsumerWidget {
       ];
     }
     final facts = SubscriptionFacts.of(profile);
-    return [facts.trafficLine, facts.expiryLine];
+    final l10n = context.appLocalizations;
+    return [l10n.trafficLine(facts.traffic), l10n.expiresLine(facts.expiry)];
   }
 
   /// ✅ while the plan is alive, ❌ once it is not, ⏳ when the panel gave no date.

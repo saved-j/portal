@@ -60,14 +60,14 @@ class AppLocalizations {
     return Intl.message('Rule', name: 'rule', desc: '', args: []);
   }
 
-  /// `Rules`
+  /// `Portal network`
   String get rules {
-    return Intl.message('Rules', name: 'rules', desc: '', args: []);
+    return Intl.message('Portal network', name: 'rules', desc: '', args: []);
   }
 
-  /// `Global`
+  /// `Simple portal`
   String get global {
-    return Intl.message('Global', name: 'global', desc: '', args: []);
+    return Intl.message('Simple portal', name: 'global', desc: '', args: []);
   }
 
   /// `Direct`
@@ -910,20 +910,20 @@ class AppLocalizations {
     );
   }
 
-  /// `Receiving a link from your phone needs the Nearby devices permission, which lets FlClashX reach the local network. Turn it on in the app's settings.`
+  /// `Receiving a link from your phone needs the Nearby devices permission, which lets PortalX reach the local network. Turn it on in the app's settings.`
   String get sendFromPhonePermissionDenied {
     return Intl.message(
-      'Receiving a link from your phone needs the Nearby devices permission, which lets FlClashX reach the local network. Turn it on in the app\'s settings.',
+      'Receiving a link from your phone needs the Nearby devices permission, which lets PortalX reach the local network. Turn it on in the app\'s settings.',
       name: 'sendFromPhonePermissionDenied',
       desc: '',
       args: [],
     );
   }
 
-  /// `Send a link to FlClashX`
+  /// `Send a link to PortalX`
   String get sendFromPhonePageTitle {
     return Intl.message(
-      'Send a link to FlClashX',
+      'Send a link to PortalX',
       name: 'sendFromPhonePageTitle',
       desc: '',
       args: [],
@@ -965,10 +965,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Scan with FlClashX on another device to import this profile.`
+  /// `Scan with PortalX on another device to import this profile.`
   String get shareQrcodeTip {
     return Intl.message(
-      'Scan with FlClashX on another device to import this profile.',
+      'Scan with PortalX on another device to import this profile.',
       name: 'shareQrcodeTip',
       desc: '',
       args: [],
@@ -2651,10 +2651,10 @@ class AppLocalizations {
     return Intl.message('Disclaimer', name: 'disclaimer', desc: '', args: []);
   }
 
-  /// `Portal is a free, open-source client built on FlClashX with the Prizrak core. Below is a short note on what it does, what it does not do, and what data it collects. Tapping Agree means you accept these terms.`
+  /// `Portal is a free, open-source client built on PortalX with the Prizrak core. Below is a short note on what it does, what it does not do, and what data it collects. Tapping Agree means you accept these terms.`
   String get disclaimerDesc {
     return Intl.message(
-      'Portal is a free, open-source client built on FlClashX with the Prizrak core. Below is a short note on what it does, what it does not do, and what data it collects. Tapping Agree means you accept these terms.',
+      'Portal is a free, open-source client built on PortalX with the Prizrak core. Below is a short note on what it does, what it does not do, and what data it collects. Tapping Agree means you accept these terms.',
       name: 'disclaimerDesc',
       desc: '',
       args: [],
@@ -2731,10 +2731,10 @@ class AppLocalizations {
     );
   }
 
-  /// `The source code is open under the GPL-3.0 license. The Mihomo core and other third-party components carry their own licenses. The authors are not responsible for modified builds or builds distributed by third parties.`
+  /// `The source code is open under the GPL-3.0 license. The Prizrak core and other third-party components carry their own licenses. The authors are not responsible for modified builds or builds distributed by third parties.`
   String get disclaimerLicenseContent {
     return Intl.message(
-      'The source code is open under the GPL-3.0 license. The Mihomo core and other third-party components carry their own licenses. The authors are not responsible for modified builds or builds distributed by third parties.',
+      'The source code is open under the GPL-3.0 license. The Prizrak core and other third-party components carry their own licenses. The authors are not responsible for modified builds or builds distributed by third parties.',
       name: 'disclaimerLicenseContent',
       desc: '',
       args: [],
@@ -4846,10 +4846,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Helper service unavailable; TUN mode cannot be enabled. Reinstall FlClashX to restore it.`
+  /// `Helper service unavailable; TUN mode cannot be enabled. Reinstall PortalX to restore it.`
   String get helperCorruptTip {
     return Intl.message(
-      'Helper service unavailable; TUN mode cannot be enabled. Reinstall FlClashX to restore it.',
+      'Helper service unavailable; TUN mode cannot be enabled. Reinstall PortalX to restore it.',
       name: 'helperCorruptTip',
       desc: '',
       args: [],
@@ -4886,20 +4886,20 @@ class AppLocalizations {
     );
   }
 
-  /// `Windows refused to run FlClashCore.exe (error {code}). An app control policy such as Smart App Control or AppLocker blocks unsigned programs; allow FlClashX in that policy or turn it off, then try again.`
+  /// `Windows refused to run PortalCore.exe (error {code}). An app control policy such as Smart App Control or AppLocker blocks unsigned programs; allow PortalX in that policy or turn it off, then try again.`
   String coreBlockedByPolicyTip(Object code) {
     return Intl.message(
-      'Windows refused to run FlClashCore.exe (error $code). An app control policy such as Smart App Control or AppLocker blocks unsigned programs; allow FlClashX in that policy or turn it off, then try again.',
+      'Windows refused to run PortalCore.exe (error $code). An app control policy such as Smart App Control or AppLocker blocks unsigned programs; allow PortalX in that policy or turn it off, then try again.',
       name: 'coreBlockedByPolicyTip',
       desc: '',
       args: [code],
     );
   }
 
-  /// `Windows Smart App Control blocked FlClashCore.exe because it is not signed. Open Windows Security → App & browser control → Smart App Control settings, choose Off, then start FlClashX again. Smart App Control cannot be turned back on without reinstalling Windows.`
+  /// `Windows Smart App Control blocked PortalCore.exe because it is not signed. Open Windows Security → App & browser control → Smart App Control settings, choose Off, then start PortalX again. Smart App Control cannot be turned back on without reinstalling Windows.`
   String get coreBlockedBySmartAppControlTip {
     return Intl.message(
-      'Windows Smart App Control blocked FlClashCore.exe because it is not signed. Open Windows Security → App & browser control → Smart App Control settings, choose Off, then start FlClashX again. Smart App Control cannot be turned back on without reinstalling Windows.',
+      'Windows Smart App Control blocked PortalCore.exe because it is not signed. Open Windows Security → App & browser control → Smart App Control settings, choose Off, then start PortalX again. Smart App Control cannot be turned back on without reinstalling Windows.',
       name: 'coreBlockedBySmartAppControlTip',
       desc: '',
       args: [],
@@ -6954,10 +6954,10 @@ class AppLocalizations {
     );
   }
 
-  /// `FlClashX ran into an error while starting and can't continue. Copy the details to report the problem. If it keeps happening, clearing the data usually lets the app start again.`
+  /// `PortalX ran into an error while starting and can't continue. Copy the details to report the problem. If it keeps happening, clearing the data usually lets the app start again.`
   String get initFailedTip {
     return Intl.message(
-      'FlClashX ran into an error while starting and can\'t continue. Copy the details to report the problem. If it keeps happening, clearing the data usually lets the app start again.',
+      'PortalX ran into an error while starting and can\'t continue. Copy the details to report the problem. If it keeps happening, clearing the data usually lets the app start again.',
       name: 'initFailedTip',
       desc: '',
       args: [],
@@ -8281,20 +8281,20 @@ class AppLocalizations {
     );
   }
 
-  /// `FlClashX Pre`
+  /// `PortalX Pre`
   String get preChannelTipTitle {
     return Intl.message(
-      'FlClashX Pre',
+      'PortalX Pre',
       name: 'preChannelTipTitle',
       desc: '',
       args: [],
     );
   }
 
-  /// `This pre-release is a separate app and can't see FlClashX's profiles. To bring them over, make a backup in FlClashX under Backup and restore and restore it here, or add your subscriptions again by link.`
+  /// `This pre-release is a separate app and can't see PortalX's profiles. To bring them over, make a backup in PortalX under Backup and restore and restore it here, or add your subscriptions again by link.`
   String get preChannelTip {
     return Intl.message(
-      'This pre-release is a separate app and can\'t see FlClashX\'s profiles. To bring them over, make a backup in FlClashX under Backup and restore and restore it here, or add your subscriptions again by link.',
+      'This pre-release is a separate app and can\'t see PortalX\'s profiles. To bring them over, make a backup in PortalX under Backup and restore and restore it here, or add your subscriptions again by link.',
       name: 'preChannelTip',
       desc: '',
       args: [],
@@ -8486,20 +8486,20 @@ class AppLocalizations {
     );
   }
 
-  /// `Bring over your FlClashX profiles`
+  /// `Bring over your PortalX profiles`
   String get stableImportTitle {
     return Intl.message(
-      'Bring over your FlClashX profiles',
+      'Bring over your PortalX profiles',
       name: 'stableImportTitle',
       desc: '',
       args: [],
     );
   }
 
-  /// `FlClashX Pre couldn't take FlClashX's profiles and settings yet. If FlClashX is running, quit it and retry.`
+  /// `PortalX Pre couldn't take PortalX's profiles and settings yet. If PortalX is running, quit it and retry.`
   String get stableImportTip {
     return Intl.message(
-      'FlClashX Pre couldn\'t take FlClashX\'s profiles and settings yet. If FlClashX is running, quit it and retry.',
+      'PortalX Pre couldn\'t take PortalX\'s profiles and settings yet. If PortalX is running, quit it and retry.',
       name: 'stableImportTip',
       desc: '',
       args: [],
@@ -8774,6 +8774,121 @@ class AppLocalizations {
   /// `In the portal`
   String get inPortal {
     return Intl.message('In the portal', name: 'inPortal', desc: '', args: []);
+  }
+
+  /// `Traffic: {value}`
+  String trafficLine(Object value) {
+    return Intl.message(
+      'Traffic: $value',
+      name: 'trafficLine',
+      desc: '',
+      args: [value],
+    );
+  }
+
+  /// `Expires: {value}`
+  String expiresLine(Object value) {
+    return Intl.message(
+      'Expires: $value',
+      name: 'expiresLine',
+      desc: '',
+      args: [value],
+    );
+  }
+
+  /// `until {value}`
+  String expiresUntil(Object value) {
+    return Intl.message(
+      'until $value',
+      name: 'expiresUntil',
+      desc: '',
+      args: [value],
+    );
+  }
+
+  /// `As in subscription`
+  String get sortAsSubscription {
+    return Intl.message(
+      'As in subscription',
+      name: 'sortAsSubscription',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `By ping`
+  String get sortByPing {
+    return Intl.message('By ping', name: 'sortByPing', desc: '', args: []);
+  }
+
+  /// `By name`
+  String get sortByName {
+    return Intl.message('By name', name: 'sortByName', desc: '', args: []);
+  }
+
+  /// `Sorting: {value}`
+  String sortTooltip(Object value) {
+    return Intl.message(
+      'Sorting: $value',
+      name: 'sortTooltip',
+      desc: '',
+      args: [value],
+    );
+  }
+
+  /// `timeout`
+  String get timeoutLabel {
+    return Intl.message('timeout', name: 'timeoutLabel', desc: '', args: []);
+  }
+
+  /// `Filters`
+  String get filtersTitle {
+    return Intl.message('Filters', name: 'filtersTitle', desc: '', args: []);
+  }
+
+  /// `Drag to reorder. Turn off to hide.`
+  String get filtersHint {
+    return Intl.message(
+      'Drag to reorder. Turn off to hide.',
+      name: 'filtersHint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Portal`
+  String get aboutPortal {
+    return Intl.message('Portal', name: 'aboutPortal', desc: '', args: []);
+  }
+
+  /// `Cores`
+  String get aboutCores {
+    return Intl.message('Cores', name: 'aboutCores', desc: '', args: []);
+  }
+
+  /// `portal network core`
+  String get aboutPortalNetworkCore {
+    return Intl.message(
+      'portal network core',
+      name: 'aboutPortalNetworkCore',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Contributors`
+  String get aboutContributors {
+    return Intl.message(
+      'Contributors',
+      name: 'aboutContributors',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Built on`
+  String get aboutBuiltOn {
+    return Intl.message('Built on', name: 'aboutBuiltOn', desc: '', args: []);
   }
 }
 

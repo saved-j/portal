@@ -12,17 +12,25 @@ import os
 from PIL import Image, ImageDraw, ImageEnhance
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = "/Volumes/Stuff/Downloads/Routers/@LOGO.png"
+SRC = "/Volumes/Stuff/Downloads/Routers/@LOGO2.png"
 
 ANDROID_RES = os.path.join(ROOT, "android/app/src/main/res")
 MACOS_SET = os.path.join(ROOT, "macos/Runner/Assets.xcassets/AppIcon.appiconset")
 ASSETS = os.path.join(ROOT, "assets/images")
 WINDOWS = os.path.join(ROOT, "windows/runner/resources")
 
-BASE = Image.open(SRC).convert("RGB")
+# The art fills the whole canvas: the source carries its own dark frame, so the frame is
+# scaled out of view and the picture reaches every edge. Android then applies its own
+# mask and shape — nothing here reserves a margin for it.
+ZOOM = 0.78
+_source = Image.open(SRC).convert("RGB")
+_side = int(min(_source.size) * ZOOM)
+_left = (_source.size[0] - _side) // 2
+_top = (_source.size[1] - _side) // 2
+BASE = _source.crop((_left, _top, _left + _side, _top + _side))
 # The owner's mark is a dark scene; at 48 px on a phone screen it reads as a black
 # square. Lift it enough to keep the door and the stars visible without washing it out.
-BASE = ImageEnhance.Brightness(BASE).enhance(128 / 100)
+BASE = ImageEnhance.Brightness(BASE).enhance(112 / 100)
 BASE = ImageEnhance.Contrast(BASE).enhance(1.06)
 BASE = ImageEnhance.Color(BASE).enhance(1.08)
 BACKGROUND = BASE.getpixel((2, 2))
@@ -50,16 +58,6 @@ def circle(image: Image.Image) -> Image.Image:
     ImageDraw.Draw(mask).ellipse((0, 0, size, size), fill=255)
     out = image.convert("RGBA")
     out.putalpha(mask)
-    return out
-
-
-def with_padding(image: Image.Image, canvas: int, coverage: float) -> Image.Image:
-    """Logo centred on a transparent canvas — used for adaptive foregrounds."""
-    inner = int(canvas * coverage)
-    out = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
-    art = rounded(image.resize((inner, inner), Image.LANCZOS), 0.22)
-    offset = (canvas - inner) // 2
-    out.paste(art, (offset, offset), art)
     return out
 
 
@@ -91,6 +89,19 @@ def save(image: Image.Image, path: str) -> None:
     print(f"{path.replace(ROOT + '/', ''):70s} {image.size[0]:4d}px")
 
 
+ICO_SIZES = (16, 24, 32, 48, 64, 128, 256)
+
+
+def save_ico(path: str) -> None:
+    """Every .ico frame is resampled from the original once — no frame is derived from
+    another frame, so a 16 px entry carries the same detail as the 256 px one."""
+    frames = [BASE.resize((side, side), Image.LANCZOS) for side in ICO_SIZES]
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    frames[-1].save(path, sizes=[(side, side) for side in ICO_SIZES],
+                    append_images=frames[:-1])
+    print(f"{path.replace(ROOT + '/', ''):70s} multi")
+
+
 def main() -> None:
     densities = {
         "mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192,
@@ -104,7 +115,7 @@ def main() -> None:
     adaptive = {"mdpi": 108, "hdpi": 162, "xhdpi": 216, "xxhdpi": 324, "xxxhdpi": 432}
     for dens, size in adaptive.items():
         # Full-bleed: the owner's mark is the icon, not a stamp inside a big margin.
-        save(with_padding(BASE, size, 0.94), f"{ANDROID_RES}/drawable-{dens}/ic_launcher_foreground.png")
+        save(square(size), f"{ANDROID_RES}/drawable-{dens}/ic_launcher_foreground.png")
         save(letter_p(size // 2), f"{ANDROID_RES}/drawable-{dens}/ic_launcher_monochrome.png")
 
     # splash: the mark itself, sitting on the void
@@ -118,11 +129,7 @@ def main() -> None:
 
     # Flutter asset + tray
     save(square(1024), f"{ASSETS}/icon.png")
-    square(1024).save(
-        f"{ASSETS}/icon.ico",
-        sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
-    )
-    print(f"{'assets/images/icon.ico':70s} multi")
+    save_ico(f"{ASSETS}/icon.ico")
 
     # macOS appiconset
     mac = {
@@ -135,11 +142,7 @@ def main() -> None:
 
     # Windows runner
     os.makedirs(WINDOWS, exist_ok=True)
-    square(256).save(
-        os.path.join(WINDOWS, "app_icon.ico"),
-        sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
-    )
-    print(f"{'windows/runner/resources/app_icon.ico':70s} multi")
+    save_ico(os.path.join(WINDOWS, "app_icon.ico"))
 
     # A master for the site/tray to reuse
     save(square(2048), os.path.join(ROOT, "tool/branding/portal_icon_master.png"))

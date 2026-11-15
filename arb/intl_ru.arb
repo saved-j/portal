@@ -1041,5 +1041,48 @@
   "openPortal": "Открыть портал",
   "closePortal": "Закрыть портал",
   "portalOff": "Портал погашен",
-  "inPortal": "В портале"
+  "inPortal": "В портале",
+  "trafficLine": "Трафик: {value}",
+  "expiresLine": "Истекает: {value}",
+  "expiresUntil": "до {value}",
+  "@trafficLine": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@expiresLine": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@expiresUntil": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "sortAsSubscription": "Как в подписке",
+  "sortByPing": "По пингу",
+  "sortByName": "По имени",
+  "sortTooltip": "Сортировка: {value}",
+  "timeoutLabel": "таймаут",
+  "filtersTitle": "Фильтры",
+  "filtersHint": "Перетащите, чтобы изменить порядок. Выключите, чтобы скрыть.",
+  "aboutPortal": "Портал",
+  "aboutCores": "Ядра",
+  "aboutPortalNetworkCore": "ядро сети порталов",
+  "aboutContributors": "Контрибуторы",
+  "aboutBuiltOn": "На чём построено",
+  "@sortTooltip": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  }
 }

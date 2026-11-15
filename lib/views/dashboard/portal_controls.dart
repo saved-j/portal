@@ -10,22 +10,67 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
 import 'package:fl_clash/core/xray_config.dart';
+import 'package:fl_clash/core/proxy_endpoints.dart';
+import 'package:fl_clash/core/xray_ping.dart';
 import 'package:fl_clash/core/subscription_availability.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
+import '../profiles/subscription_facts.dart';
 import 'package:fl_clash/core/xray_switch.dart';
 import 'package:fl_clash/plugins/xray.dart';
 import 'dart:async';
 import 'dart:convert';
 
 /// How the server list is ordered; the switch sits next to the mode control.
-enum PortalSort { ping, alphabet }
+enum PortalSort {
+  /// The panel's own order, which is often the order the owner paid for.
+  subscription,
+  ping,
+  alphabet,
+}
 
+extension PortalSortExt on PortalSort {
+  String get label => switch (this) {
+        PortalSort.subscription => 'asInSubscription',
+        PortalSort.ping => 'byPing',
+        PortalSort.alphabet => 'byName',
+      };
+
+  PortalSort get next => switch (this) {
+        PortalSort.subscription => PortalSort.ping,
+        PortalSort.ping => PortalSort.alphabet,
+        PortalSort.alphabet => PortalSort.subscription,
+      };
+}
+
+/// The order of the server list, kept per mode.
+///
+/// The two modes show different servers from different builds of the same subscription, and
+/// the owner wants them ordered differently: rules by ping, the simple portal as the panel
+/// sent it. One stored value per mode, so switching never rewrites the other's choice.
 class PortalSortNotifier extends Notifier<PortalSort> {
-  @override
-  PortalSort build() => PortalSort.alphabet;
+  bool get _simple =>
+      ref.read(patchClashConfigProvider.select((s) => s.mode)) == Mode.global;
 
-  void toggle() =>
-      state = state == PortalSort.ping ? PortalSort.alphabet : PortalSort.ping;
+  @override
+  PortalSort build() {
+    // Watched, so flipping the switch re-reads the other mode's stored order.
+    final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
+    final settings = ref.watch(appSettingProvider);
+    final stored = mode == Mode.global ? settings.portalSortXray : settings.portalSortRules;
+    return PortalSort.values.firstWhere(
+      (value) => value.name == stored,
+      orElse: () => PortalSort.subscription,
+    );
+  }
+
+  void cycle() {
+    final next = state.next;
+    ref.read(appSettingProvider.notifier).update(
+          (settings) => _simple
+              ? settings.copyWith(portalSortXray: next.name)
+              : settings.copyWith(portalSortRules: next.name),
+        );
+  }
 }
 
 final portalSortProvider =
@@ -61,22 +106,42 @@ final portalPendingProvider =
     NotifierProvider<PortalPendingNotifier, Map<String, String>>(
         PortalPendingNotifier.new);
 
-/// Rows whose protocol is revealed. Long press toggles one row, so the label stays
-/// where the eye already looks — in front of the delay, not in a sheet.
-class PortalProtocolRowsNotifier extends Notifier<Set<String>> {
-  @override
-  Set<String> build() => const {};
+/// Delays timed by the app itself, for servers of either core.
+///
+/// The engine only reports delays for the servers it holds and never their addresses, so a
+/// TCP handshake from here is the one measurement that works for both lists. A missing key
+/// means "not asked yet"; a null entry means "asked, no answer".
+final tcpDelayProvider =
+    NotifierProvider<TcpDelayNotifier, Map<String, int?>>(TcpDelayNotifier.new);
 
-  void toggle(String name) {
-    final next = {...state};
-    if (!next.remove(name)) next.add(name);
-    state = next;
+/// The addresses saved with the profile, so an engine server can be timed directly.
+final proxyEndpointsProvider =
+    FutureProvider.autoDispose<Map<String, ProxyEndpoint>>((ref) async {
+  final profile = ref.watch(currentProfileProvider);
+  if (profile == null) return const {};
+  final path = await appPath.getProfilePath(profile.id.toString());
+  return loadProxyEndpoints(path);
+});
+
+class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+  @override
+  Map<String, int?> build() => const {};
+
+  Future<void> measureAll(List<(String, String, int)> targets) async {
+    if (targets.isEmpty) return;
+    state = {...state, for (final t in targets) t.$1: null};
+    for (final (name, host, port) in targets) {
+      final value = await tcpPing(host, port);
+      state = {...state, name: value};
+    }
+  }
+
+  Future<void> measureOne(String name, String host, int port) async {
+    state = {...state, name: null};
+    final value = await tcpPing(host, port);
+    state = {...state, name: value};
   }
 }
-
-final portalProtocolRowsProvider =
-    NotifierProvider<PortalProtocolRowsNotifier, Set<String>>(
-        PortalProtocolRowsNotifier.new);
 
 /// Groups the user turned into a bypass: their outbound is DIRECT, so the chip can
 /// simply go grey. The name people know for that state is 'не идёт через портал'.
@@ -377,13 +442,17 @@ class PortalModeSwitch extends ConsumerWidget {
         const Spacer(),
         const SizedBox(width: 4),
         IconButton(
-          tooltip: sort == PortalSort.ping ? 'Сортировка: пинг' : 'Сортировка: A-Z',
+          tooltip: context.appLocalizations.sortTooltip(sortLabelFor(context, sort)),
           onPressed: () {
             HapticFeedback.selectionClick();
-            ref.read(portalSortProvider.notifier).toggle();
+            ref.read(portalSortProvider.notifier).cycle();
           },
           icon: GlyphIcon(
-            sort == PortalSort.ping ? AppGlyphs.sort : AppGlyphs.textShort,
+            switch (sort) {
+              PortalSort.subscription => AppGlyphs.sliders,
+              PortalSort.ping => AppGlyphs.sort,
+              PortalSort.alphabet => AppGlyphs.textShort,
+            },
             size: 18,
           ),
         ),
@@ -391,10 +460,31 @@ class PortalModeSwitch extends ConsumerWidget {
           tooltip: context.appLocalizations.delayTest,
           // A delay test says which servers answer, so it must not depend on the portal
           // being open: the test wakes the engine for its duration and closes it again.
-          onPressed: group == null || testing
+          onPressed: testing
               ? null
               : () {
                   HapticFeedback.mediumImpact();
+                  // In the simple portal the list is the second core's, so the engine test
+                  // has nothing to measure — its own servers are timed directly instead.
+                  // The app's own measurement serves both lists; the engine test is the
+                  // fallback for a profile whose addresses are unknown.
+                  final servers = ref.read(xrayServersProvider).value ?? const [];
+                  final endpoints = ref.read(proxyEndpointsProvider).value ?? const {};
+                  final targets = <(String, String, int)>[
+                    for (final server in servers)
+                      if (server.port > 0) (server.name, server.address, server.port),
+                    if (servers.isEmpty && group != null)
+                      for (final proxy in group.all)
+                        if (endpoints[proxy.name] case final e? when e.isUsable)
+                          (proxy.name, e.host, e.port),
+                  ];
+                  if (targets.isNotEmpty) {
+                    unawaited(
+                      ref.read(tcpDelayProvider.notifier).measureAll(targets),
+                    );
+                    return;
+                  }
+                  if (group == null) return;
                   unawaited(
                     _testDelayWithEngine(
                       ref,
@@ -480,12 +570,35 @@ class PortalServerList extends ConsumerWidget {
     final selectedName = bypassedGroup
         ? null
         : (pending ?? (xrayServers.isNotEmpty ? null : chosenName));
+    // Measure once when the list arrives: a portal whose servers all read "—" until you
+    // press something looks broken, and a closed portal is no reason not to know.
+    final endpoints = ref.watch(proxyEndpointsProvider).value ?? const {};
+    final targets = <(String, String, int)>[
+      for (final server in xrayServers)
+        if (server.port > 0) (server.name, server.address, server.port),
+      if (xrayServers.isEmpty)
+        for (final proxy in group.all)
+          if (endpoints[proxy.name] case final endpoint? when endpoint.isUsable)
+            (proxy.name, endpoint.host, endpoint.port),
+    ];
+    if (targets.isNotEmpty &&
+        !ref.watch(tcpDelayProvider.select((m) => m.isNotEmpty))) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        unawaited(ref.read(tcpDelayProvider.notifier).measureAll(targets));
+      });
+    }
+    final xrayServerByName = {
+      for (final server in xrayServers) server.name: server,
+    };
     final members = xrayServers.isNotEmpty
         ? [
             for (final server in xrayServers)
               Proxy(
                 name: server.name,
-                type: 'xray',
+                // The row shows this as the protocol badge: it comes from the server's own
+                // configuration, not from the fact that Xray is the core running it.
+                type: server.protocol,
                 serverDescription: server.label,
               ),
           ]
@@ -493,15 +606,24 @@ class PortalServerList extends ConsumerWidget {
             for (final proxy in group.all)
               if (!_isBuiltinOutbound(proxy.name)) proxy,
           ];
-    if (sort == PortalSort.alphabet) {
-      members.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    } else {
-      int rank(Proxy p) {
-        final value = ref.watch(delayProvider(proxyName: p.name));
-        // -1 is mihomo's timeout marker, not a fast server.
-        return value == null || value <= 0 ? 1 << 30 : value;
-      }
-      members.sort((a, b) => rank(a).compareTo(rank(b)));
+    switch (sort) {
+      case PortalSort.subscription:
+        // The panel's order is the order it wants: leave it exactly as delivered.
+        break;
+      case PortalSort.alphabet:
+        members.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+      case PortalSort.ping:
+        final xrayDelays = ref.watch(tcpDelayProvider);
+        int rank(Proxy p) {
+          final value = xrayServerByName.containsKey(p.name)
+              ? xrayDelays[p.name]
+              : ref.watch(delayProvider(proxyName: p.name));
+          // -1 is mihomo's timeout marker, not a fast server.
+          return value == null || value <= 0 ? 1 << 30 : value;
+        }
+        members.sort((a, b) => rank(a).compareTo(rank(b)));
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -523,6 +645,12 @@ class PortalServerList extends ConsumerWidget {
             group: group,
             proxy: proxy,
             selected: selectedName == proxy.name,
+            tcpHost: xrayServerByName[proxy.name]?.address ??
+                endpoints[proxy.name]?.host ??
+                '',
+            tcpPort: xrayServerByName[proxy.name]?.port ??
+                endpoints[proxy.name]?.port ??
+                0,
           ),
       ],
     );
@@ -809,9 +937,18 @@ Color _delayColor(BuildContext context, int? value) {
   return _delayBad(context);
 }
 
+String sortLabelFor(BuildContext context, PortalSort sort) {
+  final l10n = context.appLocalizations;
+  return switch (sort) {
+    PortalSort.subscription => l10n.sortAsSubscription,
+    PortalSort.ping => l10n.sortByPing,
+    PortalSort.alphabet => l10n.sortByName,
+  };
+}
+
 String _delayText(int? value) {
   if (value == null) return '—';
-  if (value <= 0) return 'таймаут';
+  if (value <= 0) return '—';
   return '$value ms';
 }
 
@@ -820,11 +957,18 @@ class _ServerRow extends ConsumerStatefulWidget {
     required this.group,
     required this.proxy,
     required this.selected,
+    this.tcpHost = '',
+    this.tcpPort = 0,
   });
 
   final Group group;
   final Proxy proxy;
   final bool selected;
+
+  /// Where this server listens, when it is known: the row then times a TCP handshake
+  /// instead of asking a core that either does not hold the server or cannot report it.
+  final String tcpHost;
+  final int tcpPort;
 
   @override
   ConsumerState<_ServerRow> createState() => _ServerRowState();
@@ -872,10 +1016,10 @@ class _ServerRowState extends ConsumerState<_ServerRow>
     final node = byName.containsKey(widget.proxy.name)
         ? resolve(widget.proxy.name)
         : null;
-    final delay = ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
-    final revealed = ref.watch(
-      portalProtocolRowsProvider.select((rows) => rows.contains(widget.proxy.name)),
-    );
+    final measurable = widget.tcpHost.isNotEmpty && widget.tcpPort > 0;
+    final delay = measurable
+        ? ref.watch(tcpDelayProvider)[widget.proxy.name]
+        : ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
     final color = widget.selected
         ? scheme.onPrimaryContainer
         : scheme.onSurfaceVariant;
@@ -928,16 +1072,17 @@ class _ServerRowState extends ConsumerState<_ServerRow>
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (revealed) ...[
-              Text(
-                widget.proxy.type.toUpperCase(),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  letterSpacing: 0.4,
-                ),
+            // The protocol is part of the row, always: it is what distinguishes two
+            // servers of the same country, and hiding it behind a gesture made the list
+            // read as if every server spoke the same thing.
+            Text(
+              widget.proxy.type.toUpperCase(),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                letterSpacing: 0.4,
               ),
-              const SizedBox(width: 6),
-            ],
+            ),
+            const SizedBox(width: 6),
             Text(
               _delayText(delay),
               style: theme.textTheme.labelMedium?.copyWith(
@@ -960,9 +1105,28 @@ class _ServerRowState extends ConsumerState<_ServerRow>
                 proxyName: widget.proxy.name,
               );
         },
+        // A long press answers the question a person actually has about one server: does
+        // this one respond, and how fast — not what protocol it speaks, which is on the row
+        // already.
         onLongPress: () {
           HapticFeedback.mediumImpact();
-          ref.read(portalProtocolRowsProvider.notifier).toggle(widget.proxy.name);
+          if (measurable) {
+            unawaited(
+              ref.read(tcpDelayProvider.notifier).measureOne(
+                    widget.proxy.name,
+                    widget.tcpHost,
+                    widget.tcpPort,
+                  ),
+            );
+            return;
+          }
+          unawaited(
+            _testDelayWithEngine(
+              ref,
+              [widget.proxy],
+              wasRunning: ref.read(runTimeProvider) != null,
+            ),
+          );
         },
       ),
     );
@@ -978,18 +1142,12 @@ class PortalPlanCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final profile = ref.watch(currentProfileProvider);
     final announcement = ref.watch(announcementProvider);
-    final info = profile?.subscriptionInfo;
-    final name = profile?.headers.serviceName ?? profile?.label ?? '';
-    final used = info == null ? null : info.upload + info.download;
-    final total = info?.total ?? 0;
-    final expire = info?.expire ?? 0;
-    final daysLeft = expire > 0
-        ? DateTime.fromMillisecondsSinceEpoch(expire * 1000)
-            .difference(DateTime.now())
-            .inDays
-        : null;
-    String gb(int bytes) =>
-        '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GiB';
+    // The panel's title is a sentence, not a name; the card shows the name.
+    final name = profile == null
+        ? ''
+        : (profile.headers.displayName ??
+            profile.headers.serviceName ??
+            profile.realLabel);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -1001,33 +1159,45 @@ class PortalPlanCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    name,
-                    maxLines: 1,
+            // One line, as approved: name and mark first, then the two facts separated by
+            // middle dots. Dashes stand in when the panel sends nothing, so the shape never
+            // changes between accounts.
+            if (profile != null)
+              Builder(
+                builder: (context) {
+                  final facts = SubscriptionFacts.of(profile);
+                  final meta = theme.textTheme.labelMedium
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+                  final expiry = facts.expiry == '—'
+                      ? '—'
+                      : context.appLocalizations.expiresUntil(facts.expiry);
+                  return Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '$name ${facts.mark}',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.onSurface,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        TextSpan(text: '  ·  ', style: meta),
+                        TextSpan(text: facts.traffic, style: meta),
+                        TextSpan(text: '  ·  ', style: meta),
+                        TextSpan(text: expiry, style: meta),
+                      ],
+                    ),
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                if (used != null && total > 0)
-                  Text(
-                    '${gb(used)} / ${gb(total)}',
-                    style: theme.textTheme.labelMedium
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                if (daysLeft != null) ...[
-                  const SizedBox(width: 10),
-                  Text(
-                    '$daysLeft д',
-                    style: theme.textTheme.labelMedium
-                        ?.copyWith(color: theme.colorScheme.primary),
-                  ),
-                ],
-              ],
-            ),
+                  );
+                },
+              )
+            else
+              Text(
+                name,
+                style: theme.textTheme.labelMedium
+                    ?.copyWith(color: theme.colorScheme.onSurface),
+              ),
             if (announcement != null && announcement.isNotEmpty) ...[
               const SizedBox(height: 8),
               Divider(height: 1, color: theme.colorScheme.outlineVariant),
@@ -1046,8 +1216,6 @@ class PortalPlanCard extends ConsumerWidget {
     );
   }
 }
-
-
 
 /// Reorder and hide the group filters. A sheet, not a page: it edits a row of chips.
 Future<void> showPortalFilterEditor(BuildContext context) {
@@ -1082,10 +1250,11 @@ class _FilterEditorSheet extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Фильтры', style: theme.textTheme.titleMedium),
+            Text(context.appLocalizations.filtersTitle,
+                style: theme.textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(
-              'Перетащите, чтобы изменить порядок. Выключите, чтобы скрыть.',
+              context.appLocalizations.filtersHint,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
