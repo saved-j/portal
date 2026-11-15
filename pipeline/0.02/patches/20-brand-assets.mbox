@@ -74845,6 +74845,112 @@ index a07f74add26e1743add0653c30854c4d9355dc05..059212ecd343d79c3258c9d76b12ca54
            ..writeAsBytesSync([0, ...setup.utf16le('clashx.pre'), 0]);
          setup.requireChannelMarker(binary.path, setup.utf16le('clashx.pre'));
          binary.writeAsBytesSync(setup.utf16le('clashx'));
+diff --git a/test/xray_config_test.dart b/test/xray_config_test.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..cddf7bc6d78c2a11cc0d3e3dbafde7eb5bc1efe9
+--- /dev/null
++++ b/test/xray_config_test.dart
+@@ -0,0 +1,100 @@
++import 'dart:convert';
++
++import 'package:fl_clash/core/xray_config.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++/// These tests describe the mapping the app relies on: a Clash proxy entry in, an Xray
++/// outbound out. They run without a phone, a tunnel or a panel.
++void main() {
++  test('vless over ws with tls keeps every field the server needs', () {
++    final json = xrayConfigJson({
++      'name': 'EE-1',
++      'type': 'vless',
++      'server': 'ee1.example.net',
++      'port': 443,
++      'uuid': '11111111-2222-3333-4444-555555555555',
++      'network': 'ws',
++      'tls': true,
++      'servername': 'cdn.example.net',
++      'ws-path': '/ray',
++      'ws-headers': {'Host': 'cdn.example.net'},
++      'client-fingerprint': 'chrome',
++    });
++    final config = jsonDecode(json) as Map<String, dynamic>;
++    final outbound = (config['outbounds'] as List).first as Map<String, dynamic>;
++
++    expect(outbound['protocol'], 'vless');
++    final vnext = (outbound['settings'] as Map)['vnext'] as List;
++    expect((vnext.first as Map)['address'], 'ee1.example.net');
++    expect((vnext.first as Map)['port'], 443);
++    expect(((vnext.first as Map)['users'] as List).first['id'],
++        '11111111-2222-3333-4444-555555555555');
++
++    final stream = outbound['streamSettings'] as Map;
++    expect(stream['network'], 'ws');
++    expect((stream['wsSettings'] as Map)['path'], '/ray');
++    expect(stream['security'], 'tls');
++    expect((stream['tlsSettings'] as Map)['serverName'], 'cdn.example.net');
++  });
++
++  test('reality keeps its public key and short id', () {
++    final config = xrayConfigFor({
++      'type': 'vless',
++      'server': 'r.example.net',
++      'port': 443,
++      'uuid': 'u',
++      'network': 'tcp',
++      'tls': true,
++      'servername': 'www.microsoft.com',
++      'client-fingerprint': 'firefox',
++      'reality-opts': {'public-key': 'PUBKEY', 'short-id': 'ab12'},
++    });
++    final stream = ((config['outbounds'] as List).first
++        as Map<String, dynamic>)['streamSettings'] as Map;
++    expect(stream['security'], 'reality');
++    final reality = stream['realitySettings'] as Map;
++    expect(reality['publicKey'], 'PUBKEY');
++    expect(reality['shortId'], 'ab12');
++    expect(reality['serverName'], 'www.microsoft.com');
++    expect(reality['fingerprint'], 'firefox');
++  });
++
++  test('trojan carries a password and a grpc transport', () {
++    final config = xrayConfigFor({
++      'type': 'trojan',
++      'server': 't.example.net',
++      'port': '8443',
++      'password': 'secret',
++      'network': 'grpc',
++      'grpc-service-name': 'svc',
++    });
++    final outbound = (config['outbounds'] as List).first as Map;
++    expect(outbound['protocol'], 'trojan');
++    final server = ((outbound['settings'] as Map)['servers'] as List).first as Map;
++    expect(server['port'], 8443); // a string port is accepted and normalised
++    expect(server['password'], 'secret');
++    expect((outbound['streamSettings'] as Map)['network'], 'grpc');
++    expect(((outbound['streamSettings'] as Map)['grpcSettings'] as Map)['serviceName'],
++        'svc');
++  });
++
++  test('the socks inbound is always present and bound to localhost', () {
++    final config = xrayConfigFor({
++      'type': 'vless',
++      'server': 's',
++      'port': 1,
++      'uuid': 'u',
++    }, socksPort: 10808);
++    final inbound = (config['inbounds'] as List).first as Map;
++    expect(inbound['protocol'], 'socks');
++    expect(inbound['listen'], '127.0.0.1');
++    expect(inbound['port'], 10808);
++  });
++
++  test('an unknown protocol is refused instead of silently producing nothing', () {
++    expect(
++      () => xrayConfigFor({'type': 'ss', 'server': 's', 'port': 1}),
++      throwsA(isA<UnsupportedProxyType>()),
++    );
++  });
++}
 diff --git a/tool/branding/portal_icon_master.png b/tool/branding/portal_icon_master.png
 new file mode 100644
 index 0000000000000000000000000000000000000000..b2731dcda44235e6703bb5e69325e04050b4de53
@@ -123594,6 +123700,33 @@ index 0000000000000000000000000000000000000000..8ebbce7b86117a9337791eaecc266cd8
 +)
 +
 +print("icons written")
+diff --git a/tool/xray_sample.dart b/tool/xray_sample.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..c0ae81228f03a9569f0e4d4801d5850f414bcd53
+--- /dev/null
++++ b/tool/xray_sample.dart
+@@ -0,0 +1,21 @@
++import 'dart:io';
++
++import 'package:fl_clash/core/xray_config.dart';
++
++/// Prints an Xray config for a sample node. Used to prove the converter's output is
++/// accepted by the real binary: `xray run -test -c sample.json`.
++void main(List<String> args) {
++  final sample = <String, dynamic>{
++    'name': 'sample-vless-ws-tls',
++    'type': 'vless',
++    'server': 'example.com',
++    'port': 443,
++    'uuid': '11111111-2222-3333-4444-555555555555',
++    'network': 'ws',
++    'tls': true,
++    'servername': 'example.com',
++    'ws-path': '/ray',
++    'client-fingerprint': 'chrome',
++  };
++  stdout.writeln(xrayConfigJson(sample));
++}
 diff --git a/windows/runner/resources/app_icon.ico b/windows/runner/resources/app_icon.ico
 index 8ecf32ec4cb8f6fdadfb930cfca762c1c1d4eae9..53307b7238f4cf32a1e3078f53550cdb711db871 100644
 GIT binary patch

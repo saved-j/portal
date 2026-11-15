@@ -365,6 +365,19 @@ index b85bcb90e474565ca39e618c1cd77f140317e35d..504367a710b2774f6a534c0d3d01f5e6
    "disclaimerSoftwareTitle": "它是什么，不是什么",
    "disclaimerSoftwareContent": "本程序只在您的设备上管理配置并按规则转发流量。\n\n我们不出售任何东西，也不提供代理服务器、节点、订阅或网络接入。所有服务器和订阅均来自第三方提供者，其合法性、安全性和质量由您与提供者自行解决。本程序与此类提供者无关，也不为其负责。",
    "disclaimerResponsibilityTitle": "责任",
+diff --git a/lib/common/l10n_labels.dart b/lib/common/l10n_labels.dart
+index bec3867eea51050bef99fd89ce5dd0fd614a4b04..d78d2febab228f46e898fd900c763c88c34ec35b 100644
+--- a/lib/common/l10n_labels.dart
++++ b/lib/common/l10n_labels.dart
+@@ -49,7 +49,7 @@ extension ModeL10n on Mode {
+   String get label {
+     final appLocalizations = currentAppLocalizations;
+     return switch (this) {
+-      Mode.rule => appLocalizations.rule,
++      Mode.rule => appLocalizations.rules,
+       Mode.global => appLocalizations.global,
+       Mode.direct => appLocalizations.direct,
+     };
 diff --git a/lib/l10n/intl/messages_en.dart b/lib/l10n/intl/messages_en.dart
 index 7490d2f97b33714eee9d105eb332e269ea1e3e15..446792e446f0bafe641fbc45f13641716b251339 100644
 --- a/lib/l10n/intl/messages_en.dart

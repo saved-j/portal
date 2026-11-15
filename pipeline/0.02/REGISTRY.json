@@ -26,8 +26,8 @@
     {
       "group": "20-brand-assets",
       "file": "patches/20-brand-assets.mbox",
-      "bytes": 8408428,
-      "sha256": "aa0a78a9bd9535c25ba3efbda513eb23d2a6d3a7f5c1efcbeaa79e2b4fd326ed",
+      "bytes": 8413328,
+      "sha256": "cc061c02779903abdc126c9c01d3040e4858ef6a17fb28a87bbebdb5ccc243a1",
       "paths": [
         "android/app/build.gradle.kts",
         "android/app/src/main/AndroidManifest.xml",
@@ -49,8 +49,8 @@
     {
       "group": "30-i18n",
       "file": "patches/30-i18n.mbox",
-      "bytes": 67789,
-      "sha256": "244f6675bb201c63f60d049aeb3a382269a1fd0d38cce7677f1f6c68d0d7aeb3",
+      "bytes": 68365,
+      "sha256": "6c0f1a7c517a6d0c9b1fc543f93601c24d65546c3e1fb0ff3779ba4e754eeb64",
       "paths": [
         "arb",
         "lib/l10n"
@@ -59,8 +59,8 @@
     {
       "group": "40-interface",
       "file": "patches/40-interface.mbox",
-      "bytes": 105094,
-      "sha256": "97c17bc4ee0ef9c2487ce571156a7401777d1de248f567693dba9c26fcec23f0",
+      "bytes": 110853,
+      "sha256": "712ff6a7aac5f543e0d934643a424b4527fc3ae572f075bc1a29d2b2c1d4020f",
       "paths": [
         "lib/application.dart",
         "lib/common/l10n_labels.dart",
