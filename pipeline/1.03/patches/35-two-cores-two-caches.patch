@@ -1,0 +1,93 @@
+diff --git a/lib/providers/state/portal_rows.dart b/lib/providers/state/portal_rows.dart
+index c3eff7cf..e957922c 100644
+--- a/lib/providers/state/portal_rows.dart
++++ b/lib/providers/state/portal_rows.dart
+@@ -175,6 +175,44 @@ final portalEngineRowsProvider =
+     NotifierProvider<PortalEngineRowsNotifier, Map<String, List<PortalRow>>>(
+         PortalEngineRowsNotifier.new);
+ 
++/// The child's own list, remembered per profile.
++///
++/// The engine has its cache and the child has its own — two documents, two cores, two lists.
++/// A row remembered here is a server of the xray body and nothing else; the network mode never
++/// reads this map, and the simple portal never reads the engine's. Keeping them apart is the
++/// whole point: a name means nothing without the core that answered it.
++class PortalChildRowsNotifier extends Notifier<Map<String, List<PortalRow>>> {
++  static const _build = String.fromEnvironment('APP_VERSION');
++
++  String _stamp = '';
++
++  @override
++  Map<String, List<PortalRow>> build() => const {};
++
++  void remember({required String profileId, required List<XrayServerConfig> servers}) {
++    if (_stamp != _build) {
++      _stamp = _build;
++      if (state.isNotEmpty) state = const {};
++    }
++    if (profileId.isEmpty || servers.isEmpty) return;
++    final rows = <PortalRow>[
++      for (final server in servers)
++        if (!isBuiltinOutboundName(server.name) && !isPortalServiceNode(server.name))
++          PortalRow(
++            name: server.name,
++            type: server.protocol,
++            description: server.address,
++          ),
++    ];
++    if (rows.isEmpty) return;
++    state = {...state, profileId: rows};
++  }
++}
++
++final portalChildRowsProvider =
++    NotifierProvider<PortalChildRowsNotifier, Map<String, List<PortalRow>>>(
++        PortalChildRowsNotifier.new);
++
+ /// Which core's rows these are.
+ ///
+ /// The two lists are two documents and two owners. A name is a name in both, so the owner is
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 99cdd524..2da9819c 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -574,6 +574,11 @@ PortalShown _portalShown(
+   final profileRows = simple
+       ? const <PortalRow>[]
+       : (ref.watch(profilePortalRowsProvider).value ?? const <PortalRow>[]);
++  // Each mode reads its own cache and no other: the child's remembered servers for the simple
++  // portal, the engine's remembered groups for the network mode.
++  final childCacheRows = simple
++      ? (ref.watch(portalChildRowsProvider)[profileKey] ?? const <PortalRow>[])
++      : const <PortalRow>[];
+   // Whose rows are on offer: only a core that is reading the tunnel now answers for itself.
+   final engineLive = !simple &&
+       status.active &&
+@@ -597,6 +602,12 @@ PortalShown _portalShown(
+     held: simple ? heldChild : heldEngine,
+     fallbacks: simple
+         ? [
++            (
++              'childcache',
++              portalGroupOfRows(childCacheRows).all.isEmpty
++                  ? null
++                  : portalGroupOfRows(childCacheRows),
++            ),
+             (
+               'servers',
+               portalFallbackGroup(
+@@ -1065,6 +1076,14 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
+     // are no groups to ask, and 'Сеть порталов' must then draw the engine's names instead of
+     // the portal's. The listen is not a write during the build — it fires when the engine
+     // publishes, which is when there is something worth keeping.
++    ref.listen(xrayServersProvider, (previous, next) {
++      final servers = next.value;
++      if (servers == null || servers.isEmpty) return;
++      ref.read(portalChildRowsProvider.notifier).remember(
++            profileId: '${ref.read(currentProfileIdProvider) ?? ''}',
++            servers: servers,
++          );
++    });
+     ref.listen(groupsProvider, (previous, next) {
+       if (next.isEmpty) return;
+       final group =

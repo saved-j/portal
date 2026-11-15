@@ -574,6 +574,11 @@ PortalShown _portalShown(
   final profileRows = simple
       ? const <PortalRow>[]
       : (ref.watch(profilePortalRowsProvider).value ?? const <PortalRow>[]);
+  // Each mode reads its own cache and no other: the child's remembered servers for the simple
+  // portal, the engine's remembered groups for the network mode.
+  final childCacheRows = simple
+      ? (ref.watch(portalChildRowsProvider)[profileKey] ?? const <PortalRow>[])
+      : const <PortalRow>[];
   // Whose rows are on offer: only a core that is reading the tunnel now answers for itself.
   final engineLive = !simple &&
       status.active &&
@@ -597,6 +602,12 @@ PortalShown _portalShown(
     held: simple ? heldChild : heldEngine,
     fallbacks: simple
         ? [
+            (
+              'childcache',
+              portalGroupOfRows(childCacheRows).all.isEmpty
+                  ? null
+                  : portalGroupOfRows(childCacheRows),
+            ),
             (
               'servers',
               portalFallbackGroup(
@@ -1065,6 +1076,14 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
     // are no groups to ask, and 'Сеть порталов' must then draw the engine's names instead of
     // the portal's. The listen is not a write during the build — it fires when the engine
     // publishes, which is when there is something worth keeping.
+    ref.listen(xrayServersProvider, (previous, next) {
+      final servers = next.value;
+      if (servers == null || servers.isEmpty) return;
+      ref.read(portalChildRowsProvider.notifier).remember(
+            profileId: '${ref.read(currentProfileIdProvider) ?? ''}',
+            servers: servers,
+          );
+    });
     ref.listen(groupsProvider, (previous, next) {
       if (next.isEmpty) return;
       final group =

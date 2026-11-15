@@ -175,6 +175,44 @@ final portalEngineRowsProvider =
     NotifierProvider<PortalEngineRowsNotifier, Map<String, List<PortalRow>>>(
         PortalEngineRowsNotifier.new);
 
+/// The child's own list, remembered per profile.
+///
+/// The engine has its cache and the child has its own — two documents, two cores, two lists.
+/// A row remembered here is a server of the xray body and nothing else; the network mode never
+/// reads this map, and the simple portal never reads the engine's. Keeping them apart is the
+/// whole point: a name means nothing without the core that answered it.
+class PortalChildRowsNotifier extends Notifier<Map<String, List<PortalRow>>> {
+  static const _build = String.fromEnvironment('APP_VERSION');
+
+  String _stamp = '';
+
+  @override
+  Map<String, List<PortalRow>> build() => const {};
+
+  void remember({required String profileId, required List<XrayServerConfig> servers}) {
+    if (_stamp != _build) {
+      _stamp = _build;
+      if (state.isNotEmpty) state = const {};
+    }
+    if (profileId.isEmpty || servers.isEmpty) return;
+    final rows = <PortalRow>[
+      for (final server in servers)
+        if (!isBuiltinOutboundName(server.name) && !isPortalServiceNode(server.name))
+          PortalRow(
+            name: server.name,
+            type: server.protocol,
+            description: server.address,
+          ),
+    ];
+    if (rows.isEmpty) return;
+    state = {...state, profileId: rows};
+  }
+}
+
+final portalChildRowsProvider =
+    NotifierProvider<PortalChildRowsNotifier, Map<String, List<PortalRow>>>(
+        PortalChildRowsNotifier.new);
+
 /// Which core's rows these are.
 ///
 /// The two lists are two documents and two owners. A name is a name in both, so the owner is
