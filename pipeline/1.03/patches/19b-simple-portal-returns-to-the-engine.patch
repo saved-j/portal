@@ -1,0 +1,197 @@
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt b/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
+index 659b3a97..8451143b 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
+@@ -53,8 +53,13 @@ object ServiceController {
+         // started before this run — Dart's `startListener`, or a network run whose tunnel the
+         // child then took — and a listener left behind is a second reader of the interface
+         // that carries the run. `StopListener` in Go is idempotent (it answers at once when
+-        // nothing runs), so the call is unconditional.
+-        Core.stopListener()
++        // nothing runs), so the call is unconditional, and it is written down: the log is what
++        // says the engine really stopped instead of only being assumed to have.
++        val stopped = runCatching { Core.stopListener() }
++        GlobalState.log(
++            "engine listener owner=Off xrayTunActive=$xrayTunActive stop=" +
++                (stopped.exceptionOrNull()?.toString() ?: "ok"),
++        )
+         xrayTunActive = false
+     }
+ 
+@@ -88,7 +93,14 @@ object ServiceController {
+         // engine kept reading the interface the child had been handed. The Go call is
+         // idempotent — with nothing running it answers at once — so it is asked every time.
+         if (options.xrayTun) {
+-            Core.stopListener()
++            // Said out loud, because this is the moment the engine stops being a reader: the
++            // service publishes the descriptor for the child right after, and a listener that
++            // survived would read the same interface beside it.
++            val stopped = runCatching { Core.stopListener() }
++            GlobalState.log(
++                "engine listener owner=Xray stop before the hand-over=" +
++                    (stopped.exceptionOrNull()?.toString() ?: "ok"),
++            )
+         }
+         val nextIntent = if (options.enable) {
+             VpnService::class.intent
+diff --git a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+index 7123753a..f84e15c8 100644
+--- a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
++++ b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+@@ -26,6 +26,7 @@ import com.follow.clashx.service.models.tunOptions
+ import com.follow.clashx.service.modules.ServiceModules
+ import java.net.InetSocketAddress
+ import java.util.concurrent.ConcurrentHashMap
++import java.util.concurrent.atomic.AtomicInteger
+ import android.net.VpnService as SystemVpnService
+ 
+ class VpnService : SystemVpnService(), ManagedService {
+@@ -140,7 +141,20 @@ class VpnService : SystemVpnService(), ManagedService {
+         // condition named the Xray case only (`tunOwnedByChild`), so a mihomo tunnel that
+         // was still running survived the hand-over and became the second reader the simple
+         // portal showed on the device.
+-        synchronized(tunLock) { stopTunLocked() }
++        val previousOwner = synchronized(tunLock) {
++            val owner = when {
++                !tunRunning -> OWNER_OFF
++                tunOwnedByChild -> OWNER_XRAY
++                else -> OWNER_MIHOMO
++            }
++            stopTunLocked()
++            owner
++        }
++        val owner = if (options.xrayTun) OWNER_XRAY else OWNER_MIHOMO
++        GlobalState.log(
++            "tun generation=${tunGeneration.incrementAndGet()} owner=$owner previous=$previousOwner " +
++                "stopped=${previousOwner != OWNER_OFF}",
++        )
+         val descriptor = with(Builder()) {
+             addAddressAndRoutes(options)
+             addDnsServers(options)
+@@ -363,6 +377,7 @@ class VpnService : SystemVpnService(), ManagedService {
+ 
+     private fun stopTunLocked() {
+         if (!tunRunning) return
++        val owner = if (tunOwnedByChild) OWNER_XRAY else OWNER_MIHOMO
+         if (tunOwnedByChild) {
+             // The child goes first: it holds its own copy of the descriptor, and a process
+             // left reading a revoked tunnel keeps the interface alive for as long as it runs.
+@@ -378,9 +393,23 @@ class VpnService : SystemVpnService(), ManagedService {
+             Core.stopTun()
+         }
+         tunRunning = false
++        GlobalState.log(
++            "tun generation=${tunGeneration.get()} owner=$owner released, owner=$OWNER_OFF",
++        )
+     }
+ 
+     companion object {
++        /// Numbers each established tunnel across service instances, so the log tells one
++        /// hand-over from the next: the service stops between a close and the next start, so
++        /// a per-instance counter would call every tunnel the first one.
++        private val tunGeneration = AtomicInteger(0)
++
++        // Who reads the established tunnel: nothing, the engine, or the child. Spelled in the
++        // log, because a number alone cannot say which core a start took the interface from.
++        private const val OWNER_OFF = "Off"
++        private const val OWNER_MIHOMO = "Mihomo"
++        private const val OWNER_XRAY = "Xray"
++
+         // mihomo's own TUN default: 198.18.0.0/15 is benchmarking space no LAN
+         // uses, and its fake-ip pool starts at .4, past this /30.
+         private const val IPV4_ADDRESS = "198.18.0.1/30"
+diff --git a/lib/providers/actions/setup.dart b/lib/providers/actions/setup.dart
+index 6aec8c63..171533cf 100644
+--- a/lib/providers/actions/setup.dart
++++ b/lib/providers/actions/setup.dart
+@@ -630,6 +630,13 @@ class SetupAction extends _$SetupAction {
+   Future<void> updateConfig() async {
+     _configRequests++;
+     await globalState.safeRun(() async {
++      // "Config is not applied" is the answer when there is no config to update: the simple
++      // portal never builds the engine one, and between a stop and the next start nothing of
++      // the engine listens at all. The start that follows pushes the profile itself, so this
++      // push would be nothing but the error it produces — on screen, in the middle of a switch.
++      if (_isSimplePortal || !ref.read(isStartProvider)) {
++        return;
++      }
+       final patchConfig = ref.read(patchClashConfigProvider);
+       final shouldContinueSetup = await requestAdmin(patchConfig.tun.enable);
+       if (!shouldContinueSetup) {
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 8ffbc69b..aec269f3 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -1703,12 +1703,12 @@ var _portalSwitching = false;
+ 
+ /// Moves the portal between the two modes as one transaction.
+ ///
+-/// The steps are ordered, not parallel: close the portal, stop the previous core, start the
+-/// next one, wait for the engine to have taken the new mode, move the route, ignite the
+-/// portal again. Each step is something that answered, so a failure can be caught where it
+-/// happened; when one does, the previous mode and core come back and the reason is shown.
+-/// A switch that half happened would leave a portal carrying nothing with nothing on screen
+-/// to say why.
++/// The steps are ordered, not parallel: close the portal, stop the previous core, move the
++/// mode, ignite the portal again on the other core, and — returning to the network — wait
++/// for the engine to have taken the profile its start pushed. Each step is something that
++/// answered, so a failure can be caught where it happened; when one does, the previous mode
++/// and core come back and the reason is shown. A switch that half happened would leave a
++/// portal carrying nothing with nothing on screen to say why.
+ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
+   if (_portalSwitching) return;
+   _portalSwitching = true;
+@@ -1738,16 +1738,11 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
+         );
+       }
+     } else {
+-      // The simple portal never pushed an engine config — that is exactly what "only Xray"
+-      // means — so the engine comes back with nothing applied: its groups read as empty and
+-      // the core answers "config is not applied". The profile has to be pushed before the
+-      // mode is asked for, or the network mode has no servers to show.
+-      final applied = await setup.applyProfile(force: true);
+-      if (!applied) {
+-        throw const _PortalSwitchFailure(
+-          'the portal network could not be applied: the profile was rejected',
+-        );
+-      }
++      // The simple portal runs no engine and pushes it no config — that is exactly what "only
++      // Xray" means — so on the way back the engine exists only after the start below. A push
++      // before it exists answers "config is not applied", and waiting for the mode before the
++      // start it belongs to can only time out. The mode is the setting; the start applies the
++      // profile (its own forced push), and the wait after it is what proves the engine took it.
+       final mode = await setup.pickMode(Mode.rule);
+       if (!mode.ok) {
+         throw _PortalSwitchFailure(
+@@ -1757,22 +1752,21 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
+     }
+     if (wasRunning) {
+       // In the simple portal there is no engine config to wait for: the mode is a setting
+-      // and the tunnel is the child's, so the start that follows is the whole answer. In
+-      // the network mode the engine still has to take the new config first.
+-      if (!toSimple) {
+-        final applied = await _awaitMode(ref, Mode.rule);
+-        if (!applied.ok) {
+-          throw _PortalSwitchFailure(applied.reason);
+-        }
+-      }
+-      // 6. Ignite: the same portal, on the other core. The start's own answer is the one
+-      // that matters, and its reason is what the owner is shown when it is not `ok`.
++      // and the tunnel is the child's, so the start that follows is the whole answer.
+       if (!await setup.setRunning(true)) {
+         final reason = setup.lastPortalFailure;
+         throw _PortalSwitchFailure(
+           reason.isEmpty ? 'the portal did not start again' : reason,
+         );
+       }
++      // In the network mode the engine has to have taken the profile the start pushed for
++      // this to be a switch: until it answers, the route is the old one and groups read empty.
++      if (!toSimple) {
++        final applied = await _awaitMode(ref, Mode.rule);
++        if (!applied.ok) {
++          throw _PortalSwitchFailure(applied.reason);
++        }
++      }
+     }
+   } catch (error) {
+     await _rollBackPortal(

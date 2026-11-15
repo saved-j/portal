@@ -104,6 +104,18 @@ the device, not a redesign.
   `GoLog … tun-in` line and no `10808 connect error`; the network path is unchanged and
   `GoLog … tun-in` resumes when the portal returns to it. Rollback: reverse the patch — the
   engine reads the tunnel beside the child again.
+- `19b-simple-portal-returns-to-the-engine` — 19 left the engine stopped in the simple portal,
+  and the return path had been written for the opposite: it pushed the profile and waited for
+  the engine to take `rule` *before* starting it, so the switch came back after 12 s with
+  `the engine did not take rule within 12 s`, and every settings push answered
+  `config is not applied` while nothing listened. The return now sets the mode, starts the
+  run (whose own forced push applies the profile) and waits for the engine to have taken it
+  after the start; `updateConfig` is a no-op in the simple portal and while no run exists,
+  instead of pushing at an engine that has nothing to update. The same patch writes the
+  hand-over into the log, so the transition is evidence and not an assumption:
+  `tun generation=N owner=Xray previous=Mihomo stopped=true`, `tun generation=N owner=… released,
+  owner=Off`, `engine listener owner=Xray stop before the hand-over=ok`. Rollback: reverse 19b
+  — the return switch times out again, 19 itself keeps the single reader.
 
 Apply (to a tree that does not already carry the 01..02 commit):
 ```

@@ -53,8 +53,13 @@ object ServiceController {
         // started before this run — Dart's `startListener`, or a network run whose tunnel the
         // child then took — and a listener left behind is a second reader of the interface
         // that carries the run. `StopListener` in Go is idempotent (it answers at once when
-        // nothing runs), so the call is unconditional.
-        Core.stopListener()
+        // nothing runs), so the call is unconditional, and it is written down: the log is what
+        // says the engine really stopped instead of only being assumed to have.
+        val stopped = runCatching { Core.stopListener() }
+        GlobalState.log(
+            "engine listener owner=Off xrayTunActive=$xrayTunActive stop=" +
+                (stopped.exceptionOrNull()?.toString() ?: "ok"),
+        )
         xrayTunActive = false
     }
 
@@ -88,7 +93,14 @@ object ServiceController {
         // engine kept reading the interface the child had been handed. The Go call is
         // idempotent — with nothing running it answers at once — so it is asked every time.
         if (options.xrayTun) {
-            Core.stopListener()
+            // Said out loud, because this is the moment the engine stops being a reader: the
+            // service publishes the descriptor for the child right after, and a listener that
+            // survived would read the same interface beside it.
+            val stopped = runCatching { Core.stopListener() }
+            GlobalState.log(
+                "engine listener owner=Xray stop before the hand-over=" +
+                    (stopped.exceptionOrNull()?.toString() ?: "ok"),
+            )
         }
         val nextIntent = if (options.enable) {
             VpnService::class.intent

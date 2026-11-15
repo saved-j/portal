@@ -26,6 +26,7 @@ import com.follow.clashx.service.models.tunOptions
 import com.follow.clashx.service.modules.ServiceModules
 import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import android.net.VpnService as SystemVpnService
 
 class VpnService : SystemVpnService(), ManagedService {
@@ -140,7 +141,20 @@ class VpnService : SystemVpnService(), ManagedService {
         // condition named the Xray case only (`tunOwnedByChild`), so a mihomo tunnel that
         // was still running survived the hand-over and became the second reader the simple
         // portal showed on the device.
-        synchronized(tunLock) { stopTunLocked() }
+        val previousOwner = synchronized(tunLock) {
+            val owner = when {
+                !tunRunning -> OWNER_OFF
+                tunOwnedByChild -> OWNER_XRAY
+                else -> OWNER_MIHOMO
+            }
+            stopTunLocked()
+            owner
+        }
+        val owner = if (options.xrayTun) OWNER_XRAY else OWNER_MIHOMO
+        GlobalState.log(
+            "tun generation=${tunGeneration.incrementAndGet()} owner=$owner previous=$previousOwner " +
+                "stopped=${previousOwner != OWNER_OFF}",
+        )
         val descriptor = with(Builder()) {
             addAddressAndRoutes(options)
             addDnsServers(options)
@@ -363,6 +377,7 @@ class VpnService : SystemVpnService(), ManagedService {
 
     private fun stopTunLocked() {
         if (!tunRunning) return
+        val owner = if (tunOwnedByChild) OWNER_XRAY else OWNER_MIHOMO
         if (tunOwnedByChild) {
             // The child goes first: it holds its own copy of the descriptor, and a process
             // left reading a revoked tunnel keeps the interface alive for as long as it runs.
@@ -378,9 +393,23 @@ class VpnService : SystemVpnService(), ManagedService {
             Core.stopTun()
         }
         tunRunning = false
+        GlobalState.log(
+            "tun generation=${tunGeneration.get()} owner=$owner released, owner=$OWNER_OFF",
+        )
     }
 
     companion object {
+        /// Numbers each established tunnel across service instances, so the log tells one
+        /// hand-over from the next: the service stops between a close and the next start, so
+        /// a per-instance counter would call every tunnel the first one.
+        private val tunGeneration = AtomicInteger(0)
+
+        // Who reads the established tunnel: nothing, the engine, or the child. Spelled in the
+        // log, because a number alone cannot say which core a start took the interface from.
+        private const val OWNER_OFF = "Off"
+        private const val OWNER_MIHOMO = "Mihomo"
+        private const val OWNER_XRAY = "Xray"
+
         // mihomo's own TUN default: 198.18.0.0/15 is benchmarking space no LAN
         // uses, and its fake-ip pool starts at .4, past this /30.
         private const val IPV4_ADDRESS = "198.18.0.1/30"

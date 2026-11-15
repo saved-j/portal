@@ -630,6 +630,13 @@ class SetupAction extends _$SetupAction {
   Future<void> updateConfig() async {
     _configRequests++;
     await globalState.safeRun(() async {
+      // "Config is not applied" is the answer when there is no config to update: the simple
+      // portal never builds the engine one, and between a stop and the next start nothing of
+      // the engine listens at all. The start that follows pushes the profile itself, so this
+      // push would be nothing but the error it produces — on screen, in the middle of a switch.
+      if (_isSimplePortal || !ref.read(isStartProvider)) {
+        return;
+      }
       final patchConfig = ref.read(patchClashConfigProvider);
       final shouldContinueSetup = await requestAdmin(patchConfig.tun.enable);
       if (!shouldContinueSetup) {

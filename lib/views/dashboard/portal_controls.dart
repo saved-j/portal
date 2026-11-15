@@ -1703,12 +1703,12 @@ var _portalSwitching = false;
 
 /// Moves the portal between the two modes as one transaction.
 ///
-/// The steps are ordered, not parallel: close the portal, stop the previous core, start the
-/// next one, wait for the engine to have taken the new mode, move the route, ignite the
-/// portal again. Each step is something that answered, so a failure can be caught where it
-/// happened; when one does, the previous mode and core come back and the reason is shown.
-/// A switch that half happened would leave a portal carrying nothing with nothing on screen
-/// to say why.
+/// The steps are ordered, not parallel: close the portal, stop the previous core, move the
+/// mode, ignite the portal again on the other core, and — returning to the network — wait
+/// for the engine to have taken the profile its start pushed. Each step is something that
+/// answered, so a failure can be caught where it happened; when one does, the previous mode
+/// and core come back and the reason is shown. A switch that half happened would leave a
+/// portal carrying nothing with nothing on screen to say why.
 Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
   if (_portalSwitching) return;
   _portalSwitching = true;
@@ -1738,16 +1738,11 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
         );
       }
     } else {
-      // The simple portal never pushed an engine config — that is exactly what "only Xray"
-      // means — so the engine comes back with nothing applied: its groups read as empty and
-      // the core answers "config is not applied". The profile has to be pushed before the
-      // mode is asked for, or the network mode has no servers to show.
-      final applied = await setup.applyProfile(force: true);
-      if (!applied) {
-        throw const _PortalSwitchFailure(
-          'the portal network could not be applied: the profile was rejected',
-        );
-      }
+      // The simple portal runs no engine and pushes it no config — that is exactly what "only
+      // Xray" means — so on the way back the engine exists only after the start below. A push
+      // before it exists answers "config is not applied", and waiting for the mode before the
+      // start it belongs to can only time out. The mode is the setting; the start applies the
+      // profile (its own forced push), and the wait after it is what proves the engine took it.
       final mode = await setup.pickMode(Mode.rule);
       if (!mode.ok) {
         throw _PortalSwitchFailure(
@@ -1757,21 +1752,20 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
     }
     if (wasRunning) {
       // In the simple portal there is no engine config to wait for: the mode is a setting
-      // and the tunnel is the child's, so the start that follows is the whole answer. In
-      // the network mode the engine still has to take the new config first.
-      if (!toSimple) {
-        final applied = await _awaitMode(ref, Mode.rule);
-        if (!applied.ok) {
-          throw _PortalSwitchFailure(applied.reason);
-        }
-      }
-      // 6. Ignite: the same portal, on the other core. The start's own answer is the one
-      // that matters, and its reason is what the owner is shown when it is not `ok`.
+      // and the tunnel is the child's, so the start that follows is the whole answer.
       if (!await setup.setRunning(true)) {
         final reason = setup.lastPortalFailure;
         throw _PortalSwitchFailure(
           reason.isEmpty ? 'the portal did not start again' : reason,
         );
+      }
+      // In the network mode the engine has to have taken the profile the start pushed for
+      // this to be a switch: until it answers, the route is the old one and groups read empty.
+      if (!toSimple) {
+        final applied = await _awaitMode(ref, Mode.rule);
+        if (!applied.ok) {
+          throw _PortalSwitchFailure(applied.reason);
+        }
       }
     }
   } catch (error) {
