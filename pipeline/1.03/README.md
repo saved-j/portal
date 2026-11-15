@@ -228,6 +228,11 @@ the device, not a redesign.
   `live` counts only when the record's `Active` owner is the mode's (`portalStatusProvider`),
   `held` is kept per owner, and the transition line carries `owner=` and the first three
   `names=`, so a wrong list cannot pass silently.
+- `26-version-0.5.3-portal-duo-2b` — release metadata only: `pubspec.yaml` carries
+  `version: 0.5.3-portal-duo-2b+<code + 1>`, which is the one tracked source for the version
+  (Flutter writes `android/local.properties` from it, `setup.dart` reads it for
+  `--dart-define=APP_VERSION`, the About screen reads the installed package). `local.properties`
+  is gitignored and was written on disk too. No behaviour change.
 
 Apply (to a tree that does not already carry the 01..02 commit):
 ```

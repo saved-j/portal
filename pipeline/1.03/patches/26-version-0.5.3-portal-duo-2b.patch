@@ -1,0 +1,24 @@
+# portal 1.03 patch 26 — the shop-facing version, 0.5.3-portal-duo-2b
+#
+# The build the phones run is `0.5.3-portal-duo` with versionCode 2026116401 (pubspec's
+# `2026111401` + the +5000 in build.gradle.kts). This patch is the release metadata only:
+#
+#   version: 0.5.3-portal-duo-2b+<versionCode + 1>
+#
+# `pubspec.yaml` is the one tracked source of the version: Flutter writes
+# `android/local.properties` from it, `setup.dart`/`build.sh` read it for
+# `--dart-define=APP_VERSION`, and the About screen reads the installed package. `local.properties`
+# is gitignored, so the same two values were also written there on disk for this machine's build
+# (`flutter.versionName=0.5.3-portal-duo-2b`, code + 1). No behaviour changes.
+diff --git a/pubspec.yaml b/pubspec.yaml
+index 8ebf6f3f..70ea2b3e 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -1,7 +1,7 @@
+ name: fl_clash
+ description: FlClashX, a fork of FlClash - a multi-platform proxy client based on ClashMeta for Remnawave users.
+ publish_to: 'none'
+-version: 0.5.3-portal-duo+202****1401
++version: 0.5.3-portal-duo-2b+202****1402
+ environment:
+   sdk: '>=3.10.0 <4.0.0'
