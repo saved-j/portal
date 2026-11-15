@@ -9,6 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
+import 'package:fl_clash/core/xray_config.dart';
+import 'package:fl_clash/core/xray_switch.dart';
+import 'package:fl_clash/plugins/xray.dart';
+import 'dart:async';
 
 /// How the server list is ordered; the switch sits next to the mode control.
 enum PortalSort { ping, alphabet }
@@ -197,6 +201,36 @@ List<Group> portalVisibleGroups(List<Group> all, Set<String> hidden, List<String
   return visible;
 }
 
+/// Hands the traffic to Xray for the simple portal.
+///
+/// Order matters: the child must answer before the engine is told to send everything to it,
+/// otherwise the switch would show a portal that cannot carry a packet. If the pick cannot
+/// be resolved — a builtin, or a name the applied config no longer has — the mode is left
+/// alone rather than pointing at a dead port.
+Future<void> _enterSimplePortal(WidgetRef ref) async {
+  // The strip keeps a null group name until the owner picks one; the first group is what
+  // the list is showing in that case, so the pick lives there.
+  final groupName = ref.read(portalGroupProvider) ??
+      ref.read(groupsProvider).firstOrNull?.name;
+  final chosen =
+      groupName == null ? null : ref.read(selectedProxyNameProvider(groupName));
+  Map<String, dynamic>? node;
+  if (chosen != null) {
+    final path = await appPath.configFilePath;
+    node = await nodeDefinitionFor(path, chosen);
+  }
+  if (node != null) {
+    final started = await XrayCore.instance.start(xrayConfigJson(node));
+    if (started['ok'] != true) return;
+  }
+  await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
+  if (node != null) {
+    await ref
+        .read(proxiesActionProvider.notifier)
+        .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
+  }
+}
+
 /// Mode control with the two list controls beside it: sorting and the delay test.
 class PortalModeSwitch extends ConsumerWidget {
   const PortalModeSwitch({super.key});
@@ -244,9 +278,16 @@ class PortalModeSwitch extends ConsumerWidget {
                 activeTrackColor: _liveGreen(context).withValues(alpha: 0.4),
                 onChanged: (value) {
                   HapticFeedback.selectionClick();
-                  ref
-                      .read(setupActionProvider.notifier)
-                      .pickMode(value ? Mode.rule : Mode.global);
+                  if (value) {
+                    // Back to the portal network: leave the child before the engine starts
+                    // routing again, so nothing is left holding the port.
+                    ref.read(setupActionProvider.notifier).pickMode(Mode.rule);
+                    XrayCore.instance.stop();
+                    return;
+                  }
+                  // The animation has already begun from this tap; the child, the hand-over
+                  // and the mode change settle behind it.
+                  unawaited(_enterSimplePortal(ref));
                 },
               ),
               const SizedBox(width: 8),

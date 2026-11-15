@@ -47,11 +47,27 @@ host_guard() {
   esac
 }
 
+# The child process is not stored in the repository: 33 MB of binary per ABI would bloat
+# every diff. It is fetched once into jniLibs, where nothing but the app build reads it.
+ensure_xray_android() {
+  local dest="android/app/src/main/jniLibs/arm64-v8a/libxray.so"
+  if [ -f "$dest" ]; then return 0; fi
+  local work
+  work=$(mktemp -d "${TMPDIR:-/tmp}/xray-fetch.XXXXXX")
+  echo "fetching Xray 26.11.9 for android/arm64"
+  curl -fL --retry 2 -o "$work/x.zip" \
+    https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-android-arm64-v8a.zip || return 1
+  mkdir -p "$work/out" "$(dirname "$dest")"
+  unzip -q -o "$work/x.zip" -d "$work/out" || return 1
+  cp -f "$work/out/xray" "$dest" && chmod 755 "$dest"
+}
+
 case "${1:-get}" in
   get)        flutter --version; flutter pub get ;;
   macos)      APP_ENV=stable; dart setup.dart macos --env "$APP_ENV"
               ls -lh build/macos/Build/Products/Release/*.dmg 2>/dev/null || true ;;
-  apk)        dart setup.dart android --env stable
+  apk)        ensure_xray_android || exit 1
+              dart setup.dart android --env stable
               ls -lh build/app/outputs/flutter-apk/*.apk 2>/dev/null || true ;;
   linux)      host_guard linux;   dart setup.dart linux --env stable ;;
   windows)    host_guard windows; dart setup.dart windows --env stable ;;

@@ -3,6 +3,219 @@ From: Portal patch pipeline <noreply@portal.local>
 Date: Sun, 15 Nov 2026 06:00:00 +0800
 Subject: [PATCH] 10-core-network
 
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/MainActivity.kt b/android/app/src/main/kotlin/com/follow/clashx/MainActivity.kt
+index d9bcd092b00d8c219107cbba7e08109060d7de14..5dd0124fdc7c0784261cc7124af6e6a0b1708454 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/MainActivity.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/MainActivity.kt
+@@ -5,6 +5,7 @@ import com.follow.clashx.plugins.AppPlugin
+ import com.follow.clashx.plugins.BatteryPlugin
+ import com.follow.clashx.plugins.ServicePlugin
+ import com.follow.clashx.plugins.TilePlugin
++import com.follow.clashx.plugins.XrayPlugin
+ import io.flutter.embedding.android.FlutterActivity
+ import io.flutter.embedding.engine.FlutterEngine
+ 
+@@ -35,6 +36,7 @@ class MainActivity : FlutterActivity() {
+         flutterEngine.plugins.add(BatteryPlugin())
+         flutterEngine.plugins.add(ServicePlugin())
+         flutterEngine.plugins.add(TilePlugin())
++        flutterEngine.plugins.add(XrayPlugin())
+         ServiceState.attachFlutterEngine(flutterEngine)
+         flutterEngine.addEngineLifecycleListener(stopVibrationOnRestart)
+     }
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..c7b6b6b3a432d347882467c51f8b7eea51e6b391
+--- /dev/null
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -0,0 +1,187 @@
++package com.follow.clashx.plugins
++
++import android.content.Context
++import android.util.Log
++import com.follow.clashx.common.Components
++import io.flutter.embedding.engine.plugins.FlutterPlugin
++import io.flutter.plugin.common.MethodCall
++import io.flutter.plugin.common.MethodChannel
++import java.io.File
++import java.net.InetSocketAddress
++import java.net.Socket
++import java.util.concurrent.Executors
++import java.util.zip.ZipFile
++
++/**
++ * Runs the bundled Xray next to the in-process engine.
++ *
++ * The engine keeps the TUN and the rule engine; Xray owns the real node and is reached
++ * through a socks5 outbound the host declares in the engine's config. That split is not a
++ * preference: a child process cannot inherit the tun descriptor, and its sockets cannot be
++ * protected by the VpnService, so letting the child own the tunnel would loop its own
++ * traffic straight back into the tunnel.
++ *
++ * Ported from the PortalVPN legacy client, which ran a bridge the same way and answered the
++ * same health check.
++ */
++class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
++    private lateinit var channel: MethodChannel
++    private lateinit var appContext: Context
++    private val executor = Executors.newSingleThreadExecutor()
++    @Volatile private var process: Process? = null
++    @Volatile private var lastLine: String = ""
++
++    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
++        appContext = binding.applicationContext
++        channel = MethodChannel(binding.binaryMessenger, CHANNEL)
++        channel.setMethodCallHandler(this)
++    }
++
++    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
++        channel.setMethodCallHandler(null)
++        stop()
++    }
++
++    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
++        when (call.method) {
++            "status" -> result.success(status())
++            "start" -> {
++                val config = call.argument<String>("config")
++                val port = call.argument<Int>("port") ?: DEFAULT_PORT
++                if (config.isNullOrBlank()) {
++                    result.success(mapOf("ok" to false, "message" to "empty config"))
++                    return
++                }
++                executor.execute {
++                    val outcome = start(config, port)
++                    channel.invokeMethodOnMainThread("state", status())
++                    result.success(outcome)
++                }
++            }
++            "stop" -> {
++                executor.execute {
++                    stop()
++                    channel.invokeMethodOnMainThread("state", status())
++                    result.success(mapOf("ok" to true, "message" to "stopped"))
++                }
++            }
++            else -> result.notImplemented()
++        }
++    }
++
++    private fun status(): Map<String, Any> = mapOf(
++        "running" to (process?.isAlive == true),
++        "lastLine" to lastLine,
++    )
++
++    private fun start(config: String, port: Int): Map<String, Any> {
++        stop()
++        val binary = binary() ?: return failure("libxray.so is missing from the APK")
++        val configFile = File(appContext.filesDir, "xray.json")
++        configFile.writeText(config, Charsets.UTF_8)
++
++        return try {
++            val builder = ProcessBuilder(binary.absolutePath, "run", "-c", configFile.absolutePath)
++                .directory(appContext.filesDir)
++                .redirectErrorStream(true)
++            val started = builder.start()
++            process = started
++            drain(started)
++
++            val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
++            while (System.currentTimeMillis() < deadline) {
++                if (!started.isAlive) {
++                    val code = runCatching { started.exitValue() }.getOrDefault(-1)
++                    stop()
++                    return failure("xray exited with $code: $lastLine")
++                }
++                if (reachable(port)) {
++                    Log.i(TAG, "xray is listening on 127.0.0.1:$port")
++                    return mapOf("ok" to true, "message" to "listening on $port")
++                }
++                Thread.sleep(200)
++            }
++            stop()
++            failure("xray did not open 127.0.0.1:$port within ${READY_TIMEOUT_MS}ms: $lastLine")
++        } catch (e: Exception) {
++            Log.e(TAG, "unable to start xray", e)
++            stop()
++            failure(e.message ?: "unable to start xray")
++        }
++    }
++
++    private fun stop() {
++        val current = process ?: return
++        process = null
++        runCatching {
++            current.destroy()
++            if (!current.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
++                current.destroyForcibly()
++                current.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
++            }
++        }.onFailure { Log.w(TAG, "stop: ${it.message}") }
++    }
++
++    /**
++     * Only the APK's native library directory is executable by an app targeting API 29+;
++     * a copy in filesDir fails with EACCES however its mode bits read.
++     */
++    private fun binary(): File? {
++        val native = File(appContext.applicationInfo.nativeLibraryDir, LIB_NAME)
++        if (native.exists()) return native
++        // A build whose native sources were not extracted still carries the file in the zip.
++        return runCatching {
++            ZipFile(appContext.applicationInfo.sourceDir).use { zip ->
++                val entry = zip.getEntry("lib/arm64-v8a/$LIB_NAME")
++                    ?: zip.getEntry("lib/armeabi-v7a/$LIB_NAME")
++                    ?: zip.getEntry("lib/x86_64/$LIB_NAME")
++                    ?: return@use null
++                val out = File(appContext.filesDir, LIB_NAME)
++                zip.getInputStream(entry).use { input ->
++                    out.outputStream().use { output -> input.copyTo(output) }
++                }
++                out.setExecutable(true)
++                out
++            }
++        }.getOrNull()
++    }
++
++    private fun drain(started: Process) {
++        executor.execute {
++            runCatching {
++                started.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
++                    for (line in lines) {
++                        lastLine = line
++                        if (line.contains("error", true) || line.contains("fatal", true)) {
++                            Log.e(TAG, line)
++                        } else {
++                            Log.i(TAG, line)
++                        }
++                    }
++                }
++            }.onFailure { Log.w(TAG, "output stream closed: ${it.message}") }
++        }
++    }
++
++    private fun reachable(port: Int): Boolean = runCatching {
++        Socket().use { it.connect(InetSocketAddress("127.0.0.1", port), 400) }
++        true
++    }.getOrDefault(false)
++
++    private fun failure(message: String): Map<String, Any> =
++        mapOf("ok" to false, "message" to message)
++
++    private fun MethodChannel.invokeMethodOnMainThread(method: String, arguments: Any?) {
++        android.os.Handler(android.os.Looper.getMainLooper()).post {
++            invokeMethod(method, arguments)
++        }
++    }
++
++    companion object {
++        private const val TAG = "XrayCore"
++        private const val LIB_NAME = "libxray.so"
++        private const val READY_TIMEOUT_MS = 10_000L
++        const val DEFAULT_PORT = 10808
++        val CHANNEL = "${Components.PACKAGE_NAME}/xray"
++    }
++}
 diff --git a/core/go.mod b/core/go.mod
 index 29634b987246cb3ea6de2df28efcc2a6e2b053f3..11510f8e62f181a4de52aef0d02c47aab03fbe98 100644
 --- a/core/go.mod
@@ -55,6 +268,170 @@ index 7646903df1c98e9a921836ae653ba5c66d486576..be098bdd6ee7aa104cc70b9817d53c2b
  github.com/vishvananda/netlink v1.1.0/go.mod h1:cTgwzPIzzgDAYoQrMm0EdrjRUBkTqKYppBueQtXaqoE=
  github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df/go.mod h1:JP3t17pCcGlemwknint6hfoeCVQrEMVwxRLRjXpq+BU=
  github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f/go.mod h1:DD4vA1DwXk04H54A1oHXtwZmA0grkVMdPxx/VGLCah0=
+diff --git a/core/profile_base.go b/core/profile_base.go
+index 1f9eacbf40633144e04de22b0f9dc17b99776395..12e44ad244e9cf5061c5fbe35f82ccec07c2c352 100644
+--- a/core/profile_base.go
++++ b/core/profile_base.go
+@@ -234,11 +234,26 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	// The host contributes an outbound of its own (the local Xray) and a group that selects
++	// it. A profile carries its own proxies and groups, and the loop below replaces both, so
++	// they are captured here and appended afterwards instead of being lost.
++	addedProxies := mappingValue(root, "proxies")
++	addedGroups := mappingValue(root, "proxy-groups")
+ 	for _, key := range profileBaseSections {
+ 		if value := mappingValue(profile, key); value != nil {
+ 			setMappingValue(root, key, value)
+ 		}
+ 	}
++	if merged, err := appendByName(addedProxies, mappingValue(root, "proxies")); err != nil {
++		return nil, err
++	} else if merged != nil {
++		setMappingValue(root, "proxies", merged)
++	}
++	if merged, err := appendByName(addedGroups, mappingValue(root, "proxy-groups")); err != nil {
++		return nil, err
++	} else if merged != nil {
++		setMappingValue(root, "proxy-groups", merged)
++	}
+ 	rules, err := appendRules(mappingValue(root, "rules"), mappingValue(profile, "rules"))
+ 	if err != nil {
+ 		return nil, err
+@@ -328,6 +343,50 @@ func appendRules(added, profile *yaml.Node) (*yaml.Node, error) {
+ 	return &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: content}, nil
+ }
+ 
++// The host's own entries go in front of the profile's and are matched by name, because
++// mihomo refuses a config where two proxies or two groups share a name.
++func appendByName(added, profile *yaml.Node) (*yaml.Node, error) {
++	added, profile = resolveAlias(added), resolveAlias(profile)
++	if added == nil || isNull(added) || (added.Kind == yaml.SequenceNode && len(added.Content) == 0) {
++		return nil, nil
++	}
++	if added.Kind != yaml.SequenceNode {
++		return nil, fmt.Errorf("line %d: expected a list", added.Line)
++	}
++	if profile == nil || isNull(profile) {
++		return added, nil
++	}
++	if profile.Kind != yaml.SequenceNode {
++		return nil, fmt.Errorf("line %d: expected a list", profile.Line)
++	}
++	taken := make(map[string]bool, len(added.Content))
++	for _, item := range added.Content {
++		if name := nameOf(item); name != "" {
++			taken[name] = true
++		}
++	}
++	content := append([]*yaml.Node{}, added.Content...)
++	for _, item := range profile.Content {
++		if name := nameOf(item); name != "" && taken[name] {
++			continue
++		}
++		content = append(content, item)
++	}
++	return &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: content}, nil
++}
++
++// nameOf reads the `name:` scalar of a list item, or "" when the item has none.
++func nameOf(node *yaml.Node) string {
++	item := resolveAlias(node)
++	if item == nil || item.Kind != yaml.MappingNode {
++		return ""
++	}
++	if value := mappingValue(item, "name"); value != nil && value.Kind == yaml.ScalarNode {
++		return value.Value
++	}
++	return ""
++}
++
+ func resolveAlias(node *yaml.Node) *yaml.Node {
+ 	for node != nil && node.Kind == yaml.AliasNode && node.Alias != nil {
+ 		node = node.Alias
+diff --git a/core/profile_base_merge_test.go b/core/profile_base_merge_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..554304f8bf3a72e2d90895c4a90f9d5a23c3209f
+--- /dev/null
++++ b/core/profile_base_merge_test.go
+@@ -0,0 +1,76 @@
++package core
++
++import (
++	"testing"
++
++	"go.yaml.in/yaml/v3"
++)
++
++// A profile carries its own proxies, and the host adds one of its own (the local Xray).
++// The merge must keep both, and must never let two entries share a name: mihomo refuses
++// such a config, and one bad entry costs every proxy the user has.
++func TestAppendByNameKeepsBothSides(t *testing.T) {
++	added := list(t, "- name: XRAY-SOCKS\n  type: socks5\n  server: 127.0.0.1\n")
++	profile := list(t, "- name: node-a\n  type: vless\n- name: node-b\n  type: trojan\n")
++
++	merged, err := appendByName(added, profile)
++	if err != nil {
++		t.Fatalf("appendByName: %v", err)
++	}
++	names := namesOf(t, merged)
++	if len(names) != 3 || names[0] != "XRAY-SOCKS" || names[1] != "node-a" || names[2] != "node-b" {
++		t.Fatalf("want the host entry first then the profile's, got %v", names)
++	}
++}
++
++func TestAppendByNameDropsDuplicates(t *testing.T) {
++	added := list(t, "- name: XRAY-SOCKS\n  type: socks5\n")
++	profile := list(t, "- name: XRAY-SOCKS\n  type: http\n- name: node-a\n  type: vless\n")
++
++	merged, err := appendByName(added, profile)
++	if err != nil {
++		t.Fatalf("appendByName: %v", err)
++	}
++	names := namesOf(t, merged)
++	if len(names) != 2 {
++		t.Fatalf("want the duplicate dropped, got %v", names)
++	}
++	if names[0] != "XRAY-SOCKS" || names[1] != "node-a" {
++		t.Fatalf("want the host's entry to win, got %v", names)
++	}
++}
++
++func TestAppendByNameWithoutHostEntriesChangesNothing(t *testing.T) {
++	profile := list(t, "- name: node-a\n  type: vless\n")
++	merged, err := appendByName(nil, profile)
++	if err != nil {
++		t.Fatalf("appendByName: %v", err)
++	}
++	if merged != nil {
++		t.Fatalf("want nil so the caller leaves the profile alone, got %v", namesOf(t, merged))
++	}
++}
++
++func list(t *testing.T, src string) *yaml.Node {
++	t.Helper()
++	var doc yaml.Node
++	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
++		t.Fatalf("unmarshal: %v", err)
++	}
++	if len(doc.Content) == 0 {
++		t.Fatalf("empty document")
++	}
++	return doc.Content[0]
++}
++
++func namesOf(t *testing.T, node *yaml.Node) []string {
++	t.Helper()
++	if node == nil {
++		return nil
++	}
++	out := make([]string, 0, len(node.Content))
++	for _, item := range node.Content {
++		out = append(out, nameOf(item))
++	}
++	return out
++}
 diff --git a/docs/DPI.md b/docs/DPI.md
 new file mode 100644
 index 0000000000000000000000000000000000000000..4f8efcba64bcd901f83d0df54bd5ac8a440f9785
@@ -181,3 +558,354 @@ index 2d92cec46bbba32eea04168d1953f8dac5b64a5c..d90cf96398315ffe47802db73fed4fab
  }
  
  int compareVersions(String version1, String version2) {
+diff --git a/lib/core/xray_bridge_config.dart b/lib/core/xray_bridge_config.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..78a42fed408695af95eee1512c125cd093bcabeb
+--- /dev/null
++++ b/lib/core/xray_bridge_config.dart
+@@ -0,0 +1,84 @@
++/// Wraps the engine's own configuration so that all traffic leaves through Xray.
++///
++/// The app keeps mihomo for TUN, DNS and the rule engine. When the owner turns the
++/// "Сеть порталов" switch off, the simple mode must not route through the subscription's
++/// own outbounds — it must hand everything to a local Xray that owns the real node.
++///
++/// That is done by adding one socks5 proxy pointing at 127.0.0.1 and forcing global mode.
++/// This file is the whole of that decision, so it can be tested without a tunnel.
++library;
++
++const xrayBridgeTag = 'portal-xray';
++const xrayBridgeGroup = 'PORTAL-XRAY';
++const xrayDefaultPort = 10808;
++
++/// Returns a copy of [config] in which every connection goes to the local Xray.
++///
++/// The original map is not modified: switching back must be possible by simply dropping
++/// the returned copy.
++Map<String, dynamic> withXrayBridge(
++  Map<String, dynamic> config, {
++  int port = xrayDefaultPort,
++}) {
++  final out = <String, dynamic>{...config};
++
++  final proxies = <dynamic>[
++    ...?(config['proxies'] as List?)?.where(
++      (p) => p is Map && p['name'] != xrayBridgeTag,
++    ),
++    {
++      'name': xrayBridgeTag,
++      'type': 'socks5',
++      'server': '127.0.0.1',
++      'port': port,
++      'udp': false,
++      'skip-cert-verify': true,
++    },
++  ];
++  out['proxies'] = proxies;
++
++  final groups = <dynamic>[
++    ...?(config['proxy-groups'] as List?)?.where(
++      (g) => g is Map && g['name'] != xrayBridgeGroup,
++    ),
++    {
++      'name': xrayBridgeGroup,
++      'type': 'select',
++      'proxies': [xrayBridgeTag],
++    },
++  ];
++  out['proxy-groups'] = groups;
++
++  // Global mode plus this one group is what makes the engine a plain pipe: no rules of
++  // its own, nothing selected by delay, everything into Xray.
++  out['mode'] = 'global';
++  out['GLOBAL'] = xrayBridgeGroup;
++
++  return out;
++}
++
++/// True when [config] already carries the bridge, so a second switch-off cannot stack
++/// a second socks proxy or a second group on top of the first.
++bool hasXrayBridge(Map<String, dynamic> config) {
++  final proxies = (config['proxies'] as List?) ?? const [];
++  return proxies.any((p) => p is Map && p['name'] == xrayBridgeTag);
++}
++
++/// Removes the bridge and restores the mode the config had before it was wrapped.
++Map<String, dynamic> withoutXrayBridge(
++  Map<String, dynamic> config, {
++  String restoreMode = 'rule',
++}) {
++  final out = <String, dynamic>{...config};
++  out['proxies'] = ((config['proxies'] as List?) ?? const [])
++      .where((p) => !(p is Map && p['name'] == xrayBridgeTag))
++      .toList();
++  out['proxy-groups'] = ((config['proxy-groups'] as List?) ?? const [])
++      .where((g) => !(g is Map && g['name'] == xrayBridgeGroup))
++      .toList();
++  if (out['GLOBAL'] == xrayBridgeGroup) {
++    out.remove('GLOBAL');
++  }
++  out['mode'] = restoreMode;
++  return out;
++}
+diff --git a/lib/core/xray_config.dart b/lib/core/xray_config.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..aeb8679e2eca1a9bb893b1cf45ec2345922fb7ab
+--- /dev/null
++++ b/lib/core/xray_config.dart
+@@ -0,0 +1,179 @@
++/// Turns one Clash/Mihomo proxy entry into an Xray configuration.
++///
++/// The app speaks Clash YAML: a subscription is a list of proxies with a `type` and a few
++/// protocol fields. Xray speaks its own JSON. This file is the only place that knows both,
++/// so the whole X-Ray path can be tested without a phone, a tunnel or a panel.
++library;
++
++import 'dart:convert';
++
++/// A single outbound in Xray's JSON shape, plus the socks inbound the app uses.
++Map<String, dynamic> xrayConfigFor(
++  Map<String, dynamic> proxy, {
++  int socksPort = 10808,
++  String logLevel = 'warning',
++}) {
++  final type = (proxy['type'] as String? ?? '').toLowerCase();
++  final outbound = switch (type) {
++    'vless' => _vless(proxy),
++    'vmess' => _vmess(proxy),
++    'trojan' => _trojan(proxy),
++    _ => throw UnsupportedProxyType(type),
++  };
++  return {
++    'log': {'loglevel': logLevel},
++    'inbounds': [
++      {
++        'tag': 'socks-in',
++        'listen': '127.0.0.1',
++        'port': socksPort,
++        'protocol': 'socks',
++        'settings': {'udp': false},
++      },
++    ],
++    'outbounds': [
++      outbound,
++      {'tag': 'blocked', 'protocol': 'blackhole'},
++    ],
++  };
++}
++
++class UnsupportedProxyType implements Exception {
++  const UnsupportedProxyType(this.type);
++  final String type;
++
++  @override
++  String toString() => 'UnsupportedProxyType($type)';
++}
++
++Map<String, dynamic> _vless(Map<String, dynamic> proxy) {
++  final settings = <String, dynamic>{
++    'vnext': [
++      {
++        'address': proxy['server'],
++        'port': _port(proxy),
++        'users': [
++          {
++            'id': proxy['uuid'],
++            'encryption': (proxy['encryption'] as String?) ?? 'none',
++            if (proxy['flow'] != null) 'flow': proxy['flow'],
++          },
++        ],
++      },
++    ],
++  };
++
++  final stream = _stream(proxy);
++  return {
++    'tag': 'proxy',
++    'protocol': 'vless',
++    'settings': settings,
++    'streamSettings': stream,
++  };
++}
++
++Map<String, dynamic> _vmess(Map<String, dynamic> proxy) {
++  return {
++    'tag': 'proxy',
++    'protocol': 'vmess',
++    'settings': {
++      'vnext': [
++        {
++          'address': proxy['server'],
++          'port': _port(proxy),
++          'users': [
++            {
++              'id': proxy['uuid'],
++              'alterId': proxy['alterId'] ?? 0,
++              'security': (proxy['cipher'] as String?) ?? 'auto',
++            },
++          ],
++        },
++      ],
++    },
++    'streamSettings': _stream(proxy),
++  };
++}
++
++Map<String, dynamic> _trojan(Map<String, dynamic> proxy) {
++  return {
++    'tag': 'proxy',
++    'protocol': 'trojan',
++    'settings': {
++      'servers': [
++        {
++          'address': proxy['server'],
++          'port': _port(proxy),
++          'password': proxy['password'],
++        },
++      ],
++    },
++    'streamSettings': _stream(proxy),
++  };
++}
++
++int _port(Map<String, dynamic> proxy) {
++  final raw = proxy['port'];
++  if (raw is int) return raw;
++  final parsed = int.tryParse('$raw');
++  if (parsed == null) throw const FormatException('proxy has no usable port');
++  return parsed;
++}
++
++/// Transport, TLS and REALITY. Clash keeps these flat on the proxy entry and Xray wants
++/// them nested, which is the whole reason this conversion cannot be a rename.
++Map<String, dynamic> _stream(Map<String, dynamic> proxy) {
++  final network = (proxy['network'] as String?) ?? 'tcp';
++  final stream = <String, dynamic>{'network': network};
++
++  switch (network) {
++    case 'ws':
++      stream['wsSettings'] = {
++        'path': proxy['ws-path'] ?? proxy['wsPath'] ?? '/',
++        if (proxy['ws-headers'] != null || proxy['wsHeaders'] != null)
++          'headers': proxy['ws-headers'] ?? proxy['wsHeaders'],
++      };
++      break;
++    case 'grpc':
++      stream['grpcSettings'] = {
++        'serviceName': proxy['grpc-service-name'] ?? proxy['grpcServiceName'] ?? '',
++        if (proxy['grpc-mode'] != null) 'multiMode': proxy['grpc-mode'] == 'multi',
++      };
++      break;
++    case 'h2':
++      stream['httpSettings'] = {
++        'path': proxy['h2-path'] ?? proxy['h2Path'] ?? '/',
++        'host': [proxy['h2-host'] ?? proxy['h2Host'] ?? proxy['server']],
++      };
++      break;
++  }
++
++  final reality = proxy['reality-opts'] ?? proxy['realityOpts'];
++  final tls = proxy['tls'];
++  if (reality is Map) {
++    stream['security'] = 'reality';
++    stream['realitySettings'] = {
++      'serverName': reality['server-name'] ?? reality['serverName'] ?? proxy['servername'],
++      'fingerprint': proxy['client-fingerprint'] ?? 'chrome',
++      'publicKey': reality['public-key'] ?? reality['publicKey'],
++      'shortId': reality['short-id'] ?? reality['shortId'] ?? '',
++    };
++  } else if (tls == true) {
++    stream['security'] = 'tls';
++    stream['tlsSettings'] = {
++      'serverName': proxy['servername'] ?? proxy['sni'] ?? proxy['server'],
++      'allowInsecure': proxy['skip-cert-verify'] ?? false,
++      if (proxy['alpn'] != null) 'alpn': proxy['alpn'],
++      if (proxy['client-fingerprint'] != null)
++        'fingerprint': proxy['client-fingerprint'],
++    };
++  }
++
++  return stream;
++}
++
++/// JSON text, ready to be written next to the binary.
++String xrayConfigJson(Map<String, dynamic> proxy, {int socksPort = 10808}) =>
++    const JsonEncoder.withIndent('  ').convert(
++      xrayConfigFor(proxy, socksPort: socksPort),
++    );
+diff --git a/lib/plugins/xray.dart b/lib/plugins/xray.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..293e8e3d2a9b5feac1be447bbf4bab8b95232141
+--- /dev/null
++++ b/lib/plugins/xray.dart
+@@ -0,0 +1,70 @@
++import 'dart:async';
++
++import 'package:flutter/services.dart';
++
++import '../common/constant.dart';
++
++/// The Xray child process, driven from Dart.
++///
++/// The engine keeps the tunnel; Xray owns the real node and is reached through the socks
++/// outbound the configs already declare. Nothing here decides policy — it starts, reports,
++/// and stops, so the switch stays a mode change rather than a rebuild.
++class XrayCore {
++  XrayCore._();
++
++  static final XrayCore instance = XrayCore._();
++
++  static const _channel = MethodChannel('$packageName/xray');
++
++  /// Last line the child printed, kept so a failure can be shown as it happened.
++  String lastLine = '';
++  bool running = false;
++
++  Future<Map<String, dynamic>> start(
++    String config, {
++    int port = 10808,
++  }) async {
++    try {
++      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('start', {
++        'config': config,
++        'port': port,
++      });
++      final map = result?.cast<String, dynamic>() ?? const <String, dynamic>{};
++      running = map['ok'] == true;
++      lastLine = (map['message'] as String?) ?? lastLine;
++      return map;
++    } on PlatformException catch (error) {
++      lastLine = error.message ?? '$error';
++      return {'ok': false, 'message': lastLine};
++    } on MissingPluginException {
++      // Desktop builds have no such channel yet; the portal stays on the engine alone.
++      lastLine = 'xray is not available in this build';
++      return {'ok': false, 'message': lastLine};
++    }
++  }
++
++  Future<void> stop() async {
++    try {
++      await _channel.invokeMethod('stop');
++    } on PlatformException catch (error) {
++      lastLine = error.message ?? '$error';
++    } on MissingPluginException {
++      // Nothing to stop.
++    }
++    running = false;
++  }
++
++  Future<Map<String, dynamic>> status() async {
++    try {
++      final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('status');
++      final map = result?.cast<String, dynamic>() ?? const <String, dynamic>{};
++      running = map['running'] == true;
++      lastLine = (map['lastLine'] as String?) ?? lastLine;
++      return map;
++    } on PlatformException {
++      return const {};
++    } on MissingPluginException {
++      return const {};
++    }
++  }
++}

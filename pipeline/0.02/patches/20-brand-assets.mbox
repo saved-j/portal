@@ -4,7 +4,7 @@ Date: Sun, 15 Nov 2026 06:00:00 +0800
 Subject: [PATCH] 20-brand-assets
 
 diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
-index 653dc38d4d236f200c6194973a69dc9d1d88ac1f..04411a9efc53039e283395917d1e7d1396d31b7b 100644
+index 653dc38d4d236f200c6194973a69dc9d1d88ac1f..6515ebe8523ea18f57d3f3d469c02c9b7b1b0030 100644
 --- a/android/app/build.gradle.kts
 +++ b/android/app/build.gradle.kts
 @@ -45,7 +45,7 @@ android {
@@ -16,6 +16,17 @@ index 653dc38d4d236f200c6194973a69dc9d1d88ac1f..04411a9efc53039e283395917d1e7d13
          minSdk = flutter.minSdkVersion
          targetSdk = libs.versions.targetSdk.get().toInt()
          // Releases up to 0.5.0-pre.8 gave split APKs Flutter's ABI offset of up to +4000, so the
+@@ -72,6 +72,10 @@ android {
+     packaging {
+         jniLibs {
+             useLegacyPackaging = true
++            // The Xray binary is shipped as libxray.so so that nativeLibraryDir, the only
++            // directory an app targeting API 29+ may execute from, holds a real file.
++            // Stripping it would corrupt an executable that is not a shared library.
++            keepDebugSymbols += "**/libxray.so"
+         }
+     }
+ 
 diff --git a/android/app/src/main/AndroidManifest.xml b/android/app/src/main/AndroidManifest.xml
 index 3fb0ab150437f0b089c5ec8c22b8d209f09e4a08..8bfd3a877f92968b70d4dbe716bbf237868aa2ed 100644
 --- a/android/app/src/main/AndroidManifest.xml
@@ -74845,6 +74856,81 @@ index a07f74add26e1743add0653c30854c4d9355dc05..059212ecd343d79c3258c9d76b12ca54
            ..writeAsBytesSync([0, ...setup.utf16le('clashx.pre'), 0]);
          setup.requireChannelMarker(binary.path, setup.utf16le('clashx.pre'));
          binary.writeAsBytesSync(setup.utf16le('clashx'));
+diff --git a/test/xray_bridge_config_test.dart b/test/xray_bridge_config_test.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..d3d6fe6fd1ecbb81fffbe473ca0590c2d1c5fe18
+--- /dev/null
++++ b/test/xray_bridge_config_test.dart
+@@ -0,0 +1,69 @@
++import 'package:fl_clash/core/xray_bridge_config.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++void main() {
++  Map<String, dynamic> base() => {
++        'mode': 'rule',
++        'proxies': [
++          {'name': 'node-a', 'type': 'vless', 'server': 'a', 'port': 443},
++        ],
++        'proxy-groups': [
++          {'name': 'Auto', 'type': 'url-test', 'proxies': ['node-a']},
++        ],
++        'rules': ['DOMAIN-SUFFIX,vk.com,Auto'],
++      };
++
++  test('the bridge adds one socks proxy and one group, and forces global mode', () {
++    final wrapped = withXrayBridge(base());
++    final proxies = wrapped['proxies'] as List;
++    final groups = wrapped['proxy-groups'] as List;
++
++    expect(proxies.length, 2);
++    final bridge = proxies.last as Map;
++    expect(bridge['name'], xrayBridgeTag);
++    expect(bridge['type'], 'socks5');
++    expect(bridge['server'], '127.0.0.1');
++    expect(bridge['port'], 10808);
++
++    expect(groups.length, 2);
++    expect((groups.last as Map)['proxies'], [xrayBridgeTag]);
++    expect(wrapped['mode'], 'global');
++    expect(wrapped['GLOBAL'], xrayBridgeGroup);
++
++    // the subscription's own entries are still there, just unused in global mode
++    expect((proxies.first as Map)['name'], 'node-a');
++  });
++
++  test('the original config is left untouched', () {
++    final original = base();
++    withXrayBridge(original);
++    expect((original['proxies'] as List).length, 1);
++    expect(original['mode'], 'rule');
++    expect(original.containsKey('GLOBAL'), isFalse);
++  });
++
++  test('wrapping twice does not stack a second bridge', () {
++    final once = withXrayBridge(base());
++    final twice = withXrayBridge(once);
++    final names = (twice['proxies'] as List).map((p) => (p as Map)['name']);
++    expect(names.where((n) => n == xrayBridgeTag).length, 1);
++    final groups = (twice['proxy-groups'] as List).map((g) => (g as Map)['name']);
++    expect(groups.where((n) => n == xrayBridgeGroup).length, 1);
++  });
++
++  test('removing the bridge restores the previous mode and drops only its entries', () {
++    final wrapped = withXrayBridge(base());
++    final restored = withoutXrayBridge(wrapped, restoreMode: 'rule');
++
++    expect(restored['mode'], 'rule');
++    expect(restored.containsKey('GLOBAL'), isFalse);
++    expect((restored['proxies'] as List).length, 1);
++    expect((restored['proxy-groups'] as List).length, 1);
++    expect((restored['rules'] as List).length, 1);
++  });
++
++  test('a custom port is honoured', () {
++    final wrapped = withXrayBridge(base(), port: 2080);
++    expect(((wrapped['proxies'] as List).last as Map)['port'], 2080);
++  });
++}
 diff --git a/test/xray_config_test.dart b/test/xray_config_test.dart
 new file mode 100644
 index 0000000000000000000000000000000000000000..cddf7bc6d78c2a11cc0d3e3dbafde7eb5bc1efe9
