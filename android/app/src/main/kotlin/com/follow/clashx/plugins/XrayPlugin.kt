@@ -180,9 +180,18 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         // milliseconds earlier than that, which is why this waits rather than assumes. A
         // later start — a tap on another node — reuses the tunnel it already has.
         val tun = tunForChild()
-            ?: return failure("the portal has no tunnel yet: nothing established it")
+            ?: return failure("the portal has no open tunnel: the VPN that owns it is not up")
         // A stop that arrived while the tunnel was being waited for wins: nothing opens.
         if (!isCurrent(token)) return cancelled()
+        // One number, read once, and checked before the core sees it: proxy/tun reads the
+        // number from the environment and would use 0 for a descriptor that closed in the
+        // meantime, which is an ioctl failure from inside the core that names neither.
+        val fd = tun.fd
+        if (fd < XrayTun.FIRST_TUN_FD) {
+            cachedTun = null
+            XrayTunHolder.clear()
+            return failure("the portal's tunnel is closed (fd $fd): the VPN that owned it went away")
+        }
         val logFile = File(appContext.filesDir, LOG_NAME)
         val document = runCatching { tunDocument(config, tun, logFile) }.getOrElse { error ->
             return failure("the node's config cannot take a tun inbound: ${error.message}")
@@ -201,7 +210,8 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         // A line left by the previous start must not acknowledge this one.
         runCatching { logFile.writeText("") }
 
-        val attempt = runCatching { XrayStart(document, tun.fd, assets.absolutePath) }
+        Log.i(TAG, "handing tun fd $fd to the core")
+        val attempt = runCatching { XrayStart(document, fd, assets.absolutePath) }
         if (attempt.isFailure) {
             val error = attempt.exceptionOrNull()
             Log.e(TAG, "unable to start xray", error)
@@ -219,7 +229,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         coreRunning = true
         lastLine = ""
         return try {
-            awaitAck(token, tun, logFile)
+            awaitAck(token, fd, logFile)
         } catch (e: Exception) {
             Log.e(TAG, "unable to start xray", e)
             stopCoreHere()
@@ -309,15 +319,22 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     /// The tunnel the core should read: a newly published one, else the one in hand.
     ///
-    /// The service publishes exactly once per VPN start, so a fresh publish always wins; the
-    /// cached descriptor is what a restart after a tap uses, since the interface behind it
-    /// did not change.
+    /// The service publishes once per VPN start, so a fresh publish always wins. The cached
+    /// descriptor is what a restart after a tap uses, since the interface behind it did not
+    /// change — but only while it is still open: a VPN torn down and established again closes
+    /// the old descriptor, and its number then belongs to whichever file the process opened
+    /// next, which is how a restart used to hand the core `inappropriate ioctl for device`.
+    /// A dead cache is dropped and the wait below is for the tunnel that replaced it.
     private fun tunForChild(): XrayTun? {
-        XrayTunHolder.take()?.let { tun ->
+        XrayTunHolder.take()?.takeIf { it.live }?.let { tun ->
             cachedTun = tun
             return tun
         }
-        return cachedTun ?: XrayTunHolder.await(TUN_WAIT_MS)?.also { cachedTun = it }
+        cachedTun?.let { cached ->
+            if (cached.live) return cached
+            cachedTun = null
+        }
+        return XrayTunHolder.await(TUN_WAIT_MS)?.takeIf { it.live }?.also { cachedTun = it }
     }
 
     /// Waits for the core's own line that says the tunnel is being read.
@@ -326,7 +343,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     /// to read. What it writes to the log the document names is the only evidence: the tun
     /// reader says it started, or an `[Error]` line says it never will. Both end the wait —
     /// one as the acknowledgement, one as the failure, each with the core's own words.
-    private fun awaitAck(token: Long, tun: XrayTun, logFile: File): Map<String, Any> {
+    private fun awaitAck(token: Long, fd: Int, logFile: File): Map<String, Any> {
         val tail = LogTail(logFile)
         val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
@@ -342,8 +359,8 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 // A failure line answers the start now, not at the deadline: a refused
                 // document would otherwise sit out the whole timeout saying nothing.
                 if (ACK_MARKERS.any { lastLine.contains(it, ignoreCase = true) }) {
-                    Log.i(TAG, "xray is reading the tunnel on fd ${tun.fd}")
-                    return mapOf("ok" to true, "message" to "tunnel on fd ${tun.fd}")
+                    Log.i(TAG, "xray is reading the tunnel on fd $fd")
+                    return mapOf("ok" to true, "message" to "tunnel on fd $fd")
                 }
                 if (isCoreError(lastLine)) {
                     Log.e(TAG, "xray failed to take the tunnel: $lastLine")

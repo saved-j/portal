@@ -1,0 +1,195 @@
+# 09 - the descriptor the core is given is the open tunnel, and the library proves it
+#
+# After 08 the core stopped refusing the document and refused the descriptor instead: one
+# start said `app/proxyman/inbound: failed to start proxy > inappropriate ioctl for device`
+# while the start before it had resolved the tun's own name, so the fd path itself works on
+# this platform — proxy/tun/tun_android.go takes the number from `xray.tun.fd`, sets it
+# non-blocking, duplicates it and never ioctls it, which is why the two failures differ. What
+# had gone wrong was the number: switching modes tears the VPN down and establishes it again,
+# the service closes the descriptor of the tunnel it replaced, and the plugin kept handing that
+# number over. A closed ParcelFileDescriptor reads -1, the library unsets `xray.tun.fd` for a
+# non-positive number, proxy/tun falls back to 0, and the TUNGETIFF it runs on stdin is the
+# `inappropriate ioctl for device` above. Three changes, one per place the number can go
+# wrong: the plugin reads the descriptor once, refuses anything below 3 (0..2 are the standard
+# streams) and drops a cached tunnel that closed instead of reusing it, waiting for the service
+# to publish the one that replaced it; the service takes a previously published tunnel down
+# before publishing a new one, so the plugin can never hold a live fd for an interface the
+# system no longer routes into; and the library checks the descriptor it is handed with
+# TUNGETIFF and Fstat before it starts the core, refusing a tap or a virtio-header tun and
+# naming the number in logcat under the `libxray` tag. The fd path is proven, not assumed: the
+# alternative the caller offered (socks inbound plus a forwarder) is not needed.
+
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+index a8033d28..a90276e4 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -180,9 +180,18 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         // milliseconds earlier than that, which is why this waits rather than assumes. A
+         // later start — a tap on another node — reuses the tunnel it already has.
+         val tun = tunForChild()
+-            ?: return failure("the portal has no tunnel yet: nothing established it")
++            ?: return failure("the portal has no open tunnel: the VPN that owns it is not up")
+         // A stop that arrived while the tunnel was being waited for wins: nothing opens.
+         if (!isCurrent(token)) return cancelled()
++        // One number, read once, and checked before the core sees it: proxy/tun reads the
++        // number from the environment and would use 0 for a descriptor that closed in the
++        // meantime, which is an ioctl failure from inside the core that names neither.
++        val fd = tun.fd
++        if (fd < XrayTun.FIRST_TUN_FD) {
++            cachedTun = null
++            XrayTunHolder.clear()
++            return failure("the portal's tunnel is closed (fd $fd): the VPN that owned it went away")
++        }
+         val logFile = File(appContext.filesDir, LOG_NAME)
+         val document = runCatching { tunDocument(config, tun, logFile) }.getOrElse { error ->
+             return failure("the node's config cannot take a tun inbound: ${error.message}")
+@@ -201,7 +210,8 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         // A line left by the previous start must not acknowledge this one.
+         runCatching { logFile.writeText("") }
+ 
+-        val attempt = runCatching { XrayStart(document, tun.fd, assets.absolutePath) }
++        Log.i(TAG, "handing tun fd $fd to the core")
++        val attempt = runCatching { XrayStart(document, fd, assets.absolutePath) }
+         if (attempt.isFailure) {
+             val error = attempt.exceptionOrNull()
+             Log.e(TAG, "unable to start xray", error)
+@@ -219,7 +229,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         coreRunning = true
+         lastLine = ""
+         return try {
+-            awaitAck(token, tun, logFile)
++            awaitAck(token, fd, logFile)
+         } catch (e: Exception) {
+             Log.e(TAG, "unable to start xray", e)
+             stopCoreHere()
+@@ -309,15 +319,22 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+ 
+     /// The tunnel the core should read: a newly published one, else the one in hand.
+     ///
+-    /// The service publishes exactly once per VPN start, so a fresh publish always wins; the
+-    /// cached descriptor is what a restart after a tap uses, since the interface behind it
+-    /// did not change.
++    /// The service publishes once per VPN start, so a fresh publish always wins. The cached
++    /// descriptor is what a restart after a tap uses, since the interface behind it did not
++    /// change — but only while it is still open: a VPN torn down and established again closes
++    /// the old descriptor, and its number then belongs to whichever file the process opened
++    /// next, which is how a restart used to hand the core `inappropriate ioctl for device`.
++    /// A dead cache is dropped and the wait below is for the tunnel that replaced it.
+     private fun tunForChild(): XrayTun? {
+-        XrayTunHolder.take()?.let { tun ->
++        XrayTunHolder.take()?.takeIf { it.live }?.let { tun ->
+             cachedTun = tun
+             return tun
+         }
+-        return cachedTun ?: XrayTunHolder.await(TUN_WAIT_MS)?.also { cachedTun = it }
++        cachedTun?.let { cached ->
++            if (cached.live) return cached
++            cachedTun = null
++        }
++        return XrayTunHolder.await(TUN_WAIT_MS)?.takeIf { it.live }?.also { cachedTun = it }
+     }
+ 
+     /// Waits for the core's own line that says the tunnel is being read.
+@@ -326,7 +343,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     /// to read. What it writes to the log the document names is the only evidence: the tun
+     /// reader says it started, or an `[Error]` line says it never will. Both end the wait —
+     /// one as the acknowledgement, one as the failure, each with the core's own words.
+-    private fun awaitAck(token: Long, tun: XrayTun, logFile: File): Map<String, Any> {
++    private fun awaitAck(token: Long, fd: Int, logFile: File): Map<String, Any> {
+         val tail = LogTail(logFile)
+         val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
+         while (System.currentTimeMillis() < deadline) {
+@@ -342,8 +359,8 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+                 // A failure line answers the start now, not at the deadline: a refused
+                 // document would otherwise sit out the whole timeout saying nothing.
+                 if (ACK_MARKERS.any { lastLine.contains(it, ignoreCase = true) }) {
+-                    Log.i(TAG, "xray is reading the tunnel on fd ${tun.fd}")
+-                    return mapOf("ok" to true, "message" to "tunnel on fd ${tun.fd}")
++                    Log.i(TAG, "xray is reading the tunnel on fd $fd")
++                    return mapOf("ok" to true, "message" to "tunnel on fd $fd")
+                 }
+                 if (isCoreError(lastLine)) {
+                     Log.e(TAG, "xray failed to take the tunnel: $lastLine")
+diff --git a/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+index 2699f869..a323332d 100644
+--- a/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
++++ b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+@@ -19,15 +19,29 @@ class XrayTun(
+ ) {
+     /// The number the core is given. Valid only while [descriptor] is open.
+     val fd: Int get() = descriptor.fd
++
++    /// Whether the number above still names an open tunnel.
++    ///
++    /// A descriptor the service closed reports -1, and 0..2 are the process's own streams, so
++    /// a number below 3 is not a tunnel. proxy/tun reads the number from the environment and
++    /// falls back to 0 when it is unset, which is how a closed tunnel used to reach the core as
++    /// a bare `inappropriate ioctl for device`.
++    val live: Boolean get() = fd >= FIRST_TUN_FD
++
++    companion object {
++        /// The first descriptor number that is not stdin, stdout or stderr: a tunnel is never
++        /// one of them, and proxy/tun falls back to 0 for a number that was never set.
++        const val FIRST_TUN_FD = 3
++    }
+ }
+ 
+ /**
+  * The single hand-over point between the service that makes the tunnel and the plugin that
+- * starts the child.
++ * starts the core.
+  *
+  * The two live in different Gradle modules but the same process, so the order is fixed: the
+  * service publishes as its start returns and the plugin takes right after. A take clears the
+- * slot, so two children can never be handed the same tunnel.
++ * slot, so one tunnel is never handed to two starts.
+  */
+ object XrayTunHolder {
+     private const val POLL_MS = 50L
+@@ -46,7 +60,9 @@ object XrayTunHolder {
+      *
+      * The service is started on the main thread and binds asynchronously, so the plugin can
+      * genuinely arrive first; waiting is how a cold start becomes one ordered step instead of
+-     * a race the child would lose by a few milliseconds.
++     * a race the core would lose by a few milliseconds. It is also what replaces a dead
++     * tunnel: a start whose cached descriptor was closed waits here for the VPN the service is
++     * establishing now, instead of reading a number that already belongs to another file.
+      */
+     fun await(timeoutMillis: Long): XrayTun? {
+         val deadline = System.currentTimeMillis() + timeoutMillis
+@@ -63,12 +79,12 @@ object XrayTunHolder {
+ }
+ 
+ /**
+- * The process that reads the tunnel, so the service can take it down together with the tun.
++ * The plugin's stop, for the service that owns the tunnel.
+  *
+- * The service cannot see the plugin (the module dependency runs the other way), and a child
+- * left alive after the VPN is revoked keeps its own copy of the descriptor open: the
+- * interface would outlive the run and go on carrying traffic nobody asked for. The plugin
+- * registers here; the service calls it before it closes the descriptor it owns.
++ * The service cannot see the plugin (the module dependency runs the other way), and a core
++ * left running after the VPN is revoked goes on reading a descriptor the system no longer
++ * routes into: the plugin has to let go of the tunnel it was handed when the service closes
++ * it. The plugin registers here; the service calls it before it closes the descriptor it owns.
+  */
+ object XrayChildControl {
+     @Volatile
+diff --git a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+index 43fc434f..1852b53d 100644
+--- a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
++++ b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+@@ -208,6 +208,13 @@ class VpnService : SystemVpnService(), ManagedService {
+      */
+     private fun handOverToChild(descriptor: ParcelFileDescriptor, options: VpnOptions) {
+         synchronized(tunLock) {
++            // A tunnel published before this one belongs to the interface this establish has
++            // just replaced: the system no longer routes into it, and the core may still be
++            // reading it. Handing over the new descriptor without taking the old one down
++            // leaves the plugin a live number that carries nothing, so the old tunnel goes
++            // first — the plugin is told to stop, and the descriptor this service owns is
++            // closed before another is published.
++            if (tunOwnedByChild) stopTunLocked()
+             tunOwnedByChild = true
+             tunRunning = true
+             xrayDescriptor = descriptor

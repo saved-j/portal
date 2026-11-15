@@ -208,6 +208,13 @@ class VpnService : SystemVpnService(), ManagedService {
      */
     private fun handOverToChild(descriptor: ParcelFileDescriptor, options: VpnOptions) {
         synchronized(tunLock) {
+            // A tunnel published before this one belongs to the interface this establish has
+            // just replaced: the system no longer routes into it, and the core may still be
+            // reading it. Handing over the new descriptor without taking the old one down
+            // leaves the plugin a live number that carries nothing, so the old tunnel goes
+            // first — the plugin is told to stop, and the descriptor this service owns is
+            // closed before another is published.
+            if (tunOwnedByChild) stopTunLocked()
             tunOwnedByChild = true
             tunRunning = true
             xrayDescriptor = descriptor

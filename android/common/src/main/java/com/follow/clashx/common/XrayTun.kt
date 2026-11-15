@@ -19,15 +19,29 @@ class XrayTun(
 ) {
     /// The number the core is given. Valid only while [descriptor] is open.
     val fd: Int get() = descriptor.fd
+
+    /// Whether the number above still names an open tunnel.
+    ///
+    /// A descriptor the service closed reports -1, and 0..2 are the process's own streams, so
+    /// a number below 3 is not a tunnel. proxy/tun reads the number from the environment and
+    /// falls back to 0 when it is unset, which is how a closed tunnel used to reach the core as
+    /// a bare `inappropriate ioctl for device`.
+    val live: Boolean get() = fd >= FIRST_TUN_FD
+
+    companion object {
+        /// The first descriptor number that is not stdin, stdout or stderr: a tunnel is never
+        /// one of them, and proxy/tun falls back to 0 for a number that was never set.
+        const val FIRST_TUN_FD = 3
+    }
 }
 
 /**
  * The single hand-over point between the service that makes the tunnel and the plugin that
- * starts the child.
+ * starts the core.
  *
  * The two live in different Gradle modules but the same process, so the order is fixed: the
  * service publishes as its start returns and the plugin takes right after. A take clears the
- * slot, so two children can never be handed the same tunnel.
+ * slot, so one tunnel is never handed to two starts.
  */
 object XrayTunHolder {
     private const val POLL_MS = 50L
@@ -46,7 +60,9 @@ object XrayTunHolder {
      *
      * The service is started on the main thread and binds asynchronously, so the plugin can
      * genuinely arrive first; waiting is how a cold start becomes one ordered step instead of
-     * a race the child would lose by a few milliseconds.
+     * a race the core would lose by a few milliseconds. It is also what replaces a dead
+     * tunnel: a start whose cached descriptor was closed waits here for the VPN the service is
+     * establishing now, instead of reading a number that already belongs to another file.
      */
     fun await(timeoutMillis: Long): XrayTun? {
         val deadline = System.currentTimeMillis() + timeoutMillis
@@ -63,12 +79,12 @@ object XrayTunHolder {
 }
 
 /**
- * The process that reads the tunnel, so the service can take it down together with the tun.
+ * The plugin's stop, for the service that owns the tunnel.
  *
- * The service cannot see the plugin (the module dependency runs the other way), and a child
- * left alive after the VPN is revoked keeps its own copy of the descriptor open: the
- * interface would outlive the run and go on carrying traffic nobody asked for. The plugin
- * registers here; the service calls it before it closes the descriptor it owns.
+ * The service cannot see the plugin (the module dependency runs the other way), and a core
+ * left running after the VPN is revoked goes on reading a descriptor the system no longer
+ * routes into: the plugin has to let go of the tunnel it was handed when the service closes
+ * it. The plugin registers here; the service calls it before it closes the descriptor it owns.
  */
 object XrayChildControl {
     @Volatile
