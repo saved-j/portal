@@ -241,17 +241,23 @@ counter back to `0` with `outcome=reset`. Neither counter resets the other, and 
 survives a restart on purpose: the counters describe this run's attempts, while the profile
 files keep the last good download.
 
+A number on a row is a fact about a node, or the row has a dash. The network mode's rows carry
+the engine's own `URLTEST` result — the engine holds those nodes, so it is the one party that can
+time them. The simple portal's rows are timed through the running child: one real request to the
+app's own test URL (`generate_204`), from the connect to the first response byte, and that number
+belongs to the node the tunnel is on. A handshake to a node's own address is gone — with a tun up
+this process's sockets are routed into it, the core accepts locally and answers in 3–4 ms to
+Estonia. No child, no tunnel: every row is a dash, and the log says
+`portal delay: no child is carrying the tunnel, so there is nothing to measure through`.
+
 A delay is measured by the core that holds the server, and by nothing else. The engine's rows
-carry the engine's own delay, taken through the tunnel it built. The simple portal's rows carry
-a TCP handshake timed by this process against the node's resolved address — and a node name
-that resolves only into the tunnel's own range (`198.18.0.0/15`, the fake-IP range, including
-the tun's gateway `198.18.0.1` and resolver `198.18.0.2`) is drawn as `—` and logged as such,
-because a handshake there completes against the core's local listener and reports the phone's
-own loop as a delay:
+carry the engine's own delay, taken through the tunnel it built; the simple portal's rows carry
+the first response byte of a request the child carried, or a dash with the reason:
 
 ```
-portal delay Эстония: ee.example:8443 → 198.18.0.5 is the tunnel's own address, no number
-portal delay Финляндия: fi.example:443 → 185.155.222.6 214 ms
+portal delay 🇪🇪 Эстония: the tunnel is on 🇫🇮 Финляндия, no number
+portal delay 🇫🇮 Финляндия: generate_204 214 ms
+portal delay: no child is carrying the tunnel, so there is nothing to measure through — every row is a dash
 ```
 
 `adb logcat -s flutter` carries those lines; the dash on the row and the line are the same fact.

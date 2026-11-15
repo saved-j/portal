@@ -256,6 +256,18 @@ the device, not a redesign.
   `proxy-groups:` and `rules:` — the list carries `VPN - Main`, `Auto Europe`, `Auto America`,
   `Auto Asia` and their members, and nothing else. Version 0.5.3-portal-duo-2d+2026111404.
 
+- `29-a-number-on-a-row-is-a-measured-one` — two things the app knew were not true and drew
+  anyway. (a) `XRAY-SOCKS` returned through the row cache (`source=cache`), so
+  `isPortalServiceNode()` now refuses `XRAY-SOCKS`/`PORTAL-XRAY` by name on every row path
+  (`portalGroupOfRows`, `parsePortalRows`, `PortalEngineRowsNotifier.remember`), and the cache
+  is stamped with `APP_VERSION` so a new build empties it once instead of drawing the previous
+  config's names. (b) the simple portal's delay was a TCP handshake to the node's own address,
+  and with the child holding the tun the app's own socket was answered locally in 3–4 ms; the
+  number is now a real request the child carries (`testUrl`, the same `generate_204` the engine
+  uses) timed to the first response byte, given to the row the tunnel is on and a dash with a
+  reason to every other, and no number at all when no child is running. Version
+  0.5.3-portal-duo-2e+2026111405.
+
 Apply (to a tree that does not already carry the 01..02 commit):
 ```
 git -C <clone> checkout -B work <1.02a commit>   # tree f8044d71

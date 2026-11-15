@@ -30,12 +30,29 @@ class PortalRow {
 /// uses. Nothing is written to the engine with it.
 const portalRowsGroupName = 'PORTAL';
 
+/// Names this app itself used to inject into the engine's config.
+///
+/// `XRAY-SOCKS` and `PORTAL-XRAY` came from the abandoned local bridge (`lib/core/xray_bridge_config.dart`)
+/// and were pushed into every engine config until patch 28 removed the injector. A build that
+/// still holds that config in memory, or a list remembered from before the upgrade, must not
+/// draw them: they are not servers of the subscription and never were. The filter lives here,
+/// on the one path every row source goes through, so a row cannot come back through a cache.
+const _portalServiceNodeNames = {'XRAY-SOCKS', 'PORTAL-XRAY'};
+
+/// True for a name that is this app's own machinery rather than a node of the subscription.
+bool isPortalServiceNode(String name) {
+  final trimmed = name.trim();
+  if (trimmed.isEmpty) return true;
+  return _portalServiceNodeNames.contains(trimmed.toUpperCase());
+}
+
 Group portalGroupOfRows(List<PortalRow> rows) => Group(
       type: GroupType.Selector,
       name: portalRowsGroupName,
       all: [
         for (final row in rows)
-          if (!isBuiltinOutboundName(row.name)) row.toProxy(),
+          if (!isBuiltinOutboundName(row.name) && !isPortalServiceNode(row.name))
+            row.toProxy(),
       ],
     );
 
@@ -63,7 +80,7 @@ List<PortalRow> parsePortalRows(String body) {
     if (item is! Map) continue;
     final name = '${item['name'] ?? ''}'.trim();
     if (name.isEmpty || !seen.add(name)) continue;
-    if (isBuiltinOutboundName(name)) continue;
+    if (isBuiltinOutboundName(name) || isPortalServiceNode(name)) continue;
     rows.add(
       PortalRow(
         name: name,
@@ -118,14 +135,31 @@ Group? portalFallbackGroup({
 /// actually gave is a better one. It is remembered under the profile it came from: another
 /// profile's servers are a different list, and the network mode never draws the child's.
 class PortalEngineRowsNotifier extends Notifier<Map<String, List<PortalRow>>> {
+  /// The build the remembered rows were made under.
+  ///
+  /// The memory itself cannot outlive the process, but the *meaning* of the names in it can
+  /// change with a build — that is exactly what happened when the bridge's injected group was
+  /// removed while the engine still held the config that carried it. Stamping the build makes
+  /// the invalidation explicit instead of relying on a restart, and costs nothing: a mismatch
+  /// empties the map once, on the first launch of a new build.
+  static const _build = String.fromEnvironment('APP_VERSION');
+
+  String _stamp = '';
+
   @override
   Map<String, List<PortalRow>> build() => const {};
 
   void remember({required String profileId, required Group group}) {
+    if (_stamp != _build) {
+      _stamp = _build;
+      if (state.isNotEmpty) state = const {};
+    }
     if (profileId.isEmpty || group.all.isEmpty) return;
     final rows = <PortalRow>[
       for (final proxy in group.all)
-        if (!isBuiltinOutboundName(proxy.name))
+        // A built-in (DIRECT/REJECT) and this app's own service nodes are not servers of the
+        // subscription, however real the group that carries them looks.
+        if (!isBuiltinOutboundName(proxy.name) && !isPortalServiceNode(proxy.name))
           PortalRow(
             name: proxy.name,
             type: proxy.type,

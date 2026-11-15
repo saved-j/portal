@@ -1,0 +1,701 @@
+# portal 1.03 patch 29 — a number on a row is a measured one
+#
+# Two lies the owner caught on the vivo, with the same root: something the app knew was not
+# true was being drawn as if it were.
+#
+# 1. `XRAY-SOCKS` came back through the row cache. Patch 28 removed the injector, but the
+#    engine's groups are remembered per profile (`portalEngineRowsProvider`) and the list drew
+#    `source=cache` with `names=XRAY-SOCKS | 🇪🇪 Эстония | …` — a name from a config the engine
+#    was still holding. The filter now lives on the one path every row source goes through:
+#    `isPortalServiceNode()` refuses `XRAY-SOCKS` and `PORTAL-XRAY` by name, and
+#    `portalGroupOfRows`, `parsePortalRows` and `PortalEngineRowsNotifier.remember` all call it,
+#    so a row cannot return through a cache, a profile or a stale group. The cache is stamped
+#    with `APP_VERSION` and empties itself once on the first launch of a new build, which is the
+#    explicit invalidation-on-upgrade instead of relying on a restart.
+#
+# 2. The simple portal's delay was a TCP handshake to the node's own address, timed from this
+#    process. With the child holding a tun, this app's own sockets are routed into it, the core
+#    accepts the connection locally and answers in 3–4 ms — to Estonia, against a real address,
+#    so no fake-IP filter could see it. The handshake is gone. The number is now a real request
+#    the child carries: `appSettingProvider.testUrl` (the same `generate_204` the engine's
+#    URLTEST uses, so the two are comparable), timed from the connect to the first response
+#    byte, closed at once. Nothing in this app can answer it, so a number means the request left
+#    through the node and came back.
+#
+#    One tunnel runs one node, and that is stated instead of hidden: the number belongs to the
+#    row the child is on (`portal delay 🇫🇮 Финляндия: generate_204 214 ms`), every other row
+#    keeps a dash (`portal delay 🇪🇪 Эстония: the tunnel is on 🇫🇮 Финляндия, no number`), and
+#    with no child there is no measurement at all (`no child is carrying the tunnel, so there is
+#    nothing to measure through`). A failed request is a dash, never a number. The network
+#    mode's rows keep the engine's own URLTEST, which was never a lie.
+#
+# Version: 0.5.3-portal-duo-2e+2026111405.
+diff --git a/BUILD.md b/BUILD.md
+index 9592de91..cff38af3 100644
+--- a/BUILD.md
++++ b/BUILD.md
+@@ -241,17 +241,23 @@ counter back to `0` with `outcome=reset`. Neither counter resets the other, and
+ survives a restart on purpose: the counters describe this run's attempts, while the profile
+ files keep the last good download.
+ 
++A number on a row is a fact about a node, or the row has a dash. The network mode's rows carry
++the engine's own `URLTEST` result — the engine holds those nodes, so it is the one party that can
++time them. The simple portal's rows are timed through the running child: one real request to the
++app's own test URL (`generate_204`), from the connect to the first response byte, and that number
++belongs to the node the tunnel is on. A handshake to a node's own address is gone — with a tun up
++this process's sockets are routed into it, the core accepts locally and answers in 3–4 ms to
++Estonia. No child, no tunnel: every row is a dash, and the log says
++`portal delay: no child is carrying the tunnel, so there is nothing to measure through`.
++
+ A delay is measured by the core that holds the server, and by nothing else. The engine's rows
+-carry the engine's own delay, taken through the tunnel it built. The simple portal's rows carry
+-a TCP handshake timed by this process against the node's resolved address — and a node name
+-that resolves only into the tunnel's own range (`198.18.0.0/15`, the fake-IP range, including
+-the tun's gateway `198.18.0.1` and resolver `198.18.0.2`) is drawn as `—` and logged as such,
+-because a handshake there completes against the core's local listener and reports the phone's
+-own loop as a delay:
++carry the engine's own delay, taken through the tunnel it built; the simple portal's rows carry
++the first response byte of a request the child carried, or a dash with the reason:
+ 
+ ```
+-portal delay Эстония: ee.example:8443 → 198.18.0.5 is the tunnel's own address, no number
+-portal delay Финляндия: fi.example:443 → 185.155.222.6 214 ms
++portal delay 🇪🇪 Эстония: the tunnel is on 🇫🇮 Финляндия, no number
++portal delay 🇫🇮 Финляндия: generate_204 214 ms
++portal delay: no child is carrying the tunnel, so there is nothing to measure through — every row is a dash
+ ```
+ 
+ `adb logcat -s flutter` carries those lines; the dash on the row and the line are the same fact.
+diff --git a/lib/core/xray_ping.dart b/lib/core/xray_ping.dart
+index 8a7947e5..dc6fb3b0 100644
+--- a/lib/core/xray_ping.dart
++++ b/lib/core/xray_ping.dart
+@@ -1,224 +1,124 @@
++/// The delay number the simple portal's rows carry, and where it comes from.
++///
++/// The second core's nodes are invisible to the engine: mihomo holds none of them, so every
++/// lookup in its delay table answers "timeout". What the child *can* do is carry a request — so
++/// the number is a real request the child proxies, timed to its first response byte. That is
++/// the tunnel's own end-to-end latency, measured by the only party that can measure it.
++///
++/// The previous version timed a TCP handshake to the node's own address from this process, and
++/// it lied in a way no address filter could catch: with the child holding a tun, this app's own
++/// sockets are routed into it, the core accepts the connection locally and answers in 3–4 ms —
++/// to Estonia, against a real address. A number that never left the phone is worse than a dash,
++/// so the handshake is gone. What is left cannot be answered by the phone: a request to a host
++/// this app does not run has to leave through the node to come back at all.
++library;
++
+ import 'dart:async';
+ import 'dart:io';
+ 
+ /// Why a row has a number, or does not.
+-enum TcpPingNote {
+-  /// A real address answered the handshake: this is the node's own round trip.
++enum PortalDelayNote {
++  /// The first response byte came back through the child: this is the tunnel's own latency.
+   measured,
+ 
+-  /// Nothing to measure: no host, no port.
+-  noAddress,
+-
+-  /// The name resolved only to an address the tunnel owns (fake-IP or the tun's own gateway),
+-  /// or the profile named one. Handshaking there measures the phone's own listener.
+-  fakeAddress,
++  /// No child is carrying traffic, so there is no tunnel to measure through.
++  noTunnel,
+ 
+-  /// The name did not resolve within the resolve deadline.
+-  unresolved,
++  /// Nothing to request: no URL, or a URL without a host.
++  noUrl,
+ 
+-  /// The handshake did not complete within the deadline.
++  /// No byte came back within the deadline.
+   timeout,
+ 
+-  /// The handshake was refused or the route was unreachable.
+-  unreachable,
++  /// The connection was refused, the route was unreachable, or the request raised.
++  failed,
+ }
+ 
+-/// One honest measurement of one server, and the address it was taken against.
+-///
+-/// [ms] is null whenever the measurement is not a fact about the node — never a fabricated
+-/// number, and never the duration of a handshake that never left the phone.
+-class TcpPing {
+-  const TcpPing({
+-    required this.host,
+-    required this.port,
++/// One measurement through the running portal, and what it timed.
++class PortalDelay {
++  const PortalDelay({
++    required this.url,
+     required this.note,
+-    this.address,
+-    this.looked = const [],
+     this.ms,
+   });
+ 
+-  final String host;
+-  final int port;
+-  final TcpPingNote note;
+-
+-  /// The address the handshake was timed against, when there was one.
+-  final InternetAddress? address;
+-
+-  /// What the name resolved to, fake addresses included: the reason a dash is a dash.
+-  final List<InternetAddress> looked;
+-
++  final String url;
++  final PortalDelayNote note;
+   final int? ms;
+ 
+-  bool get answered => ms != null && ms! >= 0;
++  bool get answered => note == PortalDelayNote.measured && ms != null;
+ 
+-  /// `host:port → 185.155.222.6 214 ms`, or the reason there is no number.
+-  String describe() {
+-    final where = host.isEmpty ? '' : '$host:$port';
+-    switch (note) {
+-      case TcpPingNote.measured:
+-        return '$where → ${address?.address} $ms ms';
+-      case TcpPingNote.fakeAddress:
+-        final listed = looked.isEmpty
+-            ? (address?.address ?? '')
+-            : looked.map((item) => item.address).join(',');
+-        return "$where → $listed is the tunnel's own address, no number";
+-      case TcpPingNote.unresolved:
+-        return '$where → no address, no number';
+-      case TcpPingNote.timeout:
+-        return '$where → ${address?.address} timed out, no number';
+-      case TcpPingNote.unreachable:
+-        return '$where → ${address?.address} unreachable, no number';
+-      case TcpPingNote.noAddress:
+-        return 'no address to measure';
+-    }
++  /// The last path segment, which is what a log line names: `generate_204`.
++  String get target {
++    final uri = Uri.tryParse(url);
++    if (uri == null) return url;
++    final segments = uri.pathSegments;
++    if (segments.isEmpty || segments.last.isEmpty) return uri.host;
++    return segments.last;
+   }
+-}
+ 
+-/// Whether [address] belongs to the tunnel rather than to a server.
+-///
+-/// With a tun up, a name the engine answers for resolves to its fake-IP (`198.18.0.0/15`, the
+-/// range mihomo and Xray's fake DNS both use), and the tun's own gateway and resolver sit
+-/// inside it. A TCP handshake to one of those completes against the core's local listener,
+-/// which is how a row read 5 ms to Finland from China: the number was the phone's own loop.
+-/// Loopback, the unspecified address and link-local are refused for the same reason — none of
+-/// them is a server a subscription sells, and all of them answer instantly.
+-bool isTunnelOwnedAddress(InternetAddress address) {
+-  final raw = address.rawAddress;
+-  if (address.type == InternetAddressType.IPv6) {
+-    if (raw.length != 16) return false;
+-    final loopback = raw.take(15).every((byte) => byte == 0) && raw.last == 1;
+-    final unspecified = raw.every((byte) => byte == 0);
+-    return loopback || unspecified;
+-  }
+-  if (raw.length != 4) return false;
+-  final a = raw[0];
+-  final b = raw[1];
+-  // 0.0.0.0 — an unspecified host is not an address to shake hands with.
+-  if (a == 0) return true;
+-  // 127.0.0.0/8 — loopback: the local listener answers instantly.
+-  if (a == 127) return true;
+-  // 198.18.0.0/15 — fake-IP, and the tun's gateway 198.18.0.1 / resolver 198.18.0.2.
+-  if (a == 198 && (b == 18 || b == 19)) return true;
+-  // 169.254.0.0/16 — link-local.
+-  if (a == 169 && b == 254) return true;
+-  return false;
++  /// `generate_204 214 ms`, or the reason there is no number.
++  String describe() => switch (note) {
++        PortalDelayNote.measured => '$target $ms ms',
++        PortalDelayNote.noTunnel => 'no tunnel is carrying traffic, no number',
++        PortalDelayNote.noUrl => 'no test url to request',
++        PortalDelayNote.timeout => '$target timed out, no number',
++        PortalDelayNote.failed => '$target failed, no number',
++      };
+ }
+ 
+-InternetAddress? _literal(String host) {
+-  final trimmed = host.trim();
+-  if (trimmed.isEmpty) return null;
+-  // `InternetAddress.tryParse` accepts only a numeric literal, which is exactly the case
+-  // where no lookup may happen at all.
+-  return InternetAddress.tryParse(trimmed);
+-}
+-
+-/// Times a TCP handshake to [host]: a delay for servers the engine does not hold.
++/// Times a request the running child carries, from the first byte of the connection attempt.
+ ///
+-/// The simple portal is driven by the second core, and mihomo knows nothing about those
+-/// servers: every lookup in its delay table answers "timeout". So the row times the one thing
+-/// it can time honestly — a TCP connection to the server's own address, the same handshake the
+-/// tunnel performs before it can carry a byte.
++/// The clock starts before the connection: the round trip that matters includes the tunnel's
++/// own hand-over, so a number started after `connect` would flatter the node. The request is a
++/// `GET` with `Connection: close` and only the first byte is read — a 204 has no body, and
++/// reading it would add throughput to a latency figure.
+ ///
+-/// It is not a proxy delay: it measures reachability and distance, not throughput through the
+-/// tunnel. What it must never measure is the tunnel itself. The name is resolved here, a
+-/// fake-IP or the tun's gateway is refused instead of timed (see [isTunnelOwnedAddress]), and
+-/// the handshake is opened against the resolved address so a second lookup cannot answer with
+-/// a different one. A timeout, an unreachable route or a fake address is a dash on the row —
+-/// never a number.
+-Future<TcpPing> probeTcp(
+-  String host,
+-  int port, {
+-  Duration timeout = const Duration(seconds: 3),
+-  Duration resolveTimeout = const Duration(seconds: 2),
++/// [url] is the app's own test URL (`appSettingProvider.testUrl`), the same one the engine's
++/// URLTEST uses, so a number from the portal and a number from the engine are comparable.
++Future<PortalDelay> probeThroughPortal(
++  String url, {
++  Duration timeout = const Duration(seconds: 6),
+ }) async {
+-  if (host.trim().isEmpty || port <= 0) {
+-    return TcpPing(host: host, port: port, note: TcpPingNote.noAddress);
+-  }
+-  InternetAddress? address = _literal(host);
+-  if (address == null) {
+-    List<InternetAddress> found;
+-    try {
+-      found = await InternetAddress.lookup(
+-        host.trim(),
+-      ).timeout(resolveTimeout);
+-    } on TimeoutException {
+-      return TcpPing(host: host, port: port, note: TcpPingNote.unresolved);
+-    } on SocketException {
+-      return TcpPing(host: host, port: port, note: TcpPingNote.unresolved);
+-    } catch (_) {
+-      return TcpPing(host: host, port: port, note: TcpPingNote.unresolved);
+-    }
+-    if (found.isEmpty) {
+-      return TcpPing(host: host, port: port, note: TcpPingNote.unresolved);
+-    }
+-    final real = [
+-      for (final item in found)
+-        if (!isTunnelOwnedAddress(item)) item,
+-    ];
+-    if (real.isEmpty) {
+-      return TcpPing(
+-        host: host,
+-        port: port,
+-        note: TcpPingNote.fakeAddress,
+-        looked: found,
+-        address: found.first,
+-      );
+-    }
+-    address = real.first;
+-  } else if (isTunnelOwnedAddress(address)) {
+-    return TcpPing(
+-      host: host,
+-      port: port,
+-      note: TcpPingNote.fakeAddress,
+-      looked: [address],
+-      address: address,
+-    );
++  final uri = Uri.tryParse(url.trim());
++  if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
++    return PortalDelay(url: url, note: PortalDelayNote.noUrl);
+   }
++  final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
++  final path = uri.path.isEmpty ? '/' : uri.path;
++  final request = 'GET $path HTTP/1.1\r\n'
++      'Host: ${uri.host}\r\n'
++      'User-Agent: portal-delay\r\n'
++      'Accept: */*\r\n'
++      'Connection: close\r\n\r\n';
+   final watch = Stopwatch()..start();
+   Socket? socket;
+   try {
+-    socket = await Socket.connect(address, port, timeout: timeout);
++    // The name, never a stored address: the tunnel's own DNS answers it and the node carries
++    // the connection, which is the whole point of measuring this way.
++    socket = uri.scheme == 'https'
++        ? await SecureSocket.connect(uri.host, port, timeout: timeout)
++        : await Socket.connect(uri.host, port, timeout: timeout);
++    socket.write(request);
++    await socket.flush();
++    final first = await socket.first.timeout(timeout);
+     watch.stop();
+-    return TcpPing(
+-      host: host,
+-      port: port,
+-      note: TcpPingNote.measured,
+-      address: address,
+-      looked: [address],
++    if (first.isEmpty) {
++      return PortalDelay(url: url, note: PortalDelayNote.failed);
++    }
++    return PortalDelay(
++      url: url,
++      note: PortalDelayNote.measured,
+       ms: watch.elapsedMilliseconds,
+     );
+   } on TimeoutException {
+-    return TcpPing(
+-      host: host,
+-      port: port,
+-      note: TcpPingNote.timeout,
+-      address: address,
+-      looked: [address],
+-    );
++    return PortalDelay(url: url, note: PortalDelayNote.timeout);
+   } on SocketException {
+-    return TcpPing(
+-      host: host,
+-      port: port,
+-      note: TcpPingNote.unreachable,
+-      address: address,
+-      looked: [address],
+-    );
++    return PortalDelay(url: url, note: PortalDelayNote.failed);
+   } catch (_) {
+-    return TcpPing(
+-      host: host,
+-      port: port,
+-      note: TcpPingNote.unreachable,
+-      address: address,
+-      looked: [address],
+-    );
++    return PortalDelay(url: url, note: PortalDelayNote.failed);
+   } finally {
++    watch.stop();
+     socket?.destroy();
+   }
+ }
+-
+-/// The number alone, for a caller that only draws a row. Null is the dash.
+-Future<int?> tcpPing(
+-  String host,
+-  int port, {
+-  Duration timeout = const Duration(seconds: 3),
+-}) async => (await probeTcp(host, port, timeout: timeout)).ms;
+diff --git a/lib/providers/state/portal_rows.dart b/lib/providers/state/portal_rows.dart
+index b38f0e7b..c3eff7cf 100644
+--- a/lib/providers/state/portal_rows.dart
++++ b/lib/providers/state/portal_rows.dart
+@@ -30,12 +30,29 @@ class PortalRow {
+ /// uses. Nothing is written to the engine with it.
+ const portalRowsGroupName = 'PORTAL';
+ 
++/// Names this app itself used to inject into the engine's config.
++///
++/// `XRAY-SOCKS` and `PORTAL-XRAY` came from the abandoned local bridge (`lib/core/xray_bridge_config.dart`)
++/// and were pushed into every engine config until patch 28 removed the injector. A build that
++/// still holds that config in memory, or a list remembered from before the upgrade, must not
++/// draw them: they are not servers of the subscription and never were. The filter lives here,
++/// on the one path every row source goes through, so a row cannot come back through a cache.
++const _portalServiceNodeNames = {'XRAY-SOCKS', 'PORTAL-XRAY'};
++
++/// True for a name that is this app's own machinery rather than a node of the subscription.
++bool isPortalServiceNode(String name) {
++  final trimmed = name.trim();
++  if (trimmed.isEmpty) return true;
++  return _portalServiceNodeNames.contains(trimmed.toUpperCase());
++}
++
+ Group portalGroupOfRows(List<PortalRow> rows) => Group(
+       type: GroupType.Selector,
+       name: portalRowsGroupName,
+       all: [
+         for (final row in rows)
+-          if (!isBuiltinOutboundName(row.name)) row.toProxy(),
++          if (!isBuiltinOutboundName(row.name) && !isPortalServiceNode(row.name))
++            row.toProxy(),
+       ],
+     );
+ 
+@@ -63,7 +80,7 @@ List<PortalRow> parsePortalRows(String body) {
+     if (item is! Map) continue;
+     final name = '${item['name'] ?? ''}'.trim();
+     if (name.isEmpty || !seen.add(name)) continue;
+-    if (isBuiltinOutboundName(name)) continue;
++    if (isBuiltinOutboundName(name) || isPortalServiceNode(name)) continue;
+     rows.add(
+       PortalRow(
+         name: name,
+@@ -118,14 +135,31 @@ Group? portalFallbackGroup({
+ /// actually gave is a better one. It is remembered under the profile it came from: another
+ /// profile's servers are a different list, and the network mode never draws the child's.
+ class PortalEngineRowsNotifier extends Notifier<Map<String, List<PortalRow>>> {
++  /// The build the remembered rows were made under.
++  ///
++  /// The memory itself cannot outlive the process, but the *meaning* of the names in it can
++  /// change with a build — that is exactly what happened when the bridge's injected group was
++  /// removed while the engine still held the config that carried it. Stamping the build makes
++  /// the invalidation explicit instead of relying on a restart, and costs nothing: a mismatch
++  /// empties the map once, on the first launch of a new build.
++  static const _build = String.fromEnvironment('APP_VERSION');
++
++  String _stamp = '';
++
+   @override
+   Map<String, List<PortalRow>> build() => const {};
+ 
+   void remember({required String profileId, required Group group}) {
++    if (_stamp != _build) {
++      _stamp = _build;
++      if (state.isNotEmpty) state = const {};
++    }
+     if (profileId.isEmpty || group.all.isEmpty) return;
+     final rows = <PortalRow>[
+       for (final proxy in group.all)
+-        if (!isBuiltinOutboundName(proxy.name))
++        // A built-in (DIRECT/REJECT) and this app's own service nodes are not servers of the
++        // subscription, however real the group that carries them looks.
++        if (!isBuiltinOutboundName(proxy.name) && !isPortalServiceNode(proxy.name))
+           PortalRow(
+             name: proxy.name,
+             type: proxy.type,
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 4c6fdaa4..8440d72e 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -179,10 +179,6 @@ final tcpDelayProvider =
+     NotifierProvider<TcpDelayNotifier, Map<String, int?>>(TcpDelayNotifier.new);
+ 
+ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+-  /// Handshakes open at once. A panel list is often a hundred nodes and one unreachable
+-  /// node costs the full timeout, so a serial sweep holds the screen for minutes.
+-  static const _parallel = 8;
+-
+   /// Bumped by every sweep, and by a profile change. An answer arriving under an older
+   /// number belongs to servers the list no longer shows — usually names that repeat in the
+   /// new subscription — so it is dropped instead of written under the current key.
+@@ -197,38 +193,58 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+     return const {};
+   }
+ 
++  /// The node the child is carrying traffic on, or null when no child holds the tunnel.
++  ///
++  /// The pick is a commit — written only for a node the child acknowledged — so it names the
++  /// node the tunnel is actually running, which is the only node a request through the tunnel
++  /// can measure.
++  String? get _runningNode {
++    final status = portalRuntime.status.value;
++    if (!status.active || status.owner != PortalOwner.xray) return null;
++    return portalXrayPickFor(
++      ref.read(appSettingProvider),
++      ref.read(currentProfileIdProvider),
++    );
++  }
++
+   Future<void> measureAll(List<(String, String, int)> targets) async {
+     if (targets.isEmpty) return;
+     // A newer sweep owns the state from here on; the older one stops at its next answer.
+     final generation = ++_generation;
+     state = {...state, for (final t in targets) t.$1: null};
+-    var next = 0;
+-    Future<void> worker() async {
+-      while (true) {
+-        // Checked before taking work as well as after answering: a cancelled sweep must not
+-        // keep opening handshakes for a list that is no longer on screen.
+-        if (generation != _generation) return;
+-        final index = next++;
+-        if (index >= targets.length) return;
+-        final (name, host, port) = targets[index];
+-        final probe = await probeTcp(host, port);
+-        if (generation != _generation) return;
+-        // Every number says what it timed and against which address; a dash is then a fact
+-        // from the log — a fake-IP, a timeout — instead of a number that went missing.
+-        commonPrint.log('portal delay $name: ${probe.describe()}');
+-        state = {...state, name: probe.ms};
+-      }
++    final running = _runningNode;
++    if (running == null) {
++      // No child, no tunnel: a handshake from this process would be a measurement of the
++      // phone's own route, and a dash is the honest row.
++      commonPrint.log(
++        'portal delay: no child is carrying the tunnel, so there is nothing to measure '
++        'through — every row is a dash',
++        logLevel: LogLevel.warning,
++      );
++      return;
+     }
+-
+-    await Future.wait([
+-      for (var i = 0; i < _parallel && i < targets.length; i++) worker(),
+-    ]);
++    final probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
++    if (generation != _generation) return;
++    // One tunnel runs one node: a request through it measures that node and no other. The
++    // number belongs to the row the child is on; every other row keeps its dash, because a
++    // node this tunnel is not carrying has no number this app can honestly produce.
++    commonPrint.log('portal delay $running: ${probe.describe()}');
++    state = {...state, running: probe.ms};
+   }
+ 
+   Future<void> measureOne(String name, String host, int port) async {
+     final generation = _generation;
+     state = {...state, name: null};
+-    final probe = await probeTcp(host, port);
++    final running = _runningNode;
++    if (running == null || running != name) {
++      commonPrint.log(
++        'portal delay $name: '
++        '${running == null ? 'no tunnel is carrying traffic' : 'the tunnel is on $running'}, '
++        'no number',
++      );
++      return;
++    }
++    final probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
+     if (generation != _generation) return;
+     commonPrint.log('portal delay $name: ${probe.describe()}');
+     state = {...state, name: probe.ms};
+diff --git a/pubspec.yaml b/pubspec.yaml
+index 6e8ccd5d..01bc914b 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -1,7 +1,7 @@
+ name: fl_clash
+ description: FlClashX, a fork of FlClash - a multi-platform proxy client based on ClashMeta for Remnawave users.
+ publish_to: 'none'
+-version: 0.5.3-portal-duo-2d+2026111404
++version: 0.5.3-portal-duo-2e+2026111405
+ environment:
+   sdk: '>=3.10.0 <4.0.0'
+ 
+diff --git a/test/core/xray_ping_test.dart b/test/core/xray_ping_test.dart
+index d3d7a3e3..bbebc3b9 100644
+--- a/test/core/xray_ping_test.dart
++++ b/test/core/xray_ping_test.dart
+@@ -3,53 +3,53 @@ import 'dart:io';
+ import 'package:fl_clash/core/xray_ping.dart';
+ import 'package:flutter_test/flutter_test.dart';
+ 
+-/// A ping is only worth drawing when it is a fact about the server. These tests pin the two
+-/// cases that made a row lie: a fake-IP from the tunnel's own range, and a loopback address.
++/// The number on a simple-portal row is a request the child carries, timed to its first byte.
++/// These tests pin the two halves of that promise: a request that comes back produces a number
++/// and names what it asked for, and a request that cannot come back produces a dash — never a
++/// number the phone made up.
+ void main() {
+-  InternetAddress v4(String address) => InternetAddress(address);
+-
+-  group('the tunnel owns these addresses, so they are never timed', () {
+-    test('the fake-IP range mihomo and Xray answer with', () {
+-      expect(isTunnelOwnedAddress(v4('198.18.0.1')), isTrue);
+-      expect(isTunnelOwnedAddress(v4('198.18.0.2')), isTrue);
+-      expect(isTunnelOwnedAddress(v4('198.18.44.7')), isTrue);
+-      expect(isTunnelOwnedAddress(v4('198.19.255.255')), isTrue);
++  late HttpServer server;
++  late String url;
++
++  setUp(() async {
++    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
++    server.listen((request) async {
++      request.response.statusCode = 204;
++      await request.response.close();
+     });
++    url = 'http://127.0.0.1:${server.port}/generate_204';
++  });
+ 
+-    test('loopback, the unspecified address and link-local', () {
+-      expect(isTunnelOwnedAddress(v4('127.0.0.1')), isTrue);
+-      expect(isTunnelOwnedAddress(v4('0.0.0.0')), isTrue);
+-      expect(isTunnelOwnedAddress(v4('169.254.1.1')), isTrue);
+-      expect(isTunnelOwnedAddress(InternetAddress.loopbackIPv6), isTrue);
+-    });
++  tearDown(() async {
++    await server.close(force: true);
++  });
+ 
+-    test('a real server address is not the tunnel', () {
+-      expect(isTunnelOwnedAddress(v4('185.155.222.5')), isFalse);
+-      expect(isTunnelOwnedAddress(v4('1.1.1.1')), isFalse);
+-      expect(isTunnelOwnedAddress(v4('198.17.0.1')), isFalse);
+-      expect(isTunnelOwnedAddress(v4('198.20.0.1')), isFalse);
+-      expect(isTunnelOwnedAddress(InternetAddress('2a01:4f8::1')), isFalse);
+-    });
++  test('a request that answers is a number, and the line names what it timed', () async {
++    final probe = await probeThroughPortal(url);
++    expect(probe.note, PortalDelayNote.measured);
++    expect(probe.ms, isNotNull);
++    expect(probe.ms, greaterThanOrEqualTo(0));
++    expect(probe.describe(), contains('generate_204'));
++    expect(probe.describe(), contains('ms'));
+   });
+ 
+-  group('a fake address is a dash, never a number', () {
+-    test('a literal fake-IP is refused before any handshake', () async {
+-      final probe = await probeTcp('198.18.0.5', 443);
+-      expect(probe.note, TcpPingNote.fakeAddress);
+-      expect(probe.ms, isNull);
+-      expect(probe.answered, isFalse);
+-      expect(probe.describe(), contains('the tunnel'));
+-    });
++  test('a port nothing listens on is a dash, not a small number', () async {
++    final closed = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
++    final port = closed.port;
++    await closed.close();
++    final probe = await probeThroughPortal('http://127.0.0.1:$port/generate_204');
++    expect(probe.ms, isNull);
++    expect(probe.note, isNot(PortalDelayNote.measured));
++  });
+ 
+-    test('a literal loopback is refused too', () async {
+-      final probe = await probeTcp('127.0.0.1', 7890);
+-      expect(probe.note, TcpPingNote.fakeAddress);
+-      expect(probe.ms, isNull);
+-    });
++  test('nothing to request is not a measurement', () async {
++    expect((await probeThroughPortal('')).note, PortalDelayNote.noUrl);
++    expect((await probeThroughPortal('not a url')).note, PortalDelayNote.noUrl);
++  });
+ 
+-    test('nothing to measure is not a measurement', () async {
+-      expect((await probeTcp('', 443)).note, TcpPingNote.noAddress);
+-      expect((await probeTcp('node.example', 0)).note, TcpPingNote.noAddress);
+-    });
++  test('the default note for a silent tunnel is its own reason, not a zero', () {
++    const silent = PortalDelay(url: 'https://x/generate_204', note: PortalDelayNote.noTunnel);
++    expect(silent.ms, isNull);
++    expect(silent.describe(), contains('no tunnel'));
+   });
+ }
+diff --git a/test/providers/portal_rows_mode_test.dart b/test/providers/portal_rows_mode_test.dart
+index 8361a65b..8a5fa9a8 100644
+--- a/test/providers/portal_rows_mode_test.dart
++++ b/test/providers/portal_rows_mode_test.dart
+@@ -208,4 +208,32 @@ void main() {
+       expect(kept!.group.all.single.name, 'live-row');
+     });
+   });
++
++  group('this app\'s own service nodes are never rows', () {
++    test('XRAY-SOCKS and PORTAL-XRAY are refused by name', () {
++      expect(isPortalServiceNode('XRAY-SOCKS'), isTrue);
++      expect(isPortalServiceNode('portal-xray'), isTrue);
++      expect(isPortalServiceNode(' VPN - Main '), isFalse);
++      expect(isPortalServiceNode('Auto Europe'), isFalse);
++    });
++
++    test('a group carrying them draws the subscription\'s rows only', () {
++      final group = portalGroupOfRows(const [
++        PortalRow(name: 'XRAY-SOCKS', type: 'Socks5'),
++        PortalRow(name: 'PORTAL-XRAY', type: 'Selector'),
++        PortalRow(name: 'Эстония', type: 'Vless'),
++        PortalRow(name: 'DIRECT', type: 'Direct'),
++      ]);
++      expect(group.all.map((proxy) => proxy.name), ['Эстония']);
++    });
++
++    test('a profile that somehow carries one does not offer it', () {
++      final rows = parsePortalRows('''
++proxies:
++  - {name: XRAY-SOCKS, type: socks5, server: 127.0.0.1, port: 10808}
++  - {name: Эстония, type: vless, server: ee.example, port: 443}
++''');
++      expect(rows.map((row) => row.name), ['Эстония']);
++    });
++  });
+ }

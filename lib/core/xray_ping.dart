@@ -1,224 +1,124 @@
+/// The delay number the simple portal's rows carry, and where it comes from.
+///
+/// The second core's nodes are invisible to the engine: mihomo holds none of them, so every
+/// lookup in its delay table answers "timeout". What the child *can* do is carry a request — so
+/// the number is a real request the child proxies, timed to its first response byte. That is
+/// the tunnel's own end-to-end latency, measured by the only party that can measure it.
+///
+/// The previous version timed a TCP handshake to the node's own address from this process, and
+/// it lied in a way no address filter could catch: with the child holding a tun, this app's own
+/// sockets are routed into it, the core accepts the connection locally and answers in 3–4 ms —
+/// to Estonia, against a real address. A number that never left the phone is worse than a dash,
+/// so the handshake is gone. What is left cannot be answered by the phone: a request to a host
+/// this app does not run has to leave through the node to come back at all.
+library;
+
 import 'dart:async';
 import 'dart:io';
 
 /// Why a row has a number, or does not.
-enum TcpPingNote {
-  /// A real address answered the handshake: this is the node's own round trip.
+enum PortalDelayNote {
+  /// The first response byte came back through the child: this is the tunnel's own latency.
   measured,
 
-  /// Nothing to measure: no host, no port.
-  noAddress,
+  /// No child is carrying traffic, so there is no tunnel to measure through.
+  noTunnel,
 
-  /// The name resolved only to an address the tunnel owns (fake-IP or the tun's own gateway),
-  /// or the profile named one. Handshaking there measures the phone's own listener.
-  fakeAddress,
+  /// Nothing to request: no URL, or a URL without a host.
+  noUrl,
 
-  /// The name did not resolve within the resolve deadline.
-  unresolved,
-
-  /// The handshake did not complete within the deadline.
+  /// No byte came back within the deadline.
   timeout,
 
-  /// The handshake was refused or the route was unreachable.
-  unreachable,
+  /// The connection was refused, the route was unreachable, or the request raised.
+  failed,
 }
 
-/// One honest measurement of one server, and the address it was taken against.
-///
-/// [ms] is null whenever the measurement is not a fact about the node — never a fabricated
-/// number, and never the duration of a handshake that never left the phone.
-class TcpPing {
-  const TcpPing({
-    required this.host,
-    required this.port,
+/// One measurement through the running portal, and what it timed.
+class PortalDelay {
+  const PortalDelay({
+    required this.url,
     required this.note,
-    this.address,
-    this.looked = const [],
     this.ms,
   });
 
-  final String host;
-  final int port;
-  final TcpPingNote note;
-
-  /// The address the handshake was timed against, when there was one.
-  final InternetAddress? address;
-
-  /// What the name resolved to, fake addresses included: the reason a dash is a dash.
-  final List<InternetAddress> looked;
-
+  final String url;
+  final PortalDelayNote note;
   final int? ms;
 
-  bool get answered => ms != null && ms! >= 0;
+  bool get answered => note == PortalDelayNote.measured && ms != null;
 
-  /// `host:port → 185.155.222.6 214 ms`, or the reason there is no number.
-  String describe() {
-    final where = host.isEmpty ? '' : '$host:$port';
-    switch (note) {
-      case TcpPingNote.measured:
-        return '$where → ${address?.address} $ms ms';
-      case TcpPingNote.fakeAddress:
-        final listed = looked.isEmpty
-            ? (address?.address ?? '')
-            : looked.map((item) => item.address).join(',');
-        return "$where → $listed is the tunnel's own address, no number";
-      case TcpPingNote.unresolved:
-        return '$where → no address, no number';
-      case TcpPingNote.timeout:
-        return '$where → ${address?.address} timed out, no number';
-      case TcpPingNote.unreachable:
-        return '$where → ${address?.address} unreachable, no number';
-      case TcpPingNote.noAddress:
-        return 'no address to measure';
-    }
+  /// The last path segment, which is what a log line names: `generate_204`.
+  String get target {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return url;
+    final segments = uri.pathSegments;
+    if (segments.isEmpty || segments.last.isEmpty) return uri.host;
+    return segments.last;
   }
+
+  /// `generate_204 214 ms`, or the reason there is no number.
+  String describe() => switch (note) {
+        PortalDelayNote.measured => '$target $ms ms',
+        PortalDelayNote.noTunnel => 'no tunnel is carrying traffic, no number',
+        PortalDelayNote.noUrl => 'no test url to request',
+        PortalDelayNote.timeout => '$target timed out, no number',
+        PortalDelayNote.failed => '$target failed, no number',
+      };
 }
 
-/// Whether [address] belongs to the tunnel rather than to a server.
+/// Times a request the running child carries, from the first byte of the connection attempt.
 ///
-/// With a tun up, a name the engine answers for resolves to its fake-IP (`198.18.0.0/15`, the
-/// range mihomo and Xray's fake DNS both use), and the tun's own gateway and resolver sit
-/// inside it. A TCP handshake to one of those completes against the core's local listener,
-/// which is how a row read 5 ms to Finland from China: the number was the phone's own loop.
-/// Loopback, the unspecified address and link-local are refused for the same reason — none of
-/// them is a server a subscription sells, and all of them answer instantly.
-bool isTunnelOwnedAddress(InternetAddress address) {
-  final raw = address.rawAddress;
-  if (address.type == InternetAddressType.IPv6) {
-    if (raw.length != 16) return false;
-    final loopback = raw.take(15).every((byte) => byte == 0) && raw.last == 1;
-    final unspecified = raw.every((byte) => byte == 0);
-    return loopback || unspecified;
-  }
-  if (raw.length != 4) return false;
-  final a = raw[0];
-  final b = raw[1];
-  // 0.0.0.0 — an unspecified host is not an address to shake hands with.
-  if (a == 0) return true;
-  // 127.0.0.0/8 — loopback: the local listener answers instantly.
-  if (a == 127) return true;
-  // 198.18.0.0/15 — fake-IP, and the tun's gateway 198.18.0.1 / resolver 198.18.0.2.
-  if (a == 198 && (b == 18 || b == 19)) return true;
-  // 169.254.0.0/16 — link-local.
-  if (a == 169 && b == 254) return true;
-  return false;
-}
-
-InternetAddress? _literal(String host) {
-  final trimmed = host.trim();
-  if (trimmed.isEmpty) return null;
-  // `InternetAddress.tryParse` accepts only a numeric literal, which is exactly the case
-  // where no lookup may happen at all.
-  return InternetAddress.tryParse(trimmed);
-}
-
-/// Times a TCP handshake to [host]: a delay for servers the engine does not hold.
+/// The clock starts before the connection: the round trip that matters includes the tunnel's
+/// own hand-over, so a number started after `connect` would flatter the node. The request is a
+/// `GET` with `Connection: close` and only the first byte is read — a 204 has no body, and
+/// reading it would add throughput to a latency figure.
 ///
-/// The simple portal is driven by the second core, and mihomo knows nothing about those
-/// servers: every lookup in its delay table answers "timeout". So the row times the one thing
-/// it can time honestly — a TCP connection to the server's own address, the same handshake the
-/// tunnel performs before it can carry a byte.
-///
-/// It is not a proxy delay: it measures reachability and distance, not throughput through the
-/// tunnel. What it must never measure is the tunnel itself. The name is resolved here, a
-/// fake-IP or the tun's gateway is refused instead of timed (see [isTunnelOwnedAddress]), and
-/// the handshake is opened against the resolved address so a second lookup cannot answer with
-/// a different one. A timeout, an unreachable route or a fake address is a dash on the row —
-/// never a number.
-Future<TcpPing> probeTcp(
-  String host,
-  int port, {
-  Duration timeout = const Duration(seconds: 3),
-  Duration resolveTimeout = const Duration(seconds: 2),
+/// [url] is the app's own test URL (`appSettingProvider.testUrl`), the same one the engine's
+/// URLTEST uses, so a number from the portal and a number from the engine are comparable.
+Future<PortalDelay> probeThroughPortal(
+  String url, {
+  Duration timeout = const Duration(seconds: 6),
 }) async {
-  if (host.trim().isEmpty || port <= 0) {
-    return TcpPing(host: host, port: port, note: TcpPingNote.noAddress);
+  final uri = Uri.tryParse(url.trim());
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+    return PortalDelay(url: url, note: PortalDelayNote.noUrl);
   }
-  InternetAddress? address = _literal(host);
-  if (address == null) {
-    List<InternetAddress> found;
-    try {
-      found = await InternetAddress.lookup(
-        host.trim(),
-      ).timeout(resolveTimeout);
-    } on TimeoutException {
-      return TcpPing(host: host, port: port, note: TcpPingNote.unresolved);
-    } on SocketException {
-      return TcpPing(host: host, port: port, note: TcpPingNote.unresolved);
-    } catch (_) {
-      return TcpPing(host: host, port: port, note: TcpPingNote.unresolved);
-    }
-    if (found.isEmpty) {
-      return TcpPing(host: host, port: port, note: TcpPingNote.unresolved);
-    }
-    final real = [
-      for (final item in found)
-        if (!isTunnelOwnedAddress(item)) item,
-    ];
-    if (real.isEmpty) {
-      return TcpPing(
-        host: host,
-        port: port,
-        note: TcpPingNote.fakeAddress,
-        looked: found,
-        address: found.first,
-      );
-    }
-    address = real.first;
-  } else if (isTunnelOwnedAddress(address)) {
-    return TcpPing(
-      host: host,
-      port: port,
-      note: TcpPingNote.fakeAddress,
-      looked: [address],
-      address: address,
-    );
-  }
+  final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
+  final path = uri.path.isEmpty ? '/' : uri.path;
+  final request = 'GET $path HTTP/1.1\r\n'
+      'Host: ${uri.host}\r\n'
+      'User-Agent: portal-delay\r\n'
+      'Accept: */*\r\n'
+      'Connection: close\r\n\r\n';
   final watch = Stopwatch()..start();
   Socket? socket;
   try {
-    socket = await Socket.connect(address, port, timeout: timeout);
+    // The name, never a stored address: the tunnel's own DNS answers it and the node carries
+    // the connection, which is the whole point of measuring this way.
+    socket = uri.scheme == 'https'
+        ? await SecureSocket.connect(uri.host, port, timeout: timeout)
+        : await Socket.connect(uri.host, port, timeout: timeout);
+    socket.write(request);
+    await socket.flush();
+    final first = await socket.first.timeout(timeout);
     watch.stop();
-    return TcpPing(
-      host: host,
-      port: port,
-      note: TcpPingNote.measured,
-      address: address,
-      looked: [address],
+    if (first.isEmpty) {
+      return PortalDelay(url: url, note: PortalDelayNote.failed);
+    }
+    return PortalDelay(
+      url: url,
+      note: PortalDelayNote.measured,
       ms: watch.elapsedMilliseconds,
     );
   } on TimeoutException {
-    return TcpPing(
-      host: host,
-      port: port,
-      note: TcpPingNote.timeout,
-      address: address,
-      looked: [address],
-    );
+    return PortalDelay(url: url, note: PortalDelayNote.timeout);
   } on SocketException {
-    return TcpPing(
-      host: host,
-      port: port,
-      note: TcpPingNote.unreachable,
-      address: address,
-      looked: [address],
-    );
+    return PortalDelay(url: url, note: PortalDelayNote.failed);
   } catch (_) {
-    return TcpPing(
-      host: host,
-      port: port,
-      note: TcpPingNote.unreachable,
-      address: address,
-      looked: [address],
-    );
+    return PortalDelay(url: url, note: PortalDelayNote.failed);
   } finally {
+    watch.stop();
     socket?.destroy();
   }
 }
-
-/// The number alone, for a caller that only draws a row. Null is the dash.
-Future<int?> tcpPing(
-  String host,
-  int port, {
-  Duration timeout = const Duration(seconds: 3),
-}) async => (await probeTcp(host, port, timeout: timeout)).ms;

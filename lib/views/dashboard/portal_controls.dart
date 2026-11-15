@@ -179,10 +179,6 @@ final tcpDelayProvider =
     NotifierProvider<TcpDelayNotifier, Map<String, int?>>(TcpDelayNotifier.new);
 
 class TcpDelayNotifier extends Notifier<Map<String, int?>> {
-  /// Handshakes open at once. A panel list is often a hundred nodes and one unreachable
-  /// node costs the full timeout, so a serial sweep holds the screen for minutes.
-  static const _parallel = 8;
-
   /// Bumped by every sweep, and by a profile change. An answer arriving under an older
   /// number belongs to servers the list no longer shows — usually names that repeat in the
   /// new subscription — so it is dropped instead of written under the current key.
@@ -197,38 +193,58 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
     return const {};
   }
 
+  /// The node the child is carrying traffic on, or null when no child holds the tunnel.
+  ///
+  /// The pick is a commit — written only for a node the child acknowledged — so it names the
+  /// node the tunnel is actually running, which is the only node a request through the tunnel
+  /// can measure.
+  String? get _runningNode {
+    final status = portalRuntime.status.value;
+    if (!status.active || status.owner != PortalOwner.xray) return null;
+    return portalXrayPickFor(
+      ref.read(appSettingProvider),
+      ref.read(currentProfileIdProvider),
+    );
+  }
+
   Future<void> measureAll(List<(String, String, int)> targets) async {
     if (targets.isEmpty) return;
     // A newer sweep owns the state from here on; the older one stops at its next answer.
     final generation = ++_generation;
     state = {...state, for (final t in targets) t.$1: null};
-    var next = 0;
-    Future<void> worker() async {
-      while (true) {
-        // Checked before taking work as well as after answering: a cancelled sweep must not
-        // keep opening handshakes for a list that is no longer on screen.
-        if (generation != _generation) return;
-        final index = next++;
-        if (index >= targets.length) return;
-        final (name, host, port) = targets[index];
-        final probe = await probeTcp(host, port);
-        if (generation != _generation) return;
-        // Every number says what it timed and against which address; a dash is then a fact
-        // from the log — a fake-IP, a timeout — instead of a number that went missing.
-        commonPrint.log('portal delay $name: ${probe.describe()}');
-        state = {...state, name: probe.ms};
-      }
+    final running = _runningNode;
+    if (running == null) {
+      // No child, no tunnel: a handshake from this process would be a measurement of the
+      // phone's own route, and a dash is the honest row.
+      commonPrint.log(
+        'portal delay: no child is carrying the tunnel, so there is nothing to measure '
+        'through — every row is a dash',
+        logLevel: LogLevel.warning,
+      );
+      return;
     }
-
-    await Future.wait([
-      for (var i = 0; i < _parallel && i < targets.length; i++) worker(),
-    ]);
+    final probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
+    if (generation != _generation) return;
+    // One tunnel runs one node: a request through it measures that node and no other. The
+    // number belongs to the row the child is on; every other row keeps its dash, because a
+    // node this tunnel is not carrying has no number this app can honestly produce.
+    commonPrint.log('portal delay $running: ${probe.describe()}');
+    state = {...state, running: probe.ms};
   }
 
   Future<void> measureOne(String name, String host, int port) async {
     final generation = _generation;
     state = {...state, name: null};
-    final probe = await probeTcp(host, port);
+    final running = _runningNode;
+    if (running == null || running != name) {
+      commonPrint.log(
+        'portal delay $name: '
+        '${running == null ? 'no tunnel is carrying traffic' : 'the tunnel is on $running'}, '
+        'no number',
+      );
+      return;
+    }
+    final probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
     if (generation != _generation) return;
     commonPrint.log('portal delay $name: ${probe.describe()}');
     state = {...state, name: probe.ms};

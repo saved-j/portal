@@ -208,4 +208,32 @@ void main() {
       expect(kept!.group.all.single.name, 'live-row');
     });
   });
+
+  group('this app\'s own service nodes are never rows', () {
+    test('XRAY-SOCKS and PORTAL-XRAY are refused by name', () {
+      expect(isPortalServiceNode('XRAY-SOCKS'), isTrue);
+      expect(isPortalServiceNode('portal-xray'), isTrue);
+      expect(isPortalServiceNode(' VPN - Main '), isFalse);
+      expect(isPortalServiceNode('Auto Europe'), isFalse);
+    });
+
+    test('a group carrying them draws the subscription\'s rows only', () {
+      final group = portalGroupOfRows(const [
+        PortalRow(name: 'XRAY-SOCKS', type: 'Socks5'),
+        PortalRow(name: 'PORTAL-XRAY', type: 'Selector'),
+        PortalRow(name: 'Эстония', type: 'Vless'),
+        PortalRow(name: 'DIRECT', type: 'Direct'),
+      ]);
+      expect(group.all.map((proxy) => proxy.name), ['Эстония']);
+    });
+
+    test('a profile that somehow carries one does not offer it', () {
+      final rows = parsePortalRows('''
+proxies:
+  - {name: XRAY-SOCKS, type: socks5, server: 127.0.0.1, port: 10808}
+  - {name: Эстония, type: vless, server: ee.example, port: 443}
+''');
+      expect(rows.map((row) => row.name), ['Эстония']);
+    });
+  });
 }

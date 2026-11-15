@@ -3,53 +3,53 @@ import 'dart:io';
 import 'package:fl_clash/core/xray_ping.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// A ping is only worth drawing when it is a fact about the server. These tests pin the two
-/// cases that made a row lie: a fake-IP from the tunnel's own range, and a loopback address.
+/// The number on a simple-portal row is a request the child carries, timed to its first byte.
+/// These tests pin the two halves of that promise: a request that comes back produces a number
+/// and names what it asked for, and a request that cannot come back produces a dash — never a
+/// number the phone made up.
 void main() {
-  InternetAddress v4(String address) => InternetAddress(address);
+  late HttpServer server;
+  late String url;
 
-  group('the tunnel owns these addresses, so they are never timed', () {
-    test('the fake-IP range mihomo and Xray answer with', () {
-      expect(isTunnelOwnedAddress(v4('198.18.0.1')), isTrue);
-      expect(isTunnelOwnedAddress(v4('198.18.0.2')), isTrue);
-      expect(isTunnelOwnedAddress(v4('198.18.44.7')), isTrue);
-      expect(isTunnelOwnedAddress(v4('198.19.255.255')), isTrue);
+  setUp(() async {
+    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((request) async {
+      request.response.statusCode = 204;
+      await request.response.close();
     });
-
-    test('loopback, the unspecified address and link-local', () {
-      expect(isTunnelOwnedAddress(v4('127.0.0.1')), isTrue);
-      expect(isTunnelOwnedAddress(v4('0.0.0.0')), isTrue);
-      expect(isTunnelOwnedAddress(v4('169.254.1.1')), isTrue);
-      expect(isTunnelOwnedAddress(InternetAddress.loopbackIPv6), isTrue);
-    });
-
-    test('a real server address is not the tunnel', () {
-      expect(isTunnelOwnedAddress(v4('185.155.222.5')), isFalse);
-      expect(isTunnelOwnedAddress(v4('1.1.1.1')), isFalse);
-      expect(isTunnelOwnedAddress(v4('198.17.0.1')), isFalse);
-      expect(isTunnelOwnedAddress(v4('198.20.0.1')), isFalse);
-      expect(isTunnelOwnedAddress(InternetAddress('2a01:4f8::1')), isFalse);
-    });
+    url = 'http://127.0.0.1:${server.port}/generate_204';
   });
 
-  group('a fake address is a dash, never a number', () {
-    test('a literal fake-IP is refused before any handshake', () async {
-      final probe = await probeTcp('198.18.0.5', 443);
-      expect(probe.note, TcpPingNote.fakeAddress);
-      expect(probe.ms, isNull);
-      expect(probe.answered, isFalse);
-      expect(probe.describe(), contains('the tunnel'));
-    });
+  tearDown(() async {
+    await server.close(force: true);
+  });
 
-    test('a literal loopback is refused too', () async {
-      final probe = await probeTcp('127.0.0.1', 7890);
-      expect(probe.note, TcpPingNote.fakeAddress);
-      expect(probe.ms, isNull);
-    });
+  test('a request that answers is a number, and the line names what it timed', () async {
+    final probe = await probeThroughPortal(url);
+    expect(probe.note, PortalDelayNote.measured);
+    expect(probe.ms, isNotNull);
+    expect(probe.ms, greaterThanOrEqualTo(0));
+    expect(probe.describe(), contains('generate_204'));
+    expect(probe.describe(), contains('ms'));
+  });
 
-    test('nothing to measure is not a measurement', () async {
-      expect((await probeTcp('', 443)).note, TcpPingNote.noAddress);
-      expect((await probeTcp('node.example', 0)).note, TcpPingNote.noAddress);
-    });
+  test('a port nothing listens on is a dash, not a small number', () async {
+    final closed = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = closed.port;
+    await closed.close();
+    final probe = await probeThroughPortal('http://127.0.0.1:$port/generate_204');
+    expect(probe.ms, isNull);
+    expect(probe.note, isNot(PortalDelayNote.measured));
+  });
+
+  test('nothing to request is not a measurement', () async {
+    expect((await probeThroughPortal('')).note, PortalDelayNote.noUrl);
+    expect((await probeThroughPortal('not a url')).note, PortalDelayNote.noUrl);
+  });
+
+  test('the default note for a silent tunnel is its own reason, not a zero', () {
+    const silent = PortalDelay(url: 'https://x/generate_204', note: PortalDelayNote.noTunnel);
+    expect(silent.ms, isNull);
+    expect(silent.describe(), contains('no tunnel'));
   });
 }
