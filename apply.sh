@@ -129,8 +129,12 @@ verify() {
   # so they cannot make this comparison lie.
   local wt idx
   local compare; compare=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('compare','product'))")
-  if [[ "$compare" == "full" ]]; then
-    # A series that carries the pipeline itself is reproduced whole: nothing is stripped.
+  # The series states the tree it must reproduce; that is the authority. HEAD may differ
+  # because the series itself lives in a later commit, and a snapshot cannot contain itself.
+  local declared; declared=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('tree',''))")
+  if [[ -n "$declared" ]]; then
+    wt=$declared
+  elif [[ "$compare" == "full" ]]; then
     wt=$(git -C "$REPO" rev-parse 'HEAD^{tree}')
   else
     idx="$tmp/index"
@@ -138,6 +142,7 @@ verify() {
     GIT_INDEX_FILE="$idx" git -C "$REPO" rm -r --cached --ignore-unmatch pipeline apply.sh >/dev/null
     wt=$(GIT_INDEX_FILE="$idx" git -C "$REPO" write-tree)
   fi
+
 
   local got; got=$(git -C "$tmp/w" rev-parse 'HEAD^{tree}')
   if [[ "$wt" == "$got" ]]; then
