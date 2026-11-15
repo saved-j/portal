@@ -1,0 +1,90 @@
+# 12 - the core is handed a duplicate of the tunnel, and the descriptor is checked not the number
+#
+# The ioctl failure was a number, not a path: a closed ParcelFileDescriptor reports -1, the
+# library turned a non-positive number into an unset `xray.tun.fd`, and proxy/tun then fell back
+# to "0" — stdin — whose TUNGETIFF is `inappropriate ioctl for device`. A number can also be
+# reused by whichever file the process opened next, which is why `fd >= 3` alone is not enough
+# to call a tunnel open. So the plugin now asks the descriptor itself
+# (`descriptor.fileDescriptor.valid()`) in both places it decides to use one — the start, and the
+# cached tunnel it would otherwise reuse on a tap — and hands the core a descriptor this start
+# owns: `descriptor.dup()`, closed in a `finally` once the native call returns, because
+# proxy/tun duplicates what it is given (F_DUPFD_CLOEXEC) and needs the caller's copy no longer.
+# The library stops clearing the variable for a bad number and returns an error string instead:
+# a caller with no tunnel to give must not start a core that will ioctl stdin, and the message
+# says which number was wrong.
+
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+index 88b91be9..a73966ae 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -183,14 +183,14 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+             ?: return failure("the portal has no open tunnel: the VPN that owns it is not up")
+         // A stop that arrived while the tunnel was being waited for wins: nothing opens.
+         if (!isCurrent(token)) return cancelled()
+-        // One number, read once, and checked before the core sees it: proxy/tun reads the
+-        // number from the environment and would use 0 for a descriptor that closed in the
+-        // meantime, which is an ioctl failure from inside the core that names neither.
+-        val fd = tun.fd
+-        if (fd < XrayTun.FIRST_TUN_FD) {
++        // The descriptor, not merely its number: a tunnel the service closed between the take
++        // and this line reports -1 (and 0..2 are the standard streams), while its number may
++        // already belong to the next file the process opened. proxy/tun would then ioctl that
++        // file and report the ioctl, not the cause.
++        if (tun.fd < XrayTun.FIRST_TUN_FD || !tun.descriptor.fileDescriptor.valid()) {
+             cachedTun = null
+             XrayTunHolder.clear()
+-            return failure("the portal's tunnel is closed (fd $fd): the VPN that owned it went away")
++            return failure("the tunnel descriptor is closed: nothing to read")
+         }
+         val logFile = File(appContext.filesDir, LOG_NAME)
+         val document = runCatching { tunDocument(config, tun, logFile) }.getOrElse { error ->
+@@ -210,8 +210,23 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         // A line left by the previous start must not acknowledge this one.
+         runCatching { logFile.writeText("") }
+ 
+-        Log.i(TAG, "handing tun fd $fd to the core")
+-        val attempt = runCatching { XrayStart(document, fd, assets.absolutePath) }
++        // The core gets a descriptor this start owns. The service may close its tunnel at any
++        // moment — a mode switch, a new establish — and a number that closed between the check
++        // above and the core's own read is precisely how the core came to ioctl stdin.
++        // Duplicating it here makes the number outlive the service's close for as long as this
++        // call runs; the core duplicates it once more for itself (proxy/tun does
++        // F_DUPFD_CLOEXEC on what it is handed), so closing this one on the way out leaves the
++        // core reading its own.
++        val handoff = runCatching { tun.descriptor.dup() }.getOrElse { error ->
++            return failure("cannot duplicate the tunnel descriptor: ${error.message}")
++        }
++        val fd = handoff.fd
++        Log.i(TAG, "handing tun fd $fd (a duplicate of ${tun.fd}) to the core")
++        val attempt = try {
++            runCatching { XrayStart(document, fd, assets.absolutePath) }
++        } finally {
++            runCatching { handoff.close() }
++        }
+         if (attempt.isFailure) {
+             val error = attempt.exceptionOrNull()
+             Log.e(TAG, "unable to start xray", error)
+diff --git a/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+index a323332d..efcea38c 100644
+--- a/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
++++ b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+@@ -20,13 +20,13 @@ class XrayTun(
+     /// The number the core is given. Valid only while [descriptor] is open.
+     val fd: Int get() = descriptor.fd
+ 
+-    /// Whether the number above still names an open tunnel.
++    /// Whether this still names an open tunnel.
+     ///
+-    /// A descriptor the service closed reports -1, and 0..2 are the process's own streams, so
+-    /// a number below 3 is not a tunnel. proxy/tun reads the number from the environment and
+-    /// falls back to 0 when it is unset, which is how a closed tunnel used to reach the core as
+-    /// a bare `inappropriate ioctl for device`.
+-    val live: Boolean get() = fd >= FIRST_TUN_FD
++    /// The number alone is not enough: a descriptor the service closed reports -1, and its old
++    /// number may already belong to the next file the process opened, so the descriptor itself
++    /// is asked. proxy/tun falls back to 0 for a number that was never set, which is how a
++    /// closed tunnel used to reach the core as a bare `inappropriate ioctl for device`.
++    val live: Boolean get() = fd >= FIRST_TUN_FD && descriptor.fileDescriptor.valid()
+ 
+     companion object {
+         /// The first descriptor number that is not stdin, stdout or stderr: a tunnel is never

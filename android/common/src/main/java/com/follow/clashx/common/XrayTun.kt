@@ -20,13 +20,13 @@ class XrayTun(
     /// The number the core is given. Valid only while [descriptor] is open.
     val fd: Int get() = descriptor.fd
 
-    /// Whether the number above still names an open tunnel.
+    /// Whether this still names an open tunnel.
     ///
-    /// A descriptor the service closed reports -1, and 0..2 are the process's own streams, so
-    /// a number below 3 is not a tunnel. proxy/tun reads the number from the environment and
-    /// falls back to 0 when it is unset, which is how a closed tunnel used to reach the core as
-    /// a bare `inappropriate ioctl for device`.
-    val live: Boolean get() = fd >= FIRST_TUN_FD
+    /// The number alone is not enough: a descriptor the service closed reports -1, and its old
+    /// number may already belong to the next file the process opened, so the descriptor itself
+    /// is asked. proxy/tun falls back to 0 for a number that was never set, which is how a
+    /// closed tunnel used to reach the core as a bare `inappropriate ioctl for device`.
+    val live: Boolean get() = fd >= FIRST_TUN_FD && descriptor.fileDescriptor.valid()
 
     companion object {
         /// The first descriptor number that is not stdin, stdout or stderr: a tunnel is never

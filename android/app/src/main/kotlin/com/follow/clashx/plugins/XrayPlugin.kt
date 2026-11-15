@@ -183,14 +183,14 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             ?: return failure("the portal has no open tunnel: the VPN that owns it is not up")
         // A stop that arrived while the tunnel was being waited for wins: nothing opens.
         if (!isCurrent(token)) return cancelled()
-        // One number, read once, and checked before the core sees it: proxy/tun reads the
-        // number from the environment and would use 0 for a descriptor that closed in the
-        // meantime, which is an ioctl failure from inside the core that names neither.
-        val fd = tun.fd
-        if (fd < XrayTun.FIRST_TUN_FD) {
+        // The descriptor, not merely its number: a tunnel the service closed between the take
+        // and this line reports -1 (and 0..2 are the standard streams), while its number may
+        // already belong to the next file the process opened. proxy/tun would then ioctl that
+        // file and report the ioctl, not the cause.
+        if (tun.fd < XrayTun.FIRST_TUN_FD || !tun.descriptor.fileDescriptor.valid()) {
             cachedTun = null
             XrayTunHolder.clear()
-            return failure("the portal's tunnel is closed (fd $fd): the VPN that owned it went away")
+            return failure("the tunnel descriptor is closed: nothing to read")
         }
         val logFile = File(appContext.filesDir, LOG_NAME)
         val document = runCatching { tunDocument(config, tun, logFile) }.getOrElse { error ->
@@ -210,8 +210,23 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         // A line left by the previous start must not acknowledge this one.
         runCatching { logFile.writeText("") }
 
-        Log.i(TAG, "handing tun fd $fd to the core")
-        val attempt = runCatching { XrayStart(document, fd, assets.absolutePath) }
+        // The core gets a descriptor this start owns. The service may close its tunnel at any
+        // moment — a mode switch, a new establish — and a number that closed between the check
+        // above and the core's own read is precisely how the core came to ioctl stdin.
+        // Duplicating it here makes the number outlive the service's close for as long as this
+        // call runs; the core duplicates it once more for itself (proxy/tun does
+        // F_DUPFD_CLOEXEC on what it is handed), so closing this one on the way out leaves the
+        // core reading its own.
+        val handoff = runCatching { tun.descriptor.dup() }.getOrElse { error ->
+            return failure("cannot duplicate the tunnel descriptor: ${error.message}")
+        }
+        val fd = handoff.fd
+        Log.i(TAG, "handing tun fd $fd (a duplicate of ${tun.fd}) to the core")
+        val attempt = try {
+            runCatching { XrayStart(document, fd, assets.absolutePath) }
+        } finally {
+            runCatching { handoff.close() }
+        }
         if (attempt.isFailure) {
             val error = attempt.exceptionOrNull()
             Log.e(TAG, "unable to start xray", error)
