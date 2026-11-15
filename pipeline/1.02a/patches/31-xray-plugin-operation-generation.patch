@@ -1,0 +1,133 @@
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+index 7b2ff27d..2733f063 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -16,6 +16,7 @@ import org.json.JSONObject
+ import java.io.File
+ import java.util.concurrent.Executors
+ import java.util.concurrent.TimeUnit
++import java.util.concurrent.atomic.AtomicLong
+ import java.util.zip.ZipFile
+ 
+ /**
+@@ -53,29 +54,39 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     /// and keeping it is what lets a tap replace the process without replacing the tunnel.
+     @Volatile private var cachedTun: XrayTun? = null
+ 
+-    /// Set by a stop that arrives while a start is still waiting for its acknowledgement.
+-    /// The wait checks it between polls, so the only executor thread is not held to the
+-    /// timeout.
+-    @Volatile private var startCancelled = false
++    /// Every command takes a number; only the newest one may touch the process.
++    ///
++    /// A stop has to invalidate a start that is already waiting *and* one still queued
++    /// behind it on the executor, which a shared boolean cannot do: the queued start would
++    /// clear it and go on to spawn a child nobody asked for any more. The number only ever
++    /// grows, so an older command compares false wherever it wakes up.
++    private val operation = AtomicLong(0)
++
++    private fun nextOperation(): Long = operation.incrementAndGet()
++
++    private fun isCurrent(token: Long): Boolean = operation.get() == token
+ 
+     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+         appContext = binding.applicationContext
+         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
+         channel.setMethodCallHandler(this)
+         // The service takes the child down with the tunnel, so a revoked VPN cannot leave a
+-        // process reading a descriptor nobody answers for.
++        // process reading a descriptor nobody answers for. Taking a number first also kills
++        // any start the service's teardown interrupted before it could spawn.
+         XrayChildControl.stop = {
++            nextOperation()
+             // The service is closing the descriptor it owns: the tunnel in hand is gone with
+             // it, and so is whatever is reading it. Called on the service's own thread, so
+             // kill and return — the wait belongs on the executor, not on a stopping service.
+             cachedTun = null
+-            stop()
++            killNow()
+         }
+     }
+ 
+     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+         channel.setMethodCallHandler(null)
+         XrayChildControl.stop = null
++        nextOperation()
+         stop()
+     }
+ 
+@@ -88,8 +99,15 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+                     result.success(failure("empty config"))
+                     return
+                 }
++                // Numbered here, on the platform thread, so start and stop are ordered by
++                // arrival: the newest command is the one that owns the process.
++                val token = nextOperation()
+                 executor.execute {
+-                    val outcome = start(config)
++                    if (!isCurrent(token)) {
++                        result.success(cancelled())
++                        return@execute
++                    }
++                    val outcome = start(token, config)
+                     channel.invokeMethodOnMainThread("state", status())
+                     result.success(outcome)
+                 }
+@@ -98,11 +116,16 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+                 // Kill the child from this thread, not from the queue: a start that is still
+                 // waiting for its acknowledgement holds the only executor slot, and a stop
+                 // queued behind it would arrive after the timeout it exists to cut short.
+-                startCancelled = true
++                // Taking a number first invalidates every start, running or queued.
++                val token = nextOperation()
+                 val killed = killNow()
+                 executor.execute {
++                    // The process being reaped belongs to an older command whatever arrived
++                    // since, so it is always reaped; only the state report follows the number.
+                     killed?.let { reap(it) }
+-                    channel.invokeMethodOnMainThread("state", status())
++                    if (isCurrent(token)) {
++                        channel.invokeMethodOnMainThread("state", status())
++                    }
+                     result.success(mapOf("ok" to true, "message" to "stopped"))
+                 }
+             }
+@@ -117,9 +140,8 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         "tun" to (cachedTun != null),
+     )
+ 
+-    private fun start(config: String): Map<String, Any> {
++    private fun start(token: Long, config: String): Map<String, Any> {
+         stop()
+-        startCancelled = false
+         acknowledged = false
+         val binary = binary() ?: return failure("libxray.so is missing from the APK")
+         // The service publishes as its start returns; a cold start can arrive a few
+@@ -127,6 +149,8 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         // later start — a tap on another node — reuses the tunnel it already has.
+         val tun = tunForChild()
+             ?: return failure("the portal has no tunnel yet: nothing established it")
++        // A stop that arrived while the tunnel was being waited for wins: nothing is spawned.
++        if (!isCurrent(token)) return cancelled()
+         val document = runCatching { tunDocument(config, tun) }.getOrElse { error ->
+             return failure("the node's config cannot take a tun inbound: ${error.message}")
+         }
+@@ -156,7 +180,8 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+ 
+             val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
+             while (System.currentTimeMillis() < deadline) {
+-                if (startCancelled) {
++                // A newer command — a stop, or another start — owns the process from here.
++                if (!isCurrent(token)) {
+                     stop()
+                     return cancelled()
+                 }
+@@ -284,8 +309,6 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     private fun killNow(): Process? {
+         val current = process ?: return null
+         process = null
+-        // A start still waiting for its acknowledgement reads this and gives up on its next turn.
+-        startCancelled = true
+         runCatching { current.destroy() }
+         return current
+     }

@@ -1,0 +1,1565 @@
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt b/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
+index 3e1b9cb9..cd4a848a 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
+@@ -36,6 +36,10 @@ object ServiceController {
+     internal var runtime: ServiceRuntime? = null
+         private set
+ 
++    /// The tunnel is read by the Xray child, so the Core is neither started nor stopped here.
++    @Volatile
++    private var xrayTunActive = false
++
+     private fun clearBinding() {
+         binding?.unbind()
+         binding = null
+@@ -45,7 +49,12 @@ object ServiceController {
+     private fun release() {
+         clearBinding()
+         runtime = null
+-        Core.stopListener()
++        // In the simple portal the Core never ran: a stop would reach a listener that was
++        // never started, and the tunnel is torn down by the service that made it.
++        if (!xrayTunActive) {
++            Core.stopListener()
++        }
++        xrayTunActive = false
+     }
+ 
+     fun invokeMethod(data: String, callback: (ByteArray) -> Unit): Result<Unit> = runCatching {
+@@ -106,7 +115,12 @@ object ServiceController {
+             return@withLock false
+         }
+ 
+-        Core.startListener()
++        // The simple portal's tunnel is read by the Xray child: the engine is neither started
++        // nor configured here, and its listener state is left exactly as it was.
++        xrayTunActive = options.xrayTun
++        if (!options.xrayTun) {
++            Core.startListener()
++        }
+         runtime = ServiceRuntime(
+             vpn = options.enable,
+             startedAtMillis = runtime?.startedAtMillis ?: System.currentTimeMillis(),
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+index 8315a620..2a5427f3 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -1,29 +1,42 @@
+ package com.follow.clashx.plugins
+ 
+ import android.content.Context
++import android.system.Os
++import android.system.OsConstants
+ import android.util.Log
+ import com.follow.clashx.common.Components
++import com.follow.clashx.common.XrayChildControl
++import com.follow.clashx.common.XrayTun
++import com.follow.clashx.common.XrayTunHolder
+ import io.flutter.embedding.engine.plugins.FlutterPlugin
+ import io.flutter.plugin.common.MethodCall
+ import io.flutter.plugin.common.MethodChannel
++import org.json.JSONArray
++import org.json.JSONObject
+ import java.io.File
+-import java.net.InetSocketAddress
+-import java.net.Socket
+ import java.util.concurrent.Executors
+ import java.util.concurrent.TimeUnit
+ import java.util.zip.ZipFile
+ 
+ /**
+- * Runs the bundled Xray next to the in-process engine.
++ * Runs the bundled Xray on the simple portal's tunnel.
+  *
+- * The engine keeps the TUN and the rule engine; Xray owns the real node and is reached
+- * through a socks5 outbound the host declares in the engine's config. That split is not a
+- * preference: a child process cannot inherit the tun descriptor, and its sockets cannot be
+- * protected by the VpnService, so letting the child own the tunnel would loop its own
+- * traffic straight back into the tunnel.
++ * The VpnService establishes the tun — no other component can — and this plugin hands that
++ * very descriptor to the child through its `tun` inbound. There is no engine in front of it
++ * and no socks bridge behind it: the system routes packets into the tun, the child reads
++ * them, and the node it dials is the one the owner picked.
+  *
+- * Ported from the PortalVPN legacy client, which ran a bridge the same way and answered the
+- * same health check.
++ * The descriptor crosses exec by inheritance, so the child reads the same number: close-on-
++ * exec is cleared on it and the number is stated in `xray.tun.fd`. The start is only a
++ * success once the child has acknowledged the tunnel in its own output; a child that exits,
++ * or one that never takes the descriptor, fails the start with its last line instead of
++ * falling back to a bridge it no longer has.
++ *
++ * Protecting the child's transport: `VpnService.protect` takes a socket from the calling
++ * process, and the child's sockets are created after exec by Go, so it cannot be used here.
++ * What it can do is bind every outbound to the interface the tunnel rides on, stated as
++ * `autoOutboundsInterface`; the service resolves that interface and refuses to hand over a
++ * tunnel without one.
+  */
+ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     private lateinit var channel: MethodChannel
+@@ -31,19 +44,38 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     private val executor = Executors.newSingleThreadExecutor()
+     @Volatile private var process: Process? = null
+     @Volatile private var lastLine: String = ""
++    @Volatile private var acknowledged = false
++
++    /// The tunnel this plugin was handed, kept for the life of the VPN.
++    ///
++    /// The service publishes it once, when it establishes the interface; the child is
++    /// restarted on every pick, and each restart reads the same descriptor. Taking it once
++    /// and keeping it is what lets a tap replace the process without replacing the tunnel.
++    @Volatile private var cachedTun: XrayTun? = null
+ 
+-    /// Set by a stop that arrives while a start is still waiting for its port. The wait
+-    /// checks it between polls, so the only executor thread is not held to the timeout.
++    /// Set by a stop that arrives while a start is still waiting for its acknowledgement.
++    /// The wait checks it between polls, so the only executor thread is not held to the
++    /// timeout.
+     @Volatile private var startCancelled = false
+ 
+     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+         appContext = binding.applicationContext
+         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
+         channel.setMethodCallHandler(this)
++        // The service takes the child down with the tunnel, so a revoked VPN cannot leave a
++        // process reading a descriptor nobody answers for.
++        XrayChildControl.stop = {
++            // The service is closing the descriptor it owns: the tunnel in hand is gone with
++            // it, and so is whatever is reading it. Called on the service's own thread, so
++            // kill and return — the wait belongs on the executor, not on a stopping service.
++            cachedTun = null
++            stop()
++        }
+     }
+ 
+     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+         channel.setMethodCallHandler(null)
++        XrayChildControl.stop = null
+         stop()
+     }
+ 
+@@ -52,22 +84,20 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+             "status" -> result.success(status())
+             "start" -> {
+                 val config = call.argument<String>("config")
+-                val port = call.argument<Int>("port") ?: DEFAULT_PORT
+                 if (config.isNullOrBlank()) {
+-                    result.success(mapOf("ok" to false, "message" to "empty config"))
++                    result.success(failure("empty config"))
+                     return
+                 }
+                 executor.execute {
+-                    val outcome = start(config, port)
++                    val outcome = start(config)
+                     channel.invokeMethodOnMainThread("state", status())
+                     result.success(outcome)
+                 }
+             }
+             "stop" -> {
+                 // Kill the child from this thread, not from the queue: a start that is still
+-                // waiting for its port holds the only executor slot, and a stop queued behind
+-                // it would arrive after the timeout it exists to cut short. The child dies
+-                // here; the wait for it and the answer follow on the executor.
++                // waiting for its acknowledgement holds the only executor slot, and a stop
++                // queued behind it would arrive after the timeout it exists to cut short.
+                 startCancelled = true
+                 val killed = killNow()
+                 executor.execute {
+@@ -80,45 +110,38 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         }
+     }
+ 
+-
+-    /// Copies the geodata shipped as assets next to the config, once per install.
+-    ///
+-    /// Xray reads geosite.dat and geoip.dat from XRAY_LOCATION_ASSET; putting them in
+-    /// filesDir keeps them readable to the child without shipping 10 MB in jniLibs, where
+-    /// only lib*.so survives packaging.
+-    private fun installGeoAssets(): File {
+-        val dir = File(appContext.filesDir, "xray-assets")
+-        if (!dir.exists()) dir.mkdirs()
+-        for (name in listOf("geosite.dat", "geoip.dat")) {
+-            val target = File(dir, name)
+-            val expected = runCatching {
+-                appContext.assets.open("flutter_assets/assets/xray/$name").use { it.readBytes().size }
+-            }.getOrDefault(0)
+-            if (target.exists() && target.length() == expected.toLong() && expected > 0) continue
+-            runCatching {
+-                appContext.assets.open("flutter_assets/assets/xray/$name").use { input ->
+-                    target.outputStream().use { output -> input.copyTo(output) }
+-                }
+-            }.onFailure { Log.e(TAG, "cannot install $name: ${it.message}") }
+-        }
+-        return dir
+-    }
+-
+     private fun status(): Map<String, Any> = mapOf(
+         "running" to (process?.isAlive == true),
+         "lastLine" to lastLine,
++        // Whether this plugin holds a tunnel: the child can only run while it does.
++        "tun" to (cachedTun != null),
+     )
+ 
+-    private fun start(config: String, port: Int): Map<String, Any> {
++    private fun start(config: String): Map<String, Any> {
+         stop()
+         startCancelled = false
++        acknowledged = false
+         val binary = binary() ?: return failure("libxray.so is missing from the APK")
+-        val configFile = File(appContext.filesDir, "xray.json")
+-        configFile.writeText(config, Charsets.UTF_8)
+-
++        // The service publishes as its start returns; a cold start can arrive a few
++        // milliseconds earlier than that, which is why this waits rather than assumes. A
++        // later start — a tap on another node — reuses the tunnel it already has.
++        val tun = tunForChild()
++            ?: return failure("the portal has no tunnel yet: nothing established it")
++        val document = runCatching { tunDocument(config, tun) }.getOrElse { error ->
++            return failure("the node's config cannot take a tun inbound: ${error.message}")
++        }
++        val configFile = File(appContext.filesDir, "xray-tun.json")
++        configFile.writeText(document, Charsets.UTF_8)
+         val assets = installGeoAssets()
+ 
+         return try {
++            // Close-on-exec is a per-descriptor flag, so clearing it here is what lets the
++            // child inherit the tunnel; the number is the same on both sides of exec. If it
++            // cannot be cleared the child would start without a tunnel and die on its own
++            // terms, so the start is refused here with the reason instead.
++            if (!clearCloseOnExec(tun)) {
++                return failure("cannot hand fd ${tun.fd} to the child: close-on-exec is stuck")
++            }
+             val builder = ProcessBuilder(binary.absolutePath, "run", "-c", configFile.absolutePath)
+                 .directory(appContext.filesDir)
+                 .redirectErrorStream(true)
+@@ -126,6 +149,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+             // data files. By default it looks next to the binary, where an APK cannot put
+             // them, so the directory is stated explicitly.
+             builder.environment()["XRAY_LOCATION_ASSET"] = assets.absolutePath
++            builder.environment()[TUN_FD_ENV] = tun.fd.toString()
+             val started = builder.start()
+             process = started
+             drain(started)
+@@ -141,16 +165,16 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+                     stop()
+                     return failure("xray exited with $code: $lastLine")
+                 }
+-                if (reachable(port)) {
+-                    Log.i(TAG, "xray is listening on 127.0.0.1:$port")
+-                    return mapOf("ok" to true, "message" to "listening on $port")
++                if (acknowledged) {
++                    Log.i(TAG, "xray is reading the tunnel on fd ${tun.fd}")
++                    return mapOf("ok" to true, "message" to "tunnel on fd ${tun.fd}")
+                 }
+                 // The wait belongs to the child: it returns the moment the child dies, so a
+                 // refused start does not sit out a poll interval before saying so.
+                 started.waitFor(POLL_MS, TimeUnit.MILLISECONDS)
+             }
+             stop()
+-            failure("xray did not open 127.0.0.1:$port within ${READY_TIMEOUT_MS}ms: $lastLine")
++            failure("xray did not take the tunnel within ${READY_TIMEOUT_MS}ms: $lastLine")
+         } catch (e: Exception) {
+             Log.e(TAG, "unable to start xray", e)
+             stop()
+@@ -158,6 +182,97 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         }
+     }
+ 
++    /**
++     * The node's configuration with the tunnel as its only entry point.
++     *
++     * The panel document is passed through as it is — outbounds, routing, dns — and only its
++     * inbounds are replaced: a socks listener the panel declared would be a bridge into a
++     * process that no longer has anyone on the other side, so it goes. The tun inbound states
++     * the descriptor's number, the tunnel's addresses, and the interface to dial the node on.
++     */
++    private fun tunDocument(config: String, tun: XrayTun): String {
++        val root = JSONObject(config)
++        val inbounds = JSONArray()
++        root.optJSONArray("inbounds")?.let { existing ->
++            for (index in 0 until existing.length()) {
++                val item = existing.optJSONObject(index) ?: continue
++                if (item.optString("protocol") == "socks") continue
++                inbounds.put(item)
++            }
++        }
++        inbounds.put(
++            JSONObject().apply {
++                put("tag", TUN_INBOUND_TAG)
++                put("protocol", "tun")
++                put(
++                    "settings",
++                    JSONObject().apply {
++                        put("name", TUN_NAME)
++                        put("mtu", tun.mtu)
++                        put("gateway", JSONArray(tun.gateway))
++                        put("dns", JSONArray(tun.dns))
++                        // The system routes are the VpnService's and are already in place:
++                        // the child has no root to add its own, and must not try to.
++                        put("autoSystemRoutingTable", false)
++                        put("autoSystemDnsToGateway", false)
++                        // Stated, not inferred: this is the one place the child's own
++                        // transport is kept out of the tunnel it reads.
++                        put("autoOutboundsInterface", tun.interfaceName)
++                    },
++                )
++            },
++        )
++        root.put("inbounds", inbounds)
++        // The acknowledgement this start waits for is an info-level line. A child that never
++        // read the descriptor would otherwise be indistinguishable from one that did, which
++        // is exactly the silent start this mode exists to avoid.
++        val log = root.optJSONObject("log") ?: JSONObject()
++        log.put("loglevel", ACK_LOG_LEVEL)
++        root.put("log", log)
++        return root.toString()
++    }
++
++    /// Copies the geodata shipped as assets next to the config, once per install.
++    ///
++    /// Xray reads geosite.dat and geoip.dat from XRAY_LOCATION_ASSET; putting them in
++    /// filesDir keeps them readable to the child without shipping 10 MB in jniLibs, where
++    /// only lib*.so survives packaging.
++    private fun installGeoAssets(): File {
++        val dir = File(appContext.filesDir, "xray-assets")
++        if (!dir.exists()) dir.mkdirs()
++        for (name in listOf("geosite.dat", "geoip.dat")) {
++            val target = File(dir, name)
++            val expected = runCatching {
++                appContext.assets.open("flutter_assets/assets/xray/$name").use { it.readBytes().size }
++            }.getOrDefault(0)
++            if (target.exists() && target.length() == expected.toLong() && expected > 0) continue
++            runCatching {
++                appContext.assets.open("flutter_assets/assets/xray/$name").use { input ->
++                    target.outputStream().use { output -> input.copyTo(output) }
++                }
++            }.onFailure { Log.e(TAG, "cannot install $name: ${it.message}") }
++        }
++        return dir
++    }
++
++    /// The tunnel the child should read: a newly published one, else the one in hand.
++    ///
++    /// The service publishes exactly once per VPN start, so a fresh publish always wins; the
++    /// cached descriptor is what a restart after a tap uses, since the interface behind it
++    /// did not change.
++    private fun tunForChild(): XrayTun? {
++        XrayTunHolder.take()?.let { tun ->
++            cachedTun = tun
++            return tun
++        }
++        return cachedTun ?: XrayTunHolder.await(TUN_WAIT_MS)?.also { cachedTun = it }
++    }
++
++    private fun clearCloseOnExec(tun: XrayTun): Boolean =
++        runCatching { Os.fcntlInt(tun.descriptor.fileDescriptor, OsConstants.F_SETFD, 0) }
++            .onFailure { Log.w(TAG, "cannot clear close-on-exec on fd ${tun.fd}: ${it.message}") }
++            .isSuccess
++
+     private fun stop() {
+         val current = killNow() ?: return
+         reap(current)
+@@ -169,7 +284,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     private fun killNow(): Process? {
+         val current = process ?: return null
+         process = null
+-        // A start still polling for its port reads this and gives up on its next turn.
++        // A start still waiting for its acknowledgement reads this and gives up on its next turn.
+         startCancelled = true
+         runCatching { current.destroy() }
+         return current
+@@ -211,13 +326,18 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+ 
+     private fun drain(started: Process) {
+         // A thread of its own, never the executor that runs start(): that one is still busy
+-        // waiting for the port, so a queued drain would only run after the wait ended —
+-        // which both hides the child's output and can block it on a full pipe.
++        // waiting for the acknowledgement, so a queued drain would only run after the wait
++        // ended — which both hides the child's output and can block it on a full pipe.
+         Thread {
+             runCatching {
+                 started.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+                     for (line in lines) {
+                         lastLine = line
++                        // The tunnel's own reader says so once it is up: that line is the
++                        // proof the descriptor was accepted, not the fact the process lives.
++                        if (line.contains(ACK_MARKER, ignoreCase = true)) {
++                            acknowledged = true
++                        }
+                         if (line.contains("error", true) || line.contains("fatal", true)) {
+                             Log.e(TAG, line)
+                         } else {
+@@ -229,13 +349,8 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         }.start()
+     }
+ 
+-    private fun reachable(port: Int): Boolean = runCatching {
+-        Socket().use { it.connect(InetSocketAddress("127.0.0.1", port), 400) }
+-        true
+-    }.getOrDefault(false)
+-
+     private fun failure(message: String): Map<String, Any> =
+-        mapOf("ok" to false, "message" to message)
++        mapOf("ok" to false, "message" to message, "lastLine" to lastLine)
+ 
+     private fun MethodChannel.invokeMethodOnMainThread(method: String, arguments: Any?) {
+         android.os.Handler(android.os.Looper.getMainLooper()).post {
+@@ -246,9 +361,24 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     companion object {
+         private const val TAG = "XrayCore"
+         private const val LIB_NAME = "libxray.so"
+-        private const val READY_TIMEOUT_MS = 10_000L
++        private const val READY_TIMEOUT_MS = 12_000L
+         private const val POLL_MS = 200L
+-        const val DEFAULT_PORT = 10808
++
++        /// How long the plugin waits for the service to publish the tunnel it just made.
++        private const val TUN_WAIT_MS = 8_000L
++
++        /// The environment variable the bundled Xray reads its tun descriptor from.
++        private const val TUN_FD_ENV = "xray.tun.fd"
++
++        /// The line the tun stack prints once its reader is up.
++        private const val ACK_MARKER = "TUN reader - started"
++
++        /// Info, not the panel's level: without it the acknowledgement line is filtered out.
++        private const val ACK_LOG_LEVEL = "info"
++
++        private const val TUN_NAME = "portal0"
++        private const val TUN_INBOUND_TAG = "tun-in"
++
+         val CHANNEL = "${Components.PACKAGE_NAME}/xray"
+     }
+ }
+diff --git a/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+new file mode 100644
+index 00000000..2abbe993
+--- /dev/null
++++ b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+@@ -0,0 +1,76 @@
++package com.follow.clashx.common
++
++import android.os.ParcelFileDescriptor
++
++/**
++ * The tunnel the VpnService established, and the facts the child needs to read it.
++ *
++ * A child process cannot create a VpnService and cannot open the tunnel itself, so the
++ * service makes it and states its facts here: the descriptor, the tunnel's own addresses, and
++ * the interface the child's outbound connections must leave through. [descriptor] stays owned
++ * by the service; the child only borrows the number across exec and reads it.
++ */
++class XrayTun(
++    val descriptor: ParcelFileDescriptor,
++    val interfaceName: String,
++    val mtu: Int,
++    val gateway: List<String>,
++    val dns: List<String>,
++) {
++    /// The number the child inherits. Valid only while [descriptor] is open.
++    val fd: Int get() = descriptor.fd
++}
++
++/**
++ * The single hand-over point between the service that makes the tunnel and the plugin that
++ * starts the child.
++ *
++ * The two live in different Gradle modules but the same process, so the order is fixed: the
++ * service publishes as its start returns and the plugin takes right after. A take clears the
++ * slot, so two children can never be handed the same tunnel.
++ */
++object XrayTunHolder {
++    private const val POLL_MS = 50L
++
++    @Volatile
++    private var pending: XrayTun? = null
++
++    fun publish(tun: XrayTun?) {
++        pending = tun
++    }
++
++    fun take(): XrayTun? = pending?.also { pending = null }
++
++    /**
++     * Waits up to [timeoutMillis] for the service to publish.
++     *
++     * The service is started on the main thread and binds asynchronously, so the plugin can
++     * genuinely arrive first; waiting is how a cold start becomes one ordered step instead of
++     * a race the child would lose by a few milliseconds.
++     */
++    fun await(timeoutMillis: Long): XrayTun? {
++        val deadline = System.currentTimeMillis() + timeoutMillis
++        while (System.currentTimeMillis() < deadline) {
++            take()?.let { return it }
++            Thread.sleep(POLL_MS)
++        }
++        return take()
++    }
++
++    fun clear() {
++        pending = null
++    }
++}
++
++/**
++ * The process that reads the tunnel, so the service can take it down together with the tun.
++ *
++ * The service cannot see the plugin (the module dependency runs the other way), and a child
++ * left alive after the VPN is revoked keeps its own copy of the descriptor open: the
++ * interface would outlive the run and go on carrying traffic nobody asked for. The plugin
++ * registers here; the service calls it before it closes the descriptor it owns.
++ */
++object XrayChildControl {
++    @Volatile
++    var stop: (() -> Unit)? = null
++}
+diff --git a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+index b68325ef..4fc493bd 100644
+--- a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
++++ b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+@@ -7,9 +7,13 @@ import android.net.ProxyInfo
+ import android.os.Binder
+ import android.os.Build
+ import android.os.IBinder
++import android.os.ParcelFileDescriptor
+ import androidx.core.content.getSystemService
+ import com.follow.clashx.common.AccessControlMode
+ import com.follow.clashx.common.GlobalState
++import com.follow.clashx.common.XrayChildControl
++import com.follow.clashx.common.XrayTun
++import com.follow.clashx.common.XrayTunHolder
+ import com.follow.clashx.common.R as CommonR
+ import com.follow.clashx.core.Core
+ import com.follow.clashx.service.models.CIDR
+@@ -30,6 +34,12 @@ class VpnService : SystemVpnService(), ManagedService {
+     private val tunLock = Any()
+     private var tunRunning = false
+ 
++    /// Who reads the established descriptor: the engine, or the simple portal's child.
++    private var tunOwnedByChild = false
++
++    /// The simple portal's descriptor. The child borrows its number; the service keeps it.
++    private var xrayDescriptor: ParcelFileDescriptor? = null
++
+     override fun onDestroy() {
+         try {
+             cleanup()
+@@ -123,7 +133,7 @@ class VpnService : SystemVpnService(), ManagedService {
+     }
+ 
+     private fun handleStart(options: VpnOptions) {
+-        val fd = with(Builder()) {
++        val descriptor = with(Builder()) {
+             addAddressAndRoutes(options)
+             addDnsServers(options)
+             setMtu(options.tunMtu)
+@@ -136,7 +146,12 @@ class VpnService : SystemVpnService(), ManagedService {
+             if (options.allowBypass) {
+                 allowBypass()
+             }
+-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && options.systemProxy) {
++            // The system proxy names the engine's mixed port, and in the simple portal no
++            // engine runs: declaring it would send every app to a port nothing listens on.
++            if (!options.xrayTun &&
++                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
++                options.systemProxy
++            ) {
+                 GlobalState.log("Enable VPN HTTP proxy")
+                 setHttpProxy(
+                     ProxyInfo.buildDirectProxy(
+@@ -146,9 +161,13 @@ class VpnService : SystemVpnService(), ManagedService {
+                     ),
+                 )
+             }
+-            establish()?.detachFd()
+-                ?: error("VPN establishment was rejected by the system")
++            establish() ?: error("VPN establishment was rejected by the system")
++        }
++        if (options.xrayTun) {
++            handOverToChild(descriptor, options)
++            return
+         }
++        val fd = descriptor.detachFd()
+         synchronized(tunLock) {
+             tunRunning = true
+             try {
+@@ -176,6 +195,45 @@ class VpnService : SystemVpnService(), ManagedService {
+         }
+     }
+ 
++    /**
++     * The simple portal's tunnel: no engine is started, and the descriptor goes to the child.
++     *
++     * The child cannot call protect() on the sockets it opens after exec, so the one thing
++     * that keeps its own transport out of the tunnel is binding those outbounds to the
++     * interface the tunnel rides on — which needs that interface's name, resolved here while
++     * the active network is known. Without it the child would dial its own node through the
++     * tun it is reading, so no interface means no start rather than a tunnel that eats itself.
++     */
++    private fun handOverToChild(descriptor: ParcelFileDescriptor, options: VpnOptions) {
++        val interfaceName = outboundInterface()
++        if (interfaceName == null) {
++            descriptor.close()
++            error("no active network interface: the child's own traffic would re-enter the tunnel")
++        }
++        synchronized(tunLock) {
++            tunOwnedByChild = true
++            tunRunning = true
++            xrayDescriptor = descriptor
++            XrayTunHolder.publish(
++                XrayTun(
++                    descriptor = descriptor,
++                    interfaceName = interfaceName,
++                    mtu = options.tunMtu,
++                    gateway = listOf(IPV4_ADDRESS),
++                    dns = listOf(DNS),
++                ),
++            )
++        }
++    }
++
++    /// The interface the tunnel's own traffic leaves through, which is the active network's.
++    private fun outboundInterface(): String? = runCatching {
++        val manager = connectivity ?: return null
++        val network = manager.activeNetwork ?: return null
++        val properties = manager.getLinkProperties(network) ?: return null
++        properties.interfaceName?.takeIf { it.isNotBlank() }
++    }.getOrNull()
++
+     private fun Builder.addAddressAndRoutes(options: VpnOptions) {
+         val ipv4Address = IPV4_ADDRESS.toCIDR()
+         addAddress(ipv4Address.address, ipv4Address.prefixLength)
+@@ -273,10 +331,22 @@ class VpnService : SystemVpnService(), ManagedService {
+     }
+ 
+     private fun stopTunLocked() {
+-        if (tunRunning) {
++        if (!tunRunning) return
++        if (tunOwnedByChild) {
++            // The child goes first: it holds its own copy of the descriptor, and a process
++            // left reading a revoked tunnel keeps the interface alive for as long as it runs.
++            XrayChildControl.stop?.invoke()
++            XrayTunHolder.clear()
++            xrayDescriptor?.let { descriptor ->
++                runCatching { descriptor.close() }
++                    .onFailure { GlobalState.log("Unable to close the Xray tunnel: $it") }
++            }
++            xrayDescriptor = null
++            tunOwnedByChild = false
++        } else {
+             Core.stopTun()
+-            tunRunning = false
+         }
++        tunRunning = false
+     }
+ 
+     companion object {
+diff --git a/android/service/src/main/java/com/follow/clashx/service/models/VpnOptions.kt b/android/service/src/main/java/com/follow/clashx/service/models/VpnOptions.kt
+index dbed6ab3..3c22d7e2 100644
+--- a/android/service/src/main/java/com/follow/clashx/service/models/VpnOptions.kt
++++ b/android/service/src/main/java/com/follow/clashx/service/models/VpnOptions.kt
+@@ -27,6 +27,13 @@ data class VpnOptions(
+     val excludesAllRoutes: Boolean = false,
+     val mtu: Int = 0,
+     val congestionController: String? = null,
++    /**
++     * The simple portal: the tunnel belongs to the Xray child, not to the engine.
++     *
++     * The service still establishes it — only a VpnService can — but hands the descriptor to
++     * the child instead of to the Core, and no engine is started or configured.
++     */
++    val xrayTun: Boolean = false,
+ )
+ 
+ private const val DEFAULT_TUN_MTU = 9000
+diff --git a/lib/core/xray_config.dart b/lib/core/xray_config.dart
+index b336af8e..dd580862 100644
+--- a/lib/core/xray_config.dart
++++ b/lib/core/xray_config.dart
+@@ -3,13 +3,15 @@
+ /// The app speaks Clash YAML: a subscription is a list of proxies with a `type` and a few
+ /// protocol fields. Xray speaks its own JSON. This file is the only place that knows both,
+ /// so the whole X-Ray path can be tested without a phone, a tunnel or a panel.
++///
++/// The document this builds states an inbound, because a full Xray configuration has one.
++/// It is not the one the child is started with: the plugin replaces every inbound with the
++/// tun it was handed, so what matters here is the outbound, the transport and the log level.
+ library;
+ 
+ import 'dart:convert';
+ 
+-import 'subscription_formats.dart';
+-
+-/// A single outbound in Xray's JSON shape, plus the socks inbound the app uses.
++/// A single outbound in Xray's JSON shape, plus an entry point a document needs.
+ Map<String, dynamic> xrayConfigFor(
+   Map<String, dynamic> proxy, {
+   int socksPort = 10808,
+@@ -179,34 +181,3 @@ String xrayConfigJson(Map<String, dynamic> proxy, {int socksPort = 10808}) =>
+     const JsonEncoder.withIndent('  ').convert(
+       xrayConfigFor(proxy, socksPort: socksPort),
+     );
+-
+-/// A config the panel already wrote, made to listen on our socks port.
+-///
+-/// Happ and Incy are served a ready Xray document, so there is nothing to convert — but its
+-/// inbound may be on a port the app does not know. The engine forwards to 127.0.0.1:10808,
+-/// so that inbound is guaranteed to exist and the document is passed through untouched
+-/// otherwise.
+-String withSocksInbound(String body, {int port = 10808}) {
+-  // The panel may wrap the document in a list; Xray wants a bare object.
+-  final config = decodeClientConfig(body);
+-  if (config == null) throw const FormatException('xray config not found in body');
+-  final inbounds = <dynamic>[...?(config['inbounds'] as List?)];
+-  final socksIndex = inbounds.indexWhere(
+-    (item) => item is Map && '${item['protocol']}' == 'socks',
+-  );
+-  final socks = <String, dynamic>{
+-    'tag': 'socks-in',
+-    'listen': '127.0.0.1',
+-    'port': port,
+-    'protocol': 'socks',
+-    'settings': {'udp': true},
+-  };
+-  if (socksIndex >= 0) {
+-    inbounds[socksIndex] = socks;
+-  } else {
+-    inbounds.insert(0, socks);
+-  }
+-  config['inbounds'] = inbounds;
+-  config['log'] ??= {'loglevel': 'warning'};
+-  return const JsonEncoder.withIndent('  ').convert(config);
+-}
+diff --git a/lib/models/core.dart b/lib/models/core.dart
+index 36ba67c2..32175e71 100644
+--- a/lib/models/core.dart
++++ b/lib/models/core.dart
+@@ -90,6 +90,12 @@ abstract class VpnOptions with _$VpnOptions {
+     @Default(false) bool excludesAllRoutes,
+     @Default(0) int mtu,
+     @Default('') String congestionController,
++
++    /// The simple portal: the tunnel the service makes belongs to the Xray child.
++    ///
++    /// The service still establishes it — only a VpnService can — but hands the descriptor to
++    /// the child instead of the engine, and no engine is started or configured behind it.
++    @Default(false) bool xrayTun,
+   }) = _VpnOptions;
+ 
+   factory VpnOptions.fromJson(Map<String, Object?> json) =>
+diff --git a/lib/models/generated/core.freezed.dart b/lib/models/generated/core.freezed.dart
+index ed6cf5d0..1b3ab624 100644
+--- a/lib/models/generated/core.freezed.dart
++++ b/lib/models/generated/core.freezed.dart
+@@ -1255,7 +1255,11 @@ $TunCopyWith<$Res> get tun {
+ /// @nodoc
+ mixin _$VpnOptions {
+ 
+- bool get enable; int get port; bool get ipv6; bool get dnsHijacking; AccessControlProps get accessControlProps; bool get allowBypass; bool get systemProxy; List<String> get bypassDomain; String get stack; List<String> get routeAddress; bool get excludesAllRoutes; int get mtu; String get congestionController;
++ bool get enable; int get port; bool get ipv6; bool get dnsHijacking; AccessControlProps get accessControlProps; bool get allowBypass; bool get systemProxy; List<String> get bypassDomain; String get stack; List<String> get routeAddress; bool get excludesAllRoutes; int get mtu; String get congestionController;/// The simple portal: the tunnel the service makes belongs to the Xray child.
++///
++/// The service still establishes it — only a VpnService can — but hands the descriptor to
++/// the child instead of the engine, and no engine is started or configured behind it.
++ bool get xrayTun;
+ /// Create a copy of VpnOptions
+ /// with the given fields replaced by the non-null parameter values.
+ @JsonKey(includeFromJson: false, includeToJson: false)
+@@ -1269,20 +1273,20 @@ $VpnOptionsCopyWith<VpnOptions> get copyWith => _$VpnOptionsCopyWithImpl<VpnOpti
+ @override
+ bool operator ==(Object other) {
+   final _this = this as VpnOptions;
+-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VpnOptions&&(identical(other.enable, _this.enable) || other.enable == _this.enable)&&(identical(other.port, _this.port) || other.port == _this.port)&&(identical(other.ipv6, _this.ipv6) || other.ipv6 == _this.ipv6)&&(identical(other.dnsHijacking, _this.dnsHijacking) || other.dnsHijacking == _this.dnsHijacking)&&(identical(other.accessControlProps, _this.accessControlProps) || other.accessControlProps == _this.accessControlProps)&&(identical(other.allowBypass, _this.allowBypass) || other.allowBypass == _this.allowBypass)&&(identical(other.systemProxy, _this.systemProxy) || other.systemProxy == _this.systemProxy)&&const DeepCollectionEquality().equals(other.bypassDomain, _this.bypassDomain)&&(identical(other.stack, _this.stack) || other.stack == _this.stack)&&const DeepCollectionEquality().equals(other.routeAddress, _this.routeAddress)&&(identical(other.excludesAllRoutes, _this.excludesAllRoutes) || other.excludesAllRoutes == _this.excludesAllRoutes)&&(identical(other.mtu, _this.mtu) || other.mtu == _this.mtu)&&(identical(other.congestionController, _this.congestionController) || other.congestionController == _this.congestionController));
++  return identical(this, other) || (other.runtimeType == runtimeType&&other is VpnOptions&&(identical(other.enable, _this.enable) || other.enable == _this.enable)&&(identical(other.port, _this.port) || other.port == _this.port)&&(identical(other.ipv6, _this.ipv6) || other.ipv6 == _this.ipv6)&&(identical(other.dnsHijacking, _this.dnsHijacking) || other.dnsHijacking == _this.dnsHijacking)&&(identical(other.accessControlProps, _this.accessControlProps) || other.accessControlProps == _this.accessControlProps)&&(identical(other.allowBypass, _this.allowBypass) || other.allowBypass == _this.allowBypass)&&(identical(other.systemProxy, _this.systemProxy) || other.systemProxy == _this.systemProxy)&&const DeepCollectionEquality().equals(other.bypassDomain, _this.bypassDomain)&&(identical(other.stack, _this.stack) || other.stack == _this.stack)&&const DeepCollectionEquality().equals(other.routeAddress, _this.routeAddress)&&(identical(other.excludesAllRoutes, _this.excludesAllRoutes) || other.excludesAllRoutes == _this.excludesAllRoutes)&&(identical(other.mtu, _this.mtu) || other.mtu == _this.mtu)&&(identical(other.congestionController, _this.congestionController) || other.congestionController == _this.congestionController)&&(identical(other.xrayTun, _this.xrayTun) || other.xrayTun == _this.xrayTun));
+ }
+ 
+ @JsonKey(includeFromJson: false, includeToJson: false)
+ @override
+ int get hashCode {
+   final _this = this as VpnOptions;
+-  return Object.hash(runtimeType,_this.enable,_this.port,_this.ipv6,_this.dnsHijacking,_this.accessControlProps,_this.allowBypass,_this.systemProxy,const DeepCollectionEquality().hash(_this.bypassDomain),_this.stack,const DeepCollectionEquality().hash(_this.routeAddress),_this.excludesAllRoutes,_this.mtu,_this.congestionController);
++  return Object.hash(runtimeType,_this.enable,_this.port,_this.ipv6,_this.dnsHijacking,_this.accessControlProps,_this.allowBypass,_this.systemProxy,const DeepCollectionEquality().hash(_this.bypassDomain),_this.stack,const DeepCollectionEquality().hash(_this.routeAddress),_this.excludesAllRoutes,_this.mtu,_this.congestionController,_this.xrayTun);
+ }
+ 
+ @override
+ String toString() {
+   final _this = this as VpnOptions;
+-  return 'VpnOptions(enable: ${_this.enable}, port: ${_this.port}, ipv6: ${_this.ipv6}, dnsHijacking: ${_this.dnsHijacking}, accessControlProps: ${_this.accessControlProps}, allowBypass: ${_this.allowBypass}, systemProxy: ${_this.systemProxy}, bypassDomain: ${_this.bypassDomain}, stack: ${_this.stack}, routeAddress: ${_this.routeAddress}, excludesAllRoutes: ${_this.excludesAllRoutes}, mtu: ${_this.mtu}, congestionController: ${_this.congestionController})';
++  return 'VpnOptions(enable: ${_this.enable}, port: ${_this.port}, ipv6: ${_this.ipv6}, dnsHijacking: ${_this.dnsHijacking}, accessControlProps: ${_this.accessControlProps}, allowBypass: ${_this.allowBypass}, systemProxy: ${_this.systemProxy}, bypassDomain: ${_this.bypassDomain}, stack: ${_this.stack}, routeAddress: ${_this.routeAddress}, excludesAllRoutes: ${_this.excludesAllRoutes}, mtu: ${_this.mtu}, congestionController: ${_this.congestionController}, xrayTun: ${_this.xrayTun})';
+ }
+ 
+ 
+@@ -1293,7 +1297,7 @@ abstract mixin class $VpnOptionsCopyWith<$Res>  {
+   factory $VpnOptionsCopyWith(VpnOptions value, $Res Function(VpnOptions) _then) = _$VpnOptionsCopyWithImpl;
+ @useResult
+ $Res call({
+- bool enable, int port, bool ipv6, bool dnsHijacking, AccessControlProps accessControlProps, bool allowBypass, bool systemProxy, List<String> bypassDomain, String stack, List<String> routeAddress, bool excludesAllRoutes, int mtu, String congestionController
++ bool enable, int port, bool ipv6, bool dnsHijacking, AccessControlProps accessControlProps, bool allowBypass, bool systemProxy, List<String> bypassDomain, String stack, List<String> routeAddress, bool excludesAllRoutes, int mtu, String congestionController, bool xrayTun
+ });
+ 
+ 
+@@ -1310,7 +1314,7 @@ class _$VpnOptionsCopyWithImpl<$Res>
+ 
+ /// Create a copy of VpnOptions
+ /// with the given fields replaced by the non-null parameter values.
+-@pragma('vm:prefer-inline') @override $Res call({Object? enable = null,Object? port = null,Object? ipv6 = null,Object? dnsHijacking = null,Object? accessControlProps = null,Object? allowBypass = null,Object? systemProxy = null,Object? bypassDomain = null,Object? stack = null,Object? routeAddress = null,Object? excludesAllRoutes = null,Object? mtu = null,Object? congestionController = null,}) {
++@pragma('vm:prefer-inline') @override $Res call({Object? enable = null,Object? port = null,Object? ipv6 = null,Object? dnsHijacking = null,Object? accessControlProps = null,Object? allowBypass = null,Object? systemProxy = null,Object? bypassDomain = null,Object? stack = null,Object? routeAddress = null,Object? excludesAllRoutes = null,Object? mtu = null,Object? congestionController = null,Object? xrayTun = null,}) {
+   return _then(VpnOptions(
+ enable: null == enable ? _self.enable : enable // ignore: cast_nullable_to_non_nullable
+ as bool,port: null == port ? _self.port : port // ignore: cast_nullable_to_non_nullable
+@@ -1325,7 +1329,8 @@ as String,routeAddress: null == routeAddress ? _self.routeAddress : routeAddress
+ as List<String>,excludesAllRoutes: null == excludesAllRoutes ? _self.excludesAllRoutes : excludesAllRoutes // ignore: cast_nullable_to_non_nullable
+ as bool,mtu: null == mtu ? _self.mtu : mtu // ignore: cast_nullable_to_non_nullable
+ as int,congestionController: null == congestionController ? _self.congestionController : congestionController // ignore: cast_nullable_to_non_nullable
+-as String,
++as String,xrayTun: null == xrayTun ? _self.xrayTun : xrayTun // ignore: cast_nullable_to_non_nullable
++as bool,
+   ));
+ }
+ /// Create a copy of VpnOptions
+@@ -1419,10 +1424,10 @@ return $default(_that);case _:
+ /// }
+ /// ```
+ 
+-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( bool enable,  int port,  bool ipv6,  bool dnsHijacking,  AccessControlProps accessControlProps,  bool allowBypass,  bool systemProxy,  List<String> bypassDomain,  String stack,  List<String> routeAddress,  bool excludesAllRoutes,  int mtu,  String congestionController)?  $default,{required TResult orElse(),}) {final _that = this;
++@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( bool enable,  int port,  bool ipv6,  bool dnsHijacking,  AccessControlProps accessControlProps,  bool allowBypass,  bool systemProxy,  List<String> bypassDomain,  String stack,  List<String> routeAddress,  bool excludesAllRoutes,  int mtu,  String congestionController,  bool xrayTun)?  $default,{required TResult orElse(),}) {final _that = this;
+ switch (_that) {
+ case _VpnOptions() when $default != null:
+-return $default(_that.enable,_that.port,_that.ipv6,_that.dnsHijacking,_that.accessControlProps,_that.allowBypass,_that.systemProxy,_that.bypassDomain,_that.stack,_that.routeAddress,_that.excludesAllRoutes,_that.mtu,_that.congestionController);case _:
++return $default(_that.enable,_that.port,_that.ipv6,_that.dnsHijacking,_that.accessControlProps,_that.allowBypass,_that.systemProxy,_that.bypassDomain,_that.stack,_that.routeAddress,_that.excludesAllRoutes,_that.mtu,_that.congestionController,_that.xrayTun);case _:
+   return orElse();
+ 
+ }
+@@ -1440,10 +1445,10 @@ return $default(_that.enable,_that.port,_that.ipv6,_that.dnsHijacking,_that.acce
+ /// }
+ /// ```
+ 
+-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( bool enable,  int port,  bool ipv6,  bool dnsHijacking,  AccessControlProps accessControlProps,  bool allowBypass,  bool systemProxy,  List<String> bypassDomain,  String stack,  List<String> routeAddress,  bool excludesAllRoutes,  int mtu,  String congestionController)  $default,) {final _that = this;
++@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( bool enable,  int port,  bool ipv6,  bool dnsHijacking,  AccessControlProps accessControlProps,  bool allowBypass,  bool systemProxy,  List<String> bypassDomain,  String stack,  List<String> routeAddress,  bool excludesAllRoutes,  int mtu,  String congestionController,  bool xrayTun)  $default,) {final _that = this;
+ switch (_that) {
+ case _VpnOptions():
+-return $default(_that.enable,_that.port,_that.ipv6,_that.dnsHijacking,_that.accessControlProps,_that.allowBypass,_that.systemProxy,_that.bypassDomain,_that.stack,_that.routeAddress,_that.excludesAllRoutes,_that.mtu,_that.congestionController);case _:
++return $default(_that.enable,_that.port,_that.ipv6,_that.dnsHijacking,_that.accessControlProps,_that.allowBypass,_that.systemProxy,_that.bypassDomain,_that.stack,_that.routeAddress,_that.excludesAllRoutes,_that.mtu,_that.congestionController,_that.xrayTun);case _:
+   throw StateError('Unexpected subclass');
+ 
+ }
+@@ -1460,10 +1465,10 @@ return $default(_that.enable,_that.port,_that.ipv6,_that.dnsHijacking,_that.acce
+ /// }
+ /// ```
+ 
+-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( bool enable,  int port,  bool ipv6,  bool dnsHijacking,  AccessControlProps accessControlProps,  bool allowBypass,  bool systemProxy,  List<String> bypassDomain,  String stack,  List<String> routeAddress,  bool excludesAllRoutes,  int mtu,  String congestionController)?  $default,) {final _that = this;
++@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( bool enable,  int port,  bool ipv6,  bool dnsHijacking,  AccessControlProps accessControlProps,  bool allowBypass,  bool systemProxy,  List<String> bypassDomain,  String stack,  List<String> routeAddress,  bool excludesAllRoutes,  int mtu,  String congestionController,  bool xrayTun)?  $default,) {final _that = this;
+ switch (_that) {
+ case _VpnOptions() when $default != null:
+-return $default(_that.enable,_that.port,_that.ipv6,_that.dnsHijacking,_that.accessControlProps,_that.allowBypass,_that.systemProxy,_that.bypassDomain,_that.stack,_that.routeAddress,_that.excludesAllRoutes,_that.mtu,_that.congestionController);case _:
++return $default(_that.enable,_that.port,_that.ipv6,_that.dnsHijacking,_that.accessControlProps,_that.allowBypass,_that.systemProxy,_that.bypassDomain,_that.stack,_that.routeAddress,_that.excludesAllRoutes,_that.mtu,_that.congestionController,_that.xrayTun);case _:
+   return null;
+ 
+ }
+@@ -1475,7 +1480,7 @@ return $default(_that.enable,_that.port,_that.ipv6,_that.dnsHijacking,_that.acce
+ @JsonSerializable()
+ 
+ class _VpnOptions implements VpnOptions {
+-  const _VpnOptions({required this.enable, required this.port, required this.ipv6, required this.dnsHijacking, required this.accessControlProps, required this.allowBypass, required this.systemProxy, required  List<String> bypassDomain, required this.stack,  List<String> routeAddress = const [], this.excludesAllRoutes = false, this.mtu = 0, this.congestionController = ''}): _bypassDomain = bypassDomain,_routeAddress = routeAddress;
++  const _VpnOptions({required this.enable, required this.port, required this.ipv6, required this.dnsHijacking, required this.accessControlProps, required this.allowBypass, required this.systemProxy, required  List<String> bypassDomain, required this.stack,  List<String> routeAddress = const [], this.excludesAllRoutes = false, this.mtu = 0, this.congestionController = '', this.xrayTun = false}): _bypassDomain = bypassDomain,_routeAddress = routeAddress;
+   factory _VpnOptions.fromJson(Map<String, dynamic> json) => _$VpnOptionsFromJson(json);
+ 
+ @override final  bool enable;
+@@ -1503,6 +1508,11 @@ class _VpnOptions implements VpnOptions {
+ @override@JsonKey() final  bool excludesAllRoutes;
+ @override@JsonKey() final  int mtu;
+ @override@JsonKey() final  String congestionController;
++/// The simple portal: the tunnel the service makes belongs to the Xray child.
++///
++/// The service still establishes it — only a VpnService can — but hands the descriptor to
++/// the child instead of the engine, and no engine is started or configured behind it.
++@override@JsonKey() final  bool xrayTun;
+ 
+ /// Create a copy of VpnOptions
+ /// with the given fields replaced by the non-null parameter values.
+@@ -1517,18 +1527,18 @@ Map<String, dynamic> toJson() {
+ 
+ @override
+ bool operator ==(Object other) {
+-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _VpnOptions&&(identical(other.enable, enable) || other.enable == enable)&&(identical(other.port, port) || other.port == port)&&(identical(other.ipv6, ipv6) || other.ipv6 == ipv6)&&(identical(other.dnsHijacking, dnsHijacking) || other.dnsHijacking == dnsHijacking)&&(identical(other.accessControlProps, accessControlProps) || other.accessControlProps == accessControlProps)&&(identical(other.allowBypass, allowBypass) || other.allowBypass == allowBypass)&&(identical(other.systemProxy, systemProxy) || other.systemProxy == systemProxy)&&const DeepCollectionEquality().equals(other.bypassDomain, _bypassDomain)&&(identical(other.stack, stack) || other.stack == stack)&&const DeepCollectionEquality().equals(other.routeAddress, _routeAddress)&&(identical(other.excludesAllRoutes, excludesAllRoutes) || other.excludesAllRoutes == excludesAllRoutes)&&(identical(other.mtu, mtu) || other.mtu == mtu)&&(identical(other.congestionController, congestionController) || other.congestionController == congestionController));
++    return identical(this, other) || (other.runtimeType == runtimeType&&other is _VpnOptions&&(identical(other.enable, enable) || other.enable == enable)&&(identical(other.port, port) || other.port == port)&&(identical(other.ipv6, ipv6) || other.ipv6 == ipv6)&&(identical(other.dnsHijacking, dnsHijacking) || other.dnsHijacking == dnsHijacking)&&(identical(other.accessControlProps, accessControlProps) || other.accessControlProps == accessControlProps)&&(identical(other.allowBypass, allowBypass) || other.allowBypass == allowBypass)&&(identical(other.systemProxy, systemProxy) || other.systemProxy == systemProxy)&&const DeepCollectionEquality().equals(other.bypassDomain, _bypassDomain)&&(identical(other.stack, stack) || other.stack == stack)&&const DeepCollectionEquality().equals(other.routeAddress, _routeAddress)&&(identical(other.excludesAllRoutes, excludesAllRoutes) || other.excludesAllRoutes == excludesAllRoutes)&&(identical(other.mtu, mtu) || other.mtu == mtu)&&(identical(other.congestionController, congestionController) || other.congestionController == congestionController)&&(identical(other.xrayTun, xrayTun) || other.xrayTun == xrayTun));
+ }
+ 
+ @JsonKey(includeFromJson: false, includeToJson: false)
+ @override
+ int get hashCode {
+-    return Object.hash(runtimeType,enable,port,ipv6,dnsHijacking,accessControlProps,allowBypass,systemProxy,const DeepCollectionEquality().hash(_bypassDomain),stack,const DeepCollectionEquality().hash(_routeAddress),excludesAllRoutes,mtu,congestionController);
++    return Object.hash(runtimeType,enable,port,ipv6,dnsHijacking,accessControlProps,allowBypass,systemProxy,const DeepCollectionEquality().hash(_bypassDomain),stack,const DeepCollectionEquality().hash(_routeAddress),excludesAllRoutes,mtu,congestionController,xrayTun);
+ }
+ 
+ @override
+ String toString() {
+-    return 'VpnOptions(enable: $enable, port: $port, ipv6: $ipv6, dnsHijacking: $dnsHijacking, accessControlProps: $accessControlProps, allowBypass: $allowBypass, systemProxy: $systemProxy, bypassDomain: $bypassDomain, stack: $stack, routeAddress: $routeAddress, excludesAllRoutes: $excludesAllRoutes, mtu: $mtu, congestionController: $congestionController)';
++    return 'VpnOptions(enable: $enable, port: $port, ipv6: $ipv6, dnsHijacking: $dnsHijacking, accessControlProps: $accessControlProps, allowBypass: $allowBypass, systemProxy: $systemProxy, bypassDomain: $bypassDomain, stack: $stack, routeAddress: $routeAddress, excludesAllRoutes: $excludesAllRoutes, mtu: $mtu, congestionController: $congestionController, xrayTun: $xrayTun)';
+ }
+ 
+ 
+@@ -1539,7 +1549,7 @@ abstract mixin class _$VpnOptionsCopyWith<$Res> implements $VpnOptionsCopyWith<$
+   factory _$VpnOptionsCopyWith(_VpnOptions value, $Res Function(_VpnOptions) _then) = __$VpnOptionsCopyWithImpl;
+ @override @useResult
+ $Res call({
+- bool enable, int port, bool ipv6, bool dnsHijacking, AccessControlProps accessControlProps, bool allowBypass, bool systemProxy, List<String> bypassDomain, String stack, List<String> routeAddress, bool excludesAllRoutes, int mtu, String congestionController
++ bool enable, int port, bool ipv6, bool dnsHijacking, AccessControlProps accessControlProps, bool allowBypass, bool systemProxy, List<String> bypassDomain, String stack, List<String> routeAddress, bool excludesAllRoutes, int mtu, String congestionController, bool xrayTun
+ });
+ 
+ 
+@@ -1556,7 +1566,7 @@ class __$VpnOptionsCopyWithImpl<$Res>
+ 
+ /// Create a copy of VpnOptions
+ /// with the given fields replaced by the non-null parameter values.
+-@override @pragma('vm:prefer-inline') $Res call({Object? enable = null,Object? port = null,Object? ipv6 = null,Object? dnsHijacking = null,Object? accessControlProps = null,Object? allowBypass = null,Object? systemProxy = null,Object? bypassDomain = null,Object? stack = null,Object? routeAddress = null,Object? excludesAllRoutes = null,Object? mtu = null,Object? congestionController = null,}) {
++@override @pragma('vm:prefer-inline') $Res call({Object? enable = null,Object? port = null,Object? ipv6 = null,Object? dnsHijacking = null,Object? accessControlProps = null,Object? allowBypass = null,Object? systemProxy = null,Object? bypassDomain = null,Object? stack = null,Object? routeAddress = null,Object? excludesAllRoutes = null,Object? mtu = null,Object? congestionController = null,Object? xrayTun = null,}) {
+   return _then(_VpnOptions(
+ enable: null == enable ? _self.enable : enable // ignore: cast_nullable_to_non_nullable
+ as bool,port: null == port ? _self.port : port // ignore: cast_nullable_to_non_nullable
+@@ -1571,7 +1581,8 @@ as String,routeAddress: null == routeAddress ? _self._routeAddress : routeAddres
+ as List<String>,excludesAllRoutes: null == excludesAllRoutes ? _self.excludesAllRoutes : excludesAllRoutes // ignore: cast_nullable_to_non_nullable
+ as bool,mtu: null == mtu ? _self.mtu : mtu // ignore: cast_nullable_to_non_nullable
+ as int,congestionController: null == congestionController ? _self.congestionController : congestionController // ignore: cast_nullable_to_non_nullable
+-as String,
++as String,xrayTun: null == xrayTun ? _self.xrayTun : xrayTun // ignore: cast_nullable_to_non_nullable
++as bool,
+   ));
+ }
+ 
+diff --git a/lib/models/generated/core.g.dart b/lib/models/generated/core.g.dart
+index 545c97a7..b83fd116 100644
+--- a/lib/models/generated/core.g.dart
++++ b/lib/models/generated/core.g.dart
+@@ -153,6 +153,7 @@ _VpnOptions _$VpnOptionsFromJson(Map<String, dynamic> json) => _VpnOptions(
+   excludesAllRoutes: json['excludesAllRoutes'] as bool? ?? false,
+   mtu: (json['mtu'] as num?)?.toInt() ?? 0,
+   congestionController: json['congestionController'] as String? ?? '',
++  xrayTun: json['xrayTun'] as bool? ?? false,
+ );
+ 
+ Map<String, dynamic> _$VpnOptionsToJson(_VpnOptions instance) =>
+@@ -170,6 +171,7 @@ Map<String, dynamic> _$VpnOptionsToJson(_VpnOptions instance) =>
+       'excludesAllRoutes': instance.excludesAllRoutes,
+       'mtu': instance.mtu,
+       'congestionController': instance.congestionController,
++      'xrayTun': instance.xrayTun,
+     };
+ 
+ _InitParams _$InitParamsFromJson(Map<String, dynamic> json) => _InitParams(
+diff --git a/lib/plugins/xray.dart b/lib/plugins/xray.dart
+index 293e8e3d..eddc52c6 100644
+--- a/lib/plugins/xray.dart
++++ b/lib/plugins/xray.dart
+@@ -6,9 +6,9 @@ import '../common/constant.dart';
+ 
+ /// The Xray child process, driven from Dart.
+ ///
+-/// The engine keeps the tunnel; Xray owns the real node and is reached through the socks
+-/// outbound the configs already declare. Nothing here decides policy — it starts, reports,
+-/// and stops, so the switch stays a mode change rather than a rebuild.
++/// The child runs on the simple portal's own tunnel: the Android service establishes it and
++/// the plugin hands the descriptor over, so nothing here decides policy — it starts, reports
++/// and stops. An answer is only `ok` when the child acknowledged the tunnel it was given.
+ class XrayCore {
+   XrayCore._();
+ 
+@@ -20,14 +20,14 @@ class XrayCore {
+   String lastLine = '';
+   bool running = false;
+ 
+-  Future<Map<String, dynamic>> start(
+-    String config, {
+-    int port = 10808,
+-  }) async {
++  /// Starts the child on [config], which is one complete Xray document for the chosen node.
++  ///
++  /// The plugin replaces its entry point with the tunnel: the document's own inbounds are
++  /// not used, and no socks bridge exists on the other side.
++  Future<Map<String, dynamic>> start(String config) async {
+     try {
+       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('start', {
+         'config': config,
+-        'port': port,
+       });
+       final map = result?.cast<String, dynamic>() ?? const <String, dynamic>{};
+       running = map['ok'] == true;
+diff --git a/lib/providers/action.dart b/lib/providers/action.dart
+index 34edb070..92f765e5 100644
+--- a/lib/providers/action.dart
++++ b/lib/providers/action.dart
+@@ -7,7 +7,6 @@ import 'package:fl_clash/common/boot_guard.dart';
+ import 'package:fl_clash/common/common.dart';
+ import 'package:fl_clash/common/system_dns.dart';
+ import 'package:fl_clash/core/core.dart';
+-import 'package:fl_clash/core/xray_config.dart';
+ import 'package:fl_clash/core/xray_subscription.dart';
+ import 'package:fl_clash/database/database.dart';
+ import 'package:fl_clash/enum/enum.dart';
+diff --git a/lib/providers/actions/setup.dart b/lib/providers/actions/setup.dart
+index 9bb8bfb3..cf135a20 100644
+--- a/lib/providers/actions/setup.dart
++++ b/lib/providers/actions/setup.dart
+@@ -237,7 +237,19 @@ class SetupAction extends _$SetupAction {
+     return running ? _start(request) : _stop(request);
+   }
+ 
++  /// Whether the saved mode is the simple portal, where the tunnel is the child's.
++  ///
++  /// Android only: in this fork `Mode.global` names the portal on the phone, while on the
++  /// desktop it is the engine's own global mode and keeps the engine exactly as it was.
++  bool get _isSimplePortal =>
++      system.isAndroid &&
++      ref.read(patchClashConfigProvider.select((state) => state.mode)) ==
++          Mode.global;
++
+   Future<bool> _start(_RunRequest request) async {
++    if (_isSimplePortal) {
++      return _startSimplePortal(request);
++    }
+     if (request.initialize) {
+       var applied = false;
+       try {
+@@ -253,11 +265,6 @@ class SetupAction extends _$SetupAction {
+           () => _run(false, initialize: false, undoesFailedStart: true),
+         );
+       }
+-      // Cold start in the simple portal: the engine's config points its global selector at
+-      // the local socks, so the child that fills that port has to be running too.
+-      if (applied) {
+-        await _startSavedPortalChild();
+-      }
+       return applied;
+     }
+ 
+@@ -268,9 +275,6 @@ class SetupAction extends _$SetupAction {
+       rethrow;
+     }
+     _reconcileTun();
+-    // The same hand-over as at cold start: opening a portal whose mode is the simple one
+-    // needs the child under it, whether it was saved that way or switched there.
+-    await _startSavedPortalChild();
+     final applied = await inputsApplied();
+     if (_isCurrent(request) && !applied) {
+       applyProfileDebounce(force: true, silence: true);
+@@ -278,73 +282,95 @@ class SetupAction extends _$SetupAction {
+     return true;
+   }
+ 
+-  /// Starts the child the saved mode needs, once, after the tun is up.
++  /// One cold start of the simple portal: the tunnel first, then the child that reads it.
+   ///
+-  /// In the simple portal the engine is only a pipe: its config carries XRAY-SOCKS and its
+-  /// global selector points at it, so a start that brings mihomo up and stops there leaves
+-  /// everything going into a local port nothing listens on. This is the other half of that
+-  /// start, and it is deliberately idempotent: a child already up is left alone, and two
+-  /// starts cannot overlap.
+-  Future<void> _startSavedPortalChild() async {
++  /// Nothing of the engine takes part — no config is built for it, none is pushed, and
++  /// GLOBAL keeps whatever the engine last held. If the child does not take the tunnel it is
++  /// taken back down: a tunnel nothing reads sends every packet into a black hole, which
++  /// looks exactly like a working portal from the outside.
++  Future<bool> _startSimplePortal(_RunRequest request) async {
+     if (_startingChild) {
+-      return;
++      return true;
+     }
+     _startingChild = true;
+     try {
+-      if (ref.read(patchClashConfigProvider.select((state) => state.mode)) !=
+-          Mode.global) {
+-        return;
+-      }
+-      // Already up: the child outlived an engine restart, or a switch started it.
+-      if (XrayCore.instance.running) {
+-        return;
+-      }
+-      if ((await XrayCore.instance.status())['running'] == true) {
+-        return;
+-      }
+-      final profile = ref.read(currentProfileProvider);
+-      if (profile == null) {
+-        return;
+-      }
+-      final body = await profile.readXrayFormat();
+-      if (body == null) {
+-        return;
++      await _syncPortalOptions();
++      try {
++        await _startCoreRunning(request);
++      } catch (_) {
++        _rollbackRunning(request);
++        rethrow;
+       }
+-      final servers = parseXraySubscription(body);
+-      // The stored pick is the node the child ran last, which is the one the owner chose;
+-      // an empty or stale name falls back to the panel's first server.
+-      final server = xrayServerFor(
+-        servers,
+-        ref.read(appSettingProvider).portalSelectionXray,
+-      );
+-      if (server == null) {
+-        return;
++      final started = await _startPortalChild();
++      if (started.ok) {
++        return true;
+       }
+-      final started = await XrayCore.instance.start(
+-        withSocksInbound(jsonEncode(server.config)),
++      commonPrint.log(
++        'simple portal did not start: ${started.reason}',
++        logLevel: LogLevel.error,
+       );
+-      if (started['ok'] != true) {
+-        commonPrint.log(
+-          'portal child did not start on ${server.name}: '
+-          '${XrayCore.instance.lastLine}',
+-          logLevel: LogLevel.warning,
+-        );
+-        return;
+-      }
+-      commonPrint.log('portal child started on ${server.name}');
+-      // The config already declares the road to the child; the engine's global selector is
+-      // the one thing that has to be pointed at it, exactly as the switch does.
+-      await ref
+-          .read(proxiesActionProvider.notifier)
+-          .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
++      await _tearDownSimplePortal();
++      _rollbackRunning(request);
++      return false;
++    } finally {
++      _startingChild = false;
++    }
++  }
++
++  /// The service reads its options from the shared state, which the settings feed; a mode
++  /// that just changed has to reach it before the service is asked to make the tunnel.
++  Future<void> _syncPortalOptions() async {
++    if (!system.isAndroid) return;
++    await ref.read(vpnOptionsProvider.future);
++    await service?.syncState(ref.read(sharedStateProvider).needSyncSharedState);
++  }
++
++  Future<void> _tearDownSimplePortal() async {
++    try {
++      await setCoreRunning(false);
+     } catch (error) {
+       commonPrint.log(
+-        'portal child start failed: ${compactError(error)}',
++        'simple portal teardown failed: ${compactError(error)}',
+         logLevel: LogLevel.warning,
+       );
+-    } finally {
+-      _startingChild = false;
+     }
++    _clearTraffic();
++  }
++
++  /// Starts the child on the pick the simple portal shows, and waits for its own answer.
++  ///
++  /// The answer is the child's, not a state the app infers: `ok` only after the plugin saw
++  /// the tunnel's reader come up, and the reason is the child's own last line otherwise.
++  Future<({bool ok, String reason})> _startPortalChild() async {
++    final profile = ref.read(currentProfileProvider);
++    if (profile == null) {
++      return (ok: false, reason: 'no profile is selected');
++    }
++    final body = await profile.readXrayFormat();
++    if (body == null) {
++      return (ok: false, reason: 'this subscription has no engine format');
++    }
++    // The stored pick is the node the child ran last, which is the one the owner chose;
++    // an empty or stale name falls back to the panel's first server.
++    final server = xrayServerFor(
++      parseXraySubscription(body),
++      ref.read(appSettingProvider).portalSelectionXray,
++    );
++    if (server == null) {
++      return (ok: false, reason: 'this subscription has no node the portal core can run');
++    }
++    final started = await XrayCore.instance.start(jsonEncode(server.config));
++    if (started['ok'] != true) {
++      final lastLine = XrayCore.instance.lastLine;
++      return (
++        ok: false,
++        reason: lastLine.isEmpty
++            ? 'the portal core did not take the tunnel'
++            : lastLine,
++      );
++    }
++    commonPrint.log('portal child is reading the tunnel on ${server.name}');
++    return (ok: true, reason: '');
+   }
+ 
+   Future<void> _startCoreRunning(_RunRequest request) async {
+@@ -1025,6 +1051,12 @@ class SetupAction extends _$SetupAction {
+       profile = current;
+     }
+     commonPrint.log('setup ===> ${profile?.realLabel}');
++    if (_isSimplePortal) {
++      // The simple portal runs no engine: nothing is built for it, nothing is pushed and the
++      // config it last applied stays untouched. The subscription is still read where the
++      // child's node list comes from — that file, not the Core, is the source of the list.
++      return _SetupTaskResult.completed;
++    }
+     final patchConfig = ref.read(patchClashConfigProvider);
+     final shouldContinueSetup = await requestAdmin(patchConfig.tun.enable);
+     if (!shouldContinueSetup) {
+diff --git a/lib/providers/generated/action.g.dart b/lib/providers/generated/action.g.dart
+index 30e1f24b..819e1fee 100644
+--- a/lib/providers/generated/action.g.dart
++++ b/lib/providers/generated/action.g.dart
+@@ -270,7 +270,7 @@ final class SetupActionProvider extends $NotifierProvider<SetupAction, void> {
+   }
+ }
+ 
+-String _$setupActionHash() => r'dfaf9c18d51ca4bce2b2b4f3387392573bad5d25';
++String _$setupActionHash() => r'd4d9b3b40127ffb13e52ef3d34403d8ff1ec0444';
+ 
+ abstract class _$SetupAction extends $Notifier<void> {
+   void build();
+@@ -577,7 +577,7 @@ final class ProxiesActionProvider
+   }
+ }
+ 
+-String _$proxiesActionHash() => r'bf67f404dbbde5124acf1b8d5cfafa1a3d2a96ac';
++String _$proxiesActionHash() => r'd6765063665f3ea2021827dbc158def781faab66';
+ 
+ abstract class _$ProxiesAction extends $Notifier<void> {
+   void build();
+diff --git a/lib/providers/generated/state.g.dart b/lib/providers/generated/state.g.dart
+index 7a5dc5f8..61a9540a 100644
+--- a/lib/providers/generated/state.g.dart
++++ b/lib/providers/generated/state.g.dart
+@@ -514,7 +514,7 @@ final class VpnOptionsProvider
+   }
+ }
+ 
+-String _$vpnOptionsHash() => r'cd24ac77805f282960c2df9059cba254d3140df2';
++String _$vpnOptionsHash() => r'27782fb0454ae76e141142e3cc1eea9361cd677a';
+ 
+ @ProviderFor(AccessControlState)
+ final accessControlStateProvider = AccessControlStateProvider._();
+diff --git a/lib/providers/state/system.dart b/lib/providers/state/system.dart
+index bc5bb931..774beadf 100644
+--- a/lib/providers/state/system.dart
++++ b/lib/providers/state/system.dart
+@@ -246,7 +246,7 @@ Future<VpnOptions> vpnOptions(Ref ref) async {
+   );
+   final clashConfig = ref.watch(
+     patchClashConfigProvider.select(
+-      (state) => (tun: state.tun, mixedPort: state.mixedPort),
++      (state) => (tun: state.tun, mixedPort: state.mixedPort, mode: state.mode),
+     ),
+   );
+   final vpnSetting = ref.watch(vpnSettingProvider);
+@@ -280,6 +280,9 @@ Future<VpnOptions> vpnOptions(Ref ref) async {
+     ),
+     mtu: tun.mtu,
+     congestionController: tun.congestionController,
++    // The simple portal has no engine to forward into: the service makes the tunnel and the
++    // Xray child reads it. In the network mode the engine keeps it, exactly as before.
++    xrayTun: clashConfig.mode == Mode.global,
+   );
+ }
+ 
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index fbd461ae..189f23a1 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -9,13 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:flutter/services.dart';
+ import 'package:material_ui/material_ui.dart';
+ import 'package:fl_clash/common/outbound.dart';
+-import 'package:fl_clash/core/xray_config.dart';
+ import 'package:fl_clash/core/proxy_endpoints.dart';
+ import 'package:fl_clash/core/xray_ping.dart';
+-import 'package:fl_clash/core/subscription_availability.dart';
+ import 'package:fl_clash/core/xray_subscription.dart';
+ import '../profiles/subscription_facts.dart';
+-import 'package:fl_clash/core/xray_switch.dart';
+ import 'package:fl_clash/plugins/xray.dart';
+ import 'dart:async';
+ import 'dart:convert';
+@@ -349,6 +346,30 @@ List<Group> portalVisibleGroups(List<Group> all, Set<String> hidden, List<String
+   return visible;
+ }
+ 
++/// The name of the one group the simple portal draws when no engine serves one.
++const portalSimpleGroupName = 'PORTAL';
++
++/// A group for the child's own server list.
++///
++/// The list, the row and the mode control are all shaped around a [Group], and in the simple
++/// portal no engine holds one: this is the group the child's servers make — a selector whose
++/// members are the nodes the panel offered and whose `now` is the node the child runs. It is
++/// never written to the engine; it exists so the same widgets can draw a list with no engine
++/// behind it.
++Group simplePortalGroup(List<XrayServerConfig> servers, {String? now}) => Group(
++      type: GroupType.Selector,
++      name: portalSimpleGroupName,
++      now: now,
++      all: [
++        for (final server in servers)
++          Proxy(
++            name: server.name,
++            type: server.protocol,
++            serverDescription: server.label,
++          ),
++      ],
++    );
++
+ /// The servers the second core offers.
+ ///
+ /// The subscription body is an array of full xray configurations and each element is one
+@@ -422,84 +443,14 @@ final engineFormatStatusProvider =
+   }
+ });
+ 
+-/// Hands the traffic to Xray for the simple portal.
++/// Puts the portal into the simple mode.
+ ///
+-/// Order matters: the child must answer before the engine is told to send everything to it,
+-/// otherwise the switch would show a portal that cannot carry a packet. Every way out of
+-/// here that is not a working child throws [_PortalSwitchFailure] with the reason, so the
+-/// caller can put the portal back and say what happened instead of leaving it nowhere.
++/// Only the mode moves here: in this mode the tunnel is the Xray child's, made by the
++/// service when the portal starts, and there is no engine config to build and no proxy of
++/// the engine's to point anywhere. The child itself is started by the run that follows, on
++/// the node this list shows, and only reports success once it has acknowledged the tunnel.
+ Future<void> _enterSimplePortal(WidgetRef ref) async {
+-  // The strip keeps a null group name until the owner picks one; the first group is what
+-  // the list is showing in that case, so the pick lives there.
+-  final groupName = ref.read(portalGroupProvider) ??
+-      ref.read(groupsProvider).firstOrNull?.name;
+-  // The child's own stored pick comes first: it is the node this list shows and the one the
+-  // child was started on last time, and the engine's selection cannot name it — the two
+-  // builds of the subscription label their servers differently.
+-  final stored = ref.read(appSettingProvider).portalSelectionXray;
+-  final chosen = stored.isNotEmpty
+-      ? stored
+-      : (groupName == null
+-          ? null
+-          : ref.read(selectedProxyNameProvider(groupName)));
+-  // The second core prefers its own node list: the panel served it for exactly this
+-  // purpose, and its names need not exist in the engine's config at all. The engine's
+-  // config is the fallback, so a subscription with only YAML still works.
+-  Map<String, dynamic>? node;
+-  final profile = ref.read(currentProfileProvider);
+-  if (profile != null) {
+-    final body = await profile.readXrayFormat();
+-    if (body != null) {
+-      final servers = parseXraySubscription(body);
+-      final server = xrayServerFor(servers, chosen);
+-      if (server != null) {
+-        // Each server is its own full configuration; the chosen one is what the core runs.
+-        // Only the socks entry point is ours to set.
+-        final started = await XrayCore.instance.start(
+-          withSocksInbound(jsonEncode(server.config)),
+-        );
+-        if (started['ok'] != true) {
+-          throw _PortalSwitchFailure(
+-            XrayCore.instance.lastLine.isEmpty
+-                ? 'the portal core did not start'
+-                : XrayCore.instance.lastLine,
+-          );
+-        }
+-        await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
+-        await ref
+-            .read(proxiesActionProvider.notifier)
+-            .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
+-        // The node the child actually runs is the pick this list shows next time, even when
+-        // the stored name fell through to the first server the panel offered.
+-        ref.read(portalSelectionProvider.notifier).pickXray(server.name);
+-        return;
+-      }
+-      node = xrayNodeFor(parseShareLinks(body), chosen);
+-    }
+-  }
+-  if (node == null && chosen != null) {
+-    final path = await appPath.configFilePath;
+-    node = await nodeDefinitionFor(path, chosen);
+-  }
+-  if (node == null) {
+-    // No node for the child means the portal would be a dead port: there is nothing to
+-    // start, and saying so is the only useful answer.
+-    throw const _PortalSwitchFailure(
+-      'the subscription has no node this core can run',
+-    );
+-  }
+-  final started = await XrayCore.instance.start(xrayConfigJson(node));
+-  if (started['ok'] != true) {
+-    throw _PortalSwitchFailure(
+-      XrayCore.instance.lastLine.isEmpty
+-          ? 'the portal core did not start'
+-          : XrayCore.instance.lastLine,
+-    );
+-  }
+   await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
+-  await ref
+-      .read(proxiesActionProvider.notifier)
+-      .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
+ }
+ 
+ /// Mode control with the two list controls beside it: sorting and the delay test.
+@@ -519,8 +470,13 @@ class PortalModeSwitch extends ConsumerWidget {
+       filters.order,
+     );
+     final groupName = ref.watch(portalGroupProvider);
++    final simple = mode == Mode.global;
++    final xrayServers = simple
++        ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
++        : const <XrayServerConfig>[];
+     final group = groups.where((g) => g.name == groupName).firstOrNull ??
+-        groups.firstOrNull;
++        groups.firstOrNull ??
++        (xrayServers.isEmpty ? null : simplePortalGroup(xrayServers));
+     final sort = ref.watch(portalSortProvider);
+     final engineFormat =
+         ref.watch(engineFormatStatusProvider).value ?? EngineFormatStatus.ok;
+@@ -671,8 +627,16 @@ class PortalServerList extends ConsumerWidget {
+       filters.order,
+     );
+     final groupName = ref.watch(portalGroupProvider);
++    // The simple portal is driven by the child, whose build of the same subscription names
++    // its own servers. With no engine running there is no group to take them from either,
++    // so the list is given a group of its own: the rows need one, and inventing none would
++    // show an empty portal over a list that is not empty.
++    final xrayServers = simple
++        ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
++        : const <XrayServerConfig>[];
+     final group = groups.where((g) => g.name == groupName).firstOrNull ??
+-        groups.firstOrNull;
++        groups.firstOrNull ??
++        (xrayServers.isEmpty ? null : simplePortalGroup(xrayServers));
+     if (group == null) {
+       return Padding(
+         padding: const EdgeInsets.all(16),
+@@ -691,12 +655,6 @@ class PortalServerList extends ConsumerWidget {
+         ref.read(portalPendingProvider.notifier).clear(group.name);
+       });
+     }
+-    // The simple portal is driven by the second core, whose build of the same subscription
+-    // names its own servers. Showing the engine's list here would offer nodes the running
+-    // core does not have — and hide the extras it does.
+-    final xrayServers = simple
+-        ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
+-        : const <XrayServerConfig>[];
+     // Two picks, one list each: the engine's own selection lights the rules list, and the
+     // child's stored node lights the simple portal. The engine's answer belongs to another
+     // build of the subscription, so it must not move the highlight on this one.
+@@ -808,16 +766,14 @@ class PortalServerList extends ConsumerWidget {
+ 
+ /// Starts the child on one server of the simple portal's list.
+ ///
+-/// The tap is a restart of the child alone: its configuration names the node, the engine's
+-/// route already points at the local socks, and no proxy in the engine changes. The plugin
+-/// stops the previous process before starting the next, so this is also the correct call
+-/// while the child is already running.
++/// The tap is a restart of the child alone: its configuration names the node, the tunnel it
++/// reads stays exactly where the service put it, and no proxy in any engine changes. The
++/// plugin stops the previous process before starting the next, so this is also the correct
++/// call while the child is already running.
+ Future<void> _restartChildOn(XrayServerConfig server) async {
+-  final started = await XrayCore.instance.start(
+-    withSocksInbound(jsonEncode(server.config)),
+-  );
++  final started = await XrayCore.instance.start(jsonEncode(server.config));
+   if (started['ok'] == true) {
+-    commonPrint.log('xray restarted on ${server.name}');
++    commonPrint.log('xray is reading the tunnel on ${server.name}');
+     return;
+   }
+   // The previous node went with the previous process, so a failure here is the whole
+@@ -1609,11 +1565,11 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
+   final previousMode = ref.read(patchClashConfigProvider.select((s) => s.mode));
+   final wasRunning = ref.read(runTimeProvider) != null;
+   try {
+-    // 1. The portal goes down first: the tun must not outlive the core that fills it.
++    // 1. The portal goes down first: the tun must not outlive the core that reads it.
+     if (wasRunning && !await setup.setRunning(false)) {
+       throw const _PortalSwitchFailure('the portal did not stop');
+     }
+-    // 2. The previous core is stopped before the next one wants its port.
++    // 2. The child is stopped before the next core wants the tunnel.
+     await XrayCore.instance.stop();
+     // 3-5. The next core, then the mode, then the route — in that order, and only as far
+     // as each step answers.
+@@ -1623,7 +1579,12 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
+       await setup.pickMode(Mode.rule);
+     }
+     if (wasRunning) {
+-      await _awaitMode(ref, toSimple ? Mode.global : Mode.rule);
++      // In the simple portal there is no engine config to wait for: the mode is a setting
++      // and the tunnel is the child's, so the start that follows is the whole answer. In
++      // the network mode the engine still has to take the new config first.
++      if (!toSimple) {
++        await _awaitMode(ref, Mode.rule);
++      }
+       // 6. Ignite: the same portal, on the other core.
+       if (!await setup.setRunning(true)) {
+         throw const _PortalSwitchFailure('the portal did not start again');
+diff --git a/test/panel_config_test.dart b/test/panel_config_test.dart
+index 3dcc9c6a..a6474d25 100644
+--- a/test/panel_config_test.dart
++++ b/test/panel_config_test.dart
+@@ -1,11 +1,10 @@
+ import 'dart:convert';
+ 
+ import 'package:fl_clash/core/subscription_formats.dart';
+-import 'package:fl_clash/core/xray_config.dart';
+ import 'package:flutter_test/flutter_test.dart';
+ 
+ /// Happ and Incy are served a ready Xray document instead of a link list, so the app must
+-/// recognise it and put its socks inbound where the engine expects it.
++/// recognise it and hand the document itself to the child, whose entry point is the tunnel.
+ void main() {
+   const panelConfig = '''
+ {
+@@ -22,34 +21,23 @@ void main() {
+   test('a config wrapped in a one-element array is still a config', () {
+     final wrapped = '[$panelConfig]';
+     expect(detectFormat(wrapped), SubscriptionFormat.xray);
+-    final config = jsonDecode(withSocksInbound(wrapped)) as Map<String, dynamic>;
+-    expect((config['inbounds'] as List).first['port'], 10808);
+-    expect(config['inbounds'], isA<List>());
+-    expect(jsonDecode(withSocksInbound(wrapped)), isA<Map>(),
+-        reason: 'the wrapper is unwrapped for the core');
++    final document = decodeClientConfig(wrapped);
++    expect(document, isA<Map>(), reason: 'the wrapper is unwrapped for the child');
++    expect(document!['outbounds'], isA<List>());
+   });
+ 
+   test('a json document without inbounds or outbounds is not', () {
+     expect(detectFormat('{"hasMihomo": true}'), isNull);
+   });
+ 
+-  test('the socks inbound is moved to the port the engine forwards to', () {
+-    final result = withSocksInbound(panelConfig, port: 10808);
+-    final config = jsonDecode(result) as Map<String, dynamic>;
+-    final inbounds = config['inbounds'] as List;
+-    expect(inbounds, hasLength(1), reason: 'the old socks inbound is replaced');
+-    expect((inbounds.first as Map)['port'], 10808);
+-    expect((inbounds.first as Map)['listen'], '127.0.0.1');
+-    // everything else survives, which is the point of passing the document through
+-    expect((config['outbounds'] as List), hasLength(1));
+-  });
+-
+-  test('a config with no socks inbound gets one, in front of the others', () {
+-    const noSocks = '{"inbounds": [{"port": 9000, "protocol": "http"}], "outbounds": []}';
+-    final config = jsonDecode(withSocksInbound(noSocks)) as Map<String, dynamic>;
+-    final inbounds = config['inbounds'] as List;
+-    expect(inbounds, hasLength(2));
+-    expect((inbounds.first as Map)['protocol'], 'socks');
+-    expect((inbounds.last as Map)['protocol'], 'http');
++  test('the document reaches the child as the panel wrote it', () {
++    final document = decodeClientConfig(panelConfig);
++    expect(document, isNotNull);
++    // Nothing rewrites the inbounds any more: the plugin replaces them with the tunnel.
++    final inbounds = document!['inbounds'] as List;
++    expect(inbounds, hasLength(1));
++    expect((inbounds.first as Map)['port'], 2080);
++    expect((document['outbounds'] as List), hasLength(1));
++    expect(jsonDecode(panelConfig)['log'], document['log']);
+   });
+ }

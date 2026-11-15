@@ -1,0 +1,107 @@
+diff --git a/lib/common/print.dart b/lib/common/print.dart
+index c2586859..c0225e9c 100644
+--- a/lib/common/print.dart
++++ b/lib/common/print.dart
+@@ -16,6 +16,48 @@ String compactError(Object error) {
+   return error.toString();
+ }
+ 
++/// The URL query is the account: panels put the token there and nothing else of interest,
++/// so the whole query goes rather than a best guess at which key is the secret one.
++final _urlQuery = RegExp(r'(\bhttps?://[^\s?#]+)\?[^\s#]*');
++
++final _uuid = RegExp(
++  r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b',
++  caseSensitive: false,
++);
++
++/// `token=…`, `uuid: "…"`, `password = …` and the names panels use for the same thing.
++///
++/// The name is kept so the line still says what was removed, which is what makes a redacted
++/// log readable in the first place.
++final _secretAssignment = RegExp(
++  r'(token|uuid|password|passwd|pwd|secret|apikey|authkey|authtoken|access[_-]token'
++  r'|api[_-]key|key|auth)'
++  r'("?\s*[=:]\s*"?)([^\s,;}"&]+)',
++  caseSensitive: false,
++);
++
++/// The single redaction boundary of the app: everything printed passes through here.
++///
++/// A log is something people read, paste into a chat and send to a support account, so it
++/// must not carry credentials. The wash happens at the printer instead of at every call
++/// site, because a call site added tomorrow will not remember. It never throws: a line is
++/// worth losing, the app is not, and a redaction that failed loudly would be worse than the
++/// leak it was guarding.
++String redactLogText(String text) {
++  if (text.isEmpty) return text;
++  try {
++    return text
++        .replaceAllMapped(_urlQuery, (match) => '${match.group(1)}?[redacted]')
++        .replaceAllMapped(_uuid, (_) => '[uuid]')
++        .replaceAllMapped(
++          _secretAssignment,
++          (match) => '${match.group(1)}${match.group(2)}[redacted]',
++        );
++  } catch (_) {
++    return '[line withheld: redaction failed]';
++  }
++}
++
+ class CommonPrint {
+   static CommonPrint? _instance;
+ 
+@@ -27,14 +69,21 @@ class CommonPrint {
+   }
+ 
+   void log(String? text, {LogLevel logLevel = LogLevel.info}) {
+-    final payload = '[APP] $text';
+-    debugPrint(payload);
+-    final log = Log.app(payload).copyWith(logLevel: logLevel);
+-    if (!globalState.isAttach) {
+-      fileLogger.write(log);
+-      return;
++    // Nothing here may be fatal: the printer is called from core callbacks and from timers,
++    // where a throw has no caller left to catch it.
++    try {
++      final payload = '[APP] ${redactLogText('$text')}';
++      debugPrint(payload);
++      final log = Log.app(payload).copyWith(logLevel: logLevel);
++      if (!globalState.isAttach) {
++        fileLogger.write(log);
++        return;
++      }
++      globalState.container.read(logsProvider.notifier).add(log);
++    } catch (error) {
++      // The sink is gone, not the app.
++      debugPrint('[APP] log dropped: ${error.runtimeType}');
+     }
+-    globalState.container.read(logsProvider.notifier).add(log);
+   }
+ }
+ 
+diff --git a/lib/models/profile.dart b/lib/models/profile.dart
+index fa864ffa..b59db39f 100644
+--- a/lib/models/profile.dart
++++ b/lib/models/profile.dart
+@@ -309,15 +309,17 @@ extension ProfileExtension on Profile {
+     final providerHeaders = providerHeadersOf(response.headers.map);
+     // The row can only show traffic and an expiry if the panel sends them; this line says
+     // which of the two shapes arrived, since a missing header and a mis-parsed one look the
+-    // same from the screen.
++    // same from the screen. The values themselves are the account's credentials — the line
++    // keeps their shape and their length, never their content.
+     commonPrint.log(
+-      'sub headers: userinfo=[$userinfo] provider=${providerHeaders.entries.map((e) => '${e.key}=${e.value.length > 40 ? '${e.value.substring(0, 40)}…' : e.value}').join(', ')}',
++      'sub headers: userinfo=${userinfo == null ? 'absent' : 'present(${userinfo.length})'} '
++      'provider=${providerHeaders.entries.map((e) => '${e.key}:${e.value.length}').join(', ')}',
+     );
+     for (final entry in providerHeaders.entries) {
+       if (!entry.value.startsWith('base64:')) continue;
+       final decoded = _decodeProviderBase64(entry.value);
+       if (decoded != null) {
+-        commonPrint.log('sub header ${entry.key} decoded=[$decoded]');
++        commonPrint.log('sub header ${entry.key} decoded: ${decoded.length} chars');
+       }
+     }
+     // The panel names its servers behind its own API, so the same link is asked once for the

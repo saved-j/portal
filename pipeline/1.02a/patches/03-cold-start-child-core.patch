@@ -1,0 +1,146 @@
+diff --git a/lib/providers/action.dart b/lib/providers/action.dart
+index 8417bc76..34edb070 100644
+--- a/lib/providers/action.dart
++++ b/lib/providers/action.dart
+@@ -7,6 +7,8 @@ import 'package:fl_clash/common/boot_guard.dart';
+ import 'package:fl_clash/common/common.dart';
+ import 'package:fl_clash/common/system_dns.dart';
+ import 'package:fl_clash/core/core.dart';
++import 'package:fl_clash/core/xray_config.dart';
++import 'package:fl_clash/core/xray_subscription.dart';
+ import 'package:fl_clash/database/database.dart';
+ import 'package:fl_clash/enum/enum.dart';
+ import 'package:fl_clash/features/proxy_chains/store.dart';
+@@ -14,6 +16,7 @@ import 'package:fl_clash/features/update/update.dart';
+ import 'package:fl_clash/models/models.dart';
+ import 'package:fl_clash/plugins/app.dart';
+ import 'package:fl_clash/plugins/service.dart';
++import 'package:fl_clash/plugins/xray.dart';
+ import 'package:fl_clash/providers/actions/system_exit.dart';
+ import 'package:fl_clash/providers/providers.dart';
+ import 'package:fl_clash/state.dart';
+diff --git a/lib/providers/actions/setup.dart b/lib/providers/actions/setup.dart
+index f97f73aa..9bb8bfb3 100644
+--- a/lib/providers/actions/setup.dart
++++ b/lib/providers/actions/setup.dart
+@@ -51,6 +51,9 @@ class SetupAction extends _$SetupAction {
+   var _configRequests = 0;
+   var _setupAfterInit = false;
+   Completer<void>? _initialized;
++  /// True while the simple portal's child is being started, so two paths cannot both
++  /// start it — the cold start and a user who opened the portal at the same moment.
++  var _startingChild = false;
+ 
+   /// Moves as each config push starts and again once the Core answers it.
+   int get pushes => _pushes;
+@@ -250,6 +253,11 @@ class SetupAction extends _$SetupAction {
+           () => _run(false, initialize: false, undoesFailedStart: true),
+         );
+       }
++      // Cold start in the simple portal: the engine's config points its global selector at
++      // the local socks, so the child that fills that port has to be running too.
++      if (applied) {
++        await _startSavedPortalChild();
++      }
+       return applied;
+     }
+ 
+@@ -260,6 +268,9 @@ class SetupAction extends _$SetupAction {
+       rethrow;
+     }
+     _reconcileTun();
++    // The same hand-over as at cold start: opening a portal whose mode is the simple one
++    // needs the child under it, whether it was saved that way or switched there.
++    await _startSavedPortalChild();
+     final applied = await inputsApplied();
+     if (_isCurrent(request) && !applied) {
+       applyProfileDebounce(force: true, silence: true);
+@@ -267,6 +278,75 @@ class SetupAction extends _$SetupAction {
+     return true;
+   }
+ 
++  /// Starts the child the saved mode needs, once, after the tun is up.
++  ///
++  /// In the simple portal the engine is only a pipe: its config carries XRAY-SOCKS and its
++  /// global selector points at it, so a start that brings mihomo up and stops there leaves
++  /// everything going into a local port nothing listens on. This is the other half of that
++  /// start, and it is deliberately idempotent: a child already up is left alone, and two
++  /// starts cannot overlap.
++  Future<void> _startSavedPortalChild() async {
++    if (_startingChild) {
++      return;
++    }
++    _startingChild = true;
++    try {
++      if (ref.read(patchClashConfigProvider.select((state) => state.mode)) !=
++          Mode.global) {
++        return;
++      }
++      // Already up: the child outlived an engine restart, or a switch started it.
++      if (XrayCore.instance.running) {
++        return;
++      }
++      if ((await XrayCore.instance.status())['running'] == true) {
++        return;
++      }
++      final profile = ref.read(currentProfileProvider);
++      if (profile == null) {
++        return;
++      }
++      final body = await profile.readXrayFormat();
++      if (body == null) {
++        return;
++      }
++      final servers = parseXraySubscription(body);
++      // The stored pick is the node the child ran last, which is the one the owner chose;
++      // an empty or stale name falls back to the panel's first server.
++      final server = xrayServerFor(
++        servers,
++        ref.read(appSettingProvider).portalSelectionXray,
++      );
++      if (server == null) {
++        return;
++      }
++      final started = await XrayCore.instance.start(
++        withSocksInbound(jsonEncode(server.config)),
++      );
++      if (started['ok'] != true) {
++        commonPrint.log(
++          'portal child did not start on ${server.name}: '
++          '${XrayCore.instance.lastLine}',
++          logLevel: LogLevel.warning,
++        );
++        return;
++      }
++      commonPrint.log('portal child started on ${server.name}');
++      // The config already declares the road to the child; the engine's global selector is
++      // the one thing that has to be pointed at it, exactly as the switch does.
++      await ref
++          .read(proxiesActionProvider.notifier)
++          .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
++    } catch (error) {
++      commonPrint.log(
++        'portal child start failed: ${compactError(error)}',
++        logLevel: LogLevel.warning,
++      );
++    } finally {
++      _startingChild = false;
++    }
++  }
++
+   Future<void> _startCoreRunning(_RunRequest request) async {
+     if (!await _setCoreRunning(request) && _isCurrent(request)) {
+       throw _unanswered(CoreMethod.startListener);
+diff --git a/lib/providers/generated/action.g.dart b/lib/providers/generated/action.g.dart
+index 44aca030..30e1f24b 100644
+--- a/lib/providers/generated/action.g.dart
++++ b/lib/providers/generated/action.g.dart
+@@ -270,7 +270,7 @@ final class SetupActionProvider extends $NotifierProvider<SetupAction, void> {
+   }
+ }
+ 
+-String _$setupActionHash() => r'79b1a2be3ffd74e82ceca002cfabff0678c4501b';
++String _$setupActionHash() => r'dfaf9c18d51ca4bce2b2b4f3387392573bad5d25';
+ 
+ abstract class _$SetupAction extends $Notifier<void> {
+   void build();

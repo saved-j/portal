@@ -1,0 +1,52 @@
+diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
+index 6515ebe8..efceebdf 100644
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -46,7 +46,9 @@ android {
+ 
+     defaultConfig {
+         applicationId = "io.portal.xfc"
+-        minSdk = flutter.minSdkVersion
++        // The floor is written once, in the catalog: core, service and common already read it
++        // from there, and flutter.minSdkVersion trails whatever Flutter happens to ship.
++        minSdk = libs.versions.minSdk.get().toInt()
+         targetSdk = libs.versions.targetSdk.get().toInt()
+         // Releases up to 0.5.0-pre.8 gave split APKs Flutter's ABI offset of up to +4000, so the
+         // code every variant now shares sits above it and any earlier APK upgrades to any variant.
+diff --git a/plugins/wifi_ssid/android/build.gradle b/plugins/wifi_ssid/android/build.gradle
+index 5691631e..86cb475c 100644
+--- a/plugins/wifi_ssid/android/build.gradle
++++ b/plugins/wifi_ssid/android/build.gradle
+@@ -21,6 +21,23 @@ allprojects {
+ 
+ apply plugin: 'com.android.library'
+ 
++// The app decides the SDK floor and writes it in android/gradle/libs.versions.toml; a plugin
++// that hardcodes a number pins the app to an old minimum the day the app raises it. Read the
++// catalog instead, and keep a fallback for a build of this package on its own.
++def sdkFloorFromCatalog = {
++    def dir = rootProject.projectDir
++    for (int depth = 0; depth < 5 && dir != null; depth++, dir = dir.parentFile) {
++        for (name in ['gradle/libs.versions.toml', 'android/gradle/libs.versions.toml']) {
++            def catalog = new File(dir, name)
++            if (catalog.exists()) {
++                def match = (catalog.text =~ /(?m)^\s*minSdk\s*=\s*"(\d+)"/)
++                if (match.find()) return match.group(1).toInteger()
++            }
++        }
++    }
++    return 24
++}()
++
+ android {
+     namespace 'com.follow.clash.wifi_ssid'
+     compileSdk 37
+@@ -31,7 +48,7 @@ android {
+     }
+ 
+     defaultConfig {
+-        minSdk 24
++        minSdk sdkFloorFromCatalog
+     }
+ }
+ 

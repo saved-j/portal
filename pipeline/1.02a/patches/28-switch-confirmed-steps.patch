@@ -1,0 +1,170 @@
+diff --git a/lib/providers/actions/setup.dart b/lib/providers/actions/setup.dart
+index 4d6525ff..4fb660d6 100644
+--- a/lib/providers/actions/setup.dart
++++ b/lib/providers/actions/setup.dart
+@@ -49,6 +49,24 @@ class SetupAction extends _$SetupAction {
+   var _pushes = 0;
+   var _tunMissed = false;
+   var _configRequests = 0;
++
++  /// The last config push's own failure, empty when the last one was taken.
++  ///
++  /// A switch used to report "not applied in 12 s" because the reason the Core gave was
++  /// never kept anywhere: the push's exception went into a log line and the waiter only
++  /// knew that its condition had not become true.
++  String _lastConfigError = '';
++
++  /// What the engine last said about the config it was handed.
++  String get lastConfigError => _lastConfigError;
++
++  /// Why the simple portal last failed to start, empty when it did not fail.
++  ///
++  /// The start already showed its reason; a transaction that asked for the start and got
++  /// `false` must not replace that reason with a generic sentence of its own.
++  String _lastPortalFailure = '';
++
++  String get lastPortalFailure => _lastPortalFailure;
+   var _setupAfterInit = false;
+   Completer<void>? _initialized;
+   /// True while the simple portal's child is being started, so two paths cannot both
+@@ -295,6 +313,7 @@ class SetupAction extends _$SetupAction {
+     }
+     _startingChild = true;
+     try {
++      _lastPortalFailure = '';
+       await _syncPortalOptions();
+       try {
+         await _startCoreRunning(request);
+@@ -318,6 +337,7 @@ class SetupAction extends _$SetupAction {
+   /// The child's own answer, on screen and in the log: what it said, not what was inferred.
+   void _reportPortalStartFailure(PortalCoreResult result) {
+     final reason = result.reason;
++    _lastPortalFailure = reason;
+     commonPrint.log('portal did not start: $reason', logLevel: LogLevel.error);
+     dialogs.showNotifier(
+       currentAppLocalizations.portalStartFailed(reason),
+@@ -703,17 +723,32 @@ class SetupAction extends _$SetupAction {
+     Future<void> Function()? preloadInvoke,
+   }) async {
+     _configRequests++;
+-    final result = await _setupScheduler.run(() {
+-      return _setupConfig(
+-        force: force,
+-        silence: silence,
+-        preloadInvoke: preloadInvoke,
+-        onUpdated: () async {
+-          await ref.read(proxiesActionProvider.notifier).updateGroups();
+-          await ref.read(providersProvider.notifier).syncProviders();
+-        },
+-      );
+-    });
++    final _SetupTaskResult result;
++    try {
++      result = await _setupScheduler.run(() {
++        return _setupConfig(
++          force: force,
++          silence: silence,
++          preloadInvoke: preloadInvoke,
++          onUpdated: () async {
++            await ref.read(proxiesActionProvider.notifier).updateGroups();
++            await ref.read(providersProvider.notifier).syncProviders();
++          },
++        );
++      });
++    } catch (error) {
++      // The engine's own complaint, kept for whoever is waiting on this push: a switch that
++      // times out should say what the Core said, not how long it waited.
++      _lastConfigError = compactError(error);
++      rethrow;
++    }
++    if (result == _SetupTaskResult.failed) {
++      if (_lastConfigError.isEmpty) {
++        _lastConfigError = 'the profile could not be applied';
++      }
++    } else {
++      _lastConfigError = '';
++    }
+     if (result != _SetupTaskResult.handoffToCoreRestart) {
+       if (result == _SetupTaskResult.completed) _reconcileTun();
+       return result;
+@@ -1155,6 +1190,7 @@ class SetupAction extends _$SetupAction {
+           }
+         } catch (e, s) {
+           setupFailed = true;
++          _lastConfigError = compactError(e);
+           if (preloadInvoke != null) {
+             handoffFailure = (e, s);
+           }
+diff --git a/lib/providers/generated/action.g.dart b/lib/providers/generated/action.g.dart
+index 446ade47..23ccff24 100644
+--- a/lib/providers/generated/action.g.dart
++++ b/lib/providers/generated/action.g.dart
+@@ -270,7 +270,7 @@ final class SetupActionProvider extends $NotifierProvider<SetupAction, void> {
+   }
+ }
+ 
+-String _$setupActionHash() => r'cb6424eba7cbafe07b2f7a2462ae0f2bb1f60787';
++String _$setupActionHash() => r'65a2e040ad6184305064114cb9a64590730157fa';
+ 
+ abstract class _$SetupAction extends $Notifier<void> {
+   void build();
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index d4980523..c0557ef2 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -1667,11 +1667,18 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
+       // and the tunnel is the child's, so the start that follows is the whole answer. In
+       // the network mode the engine still has to take the new config first.
+       if (!toSimple) {
+-        await _awaitMode(ref, Mode.rule);
++        final applied = await _awaitMode(ref, Mode.rule);
++        if (!applied.ok) {
++          throw _PortalSwitchFailure(applied.reason);
++        }
+       }
+-      // 6. Ignite: the same portal, on the other core.
++      // 6. Ignite: the same portal, on the other core. The start's own answer is the one
++      // that matters, and its reason is what the owner is shown when it is not `ok`.
+       if (!await setup.setRunning(true)) {
+-        throw const _PortalSwitchFailure('the portal did not start again');
++        final reason = setup.lastPortalFailure;
++        throw _PortalSwitchFailure(
++          reason.isEmpty ? 'the portal did not start again' : reason,
++        );
+       }
+     }
+   } catch (error) {
+@@ -1691,17 +1698,30 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
+ /// A mode change is a config push; until the Core answers it the route is still the old
+ /// one, and traffic moved into it would go nowhere. The applied inputs are the only honest
+ /// answer the app has to "the engine has taken it".
+-Future<void> _awaitMode(WidgetRef ref, Mode mode) async {
++///
++/// A push that failed does not become true by waiting: the reason the Core gave is known
++/// the moment it answered, and waiting the deadline out only replaces it with a timeout
++/// that names nothing. The deadline stays as the last resort for a Core that is merely slow,
++/// and even then the message says that, not "12 s" alone.
++Future<PortalCoreResult> _awaitMode(WidgetRef ref, Mode mode) async {
+   final setup = ref.read(setupActionProvider.notifier);
+   final deadline = DateTime.now().add(_modeApplyTimeout);
++  // An error left over from an earlier push is not this push's; only a new one is.
++  final before = setup.lastConfigError;
+   while (DateTime.now().isBefore(deadline)) {
+     if (ref.read(patchClashConfigProvider).mode == mode &&
+         await setup.inputsApplied()) {
+-      return;
++      return const PortalCoreResult.ok();
++    }
++    final failure = setup.lastConfigError;
++    if (failure.isNotEmpty && failure != before) {
++      return PortalCoreResult.nativeError(failure);
+     }
+     await Future<void>.delayed(const Duration(milliseconds: 150));
+   }
+-  throw _PortalSwitchFailure('the engine did not take ${mode.name} in time');
++  return PortalCoreResult.nativeError(
++    'the engine did not take ${mode.name} within ${_modeApplyTimeout.inSeconds} s',
++  );
+ }
+ 
+ /// Puts the previous mode and the previous core back, best effort.

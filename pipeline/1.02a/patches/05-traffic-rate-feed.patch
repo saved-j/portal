@@ -1,0 +1,52 @@
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index c54f64c7..863cab49 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -197,29 +197,32 @@ final portalDisplayProvider =
+     NotifierProvider<PortalDisplayNotifier, int>(PortalDisplayNotifier.new);
+ 
+ 
+-/// What is actually crossing the wire right now, taken from the engine's own connection
+-/// list: how many connections are open, how fast they move, and how much belongs to each
+-/// filter. Nothing here is inferred or animated for show.
++/// What is actually crossing the wire right now: how many connections are open, and how
++/// fast the wire moves, taken from the engine's own answers. Nothing here is inferred or
++/// animated for show.
+ typedef PortalLive = ({
+   int connections,
+   int down,
+   int up,
+ });
+ 
++/// The rate comes from the traffic sample, not from the connection list.
++///
++/// The engine's connection snapshot carries cumulative totals per connection and no rate at
++/// all — `downloadSpeed`/`uploadSpeed` on a tracked connection are read here and written
++/// nowhere in the app, so summing them answered a hard zero however fast the wire moved.
++/// The engine does report a rate, once a second, in the traffic sample the speed widgets
++/// already draw from; that is the same number the tray title shows, so the portal and the
++/// cards now agree instead of one of them standing still.
+ final portalLiveProvider = Provider<PortalLive>((ref) {
+-  final list = ref.watch(requestsProvider).list;
+-  var down = 0;
+-  var up = 0;
+-  for (final request in list) {
+-    final requestDown = request.downloadSpeed ?? 0;
+-    final requestUp = request.uploadSpeed ?? 0;
+-    down += requestDown;
+-    up += requestUp;
+-  }
++  final connections = ref.watch(requestsProvider.select((state) => state.length));
++  final sample = ref.watch(
++    trafficsProvider.select((state) => state.list.safeLast(const Traffic())),
++  );
+   return (
+-    connections: list.length,
+-    down: down,
+-    up: up,
++    connections: connections,
++    down: sample.down.round(),
++    up: sample.up.round(),
+   );
+ });
+ 

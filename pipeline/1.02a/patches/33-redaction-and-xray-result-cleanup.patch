@@ -1,0 +1,41 @@
+diff --git a/lib/core/xray_subscription.dart b/lib/core/xray_subscription.dart
+index c9cbe4ff..b9ac5786 100644
+--- a/lib/core/xray_subscription.dart
++++ b/lib/core/xray_subscription.dart
+@@ -1,6 +1,6 @@
+ import 'dart:convert';
+ 
+-import 'package:flutter/foundation.dart' show debugPrint;
++import '../common/print.dart';
+ 
+ /// A subscription body as the Xray clients understand it.
+ ///
+@@ -125,8 +125,11 @@ XraySubscriptionResult parseXraySubscriptionResult(String body) {
+   }
+ 
+   // The panel names each configuration in `remarks`; logged once so the shape is visible.
+-  for (final config in configs.take(3)) {
+-    debugPrint('xray remarks: ${config['remarks']}');
++  // Through the app's own printer, which redacts: the remark is the panel's text, and the
++  // debug sink this used to write to printed it raw and below the level the log screen shows.
++  if (configs.isNotEmpty) {
++    final remarks = configs.take(3).map((config) => config['remarks']).join(' | ');
++    commonPrint.log('xray remarks: $remarks');
+   }
+ 
+   final servers = <XrayServerConfig>[];
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 546ff130..edcdae5f 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -414,7 +414,9 @@ final xrayServersProvider =
+   if (body == null) return const [];
+   final parsed = parseXraySubscriptionResult(body);
+   final servers = parsed.servers;
+-  if (servers.isNotEmpty) {
++  // `ok` is the parse's own verdict, not a second guess at `servers.isNotEmpty`: the two
++  // agree today, and this is the one place that decides which of the two lines below runs.
++  if (parsed.ok) {
+     commonPrint.log(
+       'xray subscription: ${servers.length} servers, '
+       'first=${servers.take(3).map((s) => s.label).join(' | ')}',

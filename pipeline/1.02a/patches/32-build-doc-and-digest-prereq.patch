@@ -1,0 +1,96 @@
+diff --git a/BUILD.md b/BUILD.md
+index 5807dde6..15d2a18f 100644
+--- a/BUILD.md
++++ b/BUILD.md
+@@ -54,7 +54,9 @@ One ABI only: `dart setup.dart android --env stable --arch arm64`.
+ The Xray child process is not stored in the repository. `build.sh` downloads the pinned
+ release once into `android/app/src/main/jniLibs/arm64-v8a/libxray.so` and refuses an archive
+ whose SHA-256 is not the one pinned next to `XRAY_VERSION` in `build.sh`; a version bump has
+-to move both values in the same commit. Gradle needs no network beyond the pinned wrapper:
++to move both values in the same commit. The digest is read with `sha256sum`, or `shasum -a 256`
++where coreutils is not installed — either is enough, and a binary already present needs
++neither. Gradle needs no network beyond the pinned wrapper:
+ `android/gradlew`, `gradlew.bat` and `gradle-wrapper.jar` are committed, and the wrapper
+ verifies the distribution against the checksum in `gradle-wrapper.properties`.
+ 
+@@ -72,6 +74,10 @@ sudo apt-get install -y ninja-build libgtk-3-dev libayatana-appindicator3-dev li
+ # plus the packaging tools of the formats you ask for: dpkg-deb, rpmbuild, appimagetool
+ ```
+ 
++They are not installed by the build. A missing one is reported by name with the command that
++installs it, and the build stops there; `PORTAL_INSTALL_DEPS=1` opts in to the script running
++those commands (sudo apt-get, and a download of `appimagetool` into `/usr/local/bin`).
++
+ ```bash
+ dart setup.dart linux --env stable                      # all three
+ dart setup.dart linux --env stable --targets deb        # dist/Portal-linux-amd64.deb
+@@ -98,12 +104,22 @@ dart setup.dart windows --env stable
+ Builds on macOS only:
+ 
+ ```bash
+-./build.sh macos
+-# -> dist/Portal-macos-arm64.dmg (create-dmg is installed on first use)
++APPLE_DEVELOPER_ID="Developer ID Application: Name (TEAMID)" ./build.sh macos
++# -> dist/Portal-macos-arm64.dmg, signed
++```
++
++The image is signed with `APPLE_DEVELOPER_ID`. Without it the build refuses to cut a
++distributable DMG: an unsigned one is blocked by Gatekeeper on any other machine, and handing
++someone a file they have to be told how to bypass is not a build. A local build says so
++explicitly and gets an unsigned image that is meant for this machine only:
++
++```bash
++PORTAL_ALLOW_UNSIGNED=1 ./build.sh macos
+ ```
+ 
+-An unsigned DMG is still produced; `create-dmg` then exits non-zero and the script says so.
+-Signing and notarization need an Apple Developer identity and are not part of a plain build.
++`create-dmg` is a build dependency and is not installed automatically either: the script names
++it and the command that installs it, and `PORTAL_INSTALL_DEPS=1` lets the build run that
++command. Notarization is not part of any build here.
+ 
+ ## What the repository does not contain
+ 
+diff --git a/build.sh b/build.sh
+index a8e10167..87db1d18 100755
+--- a/build.sh
++++ b/build.sh
+@@ -71,7 +71,8 @@ XRAY_VERSION=26.11.9
+ XRAY_SHA256=edcefc25b9b3195b11e18624c8269a969d6aabc39c6298a9a5ab29de15d46f3b
+ 
+ xray_digest() {
+-  # GNU coreutils on Linux, shasum on the Mac; both print "<hash>  <file>".
++  # GNU coreutils on Linux, shasum on the Mac; both print "<hash>  <file>". Either is
++  # enough — requiring one spelling would fail on the other host for no reason.
+   if command -v sha256sum >/dev/null 2>&1; then
+     sha256sum "$1" | awk '{print $1}'
+   else
+@@ -79,9 +80,20 @@ xray_digest() {
+   fi
+ }
+ 
++# Only asked for when the archive actually has to be hashed: a binary already in jniLibs
++# needs no digest tool, and the check must not veto a build that does not verify anything.
++need_digest_tool() {
++  if command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1; then
++    return 0
++  fi
++  echo "error: sha256sum or shasum is required (verifies the Xray release digest)" >&2
++  exit 1
++}
++
+ ensure_xray_android() {
+   local dest="android/app/src/main/jniLibs/arm64-v8a/libxray.so"
+   if [ -f "$dest" ]; then return 0; fi
++  need_digest_tool
+   local url="https://github.com/XTLS/Xray-core/releases/download/v$XRAY_VERSION/Xray-android-arm64-v8a.zip"
+   local work
+   work=$(mktemp -d "${TMPDIR:-/tmp}/xray-fetch.XXXXXX")
+@@ -113,7 +125,6 @@ case "${1:-get}" in
+               APP_ENV=stable; dart setup.dart macos --env "$APP_ENV"
+               ls -lh build/macos/Build/Products/Release/*.dmg 2>/dev/null || true ;;
+   apk)        need flutter "Flutter SDK"; need unzip "extracts the Xray release"
+-              need shasum "verifies the Xray release digest"
+               ensure_xray_android || exit 1
+               dart setup.dart android --env stable
+               ls -lh build/app/outputs/flutter-apk/*.apk 2>/dev/null || true ;;

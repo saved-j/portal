@@ -1,0 +1,20 @@
+diff --git a/lib/views/config/filters.dart b/lib/views/config/filters.dart
+index ccc7db3c..dee4b83e 100644
+--- a/lib/views/config/filters.dart
++++ b/lib/views/config/filters.dart
+@@ -93,7 +93,14 @@ class _FiltersViewState extends ConsumerState<FiltersView> {
+       onReorder: _handleReorder,
+       onAdd: _handleAddOrUpdate,
+       onDelete: _handleDelete,
+-      searchFieldsOf: (filter) => [filter.label, filter.regex],
++      // The stored label is the persistence key, and on a migrated install it can be a name
++      // the list no longer shows: the row draws the localized label, so search has to match
++      // what is on screen as well as what is saved.
++      searchFieldsOf: (filter) => [
++        filter.label,
++        localizedFilterLabel(context, filter.label),
++        filter.regex,
++      ],
+       emptyLabel: appLocalizations.nullTip(appLocalizations.filters),
+     );
+   }

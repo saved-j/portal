@@ -1,0 +1,53 @@
+diff --git a/build.sh b/build.sh
+index 65da1832..071da023 100755
+--- a/build.sh
++++ b/build.sh
+@@ -49,14 +49,45 @@ host_guard() {
+ 
+ # The child process is not stored in the repository: 33 MB of binary per ABI would bloat
+ # every diff. It is fetched once into jniLibs, where nothing but the app build reads it.
++#
++# Both pins move together: the version picks the URL, the digest decides whether the archive
++# behind it is the one we shipped before. A download becomes part of an APK only after it
++# matches, so a moved tag or a half-published release fails here instead of inside the APK.
++XRAY_VERSION=26.11.9
++XRAY_SHA256=edcefc25b9b3195b11e18624c8269a969d6aabc39c6298a9a5ab29de15d46f3b
++
++xray_digest() {
++  # GNU coreutils on Linux, shasum on the Mac; both print "<hash>  <file>".
++  if command -v sha256sum >/dev/null 2>&1; then
++    sha256sum "$1" | awk '{print $1}'
++  else
++    shasum -a 256 "$1" | awk '{print $1}'
++  fi
++}
++
+ ensure_xray_android() {
+   local dest="android/app/src/main/jniLibs/arm64-v8a/libxray.so"
+   if [ -f "$dest" ]; then return 0; fi
++  local url="https://github.com/XTLS/Xray-core/releases/download/v$XRAY_VERSION/Xray-android-arm64-v8a.zip"
+   local work
+   work=$(mktemp -d "${TMPDIR:-/tmp}/xray-fetch.XXXXXX")
+-  echo "fetching Xray 26.11.9 for android/arm64"
+-  curl -fL --retry 2 -o "$work/x.zip" \
+-    https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-android-arm64-v8a.zip || return 1
++  echo "fetching Xray $XRAY_VERSION for android/arm64"
++  curl -fL --retry 2 -o "$work/x.zip" "$url" || return 1
++  local got
++  got=$(xray_digest "$work/x.zip")
++  if [ "$got" != "$XRAY_SHA256" ]; then
++    cat >&2 <<EOF
++error: the Xray archive is not the one build.sh pins.
++  version:  $XRAY_VERSION
++  url:      $url
++  expected: $XRAY_SHA256
++  got:      $got
++
++Either the asset behind that URL changed, or XRAY_VERSION was bumped without updating
++XRAY_SHA256. Look at the release page, then move XRAY_VERSION and XRAY_SHA256 together.
++EOF
++    return 1
++  fi
+   mkdir -p "$work/out" "$(dirname "$dest")"
+   unzip -q -o "$work/x.zip" -d "$work/out" || return 1
+   cp -f "$work/out/xray" "$dest" && chmod 755 "$dest"

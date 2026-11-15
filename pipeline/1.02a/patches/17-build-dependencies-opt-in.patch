@@ -1,0 +1,150 @@
+diff --git a/build.sh b/build.sh
+index 65da1832..16478d26 100755
+--- a/build.sh
++++ b/build.sh
+@@ -11,7 +11,9 @@
+ #
+ # Toolchain used on Mark's Mac: Flutter in /opt/homebrew/opt/flutter, JDK 17 keg-only,
+ # Xcode via DEVELOPER_DIR, Rust toolchain 1.99.0 pinned by plugins/rust_api/rust/rust-toolchain.toml.
+-# China mirrors: pub/flutter engine (flutter-io.cn), rustup (USTC), crates.io (USTC via ~/.cargo/config.toml).
++# Mirrors are the builder's network choice, not the product's: PORTAL_CHINA_MIRRORS=1 turns
++# on the set used from China (flutter engine artifacts, rustup). Nothing is redirected by
++# default, and anything already exported wins.
+ set -euo pipefail
+ 
+ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+@@ -23,19 +25,31 @@ export ANDROID_SDK_ROOT="$ANDROID_HOME"
+ export ANDROID_USER_HOME="${ANDROID_USER_HOME:-$HOME/.work/.android}"
+ export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.work/.gradle}"
+ export PUB_CACHE="${PUB_CACHE:-$HOME/.work/.pub-cache}"
+-# Do NOT point PUB_HOSTED_URL at pub.flutter-io.cn: a different hosted URL invalidates
+-# pubspec.lock and re-resolves packages upward (material_ui 1.5.0 -> 1.11.0 breaks the
+-# build with "MaterialShapes is imported from both"). pub.dev answers from here; only the
+-# Flutter engine artifacts need the mirror.
+-export FLUTTER_STORAGE_BASE_URL="${FLUTTER_STORAGE_BASE_URL:-https://storage.flutter-io.cn}"
+-export RUSTUP_DIST_SERVER="${RUSTUP_DIST_SERVER:-https://mirrors.ustc.edu.cn/rust-static}"
+-export RUSTUP_UPDATE_ROOT="${RUSTUP_UPDATE_ROOT:-https://mirrors.ustc.edu.cn/rust-static/rustup}"
++if [ "${PORTAL_CHINA_MIRRORS:-0}" = "1" ]; then
++  # Do NOT point PUB_HOSTED_URL at pub.flutter-io.cn: a different hosted URL invalidates
++  # pubspec.lock and re-resolves packages upward (material_ui 1.5.0 -> 1.11.0 breaks the
++  # build with "MaterialShapes is imported from both"). pub.dev answers from here; only the
++  # Flutter engine artifacts need the mirror.
++  export FLUTTER_STORAGE_BASE_URL="${FLUTTER_STORAGE_BASE_URL:-https://storage.flutter-io.cn}"
++  export RUSTUP_DIST_SERVER="${RUSTUP_DIST_SERVER:-https://mirrors.ustc.edu.cn/rust-static}"
++  export RUSTUP_UPDATE_ROOT="${RUSTUP_UPDATE_ROOT:-https://mirrors.ustc.edu.cn/rust-static/rustup}"
++fi
+ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+ # ~/.work/toolchain/bin first: create-dmg shim maps the npm --dmg-title onto --volname
+ export PATH="$HOME/.work/toolchain/bin:/opt/homebrew/opt/flutter/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
+ 
+ mkdir -p "$ANDROID_USER_HOME" "$GRADLE_USER_HOME" "$PUB_CACHE"
+ 
++# Named prerequisites, checked before the first expensive step: a machine that lacks one
++# fails here with the tool's name instead of halfway through a build.
++need() {
++  local tool=$1 hint=$2
++  if ! command -v "$tool" >/dev/null 2>&1; then
++    echo "error: $tool is required ($hint)" >&2
++    exit 1
++  fi
++}
++
+ host_guard() {
+   # Flutter desktop builds are host-native: no cross-compiling for linux/windows.
+   local want="$1" os
+@@ -63,14 +77,19 @@ ensure_xray_android() {
+ }
+ 
+ case "${1:-get}" in
+-  get)        flutter --version; flutter pub get ;;
+-  macos)      APP_ENV=stable; dart setup.dart macos --env "$APP_ENV"
++  get)        need flutter "Flutter SDK"; flutter --version; flutter pub get ;;
++  macos)      need flutter "Flutter SDK"; need xcodebuild "Xcode command line tools"
++              APP_ENV=stable; dart setup.dart macos --env "$APP_ENV"
+               ls -lh build/macos/Build/Products/Release/*.dmg 2>/dev/null || true ;;
+-  apk)        ensure_xray_android || exit 1
++  apk)        need flutter "Flutter SDK"; need unzip "extracts the Xray release"
++              need shasum "verifies the Xray release digest"
++              ensure_xray_android || exit 1
+               dart setup.dart android --env stable
+               ls -lh build/app/outputs/flutter-apk/*.apk 2>/dev/null || true ;;
+-  linux)      host_guard linux;   dart setup.dart linux --env stable ;;
+-  windows)    host_guard windows; dart setup.dart windows --env stable ;;
++  linux)      host_guard linux;   need dart "Dart SDK"; need flutter "Flutter SDK"
++              dart setup.dart linux --env stable ;;
++  windows)    host_guard windows; need flutter "Flutter SDK"
++              dart setup.dart windows --env stable ;;
+   ios)        cat >&2 <<'EOF'
+ error: this tree has no ios/ target — FlClashX ships android/macos/linux/windows only.
+ 
+diff --git a/setup.dart b/setup.dart
+index 4bce2204..e934a75f 100755
+--- a/setup.dart
++++ b/setup.dart
+@@ -1149,11 +1149,29 @@ Future<int> _ensureDependencies(String platform) async {
+   }
+ }
+ 
++/// Whether the build may install the tooling it needs: global npm packages, distro
++/// packages through sudo.
++///
++/// Off unless asked. A build that changes the machine it runs on cannot be reproduced
++/// elsewhere, and the change arrives through a privileged prompt nobody asked for; the
++/// missing piece is reported by name instead, with the command that installs it.
++bool get installDependencies =>
++    Platform.environment['PORTAL_INSTALL_DEPS'] == '1' ||
++    Platform.environment['PORTAL_INSTALL_DEPS'] == 'true';
++
+ Future<int> _ensureMacosDependencies() async {
+   if (await _hasCommand('create-dmg')) {
+     stdout.writeln('create-dmg already installed, skipping.');
+     return 0;
+   }
++  if (!installDependencies) {
++    stderr.writeln(
++      'create-dmg is missing. Install it with:\n'
++      '  npm install -g --allow-scripts=fs-xattr,macos-alias create-dmg\n'
++      'or re-run with PORTAL_INSTALL_DEPS=1 to let this script do it.',
++    );
++    return 1;
++  }
+   stdout.writeln('Installing create-dmg...');
+   // create-dmg's native helpers build on install, which npm blocks by default.
+   final result = await Process.run('npm', [
+@@ -1193,6 +1211,16 @@ Future<int> _ensureLinuxDependencies() async {
+ 
+   if (missingGroups.isEmpty) {
+     stdout.writeln('All Linux build dependencies already installed, skipping.');
++  } else if (!installDependencies) {
++    final missing = [
++      for (final group in missingGroups) ...group,
++    ];
++    stderr.writeln(
++      'Missing Linux build dependencies: ${missing.join(' ')}\n'
++      'Install them with: sudo apt-get install -y ${missing.join(' ')}\n'
++      'or re-run with PORTAL_INSTALL_DEPS=1 to let this script do it.',
++    );
++    return 1;
+   } else {
+     stdout.writeln('Updating apt package lists...');
+     final updateExit = await _runLinuxDependencyCommand([
+@@ -1221,6 +1249,19 @@ Future<int> _ensureLinuxDependencies() async {
+     stdout.writeln('appimagetool already installed, skipping.');
+     return 0;
+   }
++  if (!installDependencies) {
++    // Fetched over sudo into /usr/local: a privileged download is exactly what a build must
++    // not do on its own, and it is unpinned besides.
++    stderr.writeln(
++      'appimagetool is missing from /usr/local/bin. Fetch it yourself:\n'
++      '  sudo wget -O /usr/local/bin/appimagetool '
++      'https://github.com/AppImage/AppImageKit/releases/download/continuous/'
++      'appimagetool-${appImageToolArch(_detectArch())}.AppImage\n'
++      '  sudo chmod +x /usr/local/bin/appimagetool\n'
++      'or re-run with PORTAL_INSTALL_DEPS=1 to let this script do it.',
++    );
++    return 1;
++  }
+   stdout.writeln('Downloading appimagetool...');
+   final downloadName =
+       'appimagetool-${appImageToolArch(_detectArch())}.AppImage';

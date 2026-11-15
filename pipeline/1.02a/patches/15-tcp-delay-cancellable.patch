@@ -1,0 +1,174 @@
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index c54f64c7..a370a4a9 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -124,21 +124,51 @@ final proxyEndpointsProvider =
+ });
+ 
+ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
++  /// Handshakes open at once. A panel list is often a hundred nodes and one unreachable
++  /// node costs the full timeout, so a serial sweep holds the screen for minutes.
++  static const _parallel = 8;
++
++  /// Bumped by every sweep, and by a profile change. An answer arriving under an older
++  /// number belongs to servers the list no longer shows — usually names that repeat in the
++  /// new subscription — so it is dropped instead of written under the current key.
++  int _generation = 0;
++
+   @override
+-  Map<String, int?> build() => const {};
++  Map<String, int?> build() {
++    // The measurements belong to the profile: a different one is a different set of
++    // servers, so the map goes with it instead of lighting up names that only look alike.
++    ref.watch(currentProfileIdProvider);
++    ref.onDispose(() => _generation++);
++    return const {};
++  }
+ 
+   Future<void> measureAll(List<(String, String, int)> targets) async {
+     if (targets.isEmpty) return;
++    // A newer sweep owns the state from here on; the older one stops at its next answer.
++    final generation = ++_generation;
+     state = {...state, for (final t in targets) t.$1: null};
+-    for (final (name, host, port) in targets) {
+-      final value = await tcpPing(host, port);
+-      state = {...state, name: value};
++    var next = 0;
++    Future<void> worker() async {
++      while (true) {
++        final index = next++;
++        if (index >= targets.length) return;
++        final (name, host, port) = targets[index];
++        final value = await tcpPing(host, port);
++        if (generation != _generation) return;
++        state = {...state, name: value};
++      }
+     }
++
++    await Future.wait([
++      for (var i = 0; i < _parallel && i < targets.length; i++) worker(),
++    ]);
+   }
+ 
+   Future<void> measureOne(String name, String host, int port) async {
++    final generation = _generation;
+     state = {...state, name: null};
+     final value = await tcpPing(host, port);
++    if (generation != _generation) return;
+     state = {...state, name: value};
+   }
+ }
+@@ -581,13 +611,6 @@ class PortalServerList extends ConsumerWidget {
+           if (endpoints[proxy.name] case final endpoint? when endpoint.isUsable)
+             (proxy.name, endpoint.host, endpoint.port),
+     ];
+-    if (targets.isNotEmpty &&
+-        !ref.watch(tcpDelayProvider.select((m) => m.isNotEmpty))) {
+-      WidgetsBinding.instance.addPostFrameCallback((_) {
+-        if (!context.mounted) return;
+-        unawaited(ref.read(tcpDelayProvider.notifier).measureAll(targets));
+-      });
+-    }
+     final xrayServerByName = {
+       for (final server in xrayServers) server.name: server,
+     };
+@@ -615,19 +638,30 @@ class PortalServerList extends ConsumerWidget {
+           (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+         );
+       case PortalSort.ping:
++        // Ranked once per server, before the comparison. A comparator runs O(n log n)
++        // times and each call used to subscribe to another provider, so the order depended
++        // on which family member happened to be created first — and the subscriptions
++        // outlived the sort.
+         final xrayDelays = ref.watch(tcpDelayProvider);
+-        int rank(Proxy p) {
+-          final value = xrayServerByName.containsKey(p.name)
+-              ? xrayDelays[p.name]
+-              : ref.watch(delayProvider(proxyName: p.name));
++        final ranks = <String, int>{};
++        for (final proxy in members) {
++          final value = xrayServerByName.containsKey(proxy.name)
++              ? xrayDelays[proxy.name]
++              : ref.read(delayProvider(proxyName: proxy.name));
+           // -1 is mihomo's timeout marker, not a fast server.
+-          return value == null || value <= 0 ? 1 << 30 : value;
++          ranks[proxy.name] = value == null || value <= 0 ? 1 << 30 : value;
+         }
+-        members.sort((a, b) => rank(a).compareTo(rank(b)));
++        members.sort(
++          (a, b) =>
++              (ranks[a.name] ?? 1 << 30).compareTo(ranks[b.name] ?? 1 << 30),
++        );
+     }
+     return Column(
+       crossAxisAlignment: CrossAxisAlignment.stretch,
+       children: [
++        // Measures the servers of this list once, from a lifecycle method: a build pass is
++        // not the place to start work, and a rebuild is not a reason to start it again.
++        _TcpDelaySweep(targets),
+         // The filter strip belongs to the engine's rules. In the simple portal the list is
+         // the second core's own servers, so there are no filters to show.
+         if (!simple && xrayServers.isEmpty && groups.length > 1) const _GroupStrip(),
+@@ -658,6 +692,62 @@ class PortalServerList extends ConsumerWidget {
+ }
+ 
+ 
++/// Same list, same question: records compare by value, so a rebuild that recomputes the
++/// targets does not throw away half-finished answers by looking like a new list.
++bool _sameTargets(
++  List<(String, String, int)> a,
++  List<(String, String, int)> b,
++) {
++  if (a.length != b.length) return false;
++  for (var index = 0; index < a.length; index++) {
++    if (a[index] != b[index]) return false;
++  }
++  return true;
++}
++
++/// Starts one delay sweep for the servers the list is showing.
++///
++/// From a lifecycle method, not the build pass: a widget can be rebuilt many times a frame
++/// for reasons that have nothing to do with the servers, and starting the measurement there
++/// restarted it on every rebuild while the map was still empty. The sweep itself owns its
++/// cancellation — a newer list bumps the generation inside the notifier, which drops the
++/// answers of the older one.
++class _TcpDelaySweep extends ConsumerStatefulWidget {
++  const _TcpDelaySweep(this.targets);
++
++  final List<(String, String, int)> targets;
++
++  @override
++  ConsumerState<_TcpDelaySweep> createState() => _TcpDelaySweepState();
++}
++
++class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
++  List<(String, String, int)>? _asked;
++
++  @override
++  void initState() {
++    super.initState();
++    _start(widget.targets);
++  }
++
++  @override
++  void didUpdateWidget(covariant _TcpDelaySweep oldWidget) {
++    super.didUpdateWidget(oldWidget);
++    _start(widget.targets);
++  }
++
++  void _start(List<(String, String, int)> targets) {
++    if (targets.isEmpty) return;
++    final asked = _asked;
++    if (asked != null && _sameTargets(asked, targets)) return;
++    _asked = targets;
++    unawaited(ref.read(tcpDelayProvider.notifier).measureAll(targets));
++  }
++
++  @override
++  Widget build(BuildContext context) => const SizedBox.shrink();
++}
++
+ /// Waits until the engine reports a running proxy, so the first test is not queued into a
+ /// core that has not applied its config yet.
+ Future<void> _waitForEngine(WidgetRef ref) async {

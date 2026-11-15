@@ -1,0 +1,33 @@
+diff --git a/setup.dart b/setup.dart
+index 4bce2204..b20345a1 100755
+--- a/setup.dart
++++ b/setup.dart
+@@ -487,6 +487,20 @@ Future<void> _packageAndroid(_Build build, {String? androidArch}) async {
+ }
+ 
+ Future<void> _packageMacos(_Build build, {required String env}) async {
++  final identity = Platform.environment['APPLE_DEVELOPER_ID'] ?? '';
++  // Gatekeeper blocks an unsigned image, so a release build refuses to write one instead of
++  // producing a DMG that the user then has to be told how to bypass. A local build says so
++  // explicitly — PORTAL_ALLOW_UNSIGNED=1 — never a silent default.
++  final allowUnsigned = Platform.environment['PORTAL_ALLOW_UNSIGNED'] == '1';
++  if (identity.isEmpty && !allowUnsigned) {
++    throw const ProcessException(
++      'codesign',
++      [],
++      'APPLE_DEVELOPER_ID is not set: refusing to cut a distributable DMG. '
++          'Set PORTAL_ALLOW_UNSIGNED=1 for a local build that will not install elsewhere.',
++      1,
++    );
++  }
+   final channel = File(
+     p.join(build.rootDir, 'macos', 'Runner', 'Configs', 'Channel.xcconfig'),
+   );
+@@ -513,7 +527,6 @@ Future<void> _packageMacos(_Build build, {required String env}) async {
+     if (Directory(app).existsSync()) Directory(app).deleteSync(recursive: true);
+     Directory(built).renameSync(app);
+   }
+-  final identity = Platform.environment['APPLE_DEVELOPER_ID'] ?? '';
+   if (identity.isNotEmpty) {
+     await _signMacosApp(build, app, identity);
+   }

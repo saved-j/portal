@@ -1,0 +1,21 @@
+diff --git a/linux/packaging/appimage/make_config.yaml b/linux/packaging/appimage/make_config.yaml
+index 75e23236..263b31af 100644
+--- a/linux/packaging/appimage/make_config.yaml
++++ b/linux/packaging/appimage/make_config.yaml
+@@ -1,4 +1,6 @@
+-display_name: FlClashX
++# The AppImage's Name= and the file name the user sees. The scheme handlers, keywords and
++# StartupWMClass below stay as they are: those are contracts with the OS, not display strings.
++display_name: Portal
+ 
+ icon: ./assets/images/icon.png
+ 
+@@ -15,7 +17,7 @@ keywords:
+   - Mihomo
+   - Proxy
+ 
+-generic_name: FlClashX
++generic_name: Portal
+ 
+ categories:
+   - Network

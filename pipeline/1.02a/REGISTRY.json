@@ -1,0 +1,429 @@
+{
+  "state": "verified-awaiting-consolidation",
+  "series": "1.02a",
+  "scope": "full series, patches 01-34 (01-24 authored first, 25-34 authored after the Codex audit of 01-24)",
+  "base": {
+    "sha": "873e0ede",
+    "name": "portal 1.01a freeze"
+  },
+  "tree": "f8044d71f91d1f6918352d7957117f2f13959a62",
+  "apply": "git-apply",
+  "compare": "product",
+  "verified": {
+    "method": "pristine worktree at 873e0ede, git apply 01..34 in numeric order, git add -A, git write-tree",
+    "tree": "f8044d71f91d1f6918352d7957117f2f13959a62",
+    "reproduced_twice": true
+  },
+  "dependencies": [
+    {
+      "patch": "03-cold-start-child-core.patch",
+      "requires": [
+        "01-portal-selection-per-core.patch"
+      ]
+    },
+    {
+      "patch": "26-simple-mode-typed-result.patch",
+      "requires": [
+        "25-simple-mode-xray-tun-owner.patch"
+      ]
+    },
+    {
+      "patch": "27-selection-commit-after-start.patch",
+      "requires": [
+        "26-simple-mode-typed-result.patch"
+      ]
+    },
+    {
+      "patch": "28-switch-confirmed-steps.patch",
+      "requires": [
+        "26-simple-mode-typed-result.patch"
+      ]
+    }
+  ],
+  "device_unverified": [
+    "fd handover to the Xray tun inbound across exec (close-on-exec cleared)",
+    "whether the pinned 26.11.9 build reads xray.tun.fd and accepts 'tun' as an inbound protocol",
+    "that the tun reader start line is emitted at loglevel info",
+    "that simple mode leaves mihomo unstarted at runtime"
+  ],
+  "groups": [
+    {
+      "file": "patches/01-portal-selection-per-core.patch",
+      "sha256": "20fe7a8267800a75b596058d998dc4890c1b1038309f1b812284c30a6441f694",
+      "bytes": 88639,
+      "files": [
+        "lib/models/config.dart",
+        "lib/models/generated/config.freezed.dart",
+        "lib/models/generated/config.g.dart",
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/02-portal-switch-transactional.patch",
+      "sha256": "7dce8fb366be99c34edbad969bd896ab1a6b0bfd5ee990a5d802392d30a3b989",
+      "bytes": 135150,
+      "files": [
+        "arb/intl_en.arb",
+        "arb/intl_ru.arb",
+        "arb/intl_zh_CN.arb",
+        "lib/l10n/intl/messages_en.dart",
+        "lib/l10n/intl/messages_es.dart",
+        "lib/l10n/intl/messages_fr.dart",
+        "lib/l10n/intl/messages_ja.dart",
+        "lib/l10n/intl/messages_ko.dart",
+        "lib/l10n/intl/messages_ru.dart",
+        "lib/l10n/intl/messages_zh_CN.dart",
+        "lib/l10n/l10n.dart",
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/03-cold-start-child-core.patch",
+      "sha256": "02d97e5f68d3c624fe1a1e9d76c434bda3d7bff6b73af83caa04d5b75684f8e7",
+      "bytes": 5987,
+      "files": [
+        "lib/providers/action.dart",
+        "lib/providers/actions/setup.dart",
+        "lib/providers/generated/action.g.dart"
+      ]
+    },
+    {
+      "file": "patches/04-log-redaction.patch",
+      "sha256": "0fdfa0b908fb58802e9ca5e7810e646b74faa08cff9c782f4bfe396743722ab7",
+      "bytes": 4573,
+      "files": [
+        "lib/common/print.dart",
+        "lib/models/profile.dart"
+      ]
+    },
+    {
+      "file": "patches/05-traffic-rate-feed.patch",
+      "sha256": "3e870b1f62fca988f38987a381fe5b46fd481c3e007da09fc27437d7d4dbd44c",
+      "bytes": 2182,
+      "files": [
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/06-engine-format-read-status.patch",
+      "sha256": "4fce6da5f59530d8eb18d1156d642823d653f1ea43b7d55fec73e72a1e9f03e1",
+      "bytes": 2992,
+      "files": [
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/07-manifest-backup-export.patch",
+      "sha256": "c1dd2b5e2803088726db21cb8f17e1fcba4e7fb9dd51c97bc40b52eec801f067",
+      "bytes": 2587,
+      "files": [
+        "android/app/src/main/AndroidManifest.xml"
+      ]
+    },
+    {
+      "file": "patches/08-xray-digest.patch",
+      "sha256": "316256afbaed654aafab7695965aea6c20d494e4cc471a5a9c4edeca62e877e4",
+      "bytes": 2172,
+      "files": [
+        "build.sh"
+      ]
+    },
+    {
+      "file": "patches/09-gradle-wrapper.patch",
+      "sha256": "5bece0adb1d841e7364c4014ae183b7fe15ffafaa5578138c5300bc71e45057f",
+      "bytes": 71364,
+      "files": [
+        "android/.gitignore",
+        "android/gradle/wrapper/gradle-wrapper.jar",
+        "android/gradle/wrapper/gradle-wrapper.properties",
+        "android/gradlew",
+        "android/gradlew.bat"
+      ]
+    },
+    {
+      "file": "patches/10-build-doc.patch",
+      "sha256": "0f69400cdc24e81639fc47c68a2bd8fc5365973f3b481627233087bf9c5f4047",
+      "bytes": 6026,
+      "files": [
+        "BUILD.md"
+      ]
+    },
+    {
+      "file": "patches/11-minsdk-catalog.patch",
+      "sha256": "8698ac524e9b4ce0d51692fba26ef96ef741948fc7164f50a60066485896d1ab",
+      "bytes": 2094,
+      "files": [
+        "android/app/build.gradle.kts",
+        "plugins/wifi_ssid/android/build.gradle"
+      ]
+    },
+    {
+      "file": "patches/12-rpm-version-and-packaging-names.patch",
+      "sha256": "b2ddeec04938a4de46661d457c26bd7e27651372e3d3ad33b021e09b500b28be",
+      "bytes": 5118,
+      "files": [
+        "linux/packaging/deb/make_config.yaml",
+        "linux/packaging/rpm/make_config.yaml",
+        "setup.dart",
+        "test/setup_test.dart",
+        "windows/packaging/exe/make_config.yaml"
+      ]
+    },
+    {
+      "file": "patches/13-appimage-branding.patch",
+      "sha256": "dc96027cd4e0d5a4b17c503d6d8493b48e086fc51d86daa27155b57c9c98b79a",
+      "bytes": 639,
+      "files": [
+        "linux/packaging/appimage/make_config.yaml"
+      ]
+    },
+    {
+      "file": "patches/14-readme-trilingual.patch",
+      "sha256": "04971a6fb3f7df8a3256dd9af4467822076583aec259e0d93b7fafbbd954922e",
+      "bytes": 35415,
+      "files": [
+        "README.md",
+        "README_EN.md",
+        "README_ZH.md"
+      ]
+    },
+    {
+      "file": "patches/15-tcp-delay-cancellable.patch",
+      "sha256": "b40ce36207780c9620801fcd7904fabf259b251fa0e4458d35541091401ba0f9",
+      "bytes": 7130,
+      "files": [
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/16-macos-signing-gate.patch",
+      "sha256": "7536b3c829311f5edc56e7819fd9f7e1603ec24ee6747f00b21872204eacc040",
+      "bytes": 1469,
+      "files": [
+        "setup.dart"
+      ]
+    },
+    {
+      "file": "patches/17-build-dependencies-opt-in.patch",
+      "sha256": "010bb36cfc4ec77e5ebbe9231989650ec951e98e79041e787650e9e31859c2f7",
+      "bytes": 7414,
+      "files": [
+        "build.sh",
+        "setup.dart"
+      ]
+    },
+    {
+      "file": "patches/18-xray-parse-result.patch",
+      "sha256": "6e105af6470335a48a6049b411844057e7e0fdc70bef3cf005d8638ef0e0dedb",
+      "bytes": 4697,
+      "files": [
+        "lib/core/xray_subscription.dart",
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/19-connection-reset-warning.patch",
+      "sha256": "aef96d9839d863ad351200e78e7e5eb393b195cb76356bea3cd239d2f43740c5",
+      "bytes": 6287,
+      "files": [
+        "arb/intl_en.arb",
+        "arb/intl_ru.arb",
+        "arb/intl_zh_CN.arb",
+        "lib/l10n/intl/messages_en.dart",
+        "lib/l10n/intl/messages_ru.dart",
+        "lib/l10n/intl/messages_zh_CN.dart",
+        "lib/l10n/l10n.dart",
+        "lib/providers/actions/proxies.dart"
+      ]
+    },
+    {
+      "file": "patches/20-xray-plugin-cancellable-start.patch",
+      "sha256": "f434cf1efa6df6497bfba5ec06d55629840100ceaa0898f973e1f975c0a3570b",
+      "bytes": 5370,
+      "files": [
+        "android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt"
+      ]
+    },
+    {
+      "file": "patches/21-portal-sort-linear.patch",
+      "sha256": "2a7ad2ea93fea47e86f4cb3874660ec5b1b2384c357784bb35b616ebf08257cd",
+      "bytes": 1040,
+      "files": [
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/22-remove-dead-server-names.patch",
+      "sha256": "3e63016e751d349dc4830524249e24964c826029f1986f21e6cb217bca408ec5",
+      "bytes": 1175,
+      "files": [
+        "lib/core/xray_switch.dart"
+      ]
+    },
+    {
+      "file": "patches/23-about-screen-l10n.patch",
+      "sha256": "82432a1ef947a570024bb8ce897ed18e9bb2d16d7669974cb9620a43cb885c42",
+      "bytes": 9077,
+      "files": [
+        "arb/intl_en.arb",
+        "arb/intl_ru.arb",
+        "arb/intl_zh_CN.arb",
+        "lib/l10n/intl/messages_en.dart",
+        "lib/l10n/intl/messages_ru.dart",
+        "lib/l10n/intl/messages_zh_CN.dart",
+        "lib/l10n/l10n.dart",
+        "lib/views/about.dart"
+      ]
+    },
+    {
+      "file": "patches/24-filter-labels-l10n.patch",
+      "sha256": "995621ccf07df9eee44d14bc1164472536c8bf2790cab18cd97d61e39945b901",
+      "bytes": 12440,
+      "files": [
+        "arb/intl_en.arb",
+        "arb/intl_ru.arb",
+        "arb/intl_zh_CN.arb",
+        "lib/common/context.dart",
+        "lib/l10n/intl/messages_en.dart",
+        "lib/l10n/intl/messages_ru.dart",
+        "lib/l10n/intl/messages_zh_CN.dart",
+        "lib/l10n/l10n.dart",
+        "lib/views/config/filters.dart",
+        "lib/views/profiles/custom/members.dart"
+      ]
+    },
+    {
+      "file": "patches/25-simple-mode-xray-tun-owner.patch",
+      "sha256": "92a50cfe05f040b4d5519a1e08514c73532de2bba2a4bbfded6dab45cb145658",
+      "bytes": 85150,
+      "files": [
+        "android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt",
+        "android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt",
+        "android/common/src/main/java/com/follow/clashx/common/XrayTun.kt",
+        "android/service/src/main/java/com/follow/clashx/service/VpnService.kt",
+        "android/service/src/main/java/com/follow/clashx/service/models/VpnOptions.kt",
+        "lib/core/xray_config.dart",
+        "lib/models/core.dart",
+        "lib/models/generated/core.freezed.dart",
+        "lib/models/generated/core.g.dart",
+        "lib/plugins/xray.dart",
+        "lib/providers/action.dart",
+        "lib/providers/actions/setup.dart",
+        "lib/providers/generated/action.g.dart",
+        "lib/providers/generated/state.g.dart",
+        "lib/providers/state/system.dart",
+        "lib/views/dashboard/portal_controls.dart",
+        "test/panel_config_test.dart"
+      ]
+    },
+    {
+      "file": "patches/26-simple-mode-typed-result.patch",
+      "sha256": "ef2dd6e14e8bb9bd2229b18949f8fd0e543ac26448bf36cd9ae41f054db5e36b",
+      "bytes": 147339,
+      "files": [
+        "android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt",
+        "arb/intl_en.arb",
+        "arb/intl_ru.arb",
+        "arb/intl_zh_CN.arb",
+        "lib/l10n/intl/messages_en.dart",
+        "lib/l10n/intl/messages_es.dart",
+        "lib/l10n/intl/messages_fr.dart",
+        "lib/l10n/intl/messages_ja.dart",
+        "lib/l10n/intl/messages_ko.dart",
+        "lib/l10n/intl/messages_ru.dart",
+        "lib/l10n/intl/messages_zh_CN.dart",
+        "lib/l10n/l10n.dart",
+        "lib/plugins/xray.dart",
+        "lib/providers/actions/setup.dart",
+        "lib/providers/generated/action.g.dart",
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/27-selection-commit-after-start.patch",
+      "sha256": "8307788a975563c4212ab631bc55d4e279502e09580b7ebc54013e44df0e3c5a",
+      "bytes": 96608,
+      "files": [
+        "lib/models/config.dart",
+        "lib/models/generated/config.freezed.dart",
+        "lib/models/generated/config.g.dart",
+        "lib/models/models.dart",
+        "lib/models/portal_selection.dart",
+        "lib/providers/actions/setup.dart",
+        "lib/providers/generated/action.g.dart",
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/28-switch-confirmed-steps.patch",
+      "sha256": "2ab92fa74b00f8b0abe04b810f2bba2767878495f223662e14bb3fdfc1edc61f",
+      "bytes": 7440,
+      "files": [
+        "lib/providers/actions/setup.dart",
+        "lib/providers/generated/action.g.dart",
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/29-engine-format-parse-validation.patch",
+      "sha256": "99721e0bd8e6e023651a9a15e7553f8d3072c8c0fba6abbbb6f82970c89454e6",
+      "bytes": 255103,
+      "files": [
+        "arb/intl_en.arb",
+        "arb/intl_ru.arb",
+        "arb/intl_zh_CN.arb",
+        "lib/l10n/intl/messages_en.dart",
+        "lib/l10n/intl/messages_es.dart",
+        "lib/l10n/intl/messages_fr.dart",
+        "lib/l10n/intl/messages_ja.dart",
+        "lib/l10n/intl/messages_ko.dart",
+        "lib/l10n/intl/messages_ru.dart",
+        "lib/l10n/intl/messages_zh_CN.dart",
+        "lib/l10n/l10n.dart",
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/30-tcp-delay-dispose-cancel.patch",
+      "sha256": "807331d5dca1d1cad8aa2c34fca4a49e8c3f0de8a140dedf9119bbe293bc957e",
+      "bytes": 1957,
+      "files": [
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/31-xray-plugin-operation-generation.patch",
+      "sha256": "ce1b81b8c56951eafa845fd32276f4b066df33abb4449e37c7565465831249c0",
+      "bytes": 6993,
+      "files": [
+        "android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt"
+      ]
+    },
+    {
+      "file": "patches/32-build-doc-and-digest-prereq.patch",
+      "sha256": "11f9f20863b32bce1758b3b6484a9d990677ca431756c19ff825682beddf917f",
+      "bytes": 4681,
+      "files": [
+        "BUILD.md",
+        "build.sh"
+      ]
+    },
+    {
+      "file": "patches/33-redaction-and-xray-result-cleanup.patch",
+      "sha256": "5aec04a1c7755a5c73a1c58cafeab60aba4c28b46fd52b081f2c381792502996",
+      "bytes": 1844,
+      "files": [
+        "lib/core/xray_subscription.dart",
+        "lib/views/dashboard/portal_controls.dart"
+      ]
+    },
+    {
+      "file": "patches/34-filter-search-localized-labels.patch",
+      "sha256": "51c1f90d2c1b491c83a77506ca0fa205075d85a6e47365e30bd37350553629c6",
+      "bytes": 897,
+      "files": [
+        "lib/views/config/filters.dart"
+      ]
+    }
+  ]
+}

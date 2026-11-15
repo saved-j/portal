@@ -1,0 +1,110 @@
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+index c36e16d3..8315a620 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -10,6 +10,7 @@ import java.io.File
+ import java.net.InetSocketAddress
+ import java.net.Socket
+ import java.util.concurrent.Executors
++import java.util.concurrent.TimeUnit
+ import java.util.zip.ZipFile
+ 
+ /**
+@@ -31,6 +32,10 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     @Volatile private var process: Process? = null
+     @Volatile private var lastLine: String = ""
+ 
++    /// Set by a stop that arrives while a start is still waiting for its port. The wait
++    /// checks it between polls, so the only executor thread is not held to the timeout.
++    @Volatile private var startCancelled = false
++
+     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+         appContext = binding.applicationContext
+         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
+@@ -59,8 +64,14 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+                 }
+             }
+             "stop" -> {
++                // Kill the child from this thread, not from the queue: a start that is still
++                // waiting for its port holds the only executor slot, and a stop queued behind
++                // it would arrive after the timeout it exists to cut short. The child dies
++                // here; the wait for it and the answer follow on the executor.
++                startCancelled = true
++                val killed = killNow()
+                 executor.execute {
+-                    stop()
++                    killed?.let { reap(it) }
+                     channel.invokeMethodOnMainThread("state", status())
+                     result.success(mapOf("ok" to true, "message" to "stopped"))
+                 }
+@@ -100,6 +111,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+ 
+     private fun start(config: String, port: Int): Map<String, Any> {
+         stop()
++        startCancelled = false
+         val binary = binary() ?: return failure("libxray.so is missing from the APK")
+         val configFile = File(appContext.filesDir, "xray.json")
+         configFile.writeText(config, Charsets.UTF_8)
+@@ -120,6 +132,10 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+ 
+             val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
+             while (System.currentTimeMillis() < deadline) {
++                if (startCancelled) {
++                    stop()
++                    return failure("start cancelled")
++                }
+                 if (!started.isAlive) {
+                     val code = runCatching { started.exitValue() }.getOrDefault(-1)
+                     stop()
+@@ -129,7 +145,9 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+                     Log.i(TAG, "xray is listening on 127.0.0.1:$port")
+                     return mapOf("ok" to true, "message" to "listening on $port")
+                 }
+-                Thread.sleep(200)
++                // The wait belongs to the child: it returns the moment the child dies, so a
++                // refused start does not sit out a poll interval before saying so.
++                started.waitFor(POLL_MS, TimeUnit.MILLISECONDS)
+             }
+             stop()
+             failure("xray did not open 127.0.0.1:$port within ${READY_TIMEOUT_MS}ms: $lastLine")
+@@ -141,13 +159,28 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     }
+ 
+     private fun stop() {
+-        val current = process ?: return
++        val current = killNow() ?: return
++        reap(current)
++    }
++
++    /// Takes the child away from the plugin and terminates it, without waiting for it to
++    /// go. Safe from any thread: the platform thread calls this so that a stop is not
++    /// queued behind the start it is meant to interrupt.
++    private fun killNow(): Process? {
++        val current = process ?: return null
+         process = null
++        // A start still polling for its port reads this and gives up on its next turn.
++        startCancelled = true
++        runCatching { current.destroy() }
++        return current
++    }
++
++    /// Waits for a killed child to go, and insists when it does not.
++    private fun reap(current: Process) {
+         runCatching {
+-            current.destroy()
+-            if (!current.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
++            if (!current.waitFor(3, TimeUnit.SECONDS)) {
+                 current.destroyForcibly()
+-                current.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
++                current.waitFor(2, TimeUnit.SECONDS)
+             }
+         }.onFailure { Log.w(TAG, "stop: ${it.message}") }
+     }
+@@ -214,6 +247,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         private const val TAG = "XrayCore"
+         private const val LIB_NAME = "libxray.so"
+         private const val READY_TIMEOUT_MS = 10_000L
++        private const val POLL_MS = 200L
+         const val DEFAULT_PORT = 10808
+         val CHANNEL = "${Components.PACKAGE_NAME}/xray"
+     }

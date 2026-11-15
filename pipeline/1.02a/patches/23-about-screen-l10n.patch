@@ -1,0 +1,212 @@
+diff --git a/arb/intl_en.arb b/arb/intl_en.arb
+index b67eda95..204bd286 100644
+--- a/arb/intl_en.arb
++++ b/arb/intl_en.arb
+@@ -1052,6 +1052,11 @@
+   "timeoutLabel": "timeout",
+   "filtersTitle": "Filters",
+   "filtersHint": "Drag to reorder. Turn off to hide.",
++  "aboutSite": "🌐 Website",
++  "aboutChat": "💬 Chat",
++  "aboutSubscribe": "💳 Subscribe",
++  "aboutTelegramSupport": "📱 Telegram support",
++  "aboutVkSupport": "📱 VK support",
+   "aboutPortal": "Portal",
+   "aboutCores": "Cores",
+   "aboutPortalNetworkCore": "portal network core",
+diff --git a/arb/intl_ru.arb b/arb/intl_ru.arb
+index ceaaa13e..51eaa1f9 100644
+--- a/arb/intl_ru.arb
++++ b/arb/intl_ru.arb
+@@ -1073,6 +1073,11 @@
+   "timeoutLabel": "таймаут",
+   "filtersTitle": "Фильтры",
+   "filtersHint": "Перетащите, чтобы изменить порядок. Выключите, чтобы скрыть.",
++  "aboutSite": "🌐 Сайт",
++  "aboutChat": "💬 Чат",
++  "aboutSubscribe": "💳 Оформить подписку",
++  "aboutTelegramSupport": "📱 Поддержка в Telegram",
++  "aboutVkSupport": "📱 Поддержка в VK",
+   "aboutPortal": "Портал",
+   "aboutCores": "Ядра",
+   "aboutPortalNetworkCore": "ядро сети порталов",
+diff --git a/arb/intl_zh_CN.arb b/arb/intl_zh_CN.arb
+index f986c2c4..434093b8 100644
+--- a/arb/intl_zh_CN.arb
++++ b/arb/intl_zh_CN.arb
+@@ -1048,6 +1048,11 @@
+   "timeoutLabel": "超时",
+   "filtersTitle": "筛选",
+   "filtersHint": "拖动可调整顺序，关闭可隐藏。",
++  "aboutSite": "🌐 网站",
++  "aboutChat": "💬 聊天",
++  "aboutSubscribe": "💳 订阅",
++  "aboutTelegramSupport": "📱 Telegram 支持",
++  "aboutVkSupport": "📱 VK 支持",
+   "aboutPortal": "门户",
+   "aboutCores": "核心",
+   "aboutPortalNetworkCore": "门户网络核心",
+diff --git a/lib/l10n/intl/messages_en.dart b/lib/l10n/intl/messages_en.dart
+index 25ef52a7..6675ec09 100644
+--- a/lib/l10n/intl/messages_en.dart
++++ b/lib/l10n/intl/messages_en.dart
+@@ -278,12 +278,19 @@ class MessageLookup extends MessageLookupByLibrary {
+   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
+     "about": MessageLookupByLibrary.simpleMessage("About"),
+     "aboutBuiltOn": MessageLookupByLibrary.simpleMessage("Built on"),
++    "aboutChat": MessageLookupByLibrary.simpleMessage("💬 Chat"),
+     "aboutContributors": MessageLookupByLibrary.simpleMessage("Contributors"),
+     "aboutCores": MessageLookupByLibrary.simpleMessage("Cores"),
+     "aboutPortal": MessageLookupByLibrary.simpleMessage("Portal"),
+     "aboutPortalNetworkCore": MessageLookupByLibrary.simpleMessage(
+       "portal network core",
+     ),
++    "aboutSite": MessageLookupByLibrary.simpleMessage("🌐 Website"),
++    "aboutSubscribe": MessageLookupByLibrary.simpleMessage("💳 Subscribe"),
++    "aboutTelegramSupport": MessageLookupByLibrary.simpleMessage(
++      "📱 Telegram support",
++    ),
++    "aboutVkSupport": MessageLookupByLibrary.simpleMessage("📱 VK support"),
+     "accessControl": MessageLookupByLibrary.simpleMessage("Access control"),
+     "accessControlAllowDesc": MessageLookupByLibrary.simpleMessage(
+       "Only selected apps go through the VPN",
+diff --git a/lib/l10n/intl/messages_ru.dart b/lib/l10n/intl/messages_ru.dart
+index 7b7e5d7f..bf5a4c67 100644
+--- a/lib/l10n/intl/messages_ru.dart
++++ b/lib/l10n/intl/messages_ru.dart
+@@ -279,12 +279,21 @@ class MessageLookup extends MessageLookupByLibrary {
+   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
+     "about": MessageLookupByLibrary.simpleMessage("О программе"),
+     "aboutBuiltOn": MessageLookupByLibrary.simpleMessage("На чём построено"),
++    "aboutChat": MessageLookupByLibrary.simpleMessage("💬 Чат"),
+     "aboutContributors": MessageLookupByLibrary.simpleMessage("Контрибуторы"),
+     "aboutCores": MessageLookupByLibrary.simpleMessage("Ядра"),
+     "aboutPortal": MessageLookupByLibrary.simpleMessage("Портал"),
+     "aboutPortalNetworkCore": MessageLookupByLibrary.simpleMessage(
+       "ядро сети порталов",
+     ),
++    "aboutSite": MessageLookupByLibrary.simpleMessage("🌐 Сайт"),
++    "aboutSubscribe": MessageLookupByLibrary.simpleMessage(
++      "💳 Оформить подписку",
++    ),
++    "aboutTelegramSupport": MessageLookupByLibrary.simpleMessage(
++      "📱 Поддержка в Telegram",
++    ),
++    "aboutVkSupport": MessageLookupByLibrary.simpleMessage("📱 Поддержка в VK"),
+     "accessControl": MessageLookupByLibrary.simpleMessage("Контроль доступа"),
+     "accessControlAllowDesc": MessageLookupByLibrary.simpleMessage(
+       "Через VPN проходят только выбранные приложения",
+diff --git a/lib/l10n/intl/messages_zh_CN.dart b/lib/l10n/intl/messages_zh_CN.dart
+index 06c7c236..4a03dff3 100644
+--- a/lib/l10n/intl/messages_zh_CN.dart
++++ b/lib/l10n/intl/messages_zh_CN.dart
+@@ -240,10 +240,17 @@ class MessageLookup extends MessageLookupByLibrary {
+   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
+     "about": MessageLookupByLibrary.simpleMessage("关于"),
+     "aboutBuiltOn": MessageLookupByLibrary.simpleMessage("基于"),
++    "aboutChat": MessageLookupByLibrary.simpleMessage("💬 聊天"),
+     "aboutContributors": MessageLookupByLibrary.simpleMessage("贡献者"),
+     "aboutCores": MessageLookupByLibrary.simpleMessage("核心"),
+     "aboutPortal": MessageLookupByLibrary.simpleMessage("门户"),
+     "aboutPortalNetworkCore": MessageLookupByLibrary.simpleMessage("门户网络核心"),
++    "aboutSite": MessageLookupByLibrary.simpleMessage("🌐 网站"),
++    "aboutSubscribe": MessageLookupByLibrary.simpleMessage("💳 订阅"),
++    "aboutTelegramSupport": MessageLookupByLibrary.simpleMessage(
++      "📱 Telegram 支持",
++    ),
++    "aboutVkSupport": MessageLookupByLibrary.simpleMessage("📱 VK 支持"),
+     "accessControl": MessageLookupByLibrary.simpleMessage("访问控制"),
+     "accessControlAllowDesc": MessageLookupByLibrary.simpleMessage(
+       "只允许选中应用进入VPN",
+diff --git a/lib/l10n/l10n.dart b/lib/l10n/l10n.dart
+index 582f0cec..8e1de99b 100644
+--- a/lib/l10n/l10n.dart
++++ b/lib/l10n/l10n.dart
+@@ -8856,6 +8856,46 @@ class AppLocalizations {
+     );
+   }
+ 
++  /// `🌐 Website`
++  String get aboutSite {
++    return Intl.message('🌐 Website', name: 'aboutSite', desc: '', args: []);
++  }
++
++  /// `💬 Chat`
++  String get aboutChat {
++    return Intl.message('💬 Chat', name: 'aboutChat', desc: '', args: []);
++  }
++
++  /// `💳 Subscribe`
++  String get aboutSubscribe {
++    return Intl.message(
++      '💳 Subscribe',
++      name: 'aboutSubscribe',
++      desc: '',
++      args: [],
++    );
++  }
++
++  /// `📱 Telegram support`
++  String get aboutTelegramSupport {
++    return Intl.message(
++      '📱 Telegram support',
++      name: 'aboutTelegramSupport',
++      desc: '',
++      args: [],
++    );
++  }
++
++  /// `📱 VK support`
++  String get aboutVkSupport {
++    return Intl.message(
++      '📱 VK support',
++      name: 'aboutVkSupport',
++      desc: '',
++      args: [],
++    );
++  }
++
+   /// `Portal`
+   String get aboutPortal {
+     return Intl.message('Portal', name: 'aboutPortal', desc: '', args: []);
+diff --git a/lib/views/about.dart b/lib/views/about.dart
+index 4cfae1a8..48d0d653 100644
+--- a/lib/views/about.dart
++++ b/lib/views/about.dart
+@@ -127,31 +127,31 @@ class AboutView extends ConsumerWidget {
+             items: [
+               _buildLinkItem(
+                 glyph: AppGlyphs.link,
+-                title: '🌐 Сайт',
++                title: context.appLocalizations.aboutSite,
+                 url: _portalSite,
+                 label: 'web.portal-connect.io',
+               ),
+               _buildLinkItem(
+                 glyph: AppGlyphs.send,
+-                title: '💬 Чат',
++                title: context.appLocalizations.aboutChat,
+                 url: _portalChat,
+                 label: 't.me/portalconnect',
+               ),
+               _buildLinkItem(
+                 glyph: AppGlyphs.send,
+-                title: '💳 Оформить подписку',
++                title: context.appLocalizations.aboutSubscribe,
+                 url: _portalBot,
+                 label: 't.me/portalconnect_bot',
+               ),
+               _buildLinkItem(
+                 glyph: AppGlyphs.send,
+-                title: '📱 Поддержка в Telegram',
++                title: context.appLocalizations.aboutTelegramSupport,
+                 url: _portalSupport,
+                 label: 't.me/portalconnect_support',
+               ),
+               _buildLinkItem(
+                 glyph: AppGlyphs.link,
+-                title: '📱 Поддержка в VK',
++                title: context.appLocalizations.aboutVkSupport,
+                 url: _portalVk,
+                 label: 'vk.com/markvictorson',
+               ),

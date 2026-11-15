@@ -1,0 +1,126 @@
+diff --git a/lib/core/xray_subscription.dart b/lib/core/xray_subscription.dart
+index 935404f0..c9cbe4ff 100644
+--- a/lib/core/xray_subscription.dart
++++ b/lib/core/xray_subscription.dart
+@@ -46,18 +46,68 @@ class XrayServerConfig {
+   }
+ }
+ 
++/// Why a body yielded the servers it did, when it yielded none.
++enum XraySubscriptionProblem {
++  /// Not JSON at all: a panel error page, a truncated answer, or a share-link list.
++  notJson,
++
++  /// JSON without a full configuration: the panel spoke another schema.
++  noConfig,
++
++  /// A valid answer that carries no servers.
++  empty,
++}
++
++/// A parsed body: the servers it holds, and why it holds none when it holds none.
++///
++/// The three empty outcomes used to be one empty list, so a panel answering 502 with an
++/// HTML page was indistinguishable from a subscription with no nodes.
++class XraySubscriptionResult {
++  const XraySubscriptionResult(this.servers, [this.problem, this.error]);
++
++  final List<XrayServerConfig> servers;
++  final XraySubscriptionProblem? problem;
++
++  /// The decoder's own words, when there were any.
++  final String? error;
++
++  bool get ok => servers.isNotEmpty;
++
++  /// One line a reader can show, naming what the body actually was.
++  String get message {
++    final reason = switch (problem) {
++      null => '',
++      XraySubscriptionProblem.notJson => 'the answer is not JSON',
++      XraySubscriptionProblem.noConfig => 'no full configuration in the answer',
++      XraySubscriptionProblem.empty => 'the subscription is empty',
++    };
++    if (reason.isEmpty) return '';
++    return error == null || error!.isEmpty ? reason : '$reason: $error';
++  }
++}
++
+ /// Reads every server out of a subscription body.
+ ///
+-/// Returns an empty list for a body that is not JSON or carries no configuration, so a
+-/// broken answer never looks like a subscription with zero problems.
+-List<XrayServerConfig> parseXraySubscription(String body) {
++/// Kept for the callers that only need the list; [parseXraySubscriptionResult] is what a
++/// caller uses when an empty list has to be explained.
++List<XrayServerConfig> parseXraySubscription(String body) =>
++    parseXraySubscriptionResult(body).servers;
++
++/// Reads every server out of a subscription body, with the reason when there are none.
++XraySubscriptionResult parseXraySubscriptionResult(String body) {
+   final text = body.trim();
+-  if (text.isEmpty) return const [];
++  if (text.isEmpty) {
++    return const XraySubscriptionResult([], XraySubscriptionProblem.empty);
++  }
+   Object? decoded;
+   try {
+     decoded = jsonDecode(text);
+-  } catch (_) {
+-    return const [];
++  } catch (error) {
++    return XraySubscriptionResult(
++      const [],
++      XraySubscriptionProblem.notJson,
++      '$error',
++    );
+   }
+ 
+   final configs = <Map<String, dynamic>>[];
+@@ -70,7 +120,9 @@ List<XrayServerConfig> parseXraySubscription(String body) {
+   } else if (decoded is Map && _isFullConfig(decoded)) {
+     configs.add(Map<String, dynamic>.from(decoded));
+   }
+-  if (configs.isEmpty) return const [];
++  if (configs.isEmpty) {
++    return const XraySubscriptionResult([], XraySubscriptionProblem.noConfig);
++  }
+ 
+   // The panel names each configuration in `remarks`; logged once so the shape is visible.
+   for (final config in configs.take(3)) {
+@@ -107,7 +159,7 @@ List<XrayServerConfig> parseXraySubscription(String body) {
+       ),
+     );
+   }
+-  return servers;
++  return XraySubscriptionResult(servers);
+ }
+ 
+ /// The address and port of the outbound that carries traffic.
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index c54f64c7..8ace2245 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -280,12 +280,21 @@ final xrayServersProvider =
+   if (profile == null) return const [];
+   final body = await profile.readXrayFormat();
+   if (body == null) return const [];
+-  final servers = parseXraySubscription(body);
++  final parsed = parseXraySubscriptionResult(body);
++  final servers = parsed.servers;
+   if (servers.isNotEmpty) {
+     commonPrint.log(
+       'xray subscription: ${servers.length} servers, '
+       'first=${servers.take(3).map((s) => s.label).join(' | ')}',
+     );
++  } else if (parsed.problem != null) {
++    // An empty list is three different answers — an unreadable body, another schema, or a
++    // subscription with no nodes — so the reason is reported with the profile it was read
++    // for instead of dying in a bare `[]`.
++    commonPrint.log(
++      'xray subscription unreadable: profile=${profile.id} ${parsed.message}',
++      logLevel: LogLevel.warning,
++    );
+   }
+   return servers;
+ });

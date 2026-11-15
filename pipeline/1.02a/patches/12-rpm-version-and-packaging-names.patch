@@ -1,0 +1,133 @@
+diff --git a/linux/packaging/deb/make_config.yaml b/linux/packaging/deb/make_config.yaml
+index e0b4a19d..219295ff 100644
+--- a/linux/packaging/deb/make_config.yaml
++++ b/linux/packaging/deb/make_config.yaml
+@@ -1,5 +1,7 @@
+-display_name: FlClashX
+-package_name: FlClashX
++display_name: Portal
++# The control field is Package, generated from DesktopIdentity.packageName; this key spells
++# the same value. The package name is the app's identity and is not the display name.
++package_name: flclashx
+ maintainer:
+   name: pluralplay
+   email: pluralplay@icloud.com
+@@ -15,7 +17,8 @@ dependencies:
+   - libsecret-1-0
+ 
+ # The Helper unit is written on demand by the app, not at install time, so only
+-# its teardown belongs here; the binary is already gone when postrm runs.
++# its teardown belongs here; the binary is already gone when postrm runs. The unit is named
++# after the package identity (DesktopIdentity.helperUnit), not after the display name.
+ postuninstall_scripts:
+   - 'case "${1:-}" in remove|purge) ;; *) exit 0 ;; esac'
+   - 'systemctl disable --now flclashx-helper.service >/dev/null 2>&1 || true'
+@@ -35,7 +38,7 @@ keywords:
+   - Mihomo
+   - Proxy
+ 
+-generic_name: FlClashX
++generic_name: Portal
+ 
+ categories:
+   - Network
+diff --git a/linux/packaging/rpm/make_config.yaml b/linux/packaging/rpm/make_config.yaml
+index b41a02e0..fc7cafd2 100644
+--- a/linux/packaging/rpm/make_config.yaml
++++ b/linux/packaging/rpm/make_config.yaml
+@@ -1,4 +1,4 @@
+-display_name: FlClashX
++display_name: Portal
+ 
+ packager: pluralplay
+ packagerEmail: pluralplay@icloud.com
+@@ -26,7 +26,8 @@ postinstall_scripts:
+   - 'update-desktop-database %{_datadir}/applications &> /dev/null || :'
+ 
+ # The Helper unit is written on demand by the app, not at install time, so only
+-# its teardown belongs here; the binary is already gone when %postun runs.
++# its teardown belongs here; the binary is already gone when %postun runs. The unit is named
++# after the package identity (DesktopIdentity.helperUnit), not after the display name.
+ postuninstall_scripts:
+   - '[ "$1" = 0 ] || exit 0'
+   - 'systemctl disable --now flclashx-helper.service >/dev/null 2>&1 || true'
+@@ -46,7 +47,7 @@ keywords:
+   - Mihomo
+   - Proxy
+ 
+-generic_name: FlClashX
++generic_name: Portal
+ 
+ group: Applications/Internet
+ 
+diff --git a/setup.dart b/setup.dart
+index 4bce2204..867dce3f 100755
+--- a/setup.dart
++++ b/setup.dart
+@@ -974,11 +974,17 @@ String rpmSpecOf(
+     _scripts(config, 'postuninstall_scripts'),
+     identity,
+   );
++  // rpmbuild refuses a '-' in Version:, and this tree's version carries one
++  // (0.5.3-portal-duo). The tail of the version is exactly what Release: is for, so it
++  // moves there and the leading numbers stay parseable as an rpm version.
++  final dash = version.indexOf('-');
++  final rpmVersion = dash < 0 ? version : version.substring(0, dash);
++  final rpmRelease = dash < 0 ? '1' : '${version.substring(dash + 1)}.1';
+   return [
+     ..._scripts(config, 'spec_macros'),
+     'Name: ${identity.packageName}',
+-    'Version: $version',
+-    'Release: 1',
++    'Version: $rpmVersion',
++    'Release: $rpmRelease',
+     'Summary: $name',
+     'License: ${config['license'] ?? 'Other'}',
+     'Group: ${config['group'] ?? 'Applications/Internet'}',
+diff --git a/test/setup_test.dart b/test/setup_test.dart
+index 059212ec..6bd69f9b 100644
+--- a/test/setup_test.dart
++++ b/test/setup_test.dart
+@@ -448,6 +448,18 @@ hooks:
+         );
+       });
+ 
++      test('gives a hyphenated version a parseable rpm Version and a Release', () {
++        final spec = setup.rpmSpecOf(
++          {'display_name': 'Portal'},
++          setup.stableDesktop,
++          version: '0.5.3-portal-duo',
++        );
++
++        expect(spec, contains('Version: 0.5.3\n'));
++        expect(spec, contains('Release: portal-duo.1\n'));
++        expect(spec, isNot(contains('-portal-duo')));
++      });
++
+       test('renames the app and Helper in the staged bundle only for pre', () {
+         final dir = Directory.systemTemp.createTempSync('channel_bundle');
+         addTearDown(() => dir.deleteSync(recursive: true));
+diff --git a/windows/packaging/exe/make_config.yaml b/windows/packaging/exe/make_config.yaml
+index dfb0aa67..d615b019 100644
+--- a/windows/packaging/exe/make_config.yaml
++++ b/windows/packaging/exe/make_config.yaml
+@@ -1,11 +1,13 @@
+ script_template: inno_setup.iss
+ app_id: D915C0D1-2F5B-4676-97D5-6D55F3EF45A4
+-app_name: FlClashX
+-publisher: pluralplay
+-publisher_url: https://github.com/pluralplay/FlClashX
+-display_name: FlClashX
+-executable_name: FlClashX.exe
+-output_base_file_name: FlClashX.exe
++app_name: Portal
++publisher: Portal
++publisher_url: https://github.com/saved-j/portal
++display_name: Portal
++# The runner binary is Portal.exe (windows/CMakeLists.txt); the installer looks for exactly
++# this name when it stops the old process and builds the uninstall entry.
++executable_name: Portal.exe
++output_base_file_name: Portal.exe
+ # Resolved against the project root: flutter_distributor turns this into an
+ # absolute path via Directory.current.
+ setup_icon_file: windows\runner\resources\app_icon.ico

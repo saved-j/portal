@@ -1,0 +1,44 @@
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 0f2d1f2f..546ff130 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -209,6 +209,9 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+     var next = 0;
+     Future<void> worker() async {
+       while (true) {
++        // Checked before taking work as well as after answering: a cancelled sweep must not
++        // keep opening handshakes for a list that is no longer on screen.
++        if (generation != _generation) return;
+         final index = next++;
+         if (index >= targets.length) return;
+         final (name, host, port) = targets[index];
+@@ -230,6 +233,13 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+     if (generation != _generation) return;
+     state = {...state, name: value};
+   }
++
++  /// Revokes every sweep in flight, for a list that is gone or has been replaced.
++  ///
++  /// Whoever started the work can stop it being written: the workers compare the generation
++  /// they started under with the current one, so an answer that arrives after the list was
++  /// disposed is dropped instead of lighting up a row nobody is looking at.
++  void cancel() => _generation++;
+ }
+ 
+ /// Groups the user turned into a bypass: their outbound is DIRECT, so the chip can
+@@ -959,6 +969,15 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
+     unawaited(ref.read(tcpDelayProvider.notifier).measureAll(targets));
+   }
+ 
++  @override
++  void dispose() {
++    // The sweep belongs to this list. Leaving it revokes the answers still in flight: a
++    // handshake that lands after the list is gone must not write a delay for a row the next
++    // list never asked about.
++    ref.read(tcpDelayProvider.notifier).cancel();
++    super.dispose();
++  }
++
+   @override
+   Widget build(BuildContext context) => const SizedBox.shrink();
+ }

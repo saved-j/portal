@@ -79,11 +79,42 @@ class XrayCore {
   String lastLine = '';
   bool running = false;
 
+  /// A start that is still waiting, and the document it was asked to run.
+  ///
+  /// Two callers ask for a start at the same time — the mode switch and the row tap — and the
+  /// plugin answers the second one by cancelling the first. That is what turned a single
+  /// refused start into a loop of "start cancelled by a newer request" with nothing running.
+  /// Starts are serialised here instead: the same document joins the wait that is already
+  /// running, a different one waits for it to settle and then asks.
+  Future<PortalCoreResult>? _inFlightStart;
+  String? _inFlightConfig;
+
   /// Starts the child on [config], which is one complete Xray document for the chosen node.
   ///
   /// The plugin replaces its entry point with the tunnel: the document's own inbounds are
   /// not used, and no socks bridge exists on the other side.
-  Future<PortalCoreResult> start(String config) async {
+  Future<PortalCoreResult> start(String config) {
+    final pending = _inFlightStart;
+    if (pending != null) {
+      if (_inFlightConfig == config) return pending;
+      return pending.then(
+        (_) => start(config),
+        onError: (_) => start(config),
+      );
+    }
+    final future = _startOnce(config);
+    _inFlightStart = future;
+    _inFlightConfig = config;
+    future.whenComplete(() {
+      if (identical(_inFlightStart, future)) {
+        _inFlightStart = null;
+        _inFlightConfig = null;
+      }
+    });
+    return future;
+  }
+
+  Future<PortalCoreResult> _startOnce(String config) async {
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('start', {
         'config': config,
@@ -110,6 +141,14 @@ class XrayCore {
   }
 
   Future<PortalCoreResult> stop() async {
+    // A start that is still waiting is cancelled by the plugin's own stop; waiting for its
+    // answer first keeps this stop's result from being the previous start's cancellation.
+    final pending = _inFlightStart;
+    if (pending != null) {
+      await pending.catchError((Object _) => const PortalCoreResult.cancelled());
+      _inFlightStart = null;
+      _inFlightConfig = null;
+    }
     try {
       await _channel.invokeMethod('stop');
       running = false;

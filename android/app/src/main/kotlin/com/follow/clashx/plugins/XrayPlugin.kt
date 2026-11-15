@@ -238,7 +238,12 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                         put("dns", JSONArray(tun.dns))
                         // The system routes are the VpnService's and are already in place:
                         // the child has no root to add its own, and must not try to.
-                        put("autoSystemRoutingTable", false)
+                        //
+                        // `autoSystemRoutingTable` is absent on purpose: in this core's schema
+                        // it is a []string of routes to take over, not a flag, so a boolean
+                        // makes the core refuse the whole config
+                        // ("cannot unmarshal bool into ... TunConfig.autoSystemRoutingTable of
+                        // type []string"). An empty list is the same as leaving it out.
                         put("autoSystemDnsToGateway", false)
                         // Stated, not inferred: this is the one place the child's own
                         // transport is kept out of the tunnel it reads.

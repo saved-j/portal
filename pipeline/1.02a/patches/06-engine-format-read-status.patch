@@ -1,0 +1,68 @@
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index c54f64c7..5073c4d0 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -290,19 +290,46 @@ final xrayServersProvider =
+   return servers;
+ });
+ 
++/// What the subscription's engine-format file actually answered.
++///
++/// Three states, because a corrupt file and an absent one are different problems: the first
++/// is a download the owner can fix by updating the profile, the second is a panel that does
++/// not serve this format at all. Collapsing both into `false` — which a blanket `catch (_)`
++/// did — hid the first behind the second.
++enum EngineFormatStatus {
++  /// The file reads and carries a config.
++  ok,
++
++  /// The file is there but could not be read: a corrupt or half-written download.
++  parseFailed,
++
++  /// No such file, or nothing in it: this panel does not serve the engine's format.
++  empty,
++}
++
+ /// Whether the current subscription carries the engine's own format.
+ ///
+ /// The "Сеть порталов" switch is meaningless without it: rules live in that YAML, and a
+ /// subscription the panel only serves for Xray has nothing to route. Unknown counts as
+ /// available so the switch does not flicker off while the file is being checked.
+-final engineFormatAvailableProvider = FutureProvider.autoDispose<bool>((ref) async {
++final engineFormatStatusProvider =
++    FutureProvider.autoDispose<EngineFormatStatus>((ref) async {
+   final profile = ref.watch(currentProfileProvider);
+-  if (profile == null) return false;
++  if (profile == null) return EngineFormatStatus.empty;
+   try {
+     final file = await profile.file;
+-    return await file.exists() && await file.length() > 32;
+-  } catch (_) {
+-    return false;
++    if (!await file.exists()) return EngineFormatStatus.empty;
++    return await file.length() > 32
++        ? EngineFormatStatus.ok
++        : EngineFormatStatus.empty;
++  } catch (error) {
++    // The reason goes to the log that already carries the core's own faults: a corrupt
++    // subscription is a fact about the download, and it must not read as "no rules here".
++    commonPrint.log(
++      'engine format read failed: ${compactError(error)}',
++      logLevel: LogLevel.warning,
++    );
++    return EngineFormatStatus.parseFailed;
+   }
+ });
+ 
+@@ -381,8 +408,9 @@ class PortalModeSwitch extends ConsumerWidget {
+     final group = groups.where((g) => g.name == groupName).firstOrNull ??
+         groups.firstOrNull;
+     final sort = ref.watch(portalSortProvider);
+-    final engineAvailable =
+-        ref.watch(engineFormatAvailableProvider).value ?? true;
++    final engineFormat =
++        ref.watch(engineFormatStatusProvider).value ?? EngineFormatStatus.ok;
++    final engineAvailable = engineFormat == EngineFormatStatus.ok;
+     final testing = group != null &&
+         ref.watch(
+           delayTestingGroupsProvider.select((s) => s.contains(group.name)),

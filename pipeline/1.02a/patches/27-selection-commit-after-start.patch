@@ -1,0 +1,559 @@
+diff --git a/lib/models/config.dart b/lib/models/config.dart
+index 20392748..0e737f8f 100644
+--- a/lib/models/config.dart
++++ b/lib/models/config.dart
+@@ -268,8 +268,17 @@ abstract class AppSettingProps with _$AppSettingProps {
+ 
+     /// The server picked in each mode, kept apart for the same reason the order is: the
+     /// rules list names the engine's servers, the simple portal names the child's, and a
+-    /// name picked in one means nothing in the other. The map is keyed by filter, the
+-    /// portal's pick is the Xray node its child was started on.
++    /// name picked in one means nothing in the other.
++    ///
++    /// Both are keyed by profile: a name belongs to the subscription it was delivered in, so
++    /// a pick made on one profile must never move the highlight on another. See
++    /// `models/portal_selection.dart` for the reads and writes.
++    @Default({}) Map<String, String> portalXrayPicks,
++    @Default({}) Map<String, Map<String, String>> portalRulesPicks,
++
++    /// The shape these picks had before they were per profile: one Xray name and one filter
++    /// map for every subscription. Read once while nothing has been picked in the new shape,
++    /// then cleared by the first successful pick — a migration, not a second source of truth.
+     @Default({}) Map<String, String> portalSelectionRules,
+     @Default('') String portalSelectionXray,
+     @Default(TabAnimation.fade)
+diff --git a/lib/models/generated/config.freezed.dart b/lib/models/generated/config.freezed.dart
+index 541efff9..5d673777 100644
+--- a/lib/models/generated/config.freezed.dart
++++ b/lib/models/generated/config.freezed.dart
+@@ -307,8 +307,14 @@ mixin _$AppSettingProps implements DiagnosticableTreeMixin {
+ /// portal show different builds of one subscription and are ordered for different reasons.
+  String get portalSortRules; String get portalSortXray;/// The server picked in each mode, kept apart for the same reason the order is: the
+ /// rules list names the engine's servers, the simple portal names the child's, and a
+-/// name picked in one means nothing in the other. The map is keyed by filter, the
+-/// portal's pick is the Xray node its child was started on.
++/// name picked in one means nothing in the other.
++///
++/// Both are keyed by profile: a name belongs to the subscription it was delivered in, so
++/// a pick made on one profile must never move the highlight on another. See
++/// `models/portal_selection.dart` for the reads and writes.
++ Map<String, String> get portalXrayPicks; Map<String, Map<String, String>> get portalRulesPicks;/// The shape these picks had before they were per profile: one Xray name and one filter
++/// map for every subscription. Read once while nothing has been picked in the new shape,
++/// then cleared by the first successful pick — a migration, not a second source of truth.
+  Map<String, String> get portalSelectionRules; String get portalSelectionXray;@JsonKey(readValue: _readTabAnimation) TabAnimation get tabAnimation; bool get floatingNavigationBar; bool get autoCheckUpdate;/// The release tag the user hid; automatic checks skip only that one.
+  String? get hiddenUpdate;@JsonKey(readValue: _readSidebarExpanded) bool get sidebarExpanded; int get acceptedDisclaimerVersion; bool get minimizeOnExit; bool get menuBarMode; bool get hidden; bool get developerMode; RestoreStrategy get restoreStrategy; bool get showTrayTitle; bool get monochromeTrayIcon;@JsonKey(includeFromJson: false, includeToJson: false) bool get checkCertificate; List<Filter> get filters; bool get hideIp; bool get vibration; bool get editorLineWrap; EditorFontSize get editorFontSize; List<String> get serviceOrder; List<String> get disabledServices; Map<String, Map<String, double>> get tableColumnWidths; Map<String, int> get subscriptionNotices; Set<String> get ownedSettings;/// Special flags the panel set, put back once its headers drop them.
+  Set<String> get panelSetSettings;/// The profile update whose panel headers the settings last took.
+@@ -327,26 +333,26 @@ void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+   final _this = this as AppSettingProps;
+   properties
+     ..add(DiagnosticsProperty('type', 'AppSettingProps'))
+-    ..add(DiagnosticsProperty('locale', _this.locale))..add(DiagnosticsProperty('dashboardWidgets', _this.dashboardWidgets))..add(DiagnosticsProperty('dashboardWidgetsChosen', _this.dashboardWidgetsChosen))..add(DiagnosticsProperty('onlyStatisticsProxy', _this.onlyStatisticsProxy))..add(DiagnosticsProperty('showNotificationStopAction', _this.showNotificationStopAction))..add(DiagnosticsProperty('autoLaunch', _this.autoLaunch))..add(DiagnosticsProperty('silentLaunch', _this.silentLaunch))..add(DiagnosticsProperty('autoRun', _this.autoRun))..add(DiagnosticsProperty('openLogs', _this.openLogs))..add(DiagnosticsProperty('closeConnections', _this.closeConnections))..add(DiagnosticsProperty('requestFeed', _this.requestFeed))..add(DiagnosticsProperty('testUrl', _this.testUrl))..add(DiagnosticsProperty('delayTestTimeout', _this.delayTestTimeout))..add(DiagnosticsProperty('portalSortRules', _this.portalSortRules))..add(DiagnosticsProperty('portalSortXray', _this.portalSortXray))..add(DiagnosticsProperty('portalSelectionRules', _this.portalSelectionRules))..add(DiagnosticsProperty('portalSelectionXray', _this.portalSelectionXray))..add(DiagnosticsProperty('tabAnimation', _this.tabAnimation))..add(DiagnosticsProperty('floatingNavigationBar', _this.floatingNavigationBar))..add(DiagnosticsProperty('autoCheckUpdate', _this.autoCheckUpdate))..add(DiagnosticsProperty('hiddenUpdate', _this.hiddenUpdate))..add(DiagnosticsProperty('sidebarExpanded', _this.sidebarExpanded))..add(DiagnosticsProperty('acceptedDisclaimerVersion', _this.acceptedDisclaimerVersion))..add(DiagnosticsProperty('minimizeOnExit', _this.minimizeOnExit))..add(DiagnosticsProperty('menuBarMode', _this.menuBarMode))..add(DiagnosticsProperty('hidden', _this.hidden))..add(DiagnosticsProperty('developerMode', _this.developerMode))..add(DiagnosticsProperty('restoreStrategy', _this.restoreStrategy))..add(DiagnosticsProperty('showTrayTitle', _this.showTrayTitle))..add(DiagnosticsProperty('monochromeTrayIcon', _this.monochromeTrayIcon))..add(DiagnosticsProperty('checkCertificate', _this.checkCertificate))..add(DiagnosticsProperty('filters', _this.filters))..add(DiagnosticsProperty('hideIp', _this.hideIp))..add(DiagnosticsProperty('vibration', _this.vibration))..add(DiagnosticsProperty('editorLineWrap', _this.editorLineWrap))..add(DiagnosticsProperty('editorFontSize', _this.editorFontSize))..add(DiagnosticsProperty('serviceOrder', _this.serviceOrder))..add(DiagnosticsProperty('disabledServices', _this.disabledServices))..add(DiagnosticsProperty('tableColumnWidths', _this.tableColumnWidths))..add(DiagnosticsProperty('subscriptionNotices', _this.subscriptionNotices))..add(DiagnosticsProperty('ownedSettings', _this.ownedSettings))..add(DiagnosticsProperty('panelSetSettings', _this.panelSetSettings))..add(DiagnosticsProperty('appliedHeadersUpdate', _this.appliedHeadersUpdate));
++    ..add(DiagnosticsProperty('locale', _this.locale))..add(DiagnosticsProperty('dashboardWidgets', _this.dashboardWidgets))..add(DiagnosticsProperty('dashboardWidgetsChosen', _this.dashboardWidgetsChosen))..add(DiagnosticsProperty('onlyStatisticsProxy', _this.onlyStatisticsProxy))..add(DiagnosticsProperty('showNotificationStopAction', _this.showNotificationStopAction))..add(DiagnosticsProperty('autoLaunch', _this.autoLaunch))..add(DiagnosticsProperty('silentLaunch', _this.silentLaunch))..add(DiagnosticsProperty('autoRun', _this.autoRun))..add(DiagnosticsProperty('openLogs', _this.openLogs))..add(DiagnosticsProperty('closeConnections', _this.closeConnections))..add(DiagnosticsProperty('requestFeed', _this.requestFeed))..add(DiagnosticsProperty('testUrl', _this.testUrl))..add(DiagnosticsProperty('delayTestTimeout', _this.delayTestTimeout))..add(DiagnosticsProperty('portalSortRules', _this.portalSortRules))..add(DiagnosticsProperty('portalSortXray', _this.portalSortXray))..add(DiagnosticsProperty('portalXrayPicks', _this.portalXrayPicks))..add(DiagnosticsProperty('portalRulesPicks', _this.portalRulesPicks))..add(DiagnosticsProperty('portalSelectionRules', _this.portalSelectionRules))..add(DiagnosticsProperty('portalSelectionXray', _this.portalSelectionXray))..add(DiagnosticsProperty('tabAnimation', _this.tabAnimation))..add(DiagnosticsProperty('floatingNavigationBar', _this.floatingNavigationBar))..add(DiagnosticsProperty('autoCheckUpdate', _this.autoCheckUpdate))..add(DiagnosticsProperty('hiddenUpdate', _this.hiddenUpdate))..add(DiagnosticsProperty('sidebarExpanded', _this.sidebarExpanded))..add(DiagnosticsProperty('acceptedDisclaimerVersion', _this.acceptedDisclaimerVersion))..add(DiagnosticsProperty('minimizeOnExit', _this.minimizeOnExit))..add(DiagnosticsProperty('menuBarMode', _this.menuBarMode))..add(DiagnosticsProperty('hidden', _this.hidden))..add(DiagnosticsProperty('developerMode', _this.developerMode))..add(DiagnosticsProperty('restoreStrategy', _this.restoreStrategy))..add(DiagnosticsProperty('showTrayTitle', _this.showTrayTitle))..add(DiagnosticsProperty('monochromeTrayIcon', _this.monochromeTrayIcon))..add(DiagnosticsProperty('checkCertificate', _this.checkCertificate))..add(DiagnosticsProperty('filters', _this.filters))..add(DiagnosticsProperty('hideIp', _this.hideIp))..add(DiagnosticsProperty('vibration', _this.vibration))..add(DiagnosticsProperty('editorLineWrap', _this.editorLineWrap))..add(DiagnosticsProperty('editorFontSize', _this.editorFontSize))..add(DiagnosticsProperty('serviceOrder', _this.serviceOrder))..add(DiagnosticsProperty('disabledServices', _this.disabledServices))..add(DiagnosticsProperty('tableColumnWidths', _this.tableColumnWidths))..add(DiagnosticsProperty('subscriptionNotices', _this.subscriptionNotices))..add(DiagnosticsProperty('ownedSettings', _this.ownedSettings))..add(DiagnosticsProperty('panelSetSettings', _this.panelSetSettings))..add(DiagnosticsProperty('appliedHeadersUpdate', _this.appliedHeadersUpdate));
+ }
+ 
+ @override
+ bool operator ==(Object other) {
+   final _this = this as AppSettingProps;
+-  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppSettingProps&&(identical(other.locale, _this.locale) || other.locale == _this.locale)&&const DeepCollectionEquality().equals(other.dashboardWidgets, _this.dashboardWidgets)&&(identical(other.dashboardWidgetsChosen, _this.dashboardWidgetsChosen) || other.dashboardWidgetsChosen == _this.dashboardWidgetsChosen)&&(identical(other.onlyStatisticsProxy, _this.onlyStatisticsProxy) || other.onlyStatisticsProxy == _this.onlyStatisticsProxy)&&(identical(other.showNotificationStopAction, _this.showNotificationStopAction) || other.showNotificationStopAction == _this.showNotificationStopAction)&&(identical(other.autoLaunch, _this.autoLaunch) || other.autoLaunch == _this.autoLaunch)&&(identical(other.silentLaunch, _this.silentLaunch) || other.silentLaunch == _this.silentLaunch)&&(identical(other.autoRun, _this.autoRun) || other.autoRun == _this.autoRun)&&(identical(other.openLogs, _this.openLogs) || other.openLogs == _this.openLogs)&&(identical(other.closeConnections, _this.closeConnections) || other.closeConnections == _this.closeConnections)&&(identical(other.requestFeed, _this.requestFeed) || other.requestFeed == _this.requestFeed)&&(identical(other.testUrl, _this.testUrl) || other.testUrl == _this.testUrl)&&(identical(other.delayTestTimeout, _this.delayTestTimeout) || other.delayTestTimeout == _this.delayTestTimeout)&&(identical(other.portalSortRules, _this.portalSortRules) || other.portalSortRules == _this.portalSortRules)&&(identical(other.portalSortXray, _this.portalSortXray) || other.portalSortXray == _this.portalSortXray)&&const DeepCollectionEquality().equals(other.portalSelectionRules, _this.portalSelectionRules)&&(identical(other.portalSelectionXray, _this.portalSelectionXray) || other.portalSelectionXray == _this.portalSelectionXray)&&(identical(other.tabAnimation, _this.tabAnimation) || other.tabAnimation == _this.tabAnimation)&&(identical(other.floatingNavigationBar, _this.floatingNavigationBar) || other.floatingNavigationBar == _this.floatingNavigationBar)&&(identical(other.autoCheckUpdate, _this.autoCheckUpdate) || other.autoCheckUpdate == _this.autoCheckUpdate)&&(identical(other.hiddenUpdate, _this.hiddenUpdate) || other.hiddenUpdate == _this.hiddenUpdate)&&(identical(other.sidebarExpanded, _this.sidebarExpanded) || other.sidebarExpanded == _this.sidebarExpanded)&&(identical(other.acceptedDisclaimerVersion, _this.acceptedDisclaimerVersion) || other.acceptedDisclaimerVersion == _this.acceptedDisclaimerVersion)&&(identical(other.minimizeOnExit, _this.minimizeOnExit) || other.minimizeOnExit == _this.minimizeOnExit)&&(identical(other.menuBarMode, _this.menuBarMode) || other.menuBarMode == _this.menuBarMode)&&(identical(other.hidden, _this.hidden) || other.hidden == _this.hidden)&&(identical(other.developerMode, _this.developerMode) || other.developerMode == _this.developerMode)&&(identical(other.restoreStrategy, _this.restoreStrategy) || other.restoreStrategy == _this.restoreStrategy)&&(identical(other.showTrayTitle, _this.showTrayTitle) || other.showTrayTitle == _this.showTrayTitle)&&(identical(other.monochromeTrayIcon, _this.monochromeTrayIcon) || other.monochromeTrayIcon == _this.monochromeTrayIcon)&&(identical(other.checkCertificate, _this.checkCertificate) || other.checkCertificate == _this.checkCertificate)&&const DeepCollectionEquality().equals(other.filters, _this.filters)&&(identical(other.hideIp, _this.hideIp) || other.hideIp == _this.hideIp)&&(identical(other.vibration, _this.vibration) || other.vibration == _this.vibration)&&(identical(other.editorLineWrap, _this.editorLineWrap) || other.editorLineWrap == _this.editorLineWrap)&&(identical(other.editorFontSize, _this.editorFontSize) || other.editorFontSize == _this.editorFontSize)&&const DeepCollectionEquality().equals(other.serviceOrder, _this.serviceOrder)&&const DeepCollectionEquality().equals(other.disabledServices, _this.disabledServices)&&const DeepCollectionEquality().equals(other.tableColumnWidths, _this.tableColumnWidths)&&const DeepCollectionEquality().equals(other.subscriptionNotices, _this.subscriptionNotices)&&const DeepCollectionEquality().equals(other.ownedSettings, _this.ownedSettings)&&const DeepCollectionEquality().equals(other.panelSetSettings, _this.panelSetSettings)&&(identical(other.appliedHeadersUpdate, _this.appliedHeadersUpdate) || other.appliedHeadersUpdate == _this.appliedHeadersUpdate));
++  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppSettingProps&&(identical(other.locale, _this.locale) || other.locale == _this.locale)&&const DeepCollectionEquality().equals(other.dashboardWidgets, _this.dashboardWidgets)&&(identical(other.dashboardWidgetsChosen, _this.dashboardWidgetsChosen) || other.dashboardWidgetsChosen == _this.dashboardWidgetsChosen)&&(identical(other.onlyStatisticsProxy, _this.onlyStatisticsProxy) || other.onlyStatisticsProxy == _this.onlyStatisticsProxy)&&(identical(other.showNotificationStopAction, _this.showNotificationStopAction) || other.showNotificationStopAction == _this.showNotificationStopAction)&&(identical(other.autoLaunch, _this.autoLaunch) || other.autoLaunch == _this.autoLaunch)&&(identical(other.silentLaunch, _this.silentLaunch) || other.silentLaunch == _this.silentLaunch)&&(identical(other.autoRun, _this.autoRun) || other.autoRun == _this.autoRun)&&(identical(other.openLogs, _this.openLogs) || other.openLogs == _this.openLogs)&&(identical(other.closeConnections, _this.closeConnections) || other.closeConnections == _this.closeConnections)&&(identical(other.requestFeed, _this.requestFeed) || other.requestFeed == _this.requestFeed)&&(identical(other.testUrl, _this.testUrl) || other.testUrl == _this.testUrl)&&(identical(other.delayTestTimeout, _this.delayTestTimeout) || other.delayTestTimeout == _this.delayTestTimeout)&&(identical(other.portalSortRules, _this.portalSortRules) || other.portalSortRules == _this.portalSortRules)&&(identical(other.portalSortXray, _this.portalSortXray) || other.portalSortXray == _this.portalSortXray)&&const DeepCollectionEquality().equals(other.portalXrayPicks, _this.portalXrayPicks)&&const DeepCollectionEquality().equals(other.portalRulesPicks, _this.portalRulesPicks)&&const DeepCollectionEquality().equals(other.portalSelectionRules, _this.portalSelectionRules)&&(identical(other.portalSelectionXray, _this.portalSelectionXray) || other.portalSelectionXray == _this.portalSelectionXray)&&(identical(other.tabAnimation, _this.tabAnimation) || other.tabAnimation == _this.tabAnimation)&&(identical(other.floatingNavigationBar, _this.floatingNavigationBar) || other.floatingNavigationBar == _this.floatingNavigationBar)&&(identical(other.autoCheckUpdate, _this.autoCheckUpdate) || other.autoCheckUpdate == _this.autoCheckUpdate)&&(identical(other.hiddenUpdate, _this.hiddenUpdate) || other.hiddenUpdate == _this.hiddenUpdate)&&(identical(other.sidebarExpanded, _this.sidebarExpanded) || other.sidebarExpanded == _this.sidebarExpanded)&&(identical(other.acceptedDisclaimerVersion, _this.acceptedDisclaimerVersion) || other.acceptedDisclaimerVersion == _this.acceptedDisclaimerVersion)&&(identical(other.minimizeOnExit, _this.minimizeOnExit) || other.minimizeOnExit == _this.minimizeOnExit)&&(identical(other.menuBarMode, _this.menuBarMode) || other.menuBarMode == _this.menuBarMode)&&(identical(other.hidden, _this.hidden) || other.hidden == _this.hidden)&&(identical(other.developerMode, _this.developerMode) || other.developerMode == _this.developerMode)&&(identical(other.restoreStrategy, _this.restoreStrategy) || other.restoreStrategy == _this.restoreStrategy)&&(identical(other.showTrayTitle, _this.showTrayTitle) || other.showTrayTitle == _this.showTrayTitle)&&(identical(other.monochromeTrayIcon, _this.monochromeTrayIcon) || other.monochromeTrayIcon == _this.monochromeTrayIcon)&&(identical(other.checkCertificate, _this.checkCertificate) || other.checkCertificate == _this.checkCertificate)&&const DeepCollectionEquality().equals(other.filters, _this.filters)&&(identical(other.hideIp, _this.hideIp) || other.hideIp == _this.hideIp)&&(identical(other.vibration, _this.vibration) || other.vibration == _this.vibration)&&(identical(other.editorLineWrap, _this.editorLineWrap) || other.editorLineWrap == _this.editorLineWrap)&&(identical(other.editorFontSize, _this.editorFontSize) || other.editorFontSize == _this.editorFontSize)&&const DeepCollectionEquality().equals(other.serviceOrder, _this.serviceOrder)&&const DeepCollectionEquality().equals(other.disabledServices, _this.disabledServices)&&const DeepCollectionEquality().equals(other.tableColumnWidths, _this.tableColumnWidths)&&const DeepCollectionEquality().equals(other.subscriptionNotices, _this.subscriptionNotices)&&const DeepCollectionEquality().equals(other.ownedSettings, _this.ownedSettings)&&const DeepCollectionEquality().equals(other.panelSetSettings, _this.panelSetSettings)&&(identical(other.appliedHeadersUpdate, _this.appliedHeadersUpdate) || other.appliedHeadersUpdate == _this.appliedHeadersUpdate));
+ }
+ 
+ @JsonKey(includeFromJson: false, includeToJson: false)
+ @override
+ int get hashCode {
+   final _this = this as AppSettingProps;
+-  return Object.hashAll([runtimeType,_this.locale,const DeepCollectionEquality().hash(_this.dashboardWidgets),_this.dashboardWidgetsChosen,_this.onlyStatisticsProxy,_this.showNotificationStopAction,_this.autoLaunch,_this.silentLaunch,_this.autoRun,_this.openLogs,_this.closeConnections,_this.requestFeed,_this.testUrl,_this.delayTestTimeout,_this.portalSortRules,_this.portalSortXray,const DeepCollectionEquality().hash(_this.portalSelectionRules),_this.portalSelectionXray,_this.tabAnimation,_this.floatingNavigationBar,_this.autoCheckUpdate,_this.hiddenUpdate,_this.sidebarExpanded,_this.acceptedDisclaimerVersion,_this.minimizeOnExit,_this.menuBarMode,_this.hidden,_this.developerMode,_this.restoreStrategy,_this.showTrayTitle,_this.monochromeTrayIcon,_this.checkCertificate,const DeepCollectionEquality().hash(_this.filters),_this.hideIp,_this.vibration,_this.editorLineWrap,_this.editorFontSize,const DeepCollectionEquality().hash(_this.serviceOrder),const DeepCollectionEquality().hash(_this.disabledServices),const DeepCollectionEquality().hash(_this.tableColumnWidths),const DeepCollectionEquality().hash(_this.subscriptionNotices),const DeepCollectionEquality().hash(_this.ownedSettings),const DeepCollectionEquality().hash(_this.panelSetSettings),_this.appliedHeadersUpdate]);
++  return Object.hashAll([runtimeType,_this.locale,const DeepCollectionEquality().hash(_this.dashboardWidgets),_this.dashboardWidgetsChosen,_this.onlyStatisticsProxy,_this.showNotificationStopAction,_this.autoLaunch,_this.silentLaunch,_this.autoRun,_this.openLogs,_this.closeConnections,_this.requestFeed,_this.testUrl,_this.delayTestTimeout,_this.portalSortRules,_this.portalSortXray,const DeepCollectionEquality().hash(_this.portalXrayPicks),const DeepCollectionEquality().hash(_this.portalRulesPicks),const DeepCollectionEquality().hash(_this.portalSelectionRules),_this.portalSelectionXray,_this.tabAnimation,_this.floatingNavigationBar,_this.autoCheckUpdate,_this.hiddenUpdate,_this.sidebarExpanded,_this.acceptedDisclaimerVersion,_this.minimizeOnExit,_this.menuBarMode,_this.hidden,_this.developerMode,_this.restoreStrategy,_this.showTrayTitle,_this.monochromeTrayIcon,_this.checkCertificate,const DeepCollectionEquality().hash(_this.filters),_this.hideIp,_this.vibration,_this.editorLineWrap,_this.editorFontSize,const DeepCollectionEquality().hash(_this.serviceOrder),const DeepCollectionEquality().hash(_this.disabledServices),const DeepCollectionEquality().hash(_this.tableColumnWidths),const DeepCollectionEquality().hash(_this.subscriptionNotices),const DeepCollectionEquality().hash(_this.ownedSettings),const DeepCollectionEquality().hash(_this.panelSetSettings),_this.appliedHeadersUpdate]);
+ }
+ 
+ @override
+ String toString({ DiagnosticLevel minLevel = DiagnosticLevel.info }) {
+   final _this = this as AppSettingProps;
+-  return 'AppSettingProps(locale: ${_this.locale}, dashboardWidgets: ${_this.dashboardWidgets}, dashboardWidgetsChosen: ${_this.dashboardWidgetsChosen}, onlyStatisticsProxy: ${_this.onlyStatisticsProxy}, showNotificationStopAction: ${_this.showNotificationStopAction}, autoLaunch: ${_this.autoLaunch}, silentLaunch: ${_this.silentLaunch}, autoRun: ${_this.autoRun}, openLogs: ${_this.openLogs}, closeConnections: ${_this.closeConnections}, requestFeed: ${_this.requestFeed}, testUrl: ${_this.testUrl}, delayTestTimeout: ${_this.delayTestTimeout}, portalSortRules: ${_this.portalSortRules}, portalSortXray: ${_this.portalSortXray}, portalSelectionRules: ${_this.portalSelectionRules}, portalSelectionXray: ${_this.portalSelectionXray}, tabAnimation: ${_this.tabAnimation}, floatingNavigationBar: ${_this.floatingNavigationBar}, autoCheckUpdate: ${_this.autoCheckUpdate}, hiddenUpdate: ${_this.hiddenUpdate}, sidebarExpanded: ${_this.sidebarExpanded}, acceptedDisclaimerVersion: ${_this.acceptedDisclaimerVersion}, minimizeOnExit: ${_this.minimizeOnExit}, menuBarMode: ${_this.menuBarMode}, hidden: ${_this.hidden}, developerMode: ${_this.developerMode}, restoreStrategy: ${_this.restoreStrategy}, showTrayTitle: ${_this.showTrayTitle}, monochromeTrayIcon: ${_this.monochromeTrayIcon}, checkCertificate: ${_this.checkCertificate}, filters: ${_this.filters}, hideIp: ${_this.hideIp}, vibration: ${_this.vibration}, editorLineWrap: ${_this.editorLineWrap}, editorFontSize: ${_this.editorFontSize}, serviceOrder: ${_this.serviceOrder}, disabledServices: ${_this.disabledServices}, tableColumnWidths: ${_this.tableColumnWidths}, subscriptionNotices: ${_this.subscriptionNotices}, ownedSettings: ${_this.ownedSettings}, panelSetSettings: ${_this.panelSetSettings}, appliedHeadersUpdate: ${_this.appliedHeadersUpdate})';
++  return 'AppSettingProps(locale: ${_this.locale}, dashboardWidgets: ${_this.dashboardWidgets}, dashboardWidgetsChosen: ${_this.dashboardWidgetsChosen}, onlyStatisticsProxy: ${_this.onlyStatisticsProxy}, showNotificationStopAction: ${_this.showNotificationStopAction}, autoLaunch: ${_this.autoLaunch}, silentLaunch: ${_this.silentLaunch}, autoRun: ${_this.autoRun}, openLogs: ${_this.openLogs}, closeConnections: ${_this.closeConnections}, requestFeed: ${_this.requestFeed}, testUrl: ${_this.testUrl}, delayTestTimeout: ${_this.delayTestTimeout}, portalSortRules: ${_this.portalSortRules}, portalSortXray: ${_this.portalSortXray}, portalXrayPicks: ${_this.portalXrayPicks}, portalRulesPicks: ${_this.portalRulesPicks}, portalSelectionRules: ${_this.portalSelectionRules}, portalSelectionXray: ${_this.portalSelectionXray}, tabAnimation: ${_this.tabAnimation}, floatingNavigationBar: ${_this.floatingNavigationBar}, autoCheckUpdate: ${_this.autoCheckUpdate}, hiddenUpdate: ${_this.hiddenUpdate}, sidebarExpanded: ${_this.sidebarExpanded}, acceptedDisclaimerVersion: ${_this.acceptedDisclaimerVersion}, minimizeOnExit: ${_this.minimizeOnExit}, menuBarMode: ${_this.menuBarMode}, hidden: ${_this.hidden}, developerMode: ${_this.developerMode}, restoreStrategy: ${_this.restoreStrategy}, showTrayTitle: ${_this.showTrayTitle}, monochromeTrayIcon: ${_this.monochromeTrayIcon}, checkCertificate: ${_this.checkCertificate}, filters: ${_this.filters}, hideIp: ${_this.hideIp}, vibration: ${_this.vibration}, editorLineWrap: ${_this.editorLineWrap}, editorFontSize: ${_this.editorFontSize}, serviceOrder: ${_this.serviceOrder}, disabledServices: ${_this.disabledServices}, tableColumnWidths: ${_this.tableColumnWidths}, subscriptionNotices: ${_this.subscriptionNotices}, ownedSettings: ${_this.ownedSettings}, panelSetSettings: ${_this.panelSetSettings}, appliedHeadersUpdate: ${_this.appliedHeadersUpdate})';
+ }
+ 
+ 
+@@ -357,7 +363,7 @@ abstract mixin class $AppSettingPropsCopyWith<$Res>  {
+   factory $AppSettingPropsCopyWith(AppSettingProps value, $Res Function(AppSettingProps) _then) = _$AppSettingPropsCopyWithImpl;
+ @useResult
+ $Res call({
+- String? locale,@JsonKey(fromJson: dashboardWidgetsFromJson) List<DashboardWidget> dashboardWidgets,@JsonKey(readValue: _readDashboardWidgetsChosen) bool dashboardWidgetsChosen, bool onlyStatisticsProxy, bool showNotificationStopAction, bool autoLaunch, bool silentLaunch, bool autoRun, bool openLogs, bool closeConnections, RequestFeed requestFeed, String testUrl, int delayTestTimeout, String portalSortRules, String portalSortXray, Map<String, String> portalSelectionRules, String portalSelectionXray,@JsonKey(readValue: _readTabAnimation) TabAnimation tabAnimation, bool floatingNavigationBar, bool autoCheckUpdate, String? hiddenUpdate,@JsonKey(readValue: _readSidebarExpanded) bool sidebarExpanded, int acceptedDisclaimerVersion, bool minimizeOnExit, bool menuBarMode, bool hidden, bool developerMode, RestoreStrategy restoreStrategy, bool showTrayTitle, bool monochromeTrayIcon,@JsonKey(includeFromJson: false, includeToJson: false) bool checkCertificate, List<Filter> filters, bool hideIp, bool vibration, bool editorLineWrap, EditorFontSize editorFontSize, List<String> serviceOrder, List<String> disabledServices, Map<String, Map<String, double>> tableColumnWidths, Map<String, int> subscriptionNotices, Set<String> ownedSettings, Set<String> panelSetSettings, String? appliedHeadersUpdate
++ String? locale,@JsonKey(fromJson: dashboardWidgetsFromJson) List<DashboardWidget> dashboardWidgets,@JsonKey(readValue: _readDashboardWidgetsChosen) bool dashboardWidgetsChosen, bool onlyStatisticsProxy, bool showNotificationStopAction, bool autoLaunch, bool silentLaunch, bool autoRun, bool openLogs, bool closeConnections, RequestFeed requestFeed, String testUrl, int delayTestTimeout, String portalSortRules, String portalSortXray, Map<String, String> portalXrayPicks, Map<String, Map<String, String>> portalRulesPicks, Map<String, String> portalSelectionRules, String portalSelectionXray,@JsonKey(readValue: _readTabAnimation) TabAnimation tabAnimation, bool floatingNavigationBar, bool autoCheckUpdate, String? hiddenUpdate,@JsonKey(readValue: _readSidebarExpanded) bool sidebarExpanded, int acceptedDisclaimerVersion, bool minimizeOnExit, bool menuBarMode, bool hidden, bool developerMode, RestoreStrategy restoreStrategy, bool showTrayTitle, bool monochromeTrayIcon,@JsonKey(includeFromJson: false, includeToJson: false) bool checkCertificate, List<Filter> filters, bool hideIp, bool vibration, bool editorLineWrap, EditorFontSize editorFontSize, List<String> serviceOrder, List<String> disabledServices, Map<String, Map<String, double>> tableColumnWidths, Map<String, int> subscriptionNotices, Set<String> ownedSettings, Set<String> panelSetSettings, String? appliedHeadersUpdate
+ });
+ 
+ 
+@@ -374,7 +380,7 @@ class _$AppSettingPropsCopyWithImpl<$Res>
+ 
+ /// Create a copy of AppSettingProps
+ /// with the given fields replaced by the non-null parameter values.
+-@pragma('vm:prefer-inline') @override $Res call({Object? locale = freezed,Object? dashboardWidgets = null,Object? dashboardWidgetsChosen = null,Object? onlyStatisticsProxy = null,Object? showNotificationStopAction = null,Object? autoLaunch = null,Object? silentLaunch = null,Object? autoRun = null,Object? openLogs = null,Object? closeConnections = null,Object? requestFeed = null,Object? testUrl = null,Object? delayTestTimeout = null,Object? portalSortRules = null,Object? portalSortXray = null,Object? portalSelectionRules = null,Object? portalSelectionXray = null,Object? tabAnimation = null,Object? floatingNavigationBar = null,Object? autoCheckUpdate = null,Object? hiddenUpdate = freezed,Object? sidebarExpanded = null,Object? acceptedDisclaimerVersion = null,Object? minimizeOnExit = null,Object? menuBarMode = null,Object? hidden = null,Object? developerMode = null,Object? restoreStrategy = null,Object? showTrayTitle = null,Object? monochromeTrayIcon = null,Object? checkCertificate = null,Object? filters = null,Object? hideIp = null,Object? vibration = null,Object? editorLineWrap = null,Object? editorFontSize = null,Object? serviceOrder = null,Object? disabledServices = null,Object? tableColumnWidths = null,Object? subscriptionNotices = null,Object? ownedSettings = null,Object? panelSetSettings = null,Object? appliedHeadersUpdate = freezed,}) {
++@pragma('vm:prefer-inline') @override $Res call({Object? locale = freezed,Object? dashboardWidgets = null,Object? dashboardWidgetsChosen = null,Object? onlyStatisticsProxy = null,Object? showNotificationStopAction = null,Object? autoLaunch = null,Object? silentLaunch = null,Object? autoRun = null,Object? openLogs = null,Object? closeConnections = null,Object? requestFeed = null,Object? testUrl = null,Object? delayTestTimeout = null,Object? portalSortRules = null,Object? portalSortXray = null,Object? portalXrayPicks = null,Object? portalRulesPicks = null,Object? portalSelectionRules = null,Object? portalSelectionXray = null,Object? tabAnimation = null,Object? floatingNavigationBar = null,Object? autoCheckUpdate = null,Object? hiddenUpdate = freezed,Object? sidebarExpanded = null,Object? acceptedDisclaimerVersion = null,Object? minimizeOnExit = null,Object? menuBarMode = null,Object? hidden = null,Object? developerMode = null,Object? restoreStrategy = null,Object? showTrayTitle = null,Object? monochromeTrayIcon = null,Object? checkCertificate = null,Object? filters = null,Object? hideIp = null,Object? vibration = null,Object? editorLineWrap = null,Object? editorFontSize = null,Object? serviceOrder = null,Object? disabledServices = null,Object? tableColumnWidths = null,Object? subscriptionNotices = null,Object? ownedSettings = null,Object? panelSetSettings = null,Object? appliedHeadersUpdate = freezed,}) {
+   return _then(AppSettingProps(
+ locale: freezed == locale ? _self.locale : locale // ignore: cast_nullable_to_non_nullable
+ as String?,dashboardWidgets: null == dashboardWidgets ? _self.dashboardWidgets : dashboardWidgets // ignore: cast_nullable_to_non_nullable
+@@ -391,7 +397,9 @@ as RequestFeed,testUrl: null == testUrl ? _self.testUrl : testUrl // ignore: cas
+ as String,delayTestTimeout: null == delayTestTimeout ? _self.delayTestTimeout : delayTestTimeout // ignore: cast_nullable_to_non_nullable
+ as int,portalSortRules: null == portalSortRules ? _self.portalSortRules : portalSortRules // ignore: cast_nullable_to_non_nullable
+ as String,portalSortXray: null == portalSortXray ? _self.portalSortXray : portalSortXray // ignore: cast_nullable_to_non_nullable
+-as String,portalSelectionRules: null == portalSelectionRules ? _self.portalSelectionRules : portalSelectionRules // ignore: cast_nullable_to_non_nullable
++as String,portalXrayPicks: null == portalXrayPicks ? _self.portalXrayPicks : portalXrayPicks // ignore: cast_nullable_to_non_nullable
++as Map<String, String>,portalRulesPicks: null == portalRulesPicks ? _self.portalRulesPicks : portalRulesPicks // ignore: cast_nullable_to_non_nullable
++as Map<String, Map<String, String>>,portalSelectionRules: null == portalSelectionRules ? _self.portalSelectionRules : portalSelectionRules // ignore: cast_nullable_to_non_nullable
+ as Map<String, String>,portalSelectionXray: null == portalSelectionXray ? _self.portalSelectionXray : portalSelectionXray // ignore: cast_nullable_to_non_nullable
+ as String,tabAnimation: null == tabAnimation ? _self.tabAnimation : tabAnimation // ignore: cast_nullable_to_non_nullable
+ as TabAnimation,floatingNavigationBar: null == floatingNavigationBar ? _self.floatingNavigationBar : floatingNavigationBar // ignore: cast_nullable_to_non_nullable
+@@ -504,10 +512,10 @@ return $default(_that);case _:
+ /// }
+ /// ```
+ 
+-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen)  bool dashboardWidgetsChosen,  bool onlyStatisticsProxy,  bool showNotificationStopAction,  bool autoLaunch,  bool silentLaunch,  bool autoRun,  bool openLogs,  bool closeConnections,  RequestFeed requestFeed,  String testUrl,  int delayTestTimeout,  String portalSortRules,  String portalSortXray,  Map<String, String> portalSelectionRules,  String portalSelectionXray, @JsonKey(readValue: _readTabAnimation)  TabAnimation tabAnimation,  bool floatingNavigationBar,  bool autoCheckUpdate,  String? hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded)  bool sidebarExpanded,  int acceptedDisclaimerVersion,  bool minimizeOnExit,  bool menuBarMode,  bool hidden,  bool developerMode,  RestoreStrategy restoreStrategy,  bool showTrayTitle,  bool monochromeTrayIcon, @JsonKey(includeFromJson: false, includeToJson: false)  bool checkCertificate,  List<Filter> filters,  bool hideIp,  bool vibration,  bool editorLineWrap,  EditorFontSize editorFontSize,  List<String> serviceOrder,  List<String> disabledServices,  Map<String, Map<String, double>> tableColumnWidths,  Map<String, int> subscriptionNotices,  Set<String> ownedSettings,  Set<String> panelSetSettings,  String? appliedHeadersUpdate)?  $default,{required TResult orElse(),}) {final _that = this;
++@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen)  bool dashboardWidgetsChosen,  bool onlyStatisticsProxy,  bool showNotificationStopAction,  bool autoLaunch,  bool silentLaunch,  bool autoRun,  bool openLogs,  bool closeConnections,  RequestFeed requestFeed,  String testUrl,  int delayTestTimeout,  String portalSortRules,  String portalSortXray,  Map<String, String> portalXrayPicks,  Map<String, Map<String, String>> portalRulesPicks,  Map<String, String> portalSelectionRules,  String portalSelectionXray, @JsonKey(readValue: _readTabAnimation)  TabAnimation tabAnimation,  bool floatingNavigationBar,  bool autoCheckUpdate,  String? hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded)  bool sidebarExpanded,  int acceptedDisclaimerVersion,  bool minimizeOnExit,  bool menuBarMode,  bool hidden,  bool developerMode,  RestoreStrategy restoreStrategy,  bool showTrayTitle,  bool monochromeTrayIcon, @JsonKey(includeFromJson: false, includeToJson: false)  bool checkCertificate,  List<Filter> filters,  bool hideIp,  bool vibration,  bool editorLineWrap,  EditorFontSize editorFontSize,  List<String> serviceOrder,  List<String> disabledServices,  Map<String, Map<String, double>> tableColumnWidths,  Map<String, int> subscriptionNotices,  Set<String> ownedSettings,  Set<String> panelSetSettings,  String? appliedHeadersUpdate)?  $default,{required TResult orElse(),}) {final _that = this;
+ switch (_that) {
+ case _AppSettingProps() when $default != null:
+-return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen,_that.onlyStatisticsProxy,_that.showNotificationStopAction,_that.autoLaunch,_that.silentLaunch,_that.autoRun,_that.openLogs,_that.closeConnections,_that.requestFeed,_that.testUrl,_that.delayTestTimeout,_that.portalSortRules,_that.portalSortXray,_that.portalSelectionRules,_that.portalSelectionXray,_that.tabAnimation,_that.floatingNavigationBar,_that.autoCheckUpdate,_that.hiddenUpdate,_that.sidebarExpanded,_that.acceptedDisclaimerVersion,_that.minimizeOnExit,_that.menuBarMode,_that.hidden,_that.developerMode,_that.restoreStrategy,_that.showTrayTitle,_that.monochromeTrayIcon,_that.checkCertificate,_that.filters,_that.hideIp,_that.vibration,_that.editorLineWrap,_that.editorFontSize,_that.serviceOrder,_that.disabledServices,_that.tableColumnWidths,_that.subscriptionNotices,_that.ownedSettings,_that.panelSetSettings,_that.appliedHeadersUpdate);case _:
++return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen,_that.onlyStatisticsProxy,_that.showNotificationStopAction,_that.autoLaunch,_that.silentLaunch,_that.autoRun,_that.openLogs,_that.closeConnections,_that.requestFeed,_that.testUrl,_that.delayTestTimeout,_that.portalSortRules,_that.portalSortXray,_that.portalXrayPicks,_that.portalRulesPicks,_that.portalSelectionRules,_that.portalSelectionXray,_that.tabAnimation,_that.floatingNavigationBar,_that.autoCheckUpdate,_that.hiddenUpdate,_that.sidebarExpanded,_that.acceptedDisclaimerVersion,_that.minimizeOnExit,_that.menuBarMode,_that.hidden,_that.developerMode,_that.restoreStrategy,_that.showTrayTitle,_that.monochromeTrayIcon,_that.checkCertificate,_that.filters,_that.hideIp,_that.vibration,_that.editorLineWrap,_that.editorFontSize,_that.serviceOrder,_that.disabledServices,_that.tableColumnWidths,_that.subscriptionNotices,_that.ownedSettings,_that.panelSetSettings,_that.appliedHeadersUpdate);case _:
+   return orElse();
+ 
+ }
+@@ -525,10 +533,10 @@ return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen
+ /// }
+ /// ```
+ 
+-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen)  bool dashboardWidgetsChosen,  bool onlyStatisticsProxy,  bool showNotificationStopAction,  bool autoLaunch,  bool silentLaunch,  bool autoRun,  bool openLogs,  bool closeConnections,  RequestFeed requestFeed,  String testUrl,  int delayTestTimeout,  String portalSortRules,  String portalSortXray,  Map<String, String> portalSelectionRules,  String portalSelectionXray, @JsonKey(readValue: _readTabAnimation)  TabAnimation tabAnimation,  bool floatingNavigationBar,  bool autoCheckUpdate,  String? hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded)  bool sidebarExpanded,  int acceptedDisclaimerVersion,  bool minimizeOnExit,  bool menuBarMode,  bool hidden,  bool developerMode,  RestoreStrategy restoreStrategy,  bool showTrayTitle,  bool monochromeTrayIcon, @JsonKey(includeFromJson: false, includeToJson: false)  bool checkCertificate,  List<Filter> filters,  bool hideIp,  bool vibration,  bool editorLineWrap,  EditorFontSize editorFontSize,  List<String> serviceOrder,  List<String> disabledServices,  Map<String, Map<String, double>> tableColumnWidths,  Map<String, int> subscriptionNotices,  Set<String> ownedSettings,  Set<String> panelSetSettings,  String? appliedHeadersUpdate)  $default,) {final _that = this;
++@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen)  bool dashboardWidgetsChosen,  bool onlyStatisticsProxy,  bool showNotificationStopAction,  bool autoLaunch,  bool silentLaunch,  bool autoRun,  bool openLogs,  bool closeConnections,  RequestFeed requestFeed,  String testUrl,  int delayTestTimeout,  String portalSortRules,  String portalSortXray,  Map<String, String> portalXrayPicks,  Map<String, Map<String, String>> portalRulesPicks,  Map<String, String> portalSelectionRules,  String portalSelectionXray, @JsonKey(readValue: _readTabAnimation)  TabAnimation tabAnimation,  bool floatingNavigationBar,  bool autoCheckUpdate,  String? hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded)  bool sidebarExpanded,  int acceptedDisclaimerVersion,  bool minimizeOnExit,  bool menuBarMode,  bool hidden,  bool developerMode,  RestoreStrategy restoreStrategy,  bool showTrayTitle,  bool monochromeTrayIcon, @JsonKey(includeFromJson: false, includeToJson: false)  bool checkCertificate,  List<Filter> filters,  bool hideIp,  bool vibration,  bool editorLineWrap,  EditorFontSize editorFontSize,  List<String> serviceOrder,  List<String> disabledServices,  Map<String, Map<String, double>> tableColumnWidths,  Map<String, int> subscriptionNotices,  Set<String> ownedSettings,  Set<String> panelSetSettings,  String? appliedHeadersUpdate)  $default,) {final _that = this;
+ switch (_that) {
+ case _AppSettingProps():
+-return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen,_that.onlyStatisticsProxy,_that.showNotificationStopAction,_that.autoLaunch,_that.silentLaunch,_that.autoRun,_that.openLogs,_that.closeConnections,_that.requestFeed,_that.testUrl,_that.delayTestTimeout,_that.portalSortRules,_that.portalSortXray,_that.portalSelectionRules,_that.portalSelectionXray,_that.tabAnimation,_that.floatingNavigationBar,_that.autoCheckUpdate,_that.hiddenUpdate,_that.sidebarExpanded,_that.acceptedDisclaimerVersion,_that.minimizeOnExit,_that.menuBarMode,_that.hidden,_that.developerMode,_that.restoreStrategy,_that.showTrayTitle,_that.monochromeTrayIcon,_that.checkCertificate,_that.filters,_that.hideIp,_that.vibration,_that.editorLineWrap,_that.editorFontSize,_that.serviceOrder,_that.disabledServices,_that.tableColumnWidths,_that.subscriptionNotices,_that.ownedSettings,_that.panelSetSettings,_that.appliedHeadersUpdate);case _:
++return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen,_that.onlyStatisticsProxy,_that.showNotificationStopAction,_that.autoLaunch,_that.silentLaunch,_that.autoRun,_that.openLogs,_that.closeConnections,_that.requestFeed,_that.testUrl,_that.delayTestTimeout,_that.portalSortRules,_that.portalSortXray,_that.portalXrayPicks,_that.portalRulesPicks,_that.portalSelectionRules,_that.portalSelectionXray,_that.tabAnimation,_that.floatingNavigationBar,_that.autoCheckUpdate,_that.hiddenUpdate,_that.sidebarExpanded,_that.acceptedDisclaimerVersion,_that.minimizeOnExit,_that.menuBarMode,_that.hidden,_that.developerMode,_that.restoreStrategy,_that.showTrayTitle,_that.monochromeTrayIcon,_that.checkCertificate,_that.filters,_that.hideIp,_that.vibration,_that.editorLineWrap,_that.editorFontSize,_that.serviceOrder,_that.disabledServices,_that.tableColumnWidths,_that.subscriptionNotices,_that.ownedSettings,_that.panelSetSettings,_that.appliedHeadersUpdate);case _:
+   throw StateError('Unexpected subclass');
+ 
+ }
+@@ -545,10 +553,10 @@ return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen
+ /// }
+ /// ```
+ 
+-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen)  bool dashboardWidgetsChosen,  bool onlyStatisticsProxy,  bool showNotificationStopAction,  bool autoLaunch,  bool silentLaunch,  bool autoRun,  bool openLogs,  bool closeConnections,  RequestFeed requestFeed,  String testUrl,  int delayTestTimeout,  String portalSortRules,  String portalSortXray,  Map<String, String> portalSelectionRules,  String portalSelectionXray, @JsonKey(readValue: _readTabAnimation)  TabAnimation tabAnimation,  bool floatingNavigationBar,  bool autoCheckUpdate,  String? hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded)  bool sidebarExpanded,  int acceptedDisclaimerVersion,  bool minimizeOnExit,  bool menuBarMode,  bool hidden,  bool developerMode,  RestoreStrategy restoreStrategy,  bool showTrayTitle,  bool monochromeTrayIcon, @JsonKey(includeFromJson: false, includeToJson: false)  bool checkCertificate,  List<Filter> filters,  bool hideIp,  bool vibration,  bool editorLineWrap,  EditorFontSize editorFontSize,  List<String> serviceOrder,  List<String> disabledServices,  Map<String, Map<String, double>> tableColumnWidths,  Map<String, int> subscriptionNotices,  Set<String> ownedSettings,  Set<String> panelSetSettings,  String? appliedHeadersUpdate)?  $default,) {final _that = this;
++@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen)  bool dashboardWidgetsChosen,  bool onlyStatisticsProxy,  bool showNotificationStopAction,  bool autoLaunch,  bool silentLaunch,  bool autoRun,  bool openLogs,  bool closeConnections,  RequestFeed requestFeed,  String testUrl,  int delayTestTimeout,  String portalSortRules,  String portalSortXray,  Map<String, String> portalXrayPicks,  Map<String, Map<String, String>> portalRulesPicks,  Map<String, String> portalSelectionRules,  String portalSelectionXray, @JsonKey(readValue: _readTabAnimation)  TabAnimation tabAnimation,  bool floatingNavigationBar,  bool autoCheckUpdate,  String? hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded)  bool sidebarExpanded,  int acceptedDisclaimerVersion,  bool minimizeOnExit,  bool menuBarMode,  bool hidden,  bool developerMode,  RestoreStrategy restoreStrategy,  bool showTrayTitle,  bool monochromeTrayIcon, @JsonKey(includeFromJson: false, includeToJson: false)  bool checkCertificate,  List<Filter> filters,  bool hideIp,  bool vibration,  bool editorLineWrap,  EditorFontSize editorFontSize,  List<String> serviceOrder,  List<String> disabledServices,  Map<String, Map<String, double>> tableColumnWidths,  Map<String, int> subscriptionNotices,  Set<String> ownedSettings,  Set<String> panelSetSettings,  String? appliedHeadersUpdate)?  $default,) {final _that = this;
+ switch (_that) {
+ case _AppSettingProps() when $default != null:
+-return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen,_that.onlyStatisticsProxy,_that.showNotificationStopAction,_that.autoLaunch,_that.silentLaunch,_that.autoRun,_that.openLogs,_that.closeConnections,_that.requestFeed,_that.testUrl,_that.delayTestTimeout,_that.portalSortRules,_that.portalSortXray,_that.portalSelectionRules,_that.portalSelectionXray,_that.tabAnimation,_that.floatingNavigationBar,_that.autoCheckUpdate,_that.hiddenUpdate,_that.sidebarExpanded,_that.acceptedDisclaimerVersion,_that.minimizeOnExit,_that.menuBarMode,_that.hidden,_that.developerMode,_that.restoreStrategy,_that.showTrayTitle,_that.monochromeTrayIcon,_that.checkCertificate,_that.filters,_that.hideIp,_that.vibration,_that.editorLineWrap,_that.editorFontSize,_that.serviceOrder,_that.disabledServices,_that.tableColumnWidths,_that.subscriptionNotices,_that.ownedSettings,_that.panelSetSettings,_that.appliedHeadersUpdate);case _:
++return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen,_that.onlyStatisticsProxy,_that.showNotificationStopAction,_that.autoLaunch,_that.silentLaunch,_that.autoRun,_that.openLogs,_that.closeConnections,_that.requestFeed,_that.testUrl,_that.delayTestTimeout,_that.portalSortRules,_that.portalSortXray,_that.portalXrayPicks,_that.portalRulesPicks,_that.portalSelectionRules,_that.portalSelectionXray,_that.tabAnimation,_that.floatingNavigationBar,_that.autoCheckUpdate,_that.hiddenUpdate,_that.sidebarExpanded,_that.acceptedDisclaimerVersion,_that.minimizeOnExit,_that.menuBarMode,_that.hidden,_that.developerMode,_that.restoreStrategy,_that.showTrayTitle,_that.monochromeTrayIcon,_that.checkCertificate,_that.filters,_that.hideIp,_that.vibration,_that.editorLineWrap,_that.editorFontSize,_that.serviceOrder,_that.disabledServices,_that.tableColumnWidths,_that.subscriptionNotices,_that.ownedSettings,_that.panelSetSettings,_that.appliedHeadersUpdate);case _:
+   return null;
+ 
+ }
+@@ -560,7 +568,7 @@ return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen
+ @JsonSerializable()
+ 
+ class _AppSettingProps with DiagnosticableTreeMixin implements AppSettingProps {
+-  const _AppSettingProps({this.locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets = defaultDashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen) this.dashboardWidgetsChosen = false, this.onlyStatisticsProxy = false, this.showNotificationStopAction = true, this.autoLaunch = false, this.silentLaunch = false, this.autoRun = false, this.openLogs = false, this.closeConnections = true, this.requestFeed = RequestFeed.live, this.testUrl = defaultTestUrl, this.delayTestTimeout = defaultDelayTestTimeout, this.portalSortRules = '', this.portalSortXray = '',  Map<String, String> portalSelectionRules = const {}, this.portalSelectionXray = '', @JsonKey(readValue: _readTabAnimation) this.tabAnimation = TabAnimation.fade, this.floatingNavigationBar = true, this.autoCheckUpdate = false, this.hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded) this.sidebarExpanded = true, this.acceptedDisclaimerVersion = 0, this.minimizeOnExit = false, this.menuBarMode = false, this.hidden = false, this.developerMode = false, this.restoreStrategy = RestoreStrategy.compatible, this.showTrayTitle = true, this.monochromeTrayIcon = true, @JsonKey(includeFromJson: false, includeToJson: false) this.checkCertificate = true,  List<Filter> filters = defaultFilters, this.hideIp = false, this.vibration = true, this.editorLineWrap = false, this.editorFontSize = EditorFontSize.standard,  List<String> serviceOrder = const [],  List<String> disabledServices = const [],  Map<String, Map<String, double>> tableColumnWidths = const {},  Map<String, int> subscriptionNotices = const {},  Set<String> ownedSettings = const {},  Set<String> panelSetSettings = const {}, this.appliedHeadersUpdate}): _dashboardWidgets = dashboardWidgets,_portalSelectionRules = portalSelectionRules,_filters = filters,_serviceOrder = serviceOrder,_disabledServices = disabledServices,_tableColumnWidths = tableColumnWidths,_subscriptionNotices = subscriptionNotices,_ownedSettings = ownedSettings,_panelSetSettings = panelSetSettings;
++  const _AppSettingProps({this.locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets = defaultDashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen) this.dashboardWidgetsChosen = false, this.onlyStatisticsProxy = false, this.showNotificationStopAction = true, this.autoLaunch = false, this.silentLaunch = false, this.autoRun = false, this.openLogs = false, this.closeConnections = true, this.requestFeed = RequestFeed.live, this.testUrl = defaultTestUrl, this.delayTestTimeout = defaultDelayTestTimeout, this.portalSortRules = '', this.portalSortXray = '',  Map<String, String> portalXrayPicks = const {},  Map<String, Map<String, String>> portalRulesPicks = const {},  Map<String, String> portalSelectionRules = const {}, this.portalSelectionXray = '', @JsonKey(readValue: _readTabAnimation) this.tabAnimation = TabAnimation.fade, this.floatingNavigationBar = true, this.autoCheckUpdate = false, this.hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded) this.sidebarExpanded = true, this.acceptedDisclaimerVersion = 0, this.minimizeOnExit = false, this.menuBarMode = false, this.hidden = false, this.developerMode = false, this.restoreStrategy = RestoreStrategy.compatible, this.showTrayTitle = true, this.monochromeTrayIcon = true, @JsonKey(includeFromJson: false, includeToJson: false) this.checkCertificate = true,  List<Filter> filters = defaultFilters, this.hideIp = false, this.vibration = true, this.editorLineWrap = false, this.editorFontSize = EditorFontSize.standard,  List<String> serviceOrder = const [],  List<String> disabledServices = const [],  Map<String, Map<String, double>> tableColumnWidths = const {},  Map<String, int> subscriptionNotices = const {},  Set<String> ownedSettings = const {},  Set<String> panelSetSettings = const {}, this.appliedHeadersUpdate}): _dashboardWidgets = dashboardWidgets,_portalXrayPicks = portalXrayPicks,_portalRulesPicks = portalRulesPicks,_portalSelectionRules = portalSelectionRules,_filters = filters,_serviceOrder = serviceOrder,_disabledServices = disabledServices,_tableColumnWidths = tableColumnWidths,_subscriptionNotices = subscriptionNotices,_ownedSettings = ownedSettings,_panelSetSettings = panelSetSettings;
+   factory _AppSettingProps.fromJson(Map<String, dynamic> json) => _$AppSettingPropsFromJson(json);
+ 
+ @override final  String? locale;
+@@ -589,13 +597,39 @@ class _AppSettingProps with DiagnosticableTreeMixin implements AppSettingProps {
+ @override@JsonKey() final  String portalSortXray;
+ /// The server picked in each mode, kept apart for the same reason the order is: the
+ /// rules list names the engine's servers, the simple portal names the child's, and a
+-/// name picked in one means nothing in the other. The map is keyed by filter, the
+-/// portal's pick is the Xray node its child was started on.
+- final  Map<String, String> _portalSelectionRules;
++/// name picked in one means nothing in the other.
++///
++/// Both are keyed by profile: a name belongs to the subscription it was delivered in, so
++/// a pick made on one profile must never move the highlight on another. See
++/// `models/portal_selection.dart` for the reads and writes.
++ final  Map<String, String> _portalXrayPicks;
+ /// The server picked in each mode, kept apart for the same reason the order is: the
+ /// rules list names the engine's servers, the simple portal names the child's, and a
+-/// name picked in one means nothing in the other. The map is keyed by filter, the
+-/// portal's pick is the Xray node its child was started on.
++/// name picked in one means nothing in the other.
++///
++/// Both are keyed by profile: a name belongs to the subscription it was delivered in, so
++/// a pick made on one profile must never move the highlight on another. See
++/// `models/portal_selection.dart` for the reads and writes.
++@override@JsonKey() Map<String, String> get portalXrayPicks {
++  if (_portalXrayPicks is EqualUnmodifiableMapView) return _portalXrayPicks;
++  // ignore: implicit_dynamic_type
++  return EqualUnmodifiableMapView(_portalXrayPicks);
++}
++
++ final  Map<String, Map<String, String>> _portalRulesPicks;
++@override@JsonKey() Map<String, Map<String, String>> get portalRulesPicks {
++  if (_portalRulesPicks is EqualUnmodifiableMapView) return _portalRulesPicks;
++  // ignore: implicit_dynamic_type
++  return EqualUnmodifiableMapView(_portalRulesPicks);
++}
++
++/// The shape these picks had before they were per profile: one Xray name and one filter
++/// map for every subscription. Read once while nothing has been picked in the new shape,
++/// then cleared by the first successful pick — a migration, not a second source of truth.
++ final  Map<String, String> _portalSelectionRules;
++/// The shape these picks had before they were per profile: one Xray name and one filter
++/// map for every subscription. Read once while nothing has been picked in the new shape,
++/// then cleared by the first successful pick — a migration, not a second source of truth.
+ @override@JsonKey() Map<String, String> get portalSelectionRules {
+   if (_portalSelectionRules is EqualUnmodifiableMapView) return _portalSelectionRules;
+   // ignore: implicit_dynamic_type
+@@ -690,23 +724,23 @@ Map<String, dynamic> toJson() {
+ void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+     properties
+     ..add(DiagnosticsProperty('type', 'AppSettingProps'))
+-    ..add(DiagnosticsProperty('locale', locale))..add(DiagnosticsProperty('dashboardWidgets', dashboardWidgets))..add(DiagnosticsProperty('dashboardWidgetsChosen', dashboardWidgetsChosen))..add(DiagnosticsProperty('onlyStatisticsProxy', onlyStatisticsProxy))..add(DiagnosticsProperty('showNotificationStopAction', showNotificationStopAction))..add(DiagnosticsProperty('autoLaunch', autoLaunch))..add(DiagnosticsProperty('silentLaunch', silentLaunch))..add(DiagnosticsProperty('autoRun', autoRun))..add(DiagnosticsProperty('openLogs', openLogs))..add(DiagnosticsProperty('closeConnections', closeConnections))..add(DiagnosticsProperty('requestFeed', requestFeed))..add(DiagnosticsProperty('testUrl', testUrl))..add(DiagnosticsProperty('delayTestTimeout', delayTestTimeout))..add(DiagnosticsProperty('portalSortRules', portalSortRules))..add(DiagnosticsProperty('portalSortXray', portalSortXray))..add(DiagnosticsProperty('portalSelectionRules', portalSelectionRules))..add(DiagnosticsProperty('portalSelectionXray', portalSelectionXray))..add(DiagnosticsProperty('tabAnimation', tabAnimation))..add(DiagnosticsProperty('floatingNavigationBar', floatingNavigationBar))..add(DiagnosticsProperty('autoCheckUpdate', autoCheckUpdate))..add(DiagnosticsProperty('hiddenUpdate', hiddenUpdate))..add(DiagnosticsProperty('sidebarExpanded', sidebarExpanded))..add(DiagnosticsProperty('acceptedDisclaimerVersion', acceptedDisclaimerVersion))..add(DiagnosticsProperty('minimizeOnExit', minimizeOnExit))..add(DiagnosticsProperty('menuBarMode', menuBarMode))..add(DiagnosticsProperty('hidden', hidden))..add(DiagnosticsProperty('developerMode', developerMode))..add(DiagnosticsProperty('restoreStrategy', restoreStrategy))..add(DiagnosticsProperty('showTrayTitle', showTrayTitle))..add(DiagnosticsProperty('monochromeTrayIcon', monochromeTrayIcon))..add(DiagnosticsProperty('checkCertificate', checkCertificate))..add(DiagnosticsProperty('filters', filters))..add(DiagnosticsProperty('hideIp', hideIp))..add(DiagnosticsProperty('vibration', vibration))..add(DiagnosticsProperty('editorLineWrap', editorLineWrap))..add(DiagnosticsProperty('editorFontSize', editorFontSize))..add(DiagnosticsProperty('serviceOrder', serviceOrder))..add(DiagnosticsProperty('disabledServices', disabledServices))..add(DiagnosticsProperty('tableColumnWidths', tableColumnWidths))..add(DiagnosticsProperty('subscriptionNotices', subscriptionNotices))..add(DiagnosticsProperty('ownedSettings', ownedSettings))..add(DiagnosticsProperty('panelSetSettings', panelSetSettings))..add(DiagnosticsProperty('appliedHeadersUpdate', appliedHeadersUpdate));
++    ..add(DiagnosticsProperty('locale', locale))..add(DiagnosticsProperty('dashboardWidgets', dashboardWidgets))..add(DiagnosticsProperty('dashboardWidgetsChosen', dashboardWidgetsChosen))..add(DiagnosticsProperty('onlyStatisticsProxy', onlyStatisticsProxy))..add(DiagnosticsProperty('showNotificationStopAction', showNotificationStopAction))..add(DiagnosticsProperty('autoLaunch', autoLaunch))..add(DiagnosticsProperty('silentLaunch', silentLaunch))..add(DiagnosticsProperty('autoRun', autoRun))..add(DiagnosticsProperty('openLogs', openLogs))..add(DiagnosticsProperty('closeConnections', closeConnections))..add(DiagnosticsProperty('requestFeed', requestFeed))..add(DiagnosticsProperty('testUrl', testUrl))..add(DiagnosticsProperty('delayTestTimeout', delayTestTimeout))..add(DiagnosticsProperty('portalSortRules', portalSortRules))..add(DiagnosticsProperty('portalSortXray', portalSortXray))..add(DiagnosticsProperty('portalXrayPicks', portalXrayPicks))..add(DiagnosticsProperty('portalRulesPicks', portalRulesPicks))..add(DiagnosticsProperty('portalSelectionRules', portalSelectionRules))..add(DiagnosticsProperty('portalSelectionXray', portalSelectionXray))..add(DiagnosticsProperty('tabAnimation', tabAnimation))..add(DiagnosticsProperty('floatingNavigationBar', floatingNavigationBar))..add(DiagnosticsProperty('autoCheckUpdate', autoCheckUpdate))..add(DiagnosticsProperty('hiddenUpdate', hiddenUpdate))..add(DiagnosticsProperty('sidebarExpanded', sidebarExpanded))..add(DiagnosticsProperty('acceptedDisclaimerVersion', acceptedDisclaimerVersion))..add(DiagnosticsProperty('minimizeOnExit', minimizeOnExit))..add(DiagnosticsProperty('menuBarMode', menuBarMode))..add(DiagnosticsProperty('hidden', hidden))..add(DiagnosticsProperty('developerMode', developerMode))..add(DiagnosticsProperty('restoreStrategy', restoreStrategy))..add(DiagnosticsProperty('showTrayTitle', showTrayTitle))..add(DiagnosticsProperty('monochromeTrayIcon', monochromeTrayIcon))..add(DiagnosticsProperty('checkCertificate', checkCertificate))..add(DiagnosticsProperty('filters', filters))..add(DiagnosticsProperty('hideIp', hideIp))..add(DiagnosticsProperty('vibration', vibration))..add(DiagnosticsProperty('editorLineWrap', editorLineWrap))..add(DiagnosticsProperty('editorFontSize', editorFontSize))..add(DiagnosticsProperty('serviceOrder', serviceOrder))..add(DiagnosticsProperty('disabledServices', disabledServices))..add(DiagnosticsProperty('tableColumnWidths', tableColumnWidths))..add(DiagnosticsProperty('subscriptionNotices', subscriptionNotices))..add(DiagnosticsProperty('ownedSettings', ownedSettings))..add(DiagnosticsProperty('panelSetSettings', panelSetSettings))..add(DiagnosticsProperty('appliedHeadersUpdate', appliedHeadersUpdate));
+ }
+ 
+ @override
+ bool operator ==(Object other) {
+-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _AppSettingProps&&(identical(other.locale, locale) || other.locale == locale)&&const DeepCollectionEquality().equals(other.dashboardWidgets, _dashboardWidgets)&&(identical(other.dashboardWidgetsChosen, dashboardWidgetsChosen) || other.dashboardWidgetsChosen == dashboardWidgetsChosen)&&(identical(other.onlyStatisticsProxy, onlyStatisticsProxy) || other.onlyStatisticsProxy == onlyStatisticsProxy)&&(identical(other.showNotificationStopAction, showNotificationStopAction) || other.showNotificationStopAction == showNotificationStopAction)&&(identical(other.autoLaunch, autoLaunch) || other.autoLaunch == autoLaunch)&&(identical(other.silentLaunch, silentLaunch) || other.silentLaunch == silentLaunch)&&(identical(other.autoRun, autoRun) || other.autoRun == autoRun)&&(identical(other.openLogs, openLogs) || other.openLogs == openLogs)&&(identical(other.closeConnections, closeConnections) || other.closeConnections == closeConnections)&&(identical(other.requestFeed, requestFeed) || other.requestFeed == requestFeed)&&(identical(other.testUrl, testUrl) || other.testUrl == testUrl)&&(identical(other.delayTestTimeout, delayTestTimeout) || other.delayTestTimeout == delayTestTimeout)&&(identical(other.portalSortRules, portalSortRules) || other.portalSortRules == portalSortRules)&&(identical(other.portalSortXray, portalSortXray) || other.portalSortXray == portalSortXray)&&const DeepCollectionEquality().equals(other.portalSelectionRules, _portalSelectionRules)&&(identical(other.portalSelectionXray, portalSelectionXray) || other.portalSelectionXray == portalSelectionXray)&&(identical(other.tabAnimation, tabAnimation) || other.tabAnimation == tabAnimation)&&(identical(other.floatingNavigationBar, floatingNavigationBar) || other.floatingNavigationBar == floatingNavigationBar)&&(identical(other.autoCheckUpdate, autoCheckUpdate) || other.autoCheckUpdate == autoCheckUpdate)&&(identical(other.hiddenUpdate, hiddenUpdate) || other.hiddenUpdate == hiddenUpdate)&&(identical(other.sidebarExpanded, sidebarExpanded) || other.sidebarExpanded == sidebarExpanded)&&(identical(other.acceptedDisclaimerVersion, acceptedDisclaimerVersion) || other.acceptedDisclaimerVersion == acceptedDisclaimerVersion)&&(identical(other.minimizeOnExit, minimizeOnExit) || other.minimizeOnExit == minimizeOnExit)&&(identical(other.menuBarMode, menuBarMode) || other.menuBarMode == menuBarMode)&&(identical(other.hidden, hidden) || other.hidden == hidden)&&(identical(other.developerMode, developerMode) || other.developerMode == developerMode)&&(identical(other.restoreStrategy, restoreStrategy) || other.restoreStrategy == restoreStrategy)&&(identical(other.showTrayTitle, showTrayTitle) || other.showTrayTitle == showTrayTitle)&&(identical(other.monochromeTrayIcon, monochromeTrayIcon) || other.monochromeTrayIcon == monochromeTrayIcon)&&(identical(other.checkCertificate, checkCertificate) || other.checkCertificate == checkCertificate)&&const DeepCollectionEquality().equals(other.filters, _filters)&&(identical(other.hideIp, hideIp) || other.hideIp == hideIp)&&(identical(other.vibration, vibration) || other.vibration == vibration)&&(identical(other.editorLineWrap, editorLineWrap) || other.editorLineWrap == editorLineWrap)&&(identical(other.editorFontSize, editorFontSize) || other.editorFontSize == editorFontSize)&&const DeepCollectionEquality().equals(other.serviceOrder, _serviceOrder)&&const DeepCollectionEquality().equals(other.disabledServices, _disabledServices)&&const DeepCollectionEquality().equals(other.tableColumnWidths, _tableColumnWidths)&&const DeepCollectionEquality().equals(other.subscriptionNotices, _subscriptionNotices)&&const DeepCollectionEquality().equals(other.ownedSettings, _ownedSettings)&&const DeepCollectionEquality().equals(other.panelSetSettings, _panelSetSettings)&&(identical(other.appliedHeadersUpdate, appliedHeadersUpdate) || other.appliedHeadersUpdate == appliedHeadersUpdate));
++    return identical(this, other) || (other.runtimeType == runtimeType&&other is _AppSettingProps&&(identical(other.locale, locale) || other.locale == locale)&&const DeepCollectionEquality().equals(other.dashboardWidgets, _dashboardWidgets)&&(identical(other.dashboardWidgetsChosen, dashboardWidgetsChosen) || other.dashboardWidgetsChosen == dashboardWidgetsChosen)&&(identical(other.onlyStatisticsProxy, onlyStatisticsProxy) || other.onlyStatisticsProxy == onlyStatisticsProxy)&&(identical(other.showNotificationStopAction, showNotificationStopAction) || other.showNotificationStopAction == showNotificationStopAction)&&(identical(other.autoLaunch, autoLaunch) || other.autoLaunch == autoLaunch)&&(identical(other.silentLaunch, silentLaunch) || other.silentLaunch == silentLaunch)&&(identical(other.autoRun, autoRun) || other.autoRun == autoRun)&&(identical(other.openLogs, openLogs) || other.openLogs == openLogs)&&(identical(other.closeConnections, closeConnections) || other.closeConnections == closeConnections)&&(identical(other.requestFeed, requestFeed) || other.requestFeed == requestFeed)&&(identical(other.testUrl, testUrl) || other.testUrl == testUrl)&&(identical(other.delayTestTimeout, delayTestTimeout) || other.delayTestTimeout == delayTestTimeout)&&(identical(other.portalSortRules, portalSortRules) || other.portalSortRules == portalSortRules)&&(identical(other.portalSortXray, portalSortXray) || other.portalSortXray == portalSortXray)&&const DeepCollectionEquality().equals(other.portalXrayPicks, _portalXrayPicks)&&const DeepCollectionEquality().equals(other.portalRulesPicks, _portalRulesPicks)&&const DeepCollectionEquality().equals(other.portalSelectionRules, _portalSelectionRules)&&(identical(other.portalSelectionXray, portalSelectionXray) || other.portalSelectionXray == portalSelectionXray)&&(identical(other.tabAnimation, tabAnimation) || other.tabAnimation == tabAnimation)&&(identical(other.floatingNavigationBar, floatingNavigationBar) || other.floatingNavigationBar == floatingNavigationBar)&&(identical(other.autoCheckUpdate, autoCheckUpdate) || other.autoCheckUpdate == autoCheckUpdate)&&(identical(other.hiddenUpdate, hiddenUpdate) || other.hiddenUpdate == hiddenUpdate)&&(identical(other.sidebarExpanded, sidebarExpanded) || other.sidebarExpanded == sidebarExpanded)&&(identical(other.acceptedDisclaimerVersion, acceptedDisclaimerVersion) || other.acceptedDisclaimerVersion == acceptedDisclaimerVersion)&&(identical(other.minimizeOnExit, minimizeOnExit) || other.minimizeOnExit == minimizeOnExit)&&(identical(other.menuBarMode, menuBarMode) || other.menuBarMode == menuBarMode)&&(identical(other.hidden, hidden) || other.hidden == hidden)&&(identical(other.developerMode, developerMode) || other.developerMode == developerMode)&&(identical(other.restoreStrategy, restoreStrategy) || other.restoreStrategy == restoreStrategy)&&(identical(other.showTrayTitle, showTrayTitle) || other.showTrayTitle == showTrayTitle)&&(identical(other.monochromeTrayIcon, monochromeTrayIcon) || other.monochromeTrayIcon == monochromeTrayIcon)&&(identical(other.checkCertificate, checkCertificate) || other.checkCertificate == checkCertificate)&&const DeepCollectionEquality().equals(other.filters, _filters)&&(identical(other.hideIp, hideIp) || other.hideIp == hideIp)&&(identical(other.vibration, vibration) || other.vibration == vibration)&&(identical(other.editorLineWrap, editorLineWrap) || other.editorLineWrap == editorLineWrap)&&(identical(other.editorFontSize, editorFontSize) || other.editorFontSize == editorFontSize)&&const DeepCollectionEquality().equals(other.serviceOrder, _serviceOrder)&&const DeepCollectionEquality().equals(other.disabledServices, _disabledServices)&&const DeepCollectionEquality().equals(other.tableColumnWidths, _tableColumnWidths)&&const DeepCollectionEquality().equals(other.subscriptionNotices, _subscriptionNotices)&&const DeepCollectionEquality().equals(other.ownedSettings, _ownedSettings)&&const DeepCollectionEquality().equals(other.panelSetSettings, _panelSetSettings)&&(identical(other.appliedHeadersUpdate, appliedHeadersUpdate) || other.appliedHeadersUpdate == appliedHeadersUpdate));
+ }
+ 
+ @JsonKey(includeFromJson: false, includeToJson: false)
+ @override
+ int get hashCode {
+-    return Object.hashAll([runtimeType,locale,const DeepCollectionEquality().hash(_dashboardWidgets),dashboardWidgetsChosen,onlyStatisticsProxy,showNotificationStopAction,autoLaunch,silentLaunch,autoRun,openLogs,closeConnections,requestFeed,testUrl,delayTestTimeout,portalSortRules,portalSortXray,const DeepCollectionEquality().hash(_portalSelectionRules),portalSelectionXray,tabAnimation,floatingNavigationBar,autoCheckUpdate,hiddenUpdate,sidebarExpanded,acceptedDisclaimerVersion,minimizeOnExit,menuBarMode,hidden,developerMode,restoreStrategy,showTrayTitle,monochromeTrayIcon,checkCertificate,const DeepCollectionEquality().hash(_filters),hideIp,vibration,editorLineWrap,editorFontSize,const DeepCollectionEquality().hash(_serviceOrder),const DeepCollectionEquality().hash(_disabledServices),const DeepCollectionEquality().hash(_tableColumnWidths),const DeepCollectionEquality().hash(_subscriptionNotices),const DeepCollectionEquality().hash(_ownedSettings),const DeepCollectionEquality().hash(_panelSetSettings),appliedHeadersUpdate]);
++    return Object.hashAll([runtimeType,locale,const DeepCollectionEquality().hash(_dashboardWidgets),dashboardWidgetsChosen,onlyStatisticsProxy,showNotificationStopAction,autoLaunch,silentLaunch,autoRun,openLogs,closeConnections,requestFeed,testUrl,delayTestTimeout,portalSortRules,portalSortXray,const DeepCollectionEquality().hash(_portalXrayPicks),const DeepCollectionEquality().hash(_portalRulesPicks),const DeepCollectionEquality().hash(_portalSelectionRules),portalSelectionXray,tabAnimation,floatingNavigationBar,autoCheckUpdate,hiddenUpdate,sidebarExpanded,acceptedDisclaimerVersion,minimizeOnExit,menuBarMode,hidden,developerMode,restoreStrategy,showTrayTitle,monochromeTrayIcon,checkCertificate,const DeepCollectionEquality().hash(_filters),hideIp,vibration,editorLineWrap,editorFontSize,const DeepCollectionEquality().hash(_serviceOrder),const DeepCollectionEquality().hash(_disabledServices),const DeepCollectionEquality().hash(_tableColumnWidths),const DeepCollectionEquality().hash(_subscriptionNotices),const DeepCollectionEquality().hash(_ownedSettings),const DeepCollectionEquality().hash(_panelSetSettings),appliedHeadersUpdate]);
+ }
+ 
+ @override
+ String toString({ DiagnosticLevel minLevel = DiagnosticLevel.info }) {
+-    return 'AppSettingProps(locale: $locale, dashboardWidgets: $dashboardWidgets, dashboardWidgetsChosen: $dashboardWidgetsChosen, onlyStatisticsProxy: $onlyStatisticsProxy, showNotificationStopAction: $showNotificationStopAction, autoLaunch: $autoLaunch, silentLaunch: $silentLaunch, autoRun: $autoRun, openLogs: $openLogs, closeConnections: $closeConnections, requestFeed: $requestFeed, testUrl: $testUrl, delayTestTimeout: $delayTestTimeout, portalSortRules: $portalSortRules, portalSortXray: $portalSortXray, portalSelectionRules: $portalSelectionRules, portalSelectionXray: $portalSelectionXray, tabAnimation: $tabAnimation, floatingNavigationBar: $floatingNavigationBar, autoCheckUpdate: $autoCheckUpdate, hiddenUpdate: $hiddenUpdate, sidebarExpanded: $sidebarExpanded, acceptedDisclaimerVersion: $acceptedDisclaimerVersion, minimizeOnExit: $minimizeOnExit, menuBarMode: $menuBarMode, hidden: $hidden, developerMode: $developerMode, restoreStrategy: $restoreStrategy, showTrayTitle: $showTrayTitle, monochromeTrayIcon: $monochromeTrayIcon, checkCertificate: $checkCertificate, filters: $filters, hideIp: $hideIp, vibration: $vibration, editorLineWrap: $editorLineWrap, editorFontSize: $editorFontSize, serviceOrder: $serviceOrder, disabledServices: $disabledServices, tableColumnWidths: $tableColumnWidths, subscriptionNotices: $subscriptionNotices, ownedSettings: $ownedSettings, panelSetSettings: $panelSetSettings, appliedHeadersUpdate: $appliedHeadersUpdate)';
++    return 'AppSettingProps(locale: $locale, dashboardWidgets: $dashboardWidgets, dashboardWidgetsChosen: $dashboardWidgetsChosen, onlyStatisticsProxy: $onlyStatisticsProxy, showNotificationStopAction: $showNotificationStopAction, autoLaunch: $autoLaunch, silentLaunch: $silentLaunch, autoRun: $autoRun, openLogs: $openLogs, closeConnections: $closeConnections, requestFeed: $requestFeed, testUrl: $testUrl, delayTestTimeout: $delayTestTimeout, portalSortRules: $portalSortRules, portalSortXray: $portalSortXray, portalXrayPicks: $portalXrayPicks, portalRulesPicks: $portalRulesPicks, portalSelectionRules: $portalSelectionRules, portalSelectionXray: $portalSelectionXray, tabAnimation: $tabAnimation, floatingNavigationBar: $floatingNavigationBar, autoCheckUpdate: $autoCheckUpdate, hiddenUpdate: $hiddenUpdate, sidebarExpanded: $sidebarExpanded, acceptedDisclaimerVersion: $acceptedDisclaimerVersion, minimizeOnExit: $minimizeOnExit, menuBarMode: $menuBarMode, hidden: $hidden, developerMode: $developerMode, restoreStrategy: $restoreStrategy, showTrayTitle: $showTrayTitle, monochromeTrayIcon: $monochromeTrayIcon, checkCertificate: $checkCertificate, filters: $filters, hideIp: $hideIp, vibration: $vibration, editorLineWrap: $editorLineWrap, editorFontSize: $editorFontSize, serviceOrder: $serviceOrder, disabledServices: $disabledServices, tableColumnWidths: $tableColumnWidths, subscriptionNotices: $subscriptionNotices, ownedSettings: $ownedSettings, panelSetSettings: $panelSetSettings, appliedHeadersUpdate: $appliedHeadersUpdate)';
+ }
+ 
+ 
+@@ -717,7 +751,7 @@ abstract mixin class _$AppSettingPropsCopyWith<$Res> implements $AppSettingProps
+   factory _$AppSettingPropsCopyWith(_AppSettingProps value, $Res Function(_AppSettingProps) _then) = __$AppSettingPropsCopyWithImpl;
+ @override @useResult
+ $Res call({
+- String? locale,@JsonKey(fromJson: dashboardWidgetsFromJson) List<DashboardWidget> dashboardWidgets,@JsonKey(readValue: _readDashboardWidgetsChosen) bool dashboardWidgetsChosen, bool onlyStatisticsProxy, bool showNotificationStopAction, bool autoLaunch, bool silentLaunch, bool autoRun, bool openLogs, bool closeConnections, RequestFeed requestFeed, String testUrl, int delayTestTimeout, String portalSortRules, String portalSortXray, Map<String, String> portalSelectionRules, String portalSelectionXray,@JsonKey(readValue: _readTabAnimation) TabAnimation tabAnimation, bool floatingNavigationBar, bool autoCheckUpdate, String? hiddenUpdate,@JsonKey(readValue: _readSidebarExpanded) bool sidebarExpanded, int acceptedDisclaimerVersion, bool minimizeOnExit, bool menuBarMode, bool hidden, bool developerMode, RestoreStrategy restoreStrategy, bool showTrayTitle, bool monochromeTrayIcon,@JsonKey(includeFromJson: false, includeToJson: false) bool checkCertificate, List<Filter> filters, bool hideIp, bool vibration, bool editorLineWrap, EditorFontSize editorFontSize, List<String> serviceOrder, List<String> disabledServices, Map<String, Map<String, double>> tableColumnWidths, Map<String, int> subscriptionNotices, Set<String> ownedSettings, Set<String> panelSetSettings, String? appliedHeadersUpdate
++ String? locale,@JsonKey(fromJson: dashboardWidgetsFromJson) List<DashboardWidget> dashboardWidgets,@JsonKey(readValue: _readDashboardWidgetsChosen) bool dashboardWidgetsChosen, bool onlyStatisticsProxy, bool showNotificationStopAction, bool autoLaunch, bool silentLaunch, bool autoRun, bool openLogs, bool closeConnections, RequestFeed requestFeed, String testUrl, int delayTestTimeout, String portalSortRules, String portalSortXray, Map<String, String> portalXrayPicks, Map<String, Map<String, String>> portalRulesPicks, Map<String, String> portalSelectionRules, String portalSelectionXray,@JsonKey(readValue: _readTabAnimation) TabAnimation tabAnimation, bool floatingNavigationBar, bool autoCheckUpdate, String? hiddenUpdate,@JsonKey(readValue: _readSidebarExpanded) bool sidebarExpanded, int acceptedDisclaimerVersion, bool minimizeOnExit, bool menuBarMode, bool hidden, bool developerMode, RestoreStrategy restoreStrategy, bool showTrayTitle, bool monochromeTrayIcon,@JsonKey(includeFromJson: false, includeToJson: false) bool checkCertificate, List<Filter> filters, bool hideIp, bool vibration, bool editorLineWrap, EditorFontSize editorFontSize, List<String> serviceOrder, List<String> disabledServices, Map<String, Map<String, double>> tableColumnWidths, Map<String, int> subscriptionNotices, Set<String> ownedSettings, Set<String> panelSetSettings, String? appliedHeadersUpdate
+ });
+ 
+ 
+@@ -734,7 +768,7 @@ class __$AppSettingPropsCopyWithImpl<$Res>
+ 
+ /// Create a copy of AppSettingProps
+ /// with the given fields replaced by the non-null parameter values.
+-@override @pragma('vm:prefer-inline') $Res call({Object? locale = freezed,Object? dashboardWidgets = null,Object? dashboardWidgetsChosen = null,Object? onlyStatisticsProxy = null,Object? showNotificationStopAction = null,Object? autoLaunch = null,Object? silentLaunch = null,Object? autoRun = null,Object? openLogs = null,Object? closeConnections = null,Object? requestFeed = null,Object? testUrl = null,Object? delayTestTimeout = null,Object? portalSortRules = null,Object? portalSortXray = null,Object? portalSelectionRules = null,Object? portalSelectionXray = null,Object? tabAnimation = null,Object? floatingNavigationBar = null,Object? autoCheckUpdate = null,Object? hiddenUpdate = freezed,Object? sidebarExpanded = null,Object? acceptedDisclaimerVersion = null,Object? minimizeOnExit = null,Object? menuBarMode = null,Object? hidden = null,Object? developerMode = null,Object? restoreStrategy = null,Object? showTrayTitle = null,Object? monochromeTrayIcon = null,Object? checkCertificate = null,Object? filters = null,Object? hideIp = null,Object? vibration = null,Object? editorLineWrap = null,Object? editorFontSize = null,Object? serviceOrder = null,Object? disabledServices = null,Object? tableColumnWidths = null,Object? subscriptionNotices = null,Object? ownedSettings = null,Object? panelSetSettings = null,Object? appliedHeadersUpdate = freezed,}) {
++@override @pragma('vm:prefer-inline') $Res call({Object? locale = freezed,Object? dashboardWidgets = null,Object? dashboardWidgetsChosen = null,Object? onlyStatisticsProxy = null,Object? showNotificationStopAction = null,Object? autoLaunch = null,Object? silentLaunch = null,Object? autoRun = null,Object? openLogs = null,Object? closeConnections = null,Object? requestFeed = null,Object? testUrl = null,Object? delayTestTimeout = null,Object? portalSortRules = null,Object? portalSortXray = null,Object? portalXrayPicks = null,Object? portalRulesPicks = null,Object? portalSelectionRules = null,Object? portalSelectionXray = null,Object? tabAnimation = null,Object? floatingNavigationBar = null,Object? autoCheckUpdate = null,Object? hiddenUpdate = freezed,Object? sidebarExpanded = null,Object? acceptedDisclaimerVersion = null,Object? minimizeOnExit = null,Object? menuBarMode = null,Object? hidden = null,Object? developerMode = null,Object? restoreStrategy = null,Object? showTrayTitle = null,Object? monochromeTrayIcon = null,Object? checkCertificate = null,Object? filters = null,Object? hideIp = null,Object? vibration = null,Object? editorLineWrap = null,Object? editorFontSize = null,Object? serviceOrder = null,Object? disabledServices = null,Object? tableColumnWidths = null,Object? subscriptionNotices = null,Object? ownedSettings = null,Object? panelSetSettings = null,Object? appliedHeadersUpdate = freezed,}) {
+   return _then(_AppSettingProps(
+ locale: freezed == locale ? _self.locale : locale // ignore: cast_nullable_to_non_nullable
+ as String?,dashboardWidgets: null == dashboardWidgets ? _self._dashboardWidgets : dashboardWidgets // ignore: cast_nullable_to_non_nullable
+@@ -751,7 +785,9 @@ as RequestFeed,testUrl: null == testUrl ? _self.testUrl : testUrl // ignore: cas
+ as String,delayTestTimeout: null == delayTestTimeout ? _self.delayTestTimeout : delayTestTimeout // ignore: cast_nullable_to_non_nullable
+ as int,portalSortRules: null == portalSortRules ? _self.portalSortRules : portalSortRules // ignore: cast_nullable_to_non_nullable
+ as String,portalSortXray: null == portalSortXray ? _self.portalSortXray : portalSortXray // ignore: cast_nullable_to_non_nullable
+-as String,portalSelectionRules: null == portalSelectionRules ? _self._portalSelectionRules : portalSelectionRules // ignore: cast_nullable_to_non_nullable
++as String,portalXrayPicks: null == portalXrayPicks ? _self._portalXrayPicks : portalXrayPicks // ignore: cast_nullable_to_non_nullable
++as Map<String, String>,portalRulesPicks: null == portalRulesPicks ? _self._portalRulesPicks : portalRulesPicks // ignore: cast_nullable_to_non_nullable
++as Map<String, Map<String, String>>,portalSelectionRules: null == portalSelectionRules ? _self._portalSelectionRules : portalSelectionRules // ignore: cast_nullable_to_non_nullable
+ as Map<String, String>,portalSelectionXray: null == portalSelectionXray ? _self.portalSelectionXray : portalSelectionXray // ignore: cast_nullable_to_non_nullable
+ as String,tabAnimation: null == tabAnimation ? _self.tabAnimation : tabAnimation // ignore: cast_nullable_to_non_nullable
+ as TabAnimation,floatingNavigationBar: null == floatingNavigationBar ? _self.floatingNavigationBar : floatingNavigationBar // ignore: cast_nullable_to_non_nullable
+diff --git a/lib/models/generated/config.g.dart b/lib/models/generated/config.g.dart
+index b0b77e36..a42826bf 100644
+--- a/lib/models/generated/config.g.dart
++++ b/lib/models/generated/config.g.dart
+@@ -40,6 +40,16 @@ _AppSettingProps _$AppSettingPropsFromJson(
+       (json['delayTestTimeout'] as num?)?.toInt() ?? defaultDelayTestTimeout,
+   portalSortRules: json['portalSortRules'] as String? ?? '',
+   portalSortXray: json['portalSortXray'] as String? ?? '',
++  portalXrayPicks:
++      (json['portalXrayPicks'] as Map<String, dynamic>?)?.map(
++        (k, e) => MapEntry(k, e as String),
++      ) ??
++      const {},
++  portalRulesPicks:
++      (json['portalRulesPicks'] as Map<String, dynamic>?)?.map(
++        (k, e) => MapEntry(k, Map<String, String>.from(e as Map)),
++      ) ??
++      const {},
+   portalSelectionRules:
+       (json['portalSelectionRules'] as Map<String, dynamic>?)?.map(
+         (k, e) => MapEntry(k, e as String),
+@@ -136,6 +146,8 @@ Map<String, dynamic> _$AppSettingPropsToJson(_AppSettingProps instance) =>
+       'delayTestTimeout': instance.delayTestTimeout,
+       'portalSortRules': instance.portalSortRules,
+       'portalSortXray': instance.portalSortXray,
++      'portalXrayPicks': instance.portalXrayPicks,
++      'portalRulesPicks': instance.portalRulesPicks,
+       'portalSelectionRules': instance.portalSelectionRules,
+       'portalSelectionXray': instance.portalSelectionXray,
+       'tabAnimation': _$TabAnimationEnumMap[instance.tabAnimation]!,
+diff --git a/lib/models/models.dart b/lib/models/models.dart
+index 4e5b00fb..c01844a5 100644
+--- a/lib/models/models.dart
++++ b/lib/models/models.dart
+@@ -8,6 +8,7 @@ export 'ip_quality.dart';
+ export 'profile.dart';
+ export 'managed_settings.dart';
+ export 'profile_settings.dart';
++export 'portal_selection.dart';
+ export 'provider_headers.dart';
+ export 'references.dart';
+ export 'state.dart';
+diff --git a/lib/models/portal_selection.dart b/lib/models/portal_selection.dart
+new file mode 100644
+index 00000000..845a9808
+--- /dev/null
++++ b/lib/models/portal_selection.dart
+@@ -0,0 +1,82 @@
++import 'config.dart';
++
++/// The picks the portal keeps, in one place: they are read and written from the setup action
++/// and from the dashboard, and both must agree on what "the pick for this profile" means.
++///
++/// A name belongs to the subscription it was delivered in. The two modes keep their own
++/// pick, and so does every profile: switching profiles, or switching to a subscription that
++/// names its servers differently, must never move the highlight onto a name that is not in
++/// the list.
++///
++/// The pre-per-profile fields ([AppSettingProps.portalSelectionXray] and
++/// [AppSettingProps.portalSelectionRules]) are read only while no profile has been picked in
++/// the new shape. The first commit writes the new shape and clears them, so an upgrade keeps
++/// the node it was running and a new profile starts from the panel's first server instead of
++/// borrowing another subscription's pick.
++
++/// Keys are strings because that is what JSON object keys are; a profile id is stable.
++String portalProfileKey(int? profileId) => '${profileId ?? 0}';
++
++/// The Xray node the child of [profileId] was last started on, or ''.
++String portalXrayPickFor(AppSettingProps settings, int? profileId) {
++  final picks = settings.portalXrayPicks;
++  final stored = picks[portalProfileKey(profileId)];
++  if (stored != null) return stored;
++  // Nothing has been picked in the new shape yet: the legacy name is the one this profile
++  // was running when the app was updated.
++  if (picks.isEmpty) return settings.portalSelectionXray;
++  return '';
++}
++
++/// [settings] with the child's node written for [profileId], and the legacy name retired.
++AppSettingProps withPortalXrayPick(
++  AppSettingProps settings,
++  int? profileId,
++  String name,
++) =>
++    settings.copyWith(
++      portalXrayPicks: {
++        ...settings.portalXrayPicks,
++        portalProfileKey(profileId): name,
++      },
++      portalSelectionXray: '',
++    );
++
++/// The engine server picked for one filter of [profileId], or ''.
++String portalRulePickFor(
++  AppSettingProps settings,
++  int? profileId,
++  String group,
++) {
++  final byFilter = settings.portalRulesPicks[portalProfileKey(profileId)];
++  if (byFilter != null) return byFilter[group] ?? '';
++  if (settings.portalRulesPicks.isEmpty) {
++    return settings.portalSelectionRules[group] ?? '';
++  }
++  return '';
++}
++
++/// Every filter pick of [profileId], for a list that wants to read them all.
++Map<String, String> portalRulePicksFor(AppSettingProps settings, int? profileId) {
++  final byFilter = settings.portalRulesPicks[portalProfileKey(profileId)];
++  if (byFilter != null) return byFilter;
++  if (settings.portalRulesPicks.isEmpty) return settings.portalSelectionRules;
++  return const {};
++}
++
++/// [settings] with one filter's pick written for [profileId], and the legacy map retired.
++AppSettingProps withPortalRulePick(
++  AppSettingProps settings,
++  int? profileId,
++  String group,
++  String proxy,
++) {
++  final key = portalProfileKey(profileId);
++  return settings.copyWith(
++    portalRulesPicks: {
++      ...settings.portalRulesPicks,
++      key: {...?settings.portalRulesPicks[key], group: proxy},
++    },
++    portalSelectionRules: const {},
++  );
++}
+diff --git a/lib/providers/actions/setup.dart b/lib/providers/actions/setup.dart
+index 31a79bce..4d6525ff 100644
+--- a/lib/providers/actions/setup.dart
++++ b/lib/providers/actions/setup.dart
+@@ -356,6 +356,8 @@ class SetupAction extends _$SetupAction {
+   ///
+   /// The answer is the child's, not a state the app infers: `ok` only after the plugin saw
+   /// the tunnel's reader come up, and the reason is the child's own last line otherwise.
++  /// The pick is written only when the child answered, so a stale name never outlives the
++  /// node that actually ran.
+   Future<PortalCoreResult> _startPortalChild() async {
+     final profile = ref.read(currentProfileProvider);
+     if (profile == null) {
+@@ -367,11 +369,12 @@ class SetupAction extends _$SetupAction {
+         'this subscription has no engine format',
+       );
+     }
+-    // The stored pick is the node the child ran last, which is the one the owner chose;
+-    // an empty or stale name falls back to the panel's first server.
++    // The stored pick is the node the child ran last *for this profile*, which is the one
++    // the owner chose; an empty or stale name falls back to the panel's first server.
++    final settings = ref.read(appSettingProvider);
+     final server = xrayServerFor(
+       parseXraySubscription(body),
+-      ref.read(appSettingProvider).portalSelectionXray,
++      portalXrayPickFor(settings, profile.id),
+     );
+     if (server == null) {
+       return const PortalCoreResult.unavailable(
+@@ -380,6 +383,9 @@ class SetupAction extends _$SetupAction {
+     }
+     final started = await XrayCore.instance.start(jsonEncode(server.config));
+     if (started.ok) {
++      ref
++          .read(appSettingProvider.notifier)
++          .update((state) => withPortalXrayPick(state, profile.id, server.name));
+       commonPrint.log('portal child is reading the tunnel on ${server.name}');
+     }
+     return started;
+diff --git a/lib/providers/generated/action.g.dart b/lib/providers/generated/action.g.dart
+index 50d62894..446ade47 100644
+--- a/lib/providers/generated/action.g.dart
++++ b/lib/providers/generated/action.g.dart
+@@ -270,7 +270,7 @@ final class SetupActionProvider extends $NotifierProvider<SetupAction, void> {
+   }
+ }
+ 
+-String _$setupActionHash() => r'b160a720a0e486b3635c702aa7cc19d2578bb75f';
++String _$setupActionHash() => r'cb6424eba7cbafe07b2f7a2462ae0f2bb1f60787';
+ 
+ abstract class _$SetupAction extends $Notifier<void> {
+   void build();
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index a41ce24f..d4980523 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -73,41 +73,61 @@ class PortalSortNotifier extends Notifier<PortalSort> {
+ final portalSortProvider =
+     NotifierProvider<PortalSortNotifier, PortalSort>(PortalSortNotifier.new);
+ 
+-/// The server picked in each mode, kept apart.
++/// The server picked in each mode, kept apart and keyed by profile.
+ ///
+ /// The two lists are different builds of one subscription: the rules list names the
+ /// engine's servers, the simple portal names the child's, and a name picked in one means
+ /// nothing in the other. One stored pick for both would move the highlight onto a server
+-/// that is not in the list, so each mode remembers its own — the rules list per filter,
+-/// the simple portal as the single node its child runs.
++/// that is not in the list — and one stored pick for every profile moved it onto a server
++/// that is not in *this* subscription at all.
++///
++/// The pick of the child's node is a commit, not a hope: it is written only after the child
++/// acknowledged the tunnel, so what this list highlights is always what the child runs.
+ class PortalSelectionNotifier
+     extends Notifier<({Map<String, String> rules, String xray})> {
+   @override
+   ({Map<String, String> rules, String xray}) build() {
+     final settings = ref.watch(appSettingProvider);
++    final profileId = ref.watch(currentProfileIdProvider);
+     return (
+-      rules: settings.portalSelectionRules,
+-      xray: settings.portalSelectionXray,
++      rules: portalRulePicksFor(settings, profileId),
++      xray: portalXrayPickFor(settings, profileId),
+     );
+   }
+ 
+   /// A filter's pick in the rules list, written beside the engine's own selection: the
+   /// engine answers for itself, and this is what the list falls back to when it does not.
+   void pickRule(String group, String proxy) {
+-    final rules = {...state.rules, group: proxy};
+-    state = (rules: rules, xray: state.xray);
+-    ref
+-        .read(appSettingProvider.notifier)
+-        .update((settings) => settings.copyWith(portalSelectionRules: rules));
++    final profileId = ref.read(currentProfileIdProvider);
++    final settings = withPortalRulePick(
++      ref.read(appSettingProvider),
++      profileId,
++      group,
++      proxy,
++    );
++    state = (
++      rules: portalRulePicksFor(settings, profileId),
++      xray: portalXrayPickFor(settings, profileId),
++    );
++    ref.read(appSettingProvider.notifier).update((_) => settings);
+   }
+ 
+-  /// The Xray node the child runs, which is the simple portal's only selection.
+-  void pickXray(String proxy) {
+-    if (state.xray == proxy) return;
+-    state = (rules: state.rules, xray: proxy);
+-    ref
+-        .read(appSettingProvider.notifier)
+-        .update((settings) => settings.copyWith(portalSelectionXray: proxy));
++  /// The Xray node the child runs, written only once the child has taken the tunnel.
++  void pickXray(String proxy, {int? profileId}) {
++    final profile = profileId ?? ref.read(currentProfileIdProvider);
++    if (portalXrayPickFor(ref.read(appSettingProvider), profile) == proxy) {
++      return;
++    }
++    final settings = withPortalXrayPick(
++      ref.read(appSettingProvider),
++      profile,
++      proxy,
++    );
++    state = (
++      rules: portalRulePicksFor(settings, profile),
++      xray: portalXrayPickFor(settings, profile),
++    );
++    ref.read(appSettingProvider.notifier).update((_) => settings);
+   }
+ }
+ 
+@@ -795,11 +815,35 @@ Future<PortalCoreResult> _restartChildOn(XrayServerConfig server) async {
+ /// Starts the child for a row the owner tapped, and says what happened when it refuses.
+ ///
+ /// The pick is written only after the child answered — a name stored before the start is a
+-/// pick the child never ran, which is what made a refused selection look applied.
++/// pick the child never ran, which is what made a refused selection look applied. A refused
++/// node is not left standing alone either: the node that was confirmed before it is started
++/// again, and the reason is reported either way.
+ Future<void> _startFromList(WidgetRef ref, XrayServerConfig server) async {
++  final profileId = ref.read(currentProfileIdProvider);
++  final previous = ref.read(portalSelectionProvider).xray;
+   final started = await _restartChildOn(server);
+-  if (started.ok) return;
+-  _reportPortalFailure(started.reason);
++  if (started.ok) {
++    ref
++        .read(portalSelectionProvider.notifier)
++        .pickXray(server.name, profileId: profileId);
++    return;
++  }
++  final restored = await _restoreXrayNode(ref, previous);
++  _reportPortalFailure(
++    restored
++        ? started.reason
++        : '${started.reason}; the previous node did not come back either',
++  );
++}
++
++/// Starts the node that was confirmed before a refused one, so the portal keeps carrying.
++Future<bool> _restoreXrayNode(WidgetRef ref, String name) async {
++  if (name.isEmpty) return false;
++  final servers = ref.read(xrayServersProvider).value ?? const <XrayServerConfig>[];
++  final server = xrayServerFor(servers, name);
++  if (server == null) return false;
++  final restored = await _restartChildOn(server);
++  return restored.ok;
+ }
+ 
+ /// The failure as a sentence, in the app's own log and on the screen.

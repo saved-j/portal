@@ -1,0 +1,573 @@
+portal 1.02a/14: one README, three languages
+
+README_EN.md and README_ZH.md are removed: their text is folded into the language sections of
+README.md, so a reader chooses a section instead of a file, and no locale can drift from the
+others without the diff showing it.
+
+diff --git a/README.md b/README.md
+index dd25e888..418843b6 100644
+--- a/README.md
++++ b/README.md
+@@ -1,157 +1,104 @@
+-<div>
++<div align="center">
+ 
+-[**English**](README_EN.md) · [**中文**](README_ZH.md)
++# Portal
+ 
+-</div>
+-
+-## FlClashX
+-
+-[![Downloads](https://img.shields.io/github/downloads/pluralplay/FlClashX/total?style=flat-square&logo=github)](https://github.com/pluralplay/FlClashX/releases/)
+-[![Last Version](https://img.shields.io/github/release/pluralplay/FlClashX/all.svg?style=flat-square)](https://github.com/pluralplay/FlClashX/releases/)
+-[![License](https://img.shields.io/github/license/pluralplay/FlClashX?style=flat-square)](LICENSE)
+-
+-[![Channel](https://img.shields.io/badge/Telegram-Chat-blue?style=flat-square&logo=telegram)](https://t.me/FlClashX)
+-
+-Форк многоплатформенного прокси-клиента [FlClash](https://github.com/chen08209/FlClash) на основе Mihomo, простого и удобного в использовании, с открытым исходным кодом и без рекламы. Сделан для VPN-сервисов: подписка управляет видом и настройками приложения через заголовки ответа панели.
+-
+-Десктопный вид:
+-
+-<p style="text-align: center;">
+-    <img alt="desktop" src="snapshots/desktop.gif">
+-</p>
+-
+-Мобильный вид:
+-
+-<p style="text-align: center;">
+-    <img alt="mobile" src="snapshots/mobile.gif">
+-</p>
+-
+-## Возможности
+-
+-В основе FlClash v0.9.2 и ядро mihomo v1.19.34, поэтому всё, что умеет оригинал, работает и здесь: профили по ссылке и из файла, встроенный редактор, скрипты переопределения, свои правила, прокси и группы, просмотр соединений, запросов, DNS и логов, резервные копии через WebDAV или файл, плитка быстрых настроек и Android TV, трей и горячие клавиши на десктопе. Сверху форк добавляет:
+-
+-### Для провайдера
+-
+-🧾 **Заголовки подписки `flclashx-*`:** вид приложения и вкладки прокси, набор и порядок карточек дашборда, фон, переключатели приложения, запасные адреса панели, название и логотип сервиса, кнопки продления и докупки трафика. Подробно на [flclashx.app](https://flclashx.app/#headers).
+-
+-🔒 **Настройки из подписки закреплены за провайдером:** ключи конфига (порты, режим, TUN, стек, MTU, маршруты, geo и другие) и заголовки применяются при каждом обновлении подписки и при переключении на профиль. Большинство из них пользователь может забрать себе, а потом вернуть настройку провайдера; списки приложений Android и набор карточек дашборда всегда следуют подписке.
+-
+-🪪 **HWID:** приложение отправляет `x-hwid`, `x-device-os`, `x-ver-os` и `x-device-model` (Remnawave и совместимые панели) и показывает диалоги, когда превышен лимит устройств или HWID не поддерживается.
+-
+-🧭 **Расширенный дашборд:** логотип и название сервиса в одну строку, тариф, выбранный сервер с флагом и IP, объявление, кнопки продления подписки и докупки трафика.
+-
+-⏰ **Уведомления об окончании подписки** за 3, 2, 1 день, в день окончания и после истечения, на всех платформах. Тап ведёт на страницу продления.
+-
+-🌐 **Из YAML подписки:** `flclashx-override` у группы GLOBAL, подписи серверов и групп (`serverDescription`, `groupDescription`), внешний контроллер и Zashboard.
++**Клиент подписок и сетей порталов, построенный на FlClashX.**
++**A subscription and portal-network client, built on FlClashX.**
++**基于 FlClashX 的订阅与门户网络客户端。**
+ 
+-### Android
+-
+-📱 **120 Гц:** пока приложение на экране, дисплей работает на самой высокой частоте (90/120/144 Гц); в фоне частота возвращается системе.
+-
+-🔔 **Уведомление VPN** показывает только название сервиса из подписки (без него имя профиля) и, если включено в «Настройки → Общие», кнопку остановки.
+-
+-🎯 **Контроль доступа:** «Умный выбор» отправляет установленные российские приложения мимо VPN, а остальные в VPN. `tun.include-package` и `tun.exclude-package` из профиля действуют всегда и стоят выше ручного выбора приложений.
+-
+-🔗 **Ссылки `flclashx://install-config`** добавляют профиль сразу, без подтверждения, и приложение сообщает об этом.
+-
+-📺 **Android TV:** кнопка «Добавить профиль из буфера», выбор профиля, передача профиля с телефона по QR-коду.
+-
+-### Десктоп
+-
+-💻 **macOS:** режим «Прикрепить к строке меню»: окно открывается по клику на иконку в строке меню, значка в Dock нет.
+-
+-🇷🇺🇨🇳 **Windows:** русский и китайский языки в установщике.
+-
+-### Интерфейс
+-
+-🪟 **Стекло** на карточках дашборда, шторках, карточках и группах настроек; степень задаётся в настройках темы или ключом `app.glass` в заголовке `flclashx-view`.
+-
+-📊 **Дашборд:** карточку статуса и объявление можно переставлять; среди проверок доступности сервисов есть Госуслуги, Сбербанк, VK, Яндекс и Кинопоиск; качество IP текущего выхода.
+-
+-🧭 **Вкладка прокси:** поиск, режим, проверка задержки и сворачивание групп собраны в одну группу кнопок, остальное в меню «Ещё».
+-
+-🛠️ **Настройки по умолчанию:** поиск процессов включён, TUN включён, системный прокси выключен, прокси показаны списком, китайских пресетов нет.
+-
+-🗑️ **«Сброс приложения»** в общих настройках удаляет все профили, настройки и рабочую папку и закрывает приложение. Логи можно писать в файл.
+-
+-🌍 **Локализация:** переработанный русский язык, всего 7 языков.
+-
+-## Заголовки и параметры подписки
+-
+-Какие HTTP-заголовки ответа панели и YAML-параметры понимает приложение, с примерами и шаблоном для панели, описано на [flclashx.app](https://flclashx.app/#headers).
++</div>
+ 
+-Настройку, которую задаёт подписка, приложение показывает приглушённой. Пользователь может забрать её себе, и тогда обновления подписки и смена профиля её не трогают. Вернуть настройку провайдера можно правым кликом или долгим нажатием по строке, а все сразу пунктом «Вернуть настройки провайдера» в «Общие → Логи и диагностика».
++---
+ 
+-## Использование
++## Русский
+ 
+-**Импорт профиля по ссылке.** Ссылка такого вида добавляет подписку в FlClashX сразу, без подтверждения. Схемы `clash://`, `clashmeta://`, `flclash://` и `clashx://` работают так же.
++Portal — мультиплатформенный клиент для подписок и сетей порталов. Это форк
++[FlClashX](https://github.com/pluralplay/FlClashX), в котором работают два ядра:
++**Prizrak** (сборка mihomo) для маршрутизации по правилам и **Xray** для простого портала.
++Один список подписок питает оба ядра, а какое из них несёт трафик, решает приложение.
+ 
+-```text
+-flclashx://install-config?url=<ссылка на подписку в URL-кодировке>
+-```
++- Платформы: Android, macOS, Windows, Linux
++- Без рекламы, без телеметрии, без аккаунтов
++- Лицензия: GPL-3.0
+ 
+-**Автоматизация на Android.** Tasker, MacroDroid и похожие приложения могут запускать, останавливать и переключать VPN, открывая activity с одним из действий:
++### Сборка
+ 
+-```text
+-com.follow.clashx.action.START
+-com.follow.clashx.action.STOP
+-com.follow.clashx.action.TOGGLE
+-```
++См. [BUILD.md](BUILD.md): там закреплены версии Flutter, JDK, Gradle, Android SDK/NDK, Go и
++Rust, приведены команды для APK, deb, rpm, AppImage, Windows и macOS и сказано, что в
++репозиторий не попадает (ключ подписи и бинарник Xray — он скачивается по закреплённому
++SHA-256).
+ 
+-С компьютера то же самое через adb:
++### Структура
+ 
+-```bash
+-adb shell am start -a com.follow.clashx.action.TOGGLE
+-```
++- `lib/` — приложение на Flutter (Dart)
++- `core/` — обвязка Go-ядра
++- `services/helper/` — привилегированный хелпер для TUN на десктопе (Rust)
++- `plugins/` — локальные Flutter-пакеты (окно, трей, прокси, rust_api, wifi_ssid)
++- `android/`, `macos/`, `linux/`, `windows/` — платформенные оболочки
++- `pipeline/1.01a/` — одна замороженная серия патчей против апстрима FlClashX;
++  `./apply.sh 1.01a verify` доказывает деревом, что она воспроизводит продукт
++- `pipeline/1.02a/` — следующая серия: по одному патчу на тему, каждый применяется к
++  замороженному дереву отдельно
+ 
+-**Иконка в трее на Linux.** Пакет `.deb` ставит зависимости сам. Для AppImage и `.rpm` установите AyatanaAppIndicator:
++## English
+ 
+-```bash
+-sudo apt-get install libayatana-appindicator3-1   # Debian и Ubuntu
+-sudo dnf install libayatana-appindicator-gtk3     # Fedora
+-```
++Portal is a multi-platform client for subscriptions and portal networks. It is a fork of
++[FlClashX](https://github.com/pluralplay/FlClashX) that runs two cores: **Prizrak** (a mihomo
++build) for rule-based routing, and **Xray** for the simple portal. One subscription list
++feeds both; the app decides which core carries the traffic.
+ 
+-**Десктоп без пользователя.** Ядро запускается только после принятия дисклеймера. Где нажать на него некому, например в контейнере, задайте переменную окружения `FLCLASH_ACCEPT_DISCLAIMER=1`, и он будет принят при первом запуске.
++- Platforms: Android, macOS, Windows, Linux
++- No ads, no telemetry, no accounts
++- GPL-3.0
+ 
+-## Скачать
++### Build
+ 
+-Сборки лежат в [GitHub Releases](https://github.com/pluralplay/FlClashX/releases).
++See [BUILD.md](BUILD.md): it pins Flutter, JDK, Gradle, the Android SDK/NDK, Go and Rust,
++lists the commands for APK, deb, rpm, AppImage, Windows and macOS, and says what never enters
++the repository — the signing keystore, and the Xray binary, which is downloaded and checked
++against a pinned SHA-256.
+ 
+-| Платформа | Пакеты |
+-| --- | --- |
+-| Android | APK для `arm64-v8a`, `armeabi-v7a` и `x86_64`; большинству телефонов нужен `arm64-v8a` |
+-| Windows 10 и новее | Установщик (`.exe`) или портативный `.zip`, для x64 и ARM64 |
+-| macOS 12 и новее | DMG для Apple Silicon и Intel |
+-| Linux | `.deb`, `.rpm` и AppImage, для x64 и ARM64; в AUR пакеты `flclashx-bin` и `flclashx-git` |
++### Layout
+ 
+-<a href="https://github.com/pluralplay/FlClashX/releases"><img alt="Get it on GitHub" src="snapshots/get-it-on-github.svg" width="200px"/></a>
++- `lib/` — the Flutter application (Dart)
++- `core/` — the Go core glue
++- `services/helper/` — privileged helper for TUN on desktop (Rust)
++- `plugins/` — local Flutter packages (window, tray, proxy, rust_api, wifi_ssid)
++- `android/`, `macos/`, `linux/`, `windows/` — platform shells
++- `pipeline/1.01a/` — a single frozen patch series against upstream FlClashX;
++  `./apply.sh 1.01a verify` proves by tree that it reproduces the product
++- `pipeline/1.02a/` — the next series: one topic per patch, each applying to the frozen tree
++  on its own
+ 
+-## Сборка из исходников
++## 中文
+ 
+-Нужны [Flutter](https://docs.flutter.dev/get-started/install) 3.47 (релизы собираются на 3.47.6), [Go](https://go.dev/dl/) 1.27 и [Rust](https://rustup.rs/), установленный через rustup. Каждая платформа собирается на своей системе, кроме Android, который собирается где угодно.
++Portal 是一个多平台订阅与门户网络客户端，基于
++[FlClashX](https://github.com/pluralplay/FlClashX) 分叉，内置两个内核：**Prizrak**（mihomo
++构建）负责规则路由，**Xray** 负责简单门户。同一份订阅列表同时供给两个内核，由应用决定谁来
++承载流量。
+ 
+-```bash
+-git clone https://github.com/pluralplay/FlClashX.git
+-cd FlClashX
+-flutter pub get
+-dart setup.dart android   # или windows, macos, linux
+-```
++- 平台：Android、macOS、Windows、Linux
++- 无广告、无遥测、无账号
++- 许可证：GPL-3.0
+ 
+-Пакеты появятся в `dist/`. Ядро на Go и библиотеки на Rust собираются вместе с Flutter-сборкой.
++### 构建
+ 
+-| Платформа | Дополнительно |
+-| --- | --- |
+-| Android | Android SDK с NDK. `--arch arm64` собирает один ABI |
+-| Windows | [Inno Setup](https://jrsoftware.org/isinfo.php) 6 для установщика |
+-| macOS | Xcode и Node.js; скрипт ставит `create-dmg` через npm |
+-| Linux | Debian или Ubuntu; скрипт ставит пакеты для сборки через apt и скачивает `appimagetool` |
++见 [BUILD.md](BUILD.md)：其中固定了 Flutter、JDK、Gradle、Android SDK/NDK、Go 与 Rust 的
++版本，列出了 APK、deb、rpm、AppImage、Windows 与 macOS 的构建命令，并说明哪些内容不进
++仓库——签名密钥，以及按固定 SHA-256 校验后下载的 Xray 二进制。
+ 
+-Остальные параметры, например `--targets` для сборки только части форматов: `dart setup.dart --help`.
++### 目录
+ 
+-## Star
++- `lib/` — Flutter 应用（Dart）
++- `core/` — Go 内核封装
++- `services/helper/` — 桌面端 TUN 的特权助手（Rust）
++- `plugins/` — 本地 Flutter 包（window、tray、proxy、rust_api、wifi_ssid）
++- `android/`、`macos/`、`linux/`、`windows/` — 平台外壳
++- `pipeline/1.01a/` — 针对上游 FlClashX 的一整套冻结补丁；`./apply.sh 1.01a verify`
++  用目录树证明它能复现产品
++- `pipeline/1.02a/` — 后续系列：每个补丁一个主题，均可单独应用到冻结的目录树
+ 
+-<p style="text-align: center;">
+-Самый простой способ поддержать разработчиков — нажать на звездочку (⭐) в верхней части страницы.<br>
+-Если хотите поддержать копеечкой, то можно <a href="https://t.me/tribute/app?startapp=dtyh">сделать это тут.</a></p>
++## License
+ 
+-**TON USDT:** `UQDSfrJ_k1BdsknhdR_zj4T3Is3OdMylD8PnDJ9mxO35i-TE`
++GPL-3.0. Portal is a fork of [FlClashX](https://github.com/pluralplay/FlClashX), which is a
++fork of [FlClash](https://github.com/chen08209/FlClash). See [LICENSE](LICENSE).
+diff --git a/README_EN.md b/README_EN.md
+deleted file mode 100644
+index a95e6c63..00000000
+--- a/README_EN.md
++++ /dev/null
+@@ -1,158 +0,0 @@
+-<div>
+-
+-[**Russian**](README.md) · [**中文**](README_ZH.md)
+-
+-</div>
+-
+-## FlClashX
+-
+-[![Downloads](https://img.shields.io/github/downloads/pluralplay/FlClashX/total?style=flat-square&logo=github)](https://github.com/pluralplay/FlClashX/releases/)
+-[![Last Version](https://img.shields.io/github/release/pluralplay/FlClashX/all.svg?style=flat-square)](https://github.com/pluralplay/FlClashX/releases/)
+-[![License](https://img.shields.io/github/license/pluralplay/FlClashX?style=flat-square)](LICENSE)
+-
+-[![Channel](https://img.shields.io/badge/Telegram-Chat-blue?style=flat-square&logo=telegram)](https://t.me/FlClashX)
+-
+-A fork of the multi-platform proxy client [FlClash](https://github.com/chen08209/FlClash) based on Mihomo, simple and easy to use, open source and ad-free. Built for VPN services: the subscription drives the app's look and settings through the headers of the panel's response.
+-
+-on Desktop:
+-
+-<p style="text-align: center;">
+-    <img alt="desktop" src="snapshots/desktop.gif">
+-</p>
+-
+-on Mobile:
+-
+-<p style="text-align: center;">
+-    <img alt="mobile" src="snapshots/mobile.gif">
+-</p>
+-
+-## Features
+-
+-Built on FlClash v0.9.2 and the mihomo v1.19.34 core, so everything the original does works here too: profiles from a link or a file, a built-in editor, override scripts, custom rules, proxies and groups, live views of connections, requests, DNS queries and logs, backup through WebDAV or a file, a Quick Settings tile and Android TV support, a tray menu and global hotkeys on the desktop. On top of that the fork adds:
+-
+-### For providers
+-
+-🧾 **`flclashx-*` subscription headers:** the look of the app and the proxies tab, the cards of the dashboard and their order, a background, app switches, fallback panel addresses, the service name and logo, renew and buy-traffic buttons. See [flclashx.app](https://flclashx.app/#headers).
+-
+-🔒 **Subscription settings belong to the provider:** config keys (ports, mode, TUN, stack, MTU, routes, geo and more) and headers are applied on every subscription update and when switching to the profile. Most of them the user can take over and hand back to the provider; the Android app lists and the dashboard card list always follow the subscription.
+-
+-🪪 **HWID:** the app sends `x-hwid`, `x-device-os`, `x-ver-os` and `x-device-model` (Remnawave and compatible panels) and shows dialogs when the device limit is reached or a HWID is not supported.
+-
+-🧭 **Extended dashboard:** the service logo and name on one row, the plan, the selected server with its flag and IP, the announcement, renew and buy-traffic buttons.
+-
+-⏰ **Expiry notifications** 3, 2 and 1 days before, on the day and after the subscription ends, on every platform. Tapping one opens the renewal page.
+-
+-🌐 **From the subscription YAML:** `flclashx-override` on the GLOBAL group, server and group captions (`serverDescription`, `groupDescription`), the external controller and Zashboard.
+-
+-### Android
+-
+-📱 **120 Hz:** while the app is on screen the display runs at its highest rate (90/120/144 Hz); in the background the rate goes back to the system.
+-
+-🔔 **The VPN notification** shows only the service name from the subscription (the profile name without one) and, when turned on in Settings → General, a stop button.
+-
+-🎯 **Access control:** "Smart selection" sends installed Russian apps around the VPN and every other app through it. A profile's `tun.include-package` and `tun.exclude-package` always apply and take precedence over the apps picked by hand.
+-
+-🔗 **`flclashx://install-config` links** add the profile right away, without a confirmation, and the app says so.
+-
+-📺 **Android TV:** an "Add profile from clipboard" button, a profile picker, sending a profile from the phone with a QR code.
+-
+-### Desktop
+-
+-💻 **macOS:** "Pin to menu bar" mode: the window opens from the menu bar icon, with no Dock icon.
+-
+-🇷🇺🇨🇳 **Windows:** Russian and Chinese in the installer.
+-
+-### Interface
+-
+-🪟 **Glass** on dashboard cards, sheets, cards and settings groups; the strength is set in the theme settings or with the `app.glass` key of the `flclashx-view` header.
+-
+-📊 **Dashboard:** the status card and the announcement can be moved; the service checks include Gosuslugi, Sberbank, VK, Yandex and Kinopoisk; IP quality of the current exit.
+-
+-🧭 **Proxies tab:** search, mode, latency test and fold-all sit in one button group, the rest under "More".
+-
+-🛠️ **Defaults:** process lookup on, TUN on, system proxy off, proxies shown as a list, no China presets.
+-
+-🗑️ **"Reset app"** in the general settings deletes every profile, the settings and the working folder and closes the app. Logs can be written to a file.
+-
+-🌍 **Localization:** a reworked Russian translation, seven languages in all.
+-
+-## Subscription headers and parameters
+-
+-The HTTP headers of the panel's response and the YAML parameters the app understands, with examples and a panel template, are described on [flclashx.app](https://flclashx.app/#headers).
+-
+-A setting the subscription sets is shown dimmed. The user can take it over, and then subscription updates and profile switches leave it alone. Right-clicking or long-pressing the row hands it back to the provider, and "Hand settings back to provider" in General → Logs and diagnostics hands back all of them at once.
+-
+-## Usage
+-
+-**Import a profile from a link.** Opening a link in this form adds the subscription to FlClashX right away, without a confirmation. The `clash://`, `clashmeta://`, `flclash://` and `clashx://` schemes work the same way.
+-
+-```text
+-flclashx://install-config?url=<URL-encoded subscription link>
+-```
+-
+-**Automate on Android.** Tasker, MacroDroid and similar apps can start, stop or toggle the VPN by starting an activity with one of these actions:
+-
+-```text
+-com.follow.clashx.action.START
+-com.follow.clashx.action.STOP
+-com.follow.clashx.action.TOGGLE
+-```
+-
+-From a computer, the same works over adb:
+-
+-```bash
+-adb shell am start -a com.follow.clashx.action.TOGGLE
+-```
+-
+-**Linux tray icon.** The `.deb` package installs its own dependencies. With the AppImage or the `.rpm`, install the AyatanaAppIndicator library:
+-
+-```bash
+-sudo apt-get install libayatana-appindicator3-1   # Debian and Ubuntu
+-sudo dnf install libayatana-appindicator-gtk3     # Fedora
+-```
+-
+-**Unattended desktop.** The core starts only after the disclaimer is accepted. Where nobody can click it, such as a container, set `FLCLASH_ACCEPT_DISCLAIMER=1` in the app's environment to accept it on first launch.
+-
+-## Download
+-
+-Builds are on [GitHub Releases](https://github.com/pluralplay/FlClashX/releases).
+-
+-| Platform | Packages |
+-| --- | --- |
+-| Android | APK for `arm64-v8a`, `armeabi-v7a` and `x86_64`; most phones use `arm64-v8a` |
+-| Windows 10 and later | Installer (`.exe`) or portable `.zip`, for x64 and ARM64 |
+-| macOS 12 and later | DMG for Apple Silicon and Intel |
+-| Linux | `.deb`, `.rpm` and AppImage, for x64 and ARM64; `flclashx-bin` and `flclashx-git` on the AUR |
+-
+-<a href="https://github.com/pluralplay/FlClashX/releases"><img alt="Get it on GitHub" src="snapshots/get-it-on-github.svg" width="200px"/></a>
+-
+-## Build from source
+-
+-You need [Flutter](https://docs.flutter.dev/get-started/install) 3.47 (release builds use 3.47.6), [Go](https://go.dev/dl/) 1.27 and [Rust](https://rustup.rs/) installed through rustup. Each platform builds on its own host, except Android, which builds anywhere.
+-
+-```bash
+-git clone https://github.com/pluralplay/FlClashX.git
+-cd FlClashX
+-flutter pub get
+-dart setup.dart android   # or windows, macos, linux
+-```
+-
+-Packages land in `dist/`. The Go core and the Rust libraries are compiled as part of the Flutter build.
+-
+-| Platform | Also needed |
+-| --- | --- |
+-| Android | Android SDK with the NDK. Add `--arch arm64` to build a single ABI |
+-| Windows | [Inno Setup](https://jrsoftware.org/isinfo.php) 6 for the installer |
+-| macOS | Xcode and Node.js; the script installs `create-dmg` through npm |
+-| Linux | Debian or Ubuntu; the script installs the build packages with apt and downloads `appimagetool` |
+-
+-Run `dart setup.dart --help` for the remaining options, such as `--targets` to build only some package formats.
+-
+-## Star
+-
+-<p style="text-align: center;">
+-The easiest way to support the developers is to click the star (⭐) at the top of the page.<br>
+-If you want to support with a small donation, you can <a href="https://t.me/tribute/app?startapp=dtyh">do so here.</a>
+-</p>
+-
+-**TON USDT:** `UQDSfrJ_k1BdsknhdR_zj4T3Is3OdMylD8PnDJ9mxO35i-TE`
+diff --git a/README_ZH.md b/README_ZH.md
+deleted file mode 100644
+index 71059d06..00000000
+--- a/README_ZH.md
++++ /dev/null
+@@ -1,158 +0,0 @@
+-<div>
+-
+-[**Русский**](README.md) · [**English**](README_EN.md)
+-
+-</div>
+-
+-## FlClashX
+-
+-[![Downloads](https://img.shields.io/github/downloads/pluralplay/FlClashX/total?style=flat-square&logo=github)](https://github.com/pluralplay/FlClashX/releases/)
+-[![Last Version](https://img.shields.io/github/release/pluralplay/FlClashX/all.svg?style=flat-square)](https://github.com/pluralplay/FlClashX/releases/)
+-[![License](https://img.shields.io/github/license/pluralplay/FlClashX?style=flat-square)](LICENSE)
+-
+-[![Channel](https://img.shields.io/badge/Telegram-Chat-blue?style=flat-square&logo=telegram)](https://t.me/FlClashX)
+-
+-基于 Mihomo 的多平台代理客户端 [FlClash](https://github.com/chen08209/FlClash) 的分支，简单易用、开源、无广告。为 VPN 服务商而做：订阅通过面板的响应头控制应用的外观和设置。
+-
+-桌面端：
+-
+-<p style="text-align: center;">
+-    <img alt="desktop" src="snapshots/desktop.gif">
+-</p>
+-
+-移动端：
+-
+-<p style="text-align: center;">
+-    <img alt="mobile" src="snapshots/mobile.gif">
+-</p>
+-
+-## 功能
+-
+-基于 FlClash v0.9.2 和 mihomo v1.19.34 内核，原版的全部功能在这里都能用：从链接或文件导入配置、内置编辑器、覆写脚本、自定义规则、代理和策略组、连接/请求/DNS 查询/日志的实时查看、通过 WebDAV 或文件备份、快捷设置磁贴和 Android TV 支持、桌面端的托盘菜单和全局快捷键。在此之上，本分支还增加了：
+-
+-### 面向服务商
+-
+-🧾 **`flclashx-*` 订阅响应头：** 应用和代理页的外观、仪表盘卡片的集合与顺序、背景、应用开关、面板备用地址、服务名称和标志、续费与购买流量按钮。详见 [flclashx.app](https://flclashx.app/#headers)。
+-
+-🔒 **订阅设置的归属固定在服务商：** 配置项（端口、模式、TUN、栈、MTU、路由、geo 等）和响应头会在每次更新订阅以及切换到该配置时应用。其中大部分用户可以自行接管，之后再交还给服务商；Android 的应用列表和仪表盘卡片集合始终跟随订阅。
+-
+-🪪 **HWID：** 应用会发送 `x-hwid`、`x-device-os`、`x-ver-os` 和 `x-device-model`（Remnawave 及兼容面板），并在设备数量超限或 HWID 不受支持时弹出提示。
+-
+-🧭 **增强仪表盘：** 服务标志和名称显示在同一行、套餐、带旗帜和 IP 的当前服务器、公告、续费订阅和购买流量按钮。
+-
+-⏰ **到期提醒** 在到期前 3 天、2 天、1 天、到期当天以及到期之后推送，覆盖所有平台。点击通知会打开续费页面。
+-
+-🌐 **来自订阅 YAML：** GLOBAL 组的 `flclashx-override`、服务器和策略组的说明文字（`serverDescription`、`groupDescription`）、外部控制器和 Zashboard。
+-
+-### Android
+-
+-📱 **120 Hz：** 应用在前台时，屏幕以最高刷新率（90/120/144 Hz）运行；切到后台后把刷新率交还给系统。
+-
+-🔔 **VPN 通知** 只显示订阅中的服务名称（没有则为配置名称），以及在「设置 → 通用」中开启后显示的停止按钮。
+-
+-🎯 **访问控制：** 「智能选择」让已安装的俄罗斯应用绕过 VPN，其他应用则走 VPN。配置中的 `tun.include-package` 和 `tun.exclude-package` 始终生效，并优先于手动选择的应用。
+-
+-🔗 **`flclashx://install-config` 链接** 无需确认即可直接添加配置，应用会给出提示。
+-
+-📺 **Android TV：** 「从剪贴板添加配置」按钮、配置选择器、通过二维码从手机发送配置。
+-
+-### 桌面端
+-
+-💻 **macOS：** 「固定到菜单栏」模式：点击菜单栏图标打开窗口，Dock 中不显示图标。
+-
+-🇷🇺🇨🇳 **Windows：** 安装程序支持俄语和中文。
+-
+-### 界面
+-
+-🪟 **玻璃效果** 用于仪表盘卡片、抽屉、卡片和设置分组；强度可在主题设置中调整，也可通过 `flclashx-view` 响应头中的 `app.glass` 键设置。
+-
+-📊 **仪表盘：** 状态卡片和公告可以调整位置；服务可用性检测包含 Gosuslugi、Sberbank、VK、Yandex 和 Kinopoisk；当前出口的 IP 质量。
+-
+-🧭 **代理页：** 搜索、模式、延迟测试和折叠全部整合为一组按钮，其余放在「更多」菜单中。
+-
+-🛠️ **默认设置：** 进程查找开启、TUN 开启、系统代理关闭、代理以列表显示、不含中国预设。
+-
+-🗑️ **「重置应用」** 位于通用设置，会删除所有配置、设置和工作目录并关闭应用。日志可以写入文件。
+-
+-🌍 **本地化：** 重做的俄语翻译，共 7 种语言。
+-
+-## 订阅响应头和参数
+-
+-应用支持的 HTTP 响应头和 YAML 参数，以及示例和面板模板，详见 [flclashx.app](https://flclashx.app/#headers)。
+-
+-由订阅设置的选项会以灰显方式显示。用户可以自行接管，此后更新订阅和切换配置都不会改动它。右键或长按该行可以交还给服务商，「通用 → 日志与诊断」中的「将设置交还给服务商」可以一次全部交还。
+-
+-## 使用
+-
+-**通过链接导入配置。** 打开下面这种链接会立即把订阅添加到 FlClashX，无需确认。`clash://`、`clashmeta://`、`flclash://` 和 `clashx://` 协议的工作方式相同。
+-
+-```text
+-flclashx://install-config?url=<URL 编码后的订阅链接>
+-```
+-
+-**在 Android 上自动化。** Tasker、MacroDroid 及类似应用可以通过以下 action 启动 activity 来启动、停止或切换 VPN：
+-
+-```text
+-com.follow.clashx.action.START
+-com.follow.clashx.action.STOP
+-com.follow.clashx.action.TOGGLE
+-```
+-
+-在电脑上也可以通过 adb 完成同样的操作：
+-
+-```bash
+-adb shell am start -a com.follow.clashx.action.TOGGLE
+-```
+-
+-**Linux 托盘图标。** `.deb` 包会自动安装依赖。使用 AppImage 或 `.rpm` 时，请先安装 AyatanaAppIndicator：
+-
+-```bash
+-sudo apt-get install libayatana-appindicator3-1   # Debian 和 Ubuntu
+-sudo dnf install libayatana-appindicator-gtk3     # Fedora
+-```
+-
+-**无人值守的桌面环境。** 只有在接受免责声明后内核才会启动。在无人可以点击的地方（例如容器中），在应用环境中设置 `FLCLASH_ACCEPT_DISCLAIMER=1`，首次启动时就会自动接受。
+-
+-## 下载
+-
+-安装包发布在 [GitHub Releases](https://github.com/pluralplay/FlClashX/releases)。
+-
+-| 平台 | 安装包 |
+-| --- | --- |
+-| Android | `arm64-v8a`、`armeabi-v7a` 和 `x86_64` 的 APK；大多数手机需要 `arm64-v8a` |
+-| Windows 10 及更高版本 | 安装程序（`.exe`）或便携版 `.zip`，支持 x64 和 ARM64 |
+-| macOS 12 及更高版本 | 适用于 Apple Silicon 和 Intel 的 DMG |
+-| Linux | `.deb`、`.rpm` 和 AppImage，支持 x64 和 ARM64；AUR 上有 `flclashx-bin` 和 `flclashx-git` |
+-
+-<a href="https://github.com/pluralplay/FlClashX/releases"><img alt="Get it on GitHub" src="snapshots/get-it-on-github.svg" width="200px"/></a>
+-
+-## 从源码构建
+-
+-需要 [Flutter](https://docs.flutter.dev/get-started/install) 3.47（发布版本使用 3.47.6）、[Go](https://go.dev/dl/) 1.27，以及通过 rustup 安装的 [Rust](https://rustup.rs/)。除 Android 外，每个平台都要在各自的系统上构建；Android 可以在任何系统上构建。
+-
+-```bash
+-git clone https://github.com/pluralplay/FlClashX.git
+-cd FlClashX
+-flutter pub get
+-dart setup.dart android   # 或 windows、macos、linux
+-```
+-
+-构建产物会出现在 `dist/`。Go 内核和 Rust 库会随 Flutter 构建一起编译。
+-
+-| 平台 | 额外需要 |
+-| --- | --- |
+-| Android | 带 NDK 的 Android SDK。加 `--arch arm64` 可以只构建一个 ABI |
+-| Windows | 用于制作安装程序的 [Inno Setup](https://jrsoftware.org/isinfo.php) 6 |
+-| macOS | Xcode 和 Node.js；脚本会通过 npm 安装 `create-dmg` |
+-| Linux | Debian 或 Ubuntu；脚本会用 apt 安装构建依赖并下载 `appimagetool` |
+-
+-其余参数（例如用 `--targets` 只构建部分格式）请运行 `dart setup.dart --help` 查看。
+-
+-## Star
+-
+-<p style="text-align: center;">
+-支持开发者最简单的方式是点击页面顶部的星标（⭐）。<br>
+-如果想小额赞助，可以<a href="https://t.me/tribute/app?startapp=dtyh">在这里支持。</a>
+-</p>
+-
+-**TON USDT:** `UQDSfrJ_k1BdsknhdR_zj4T3Is3OdMylD8PnDJ9mxO35i-TE`

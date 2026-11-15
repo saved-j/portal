@@ -1,0 +1,317 @@
+diff --git a/arb/intl_en.arb b/arb/intl_en.arb
+index b67eda95..661f0053 100644
+--- a/arb/intl_en.arb
++++ b/arb/intl_en.arb
+@@ -357,6 +357,17 @@
+   "iconStylePlain": "Plain",
+   "iconStyleHidden": "Hidden",
+   "filter": "Filter",
++  "filterHongKong": "Hong Kong",
++  "filterTaiwan": "Taiwan",
++  "filterJapan": "Japan",
++  "filterSingapore": "Singapore",
++  "filterUnitedStates": "United States",
++  "filterSouthKorea": "South Korea",
++  "filterUnitedKingdom": "United Kingdom",
++  "filterRemainingTraffic": "Remaining Traffic",
++  "filterExpiryDate": "Expiry Date",
++  "filterTrafficReset": "Traffic Reset",
++  "filterWebsiteNotices": "Website & Notices",
+   "hideTimeoutProxies": "Hide timed-out proxies",
+   "hideTimeoutProxiesDesc": "Leave out proxies whose last delay test timed out",
+   "stackMode": "Stack mode",
+diff --git a/arb/intl_ru.arb b/arb/intl_ru.arb
+index ceaaa13e..465286ef 100644
+--- a/arb/intl_ru.arb
++++ b/arb/intl_ru.arb
+@@ -357,6 +357,17 @@
+   "iconStylePlain": "Без подложки",
+   "iconStyleHidden": "Скрыто",
+   "filter": "Фильтр",
++  "filterHongKong": "Гонконг",
++  "filterTaiwan": "Тайвань",
++  "filterJapan": "Япония",
++  "filterSingapore": "Сингапур",
++  "filterUnitedStates": "США",
++  "filterSouthKorea": "Южная Корея",
++  "filterUnitedKingdom": "Великобритания",
++  "filterRemainingTraffic": "Остаток трафика",
++  "filterExpiryDate": "Дата окончания",
++  "filterTrafficReset": "Сброс трафика",
++  "filterWebsiteNotices": "Сайты и уведомления",
+   "hideTimeoutProxies": "Скрывать прокси с таймаутом",
+   "hideTimeoutProxiesDesc": "Не показывать прокси, у которых последний тест задержки завершился таймаутом",
+   "stackMode": "Стек TUN",
+diff --git a/arb/intl_zh_CN.arb b/arb/intl_zh_CN.arb
+index f986c2c4..b88b8d2b 100644
+--- a/arb/intl_zh_CN.arb
++++ b/arb/intl_zh_CN.arb
+@@ -357,6 +357,17 @@
+   "iconStylePlain": "纯图标",
+   "iconStyleHidden": "隐藏",
+   "filter": "筛选",
++  "filterHongKong": "香港",
++  "filterTaiwan": "台湾",
++  "filterJapan": "日本",
++  "filterSingapore": "新加坡",
++  "filterUnitedStates": "美国",
++  "filterSouthKorea": "韩国",
++  "filterUnitedKingdom": "英国",
++  "filterRemainingTraffic": "剩余流量",
++  "filterExpiryDate": "到期日期",
++  "filterTrafficReset": "流量重置",
++  "filterWebsiteNotices": "网站与公告",
+   "hideTimeoutProxies": "隐藏超时代理",
+   "hideTimeoutProxiesDesc": "不显示上次延迟测试超时的代理",
+   "stackMode": "栈模式",
+diff --git a/lib/common/context.dart b/lib/common/context.dart
+index 757e5166..e62a7473 100644
+--- a/lib/common/context.dart
++++ b/lib/common/context.dart
+@@ -19,3 +19,27 @@ extension AppContextExtension on BuildContext {
+ 
+   AppLocalizations get appLocalizations => AppLocalizations.of(this);
+ }
++
++/// The name a filter is shown under.
++///
++/// A label is a filter's identity: the settings store keys on it and the panel's own
++/// filters are matched by it, so it is never translated in place. The eleven defaults the
++/// app ships are shown in the interface language instead, and a filter the owner renamed is
++/// shown exactly as typed.
++String localizedFilterLabel(BuildContext context, String label) {
++  final appLocalizations = AppLocalizations.of(context);
++  return switch (label) {
++    'Hong Kong' => appLocalizations.filterHongKong,
++    'Taiwan' => appLocalizations.filterTaiwan,
++    'Japan' => appLocalizations.filterJapan,
++    'Singapore' => appLocalizations.filterSingapore,
++    'United States' => appLocalizations.filterUnitedStates,
++    'South Korea' => appLocalizations.filterSouthKorea,
++    'United Kingdom' => appLocalizations.filterUnitedKingdom,
++    'Remaining Traffic' => appLocalizations.filterRemainingTraffic,
++    'Expiry Date' => appLocalizations.filterExpiryDate,
++    'Traffic Reset' => appLocalizations.filterTrafficReset,
++    'Website & Notices' => appLocalizations.filterWebsiteNotices,
++    _ => label,
++  };
++}
+diff --git a/lib/l10n/intl/messages_en.dart b/lib/l10n/intl/messages_en.dart
+index 25ef52a7..8cac09d0 100644
+--- a/lib/l10n/intl/messages_en.dart
++++ b/lib/l10n/intl/messages_en.dart
+@@ -836,6 +836,23 @@ class MessageLookup extends MessageLookupByLibrary {
+       "The file has been modified. Save the changes?",
+     ),
+     "filter": MessageLookupByLibrary.simpleMessage("Filter"),
++    "filterExpiryDate": MessageLookupByLibrary.simpleMessage("Expiry Date"),
++    "filterHongKong": MessageLookupByLibrary.simpleMessage("Hong Kong"),
++    "filterJapan": MessageLookupByLibrary.simpleMessage("Japan"),
++    "filterRemainingTraffic": MessageLookupByLibrary.simpleMessage(
++      "Remaining Traffic",
++    ),
++    "filterSingapore": MessageLookupByLibrary.simpleMessage("Singapore"),
++    "filterSouthKorea": MessageLookupByLibrary.simpleMessage("South Korea"),
++    "filterTaiwan": MessageLookupByLibrary.simpleMessage("Taiwan"),
++    "filterTrafficReset": MessageLookupByLibrary.simpleMessage("Traffic Reset"),
++    "filterUnitedKingdom": MessageLookupByLibrary.simpleMessage(
++      "United Kingdom",
++    ),
++    "filterUnitedStates": MessageLookupByLibrary.simpleMessage("United States"),
++    "filterWebsiteNotices": MessageLookupByLibrary.simpleMessage(
++      "Website & Notices",
++    ),
+     "filters": MessageLookupByLibrary.simpleMessage("Filters"),
+     "filtersHint": MessageLookupByLibrary.simpleMessage(
+       "Drag to reorder. Turn off to hide.",
+diff --git a/lib/l10n/intl/messages_ru.dart b/lib/l10n/intl/messages_ru.dart
+index 7b7e5d7f..4a43760d 100644
+--- a/lib/l10n/intl/messages_ru.dart
++++ b/lib/l10n/intl/messages_ru.dart
+@@ -869,6 +869,23 @@ class MessageLookup extends MessageLookupByLibrary {
+       "Файл изменён. Сохранить изменения?",
+     ),
+     "filter": MessageLookupByLibrary.simpleMessage("Фильтр"),
++    "filterExpiryDate": MessageLookupByLibrary.simpleMessage("Дата окончания"),
++    "filterHongKong": MessageLookupByLibrary.simpleMessage("Гонконг"),
++    "filterJapan": MessageLookupByLibrary.simpleMessage("Япония"),
++    "filterRemainingTraffic": MessageLookupByLibrary.simpleMessage(
++      "Остаток трафика",
++    ),
++    "filterSingapore": MessageLookupByLibrary.simpleMessage("Сингапур"),
++    "filterSouthKorea": MessageLookupByLibrary.simpleMessage("Южная Корея"),
++    "filterTaiwan": MessageLookupByLibrary.simpleMessage("Тайвань"),
++    "filterTrafficReset": MessageLookupByLibrary.simpleMessage("Сброс трафика"),
++    "filterUnitedKingdom": MessageLookupByLibrary.simpleMessage(
++      "Великобритания",
++    ),
++    "filterUnitedStates": MessageLookupByLibrary.simpleMessage("США"),
++    "filterWebsiteNotices": MessageLookupByLibrary.simpleMessage(
++      "Сайты и уведомления",
++    ),
+     "filters": MessageLookupByLibrary.simpleMessage("Фильтры"),
+     "filtersHint": MessageLookupByLibrary.simpleMessage(
+       "Перетащите, чтобы изменить порядок. Выключите, чтобы скрыть.",
+diff --git a/lib/l10n/intl/messages_zh_CN.dart b/lib/l10n/intl/messages_zh_CN.dart
+index 06c7c236..477d7a6d 100644
+--- a/lib/l10n/intl/messages_zh_CN.dart
++++ b/lib/l10n/intl/messages_zh_CN.dart
+@@ -649,6 +649,17 @@ class MessageLookup extends MessageLookupByLibrary {
+     "file": MessageLookupByLibrary.simpleMessage("文件"),
+     "fileIsUpdate": MessageLookupByLibrary.simpleMessage("文件有修改，是否保存修改"),
+     "filter": MessageLookupByLibrary.simpleMessage("筛选"),
++    "filterExpiryDate": MessageLookupByLibrary.simpleMessage("到期日期"),
++    "filterHongKong": MessageLookupByLibrary.simpleMessage("香港"),
++    "filterJapan": MessageLookupByLibrary.simpleMessage("日本"),
++    "filterRemainingTraffic": MessageLookupByLibrary.simpleMessage("剩余流量"),
++    "filterSingapore": MessageLookupByLibrary.simpleMessage("新加坡"),
++    "filterSouthKorea": MessageLookupByLibrary.simpleMessage("韩国"),
++    "filterTaiwan": MessageLookupByLibrary.simpleMessage("台湾"),
++    "filterTrafficReset": MessageLookupByLibrary.simpleMessage("流量重置"),
++    "filterUnitedKingdom": MessageLookupByLibrary.simpleMessage("英国"),
++    "filterUnitedStates": MessageLookupByLibrary.simpleMessage("美国"),
++    "filterWebsiteNotices": MessageLookupByLibrary.simpleMessage("网站与公告"),
+     "filters": MessageLookupByLibrary.simpleMessage("筛选"),
+     "filtersHint": MessageLookupByLibrary.simpleMessage("拖动可调整顺序，关闭可隐藏。"),
+     "filtersTitle": MessageLookupByLibrary.simpleMessage("筛选"),
+diff --git a/lib/l10n/l10n.dart b/lib/l10n/l10n.dart
+index 582f0cec..3611c0c1 100644
+--- a/lib/l10n/l10n.dart
++++ b/lib/l10n/l10n.dart
+@@ -2871,6 +2871,106 @@ class AppLocalizations {
+     return Intl.message('Filter', name: 'filter', desc: '', args: []);
+   }
+ 
++  /// `Hong Kong`
++  String get filterHongKong {
++    return Intl.message(
++      'Hong Kong',
++      name: 'filterHongKong',
++      desc: '',
++      args: [],
++    );
++  }
++
++  /// `Taiwan`
++  String get filterTaiwan {
++    return Intl.message('Taiwan', name: 'filterTaiwan', desc: '', args: []);
++  }
++
++  /// `Japan`
++  String get filterJapan {
++    return Intl.message('Japan', name: 'filterJapan', desc: '', args: []);
++  }
++
++  /// `Singapore`
++  String get filterSingapore {
++    return Intl.message(
++      'Singapore',
++      name: 'filterSingapore',
++      desc: '',
++      args: [],
++    );
++  }
++
++  /// `United States`
++  String get filterUnitedStates {
++    return Intl.message(
++      'United States',
++      name: 'filterUnitedStates',
++      desc: '',
++      args: [],
++    );
++  }
++
++  /// `South Korea`
++  String get filterSouthKorea {
++    return Intl.message(
++      'South Korea',
++      name: 'filterSouthKorea',
++      desc: '',
++      args: [],
++    );
++  }
++
++  /// `United Kingdom`
++  String get filterUnitedKingdom {
++    return Intl.message(
++      'United Kingdom',
++      name: 'filterUnitedKingdom',
++      desc: '',
++      args: [],
++    );
++  }
++
++  /// `Remaining Traffic`
++  String get filterRemainingTraffic {
++    return Intl.message(
++      'Remaining Traffic',
++      name: 'filterRemainingTraffic',
++      desc: '',
++      args: [],
++    );
++  }
++
++  /// `Expiry Date`
++  String get filterExpiryDate {
++    return Intl.message(
++      'Expiry Date',
++      name: 'filterExpiryDate',
++      desc: '',
++      args: [],
++    );
++  }
++
++  /// `Traffic Reset`
++  String get filterTrafficReset {
++    return Intl.message(
++      'Traffic Reset',
++      name: 'filterTrafficReset',
++      desc: '',
++      args: [],
++    );
++  }
++
++  /// `Website & Notices`
++  String get filterWebsiteNotices {
++    return Intl.message(
++      'Website & Notices',
++      name: 'filterWebsiteNotices',
++      desc: '',
++      args: [],
++    );
++  }
++
+   /// `Hide timed-out proxies`
+   String get hideTimeoutProxies {
+     return Intl.message(
+diff --git a/lib/views/config/filters.dart b/lib/views/config/filters.dart
+index 48b95817..ccc7db3c 100644
+--- a/lib/views/config/filters.dart
++++ b/lib/views/config/filters.dart
+@@ -121,7 +121,11 @@ class _FilterItem extends StatelessWidget {
+       onPressed: isEditing ? onSelected : onPressed,
+       contentPadding: const EdgeInsets.only(left: 16),
+       title: TooltipText(
+-        text: Text(filter.label, maxLines: 1, overflow: TextOverflow.ellipsis),
++        text: Text(
++          localizedFilterLabel(context, filter.label),
++          maxLines: 1,
++          overflow: TextOverflow.ellipsis,
++        ),
+       ),
+       subtitle: FilterRegexText(filter.regex),
+       trailing: CommonCheckBox(
+diff --git a/lib/views/profiles/custom/members.dart b/lib/views/profiles/custom/members.dart
+index f0c64218..898149fd 100644
+--- a/lib/views/profiles/custom/members.dart
++++ b/lib/views/profiles/custom/members.dart
+@@ -680,7 +680,7 @@ class _MemberPickerState<M> extends ConsumerState<_MemberPicker<M>> {
+             (
+               kind: kind,
+               name: filter.regex,
+-              title: filter.label,
++              title: localizedFilterLabel(context, filter.label),
+               subtitle: filter.regex,
+             ),
+       ];
