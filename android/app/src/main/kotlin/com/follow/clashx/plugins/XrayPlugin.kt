@@ -112,6 +112,24 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         // The service takes the core down with the tunnel, so a revoked VPN cannot leave a
         // core reading a descriptor nobody answers for. Taking a number first also cancels
         // any start the service's teardown interrupted before it could open the core.
+        // The dashboard speaks to the portal channel, the core lives here: the bridge is the
+        // one line between them, and it is only set while this plugin holds the library.
+        PortalMeasureBridge.start = { config ->
+            val task = executor.submit(Callable { startMeasure(config) })
+            try {
+                task.get(START_WAIT_MS, TimeUnit.MILLISECONDS)
+            } catch (error: Exception) {
+                task.cancel(true)
+                mapOf("ok" to false, "message" to (error.message ?: "$error"))
+            }
+        }
+        PortalMeasureBridge.stop = {
+            val task = executor.submit(Callable {
+                stopCoreHere()
+                true
+            })
+            runCatching { task.get(STOP_WAIT_MS, TimeUnit.MILLISECONDS) }.getOrDefault(false)
+        }
         XrayChildControl.stop = {
             nextOperation()
             // The service is closing the descriptor it owns: the tunnel in hand is gone with
@@ -129,6 +147,8 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         channel.setMethodCallHandler(null)
         PortalRuntimeCoordinator.detachChild(this)
         XrayChildControl.stop = null
+        PortalMeasureBridge.start = null
+        PortalMeasureBridge.stop = null
         nextOperation()
         takeCore()
         requestNativeStop()
@@ -166,34 +186,6 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
                     "generation" to outcome.runtime.generation,
                 ),
                 )
-            }
-            // A measurement core: the same library, started on a document that listens on
-            // local socks inbounds instead of a tun, so every node can be timed at once
-            // without moving the tunnel. It is not a portal: no coordinator, no generation,
-            // and it refuses to start while the portal's own child is running.
-            "measureStart" -> {
-                val config = call.argument<String>("config")
-                if (config.isNullOrBlank()) {
-                    result.success(mapOf("ok" to false, "message" to "empty config"))
-                    return
-                }
-                GlobalState.launch {
-                    val outcome = executor.submit(Callable { startMeasure(config) })
-                    val answer = try {
-                        outcome.get(START_WAIT_MS, TimeUnit.MILLISECONDS)
-                    } catch (error: Exception) {
-                        mapOf("ok" to false, "message" to (error.message ?: "$error"))
-                    }
-                    replyOnMain(result, answer)
-                }
-            }
-            "measureStop" -> {
-                val task = executor.submit(Callable {
-                    stopCoreHere()
-                    true
-                })
-                val ok = runCatching { task.get(STOP_WAIT_MS, TimeUnit.MILLISECONDS) }.getOrDefault(false)
-                result.success(mapOf("ok" to ok))
             }
             else -> result.notImplemented()
         }

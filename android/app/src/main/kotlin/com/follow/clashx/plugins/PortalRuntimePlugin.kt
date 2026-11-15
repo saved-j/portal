@@ -78,6 +78,31 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
             }
 
+            // The measurement core: started for a sweep and stopped right after, never a
+            // portal. The core itself belongs to the xray plugin; the bridge is how this
+            // channel reaches it.
+            "measureStart" -> {
+                val config = call.argument<String>("config")
+                val bridge = PortalMeasureBridge.start
+                if (config.isNullOrBlank() || bridge == null) {
+                    result.success(
+                        mapOf(
+                            "ok" to false,
+                            "message" to if (bridge == null) "no child on this platform" else "empty config",
+                        ),
+                    )
+                    return
+                }
+                GlobalState.launch { result.success(bridge(config)) }
+            }
+
+            "measureStop" -> {
+                val bridge = PortalMeasureBridge.stop
+                GlobalState.launch {
+                    result.success(mapOf("ok" to (bridge?.invoke() ?: false)))
+                }
+            }
+
             "status" -> result.success(PortalRuntimeCoordinator.status())
 
             // The switch's own clock: the tap starts it here, and the record's hook writes

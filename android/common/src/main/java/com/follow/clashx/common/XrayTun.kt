@@ -149,3 +149,17 @@ object XrayChildControl {
     @Volatile
     var stop: (() -> Unit)? = null
 }
+
+/// The measurement core, reached from the portal channel.
+///
+/// The core belongs to the xray plugin, which owns the library and its single instance; the
+/// dashboard talks to the portal channel. These lambdas are the one line between them, set
+/// when the xray plugin attaches and cleared when it goes — null means this build has no child
+/// at all, which is exactly what the caller must hear.
+object PortalMeasureBridge {
+    @Volatile
+    var start: ((String) -> Map<String, Any>)? = null
+
+    @Volatile
+    var stop: (() -> Boolean)? = null
+}
