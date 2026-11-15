@@ -315,7 +315,11 @@ class SetupAction extends _$SetupAction {
     _reconcileTun();
     final applied = await inputsApplied();
     if (_isCurrent(request) && !applied) {
-      applyProfileDebounce(force: true, silence: true);
+      // The start of a switch is the switch's own ask for the profile. Pushed now, not through
+      // the edit debouncer: the coalescing that keeps an editor from pushing ten times would
+      // hold the engine's first config back for two to ten seconds, which is exactly the time
+      // the owner spends looking at a list the new owner has not filled yet.
+      applyProfileNow();
     }
     return true;
   }
@@ -732,6 +736,35 @@ class SetupAction extends _$SetupAction {
         ),
       ),
     );
+  }
+
+  /// The same apply, pushed now — for the caller that is the reason the inputs changed.
+  ///
+  /// [applyProfileDebounce] exists for edits: an editor can change ten inputs in a minute and
+  /// only the last one is worth a push. A mode switch is not an edit. The owner is watching
+  /// the list that the push fills, and the 2–10 s the coalescing waits are the delay he sees
+  /// between the tap and a portal whose engine has a config. The debounced push carries the
+  /// same inputs, so it is cancelled rather than left to fire again behind this one.
+  ///
+  /// The push is not awaited, and it is a background task in the full sense: the tunnel
+  /// already has its new owner, and a switch that waited on a rule-set download would be the
+  /// same freeze under another name. Its failure is reported the way every scheduled push
+  /// reports one — a line in the app's log — and not as a banner over a portal that is
+  /// working: a switch that goes back the other way while this push is in flight leaves the
+  /// engine with no config, and `config is not applied` there is not a defect to show.
+  void applyProfileNow({bool force = true, bool silence = true}) {
+    debouncer.cancel(FunctionTag.applyProfile);
+    _pendingForceApply = false;
+    unawaited(() async {
+      try {
+        await applyProfile(force: force, silence: silence);
+      } catch (error, stackTrace) {
+        commonPrint.log(
+          'apply now: ${compactError(error)}, $stackTrace',
+          logLevel: LogLevel.warning,
+        );
+      }
+    }());
   }
 
   /// A mode the user picks in the app, asked first while the subscription
