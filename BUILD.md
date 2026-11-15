@@ -217,6 +217,21 @@ engine's groups — or, with the portal closed, the engine's own last answer for
 then the profile's engine-format `proxies:`. Neither mode can draw the other's names, and a
 group held from the other mode is dropped when the mode changes.
 
+A delay is measured by the core that holds the server, and by nothing else. The engine's rows
+carry the engine's own delay, taken through the tunnel it built. The simple portal's rows carry
+a TCP handshake timed by this process against the node's resolved address — and a node name
+that resolves only into the tunnel's own range (`198.18.0.0/15`, the fake-IP range, including
+the tun's gateway `198.18.0.1` and resolver `198.18.0.2`) is drawn as `—` and logged as such,
+because a handshake there completes against the core's local listener and reports the phone's
+own loop as a delay:
+
+```
+portal delay Эстония: ee.example:8443 → 198.18.0.5 is the tunnel's own address, no number
+portal delay Финляндия: fi.example:443 → 185.155.222.6 214 ms
+```
+
+`adb logcat -s flutter` carries those lines; the dash on the row and the line are the same fact.
+
 ## Checks
 
 ```bash

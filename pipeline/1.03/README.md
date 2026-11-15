@@ -196,6 +196,17 @@ the device, not a redesign.
   mode is dropped, and the list line carries `mode=` beside `source=`: `mode=rule source=live
   rows=28` / `mode=global source=live rows=3`. 20d's never-empty rule and the honest empty
   state (`source=none`) stand.
+- `23-pings-are-real-or-dashes` — the portal's rows read 5/10/14/25 ms to Finland and Estonia
+  from China. `tcpPing` connected to the node's *name*, the running core answered it with its
+  fake-IP (`198.18.x.x`), and the handshake completed against the core's own listener: the row
+  reported the phone's loop. `isTunnelOwnedAddress` refuses `198.18.0.0/15` (gateway
+  `198.18.0.1`, resolver `198.18.0.2` included), loopback, `0.0.0.0` and link-local;
+  `probeTcp` resolves the name itself and hands the handshake the resolved address, and a fake
+  address, an unresolved name, a timeout or an unreachable route are all `ms == null` — a dash,
+  never a number. The network mode keeps the engine's own delay for its rows and asks the
+  engine for a test; only the simple portal is timed from here, against the node's real
+  address. Every measurement logs what it timed: `portal delay Эстония: … → 198.18.0.5 is the
+  tunnel's own address, no number` / `… → 185.155.222.6 214 ms`.
 
 Apply (to a tree that does not already carry the 01..02 commit):
 ```

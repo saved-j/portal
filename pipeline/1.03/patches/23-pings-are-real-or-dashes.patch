@@ -1,0 +1,502 @@
+# portal 1.03 patch 23 — the pings are real or they are dashes
+#
+# The simple portal's rows read 5 / 10 / 14 / 25 ms to Finland and Estonia from China, which
+# no route can do. xray_ping's tcpPing() called Socket.connect(host, port) and let the running
+# core resolve the name: with a tun up that answer is the engine's fake-IP, 198.18.x.x, so the
+# handshake completed against the core's own local listener and the row reported the phone's
+# own loop as the distance to the node. The network mode was worse than wrong: it TCP-timed
+# the engine's rows too, so every row of 'Сеть порталов' had a number that was never a
+# proxied measurement.
+#
+# Now:
+#   - isTunnelOwnedAddress() refuses 198.18.0.0/15 (fake-IP, and the tun's gateway 198.18.0.1
+#     and resolver 198.18.0.2), loopback, 0.0.0.0 and link-local;
+#   - probeTcp() resolves the name itself, drops a fake answer instead of timing it, and opens
+#     the handshake against the resolved address so a second lookup cannot answer differently.
+#     A fake address, an unresolved name, a timeout and an unreachable route are all ms == null,
+#     i.e. '—' on the row — never a number;
+#   - the network mode keeps the engine's own delay for its rows (delayProvider), which is a
+#     real proxied measurement, and its delay-test button asks the engine, not this process;
+#   - the simple portal times the node's resolved address, so the number is the node's own
+#     round trip and reads like its geography.
+#
+# Every measurement now logs what it timed and against which address:
+#
+#   portal delay Эстония: ee.example:8443 → 198.18.0.5 is the tunnel's own address, no number
+#   portal delay Финляндия: fi.example:443 → 185.155.222.6 214 ms
+diff --git a/BUILD.md b/BUILD.md
+index 9738e15f..80c4cee0 100644
+--- a/BUILD.md
++++ b/BUILD.md
+@@ -217,6 +217,21 @@ engine's groups — or, with the portal closed, the engine's own last answer for
+ then the profile's engine-format `proxies:`. Neither mode can draw the other's names, and a
+ group held from the other mode is dropped when the mode changes.
+ 
++A delay is measured by the core that holds the server, and by nothing else. The engine's rows
++carry the engine's own delay, taken through the tunnel it built. The simple portal's rows carry
++a TCP handshake timed by this process against the node's resolved address — and a node name
++that resolves only into the tunnel's own range (`198.18.0.0/15`, the fake-IP range, including
++the tun's gateway `198.18.0.1` and resolver `198.18.0.2`) is drawn as `—` and logged as such,
++because a handshake there completes against the core's local listener and reports the phone's
++own loop as a delay:
++
++```
++portal delay Эстония: ee.example:8443 → 198.18.0.5 is the tunnel's own address, no number
++portal delay Финляндия: fi.example:443 → 185.155.222.6 214 ms
++```
++
++`adb logcat -s flutter` carries those lines; the dash on the row and the line are the same fact.
++
+ ## Checks
+ 
+ ```bash
+diff --git a/lib/core/xray_ping.dart b/lib/core/xray_ping.dart
+index da20d828..8a7947e5 100644
+--- a/lib/core/xray_ping.dart
++++ b/lib/core/xray_ping.dart
+@@ -1,34 +1,224 @@
+ import 'dart:async';
+ import 'dart:io';
+ 
+-/// A delay for servers the engine does not hold.
++/// Why a row has a number, or does not.
++enum TcpPingNote {
++  /// A real address answered the handshake: this is the node's own round trip.
++  measured,
++
++  /// Nothing to measure: no host, no port.
++  noAddress,
++
++  /// The name resolved only to an address the tunnel owns (fake-IP or the tun's own gateway),
++  /// or the profile named one. Handshaking there measures the phone's own listener.
++  fakeAddress,
++
++  /// The name did not resolve within the resolve deadline.
++  unresolved,
++
++  /// The handshake did not complete within the deadline.
++  timeout,
++
++  /// The handshake was refused or the route was unreachable.
++  unreachable,
++}
++
++/// One honest measurement of one server, and the address it was taken against.
++///
++/// [ms] is null whenever the measurement is not a fact about the node — never a fabricated
++/// number, and never the duration of a handshake that never left the phone.
++class TcpPing {
++  const TcpPing({
++    required this.host,
++    required this.port,
++    required this.note,
++    this.address,
++    this.looked = const [],
++    this.ms,
++  });
++
++  final String host;
++  final int port;
++  final TcpPingNote note;
++
++  /// The address the handshake was timed against, when there was one.
++  final InternetAddress? address;
++
++  /// What the name resolved to, fake addresses included: the reason a dash is a dash.
++  final List<InternetAddress> looked;
++
++  final int? ms;
++
++  bool get answered => ms != null && ms! >= 0;
++
++  /// `host:port → 185.155.222.6 214 ms`, or the reason there is no number.
++  String describe() {
++    final where = host.isEmpty ? '' : '$host:$port';
++    switch (note) {
++      case TcpPingNote.measured:
++        return '$where → ${address?.address} $ms ms';
++      case TcpPingNote.fakeAddress:
++        final listed = looked.isEmpty
++            ? (address?.address ?? '')
++            : looked.map((item) => item.address).join(',');
++        return "$where → $listed is the tunnel's own address, no number";
++      case TcpPingNote.unresolved:
++        return '$where → no address, no number';
++      case TcpPingNote.timeout:
++        return '$where → ${address?.address} timed out, no number';
++      case TcpPingNote.unreachable:
++        return '$where → ${address?.address} unreachable, no number';
++      case TcpPingNote.noAddress:
++        return 'no address to measure';
++    }
++  }
++}
++
++/// Whether [address] belongs to the tunnel rather than to a server.
++///
++/// With a tun up, a name the engine answers for resolves to its fake-IP (`198.18.0.0/15`, the
++/// range mihomo and Xray's fake DNS both use), and the tun's own gateway and resolver sit
++/// inside it. A TCP handshake to one of those completes against the core's local listener,
++/// which is how a row read 5 ms to Finland from China: the number was the phone's own loop.
++/// Loopback, the unspecified address and link-local are refused for the same reason — none of
++/// them is a server a subscription sells, and all of them answer instantly.
++bool isTunnelOwnedAddress(InternetAddress address) {
++  final raw = address.rawAddress;
++  if (address.type == InternetAddressType.IPv6) {
++    if (raw.length != 16) return false;
++    final loopback = raw.take(15).every((byte) => byte == 0) && raw.last == 1;
++    final unspecified = raw.every((byte) => byte == 0);
++    return loopback || unspecified;
++  }
++  if (raw.length != 4) return false;
++  final a = raw[0];
++  final b = raw[1];
++  // 0.0.0.0 — an unspecified host is not an address to shake hands with.
++  if (a == 0) return true;
++  // 127.0.0.0/8 — loopback: the local listener answers instantly.
++  if (a == 127) return true;
++  // 198.18.0.0/15 — fake-IP, and the tun's gateway 198.18.0.1 / resolver 198.18.0.2.
++  if (a == 198 && (b == 18 || b == 19)) return true;
++  // 169.254.0.0/16 — link-local.
++  if (a == 169 && b == 254) return true;
++  return false;
++}
++
++InternetAddress? _literal(String host) {
++  final trimmed = host.trim();
++  if (trimmed.isEmpty) return null;
++  // `InternetAddress.tryParse` accepts only a numeric literal, which is exactly the case
++  // where no lookup may happen at all.
++  return InternetAddress.tryParse(trimmed);
++}
++
++/// Times a TCP handshake to [host]: a delay for servers the engine does not hold.
+ ///
+ /// The simple portal is driven by the second core, and mihomo knows nothing about those
+-/// servers: every lookup in its delay table answers "timeout". So the row times the one
+-/// thing it can time honestly — a TCP connection to the server's own address, the same
+-/// handshake the tunnel performs before it can carry a byte.
++/// servers: every lookup in its delay table answers "timeout". So the row times the one thing
++/// it can time honestly — a TCP connection to the server's own address, the same handshake the
++/// tunnel performs before it can carry a byte.
+ ///
+-/// It is not a proxy delay: it measures reachability and distance, not throughput through
+-/// the tunnel. The row says so by being a separate number, not by pretending to be mihomo's.
+-Future<int?> tcpPing(
++/// It is not a proxy delay: it measures reachability and distance, not throughput through the
++/// tunnel. What it must never measure is the tunnel itself. The name is resolved here, a
++/// fake-IP or the tun's gateway is refused instead of timed (see [isTunnelOwnedAddress]), and
++/// the handshake is opened against the resolved address so a second lookup cannot answer with
++/// a different one. A timeout, an unreachable route or a fake address is a dash on the row —
++/// never a number.
++Future<TcpPing> probeTcp(
+   String host,
+   int port, {
+   Duration timeout = const Duration(seconds: 3),
++  Duration resolveTimeout = const Duration(seconds: 2),
+ }) async {
+-  if (host.isEmpty || port <= 0) return null;
++  if (host.trim().isEmpty || port <= 0) {
++    return TcpPing(host: host, port: port, note: TcpPingNote.noAddress);
++  }
++  InternetAddress? address = _literal(host);
++  if (address == null) {
++    List<InternetAddress> found;
++    try {
++      found = await InternetAddress.lookup(
++        host.trim(),
++      ).timeout(resolveTimeout);
++    } on TimeoutException {
++      return TcpPing(host: host, port: port, note: TcpPingNote.unresolved);
++    } on SocketException {
++      return TcpPing(host: host, port: port, note: TcpPingNote.unresolved);
++    } catch (_) {
++      return TcpPing(host: host, port: port, note: TcpPingNote.unresolved);
++    }
++    if (found.isEmpty) {
++      return TcpPing(host: host, port: port, note: TcpPingNote.unresolved);
++    }
++    final real = [
++      for (final item in found)
++        if (!isTunnelOwnedAddress(item)) item,
++    ];
++    if (real.isEmpty) {
++      return TcpPing(
++        host: host,
++        port: port,
++        note: TcpPingNote.fakeAddress,
++        looked: found,
++        address: found.first,
++      );
++    }
++    address = real.first;
++  } else if (isTunnelOwnedAddress(address)) {
++    return TcpPing(
++      host: host,
++      port: port,
++      note: TcpPingNote.fakeAddress,
++      looked: [address],
++      address: address,
++    );
++  }
+   final watch = Stopwatch()..start();
+   Socket? socket;
+   try {
+-    socket = await Socket.connect(host, port, timeout: timeout);
++    socket = await Socket.connect(address, port, timeout: timeout);
+     watch.stop();
+-    return watch.elapsedMilliseconds;
+-  } on SocketException {
+-    return null;
++    return TcpPing(
++      host: host,
++      port: port,
++      note: TcpPingNote.measured,
++      address: address,
++      looked: [address],
++      ms: watch.elapsedMilliseconds,
++    );
+   } on TimeoutException {
+-    return null;
++    return TcpPing(
++      host: host,
++      port: port,
++      note: TcpPingNote.timeout,
++      address: address,
++      looked: [address],
++    );
++  } on SocketException {
++    return TcpPing(
++      host: host,
++      port: port,
++      note: TcpPingNote.unreachable,
++      address: address,
++      looked: [address],
++    );
+   } catch (_) {
+-    return null;
++    return TcpPing(
++      host: host,
++      port: port,
++      note: TcpPingNote.unreachable,
++      address: address,
++      looked: [address],
++    );
+   } finally {
+     socket?.destroy();
+   }
+ }
++
++/// The number alone, for a caller that only draws a row. Null is the dash.
++Future<int?> tcpPing(
++  String host,
++  int port, {
++  Duration timeout = const Duration(seconds: 3),
++}) async => (await probeTcp(host, port, timeout: timeout)).ms;
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index d098b46e..2ed14001 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:flutter/services.dart';
+ import 'package:material_ui/material_ui.dart';
+ import 'package:fl_clash/common/outbound.dart';
+-import 'package:fl_clash/core/proxy_endpoints.dart';
+ import 'package:fl_clash/core/xray_ping.dart';
+ import 'package:fl_clash/core/xray_subscription.dart';
+ import '../profiles/subscription_facts.dart';
+@@ -167,23 +166,16 @@ final portalPendingProvider =
+     NotifierProvider<PortalPendingNotifier, Map<String, String>>(
+         PortalPendingNotifier.new);
+ 
+-/// Delays timed by the app itself, for servers of either core.
++/// Delays measured by this process, for the servers of the simple portal.
+ ///
+-/// The engine only reports delays for the servers it holds and never their addresses, so a
+-/// TCP handshake from here is the one measurement that works for both lists. A missing key
+-/// means "not asked yet"; a null entry means "asked, no answer".
++/// The engine only reports delays for the servers it holds; the child's servers are not among
++/// them, so a TCP handshake from here is the only measurement those rows can have. An engine
++/// row is never put in this map: its number is the engine's own, taken through the tunnel it
++/// built. A missing key means "not asked yet"; a null entry means "asked, no answer" — and a
++/// null is also the honest answer for a name that only resolves to the tunnel's own address.
+ final tcpDelayProvider =
+     NotifierProvider<TcpDelayNotifier, Map<String, int?>>(TcpDelayNotifier.new);
+ 
+-/// The addresses saved with the profile, so an engine server can be timed directly.
+-final proxyEndpointsProvider =
+-    FutureProvider.autoDispose<Map<String, ProxyEndpoint>>((ref) async {
+-  final profile = ref.watch(currentProfileProvider);
+-  if (profile == null) return const {};
+-  final path = await appPath.getProfilePath(profile.id.toString());
+-  return loadProxyEndpoints(path);
+-});
+-
+ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+   /// Handshakes open at once. A panel list is often a hundred nodes and one unreachable
+   /// node costs the full timeout, so a serial sweep holds the screen for minutes.
+@@ -217,9 +209,12 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+         final index = next++;
+         if (index >= targets.length) return;
+         final (name, host, port) = targets[index];
+-        final value = await tcpPing(host, port);
++        final probe = await probeTcp(host, port);
+         if (generation != _generation) return;
+-        state = {...state, name: value};
++        // Every number says what it timed and against which address; a dash is then a fact
++        // from the log — a fake-IP, a timeout — instead of a number that went missing.
++        commonPrint.log('portal delay $name: ${probe.describe()}');
++        state = {...state, name: probe.ms};
+       }
+     }
+ 
+@@ -231,9 +226,10 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+   Future<void> measureOne(String name, String host, int port) async {
+     final generation = _generation;
+     state = {...state, name: null};
+-    final value = await tcpPing(host, port);
++    final probe = await probeTcp(host, port);
+     if (generation != _generation) return;
+-    state = {...state, name: value};
++    commonPrint.log('portal delay $name: ${probe.describe()}');
++    state = {...state, name: probe.ms};
+   }
+ 
+   /// Revokes every sweep in flight, for a list that is gone or has been replaced.
+@@ -708,18 +704,15 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
+               : () {
+                   HapticFeedback.mediumImpact();
+                   // In the simple portal the list is the second core's, so the engine test
+-                  // has nothing to measure — its own servers are timed directly instead.
+-                  // The app's own measurement serves both lists; the engine test is the
+-                  // fallback for a profile whose addresses are unknown.
++                  // has nothing to measure — its own servers are timed directly instead, and
++                  // a fake address is a dash there. In the network mode the engine holds
++                  // every server of the list and answers with its own proxied delay, which is
++                  // the only number that is a fact about the node rather than about a
++                  // handshake the phone performed to a local listener.
+                   final servers = ref.read(xrayServersProvider).value ?? const [];
+-                  final endpoints = ref.read(proxyEndpointsProvider).value ?? const {};
+                   final targets = <(String, String, int)>[
+                     for (final server in servers)
+                       if (server.port > 0) (server.name, server.address, server.port),
+-                    if (servers.isEmpty && group != null)
+-                      for (final proxy in group.all)
+-                        if (endpoints[proxy.name] case final e? when e.isUsable)
+-                          (proxy.name, e.host, e.port),
+                   ];
+                   if (targets.isNotEmpty) {
+                     unawaited(
+@@ -874,15 +867,14 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
+                 ? xrayPick
+                 : (pending ?? chosenName ?? rulesPick);
+     // Measure once when the list arrives: a portal whose servers all read "—" until you
+-    // press something looks broken, and a closed portal is no reason not to know.
+-    final endpoints = ref.watch(proxyEndpointsProvider).value ?? const {};
++    // press something looks broken, and a closed portal is no reason not to know. Only the
++    // simple portal is measured here: those are the servers no engine holds. In the network
++    // mode the delay is the engine's own, taken through the tunnel it built — a TCP handshake
++    // from this process to an engine node's name resolves through the running engine to its
++    // fake-IP, and timing that measures the phone's own listener, not the node.
+     final targets = <(String, String, int)>[
+       for (final server in xrayServers)
+         if (server.port > 0) (server.name, server.address, server.port),
+-      if (xrayServers.isEmpty)
+-        for (final proxy in group.all)
+-          if (endpoints[proxy.name] case final endpoint? when endpoint.isUsable)
+-            (proxy.name, endpoint.host, endpoint.port),
+     ];
+     final xrayServerByName = {
+       for (final server in xrayServers) server.name: server,
+@@ -955,12 +947,11 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
+             // Present only on the child's list: the row then knows a tap starts that node
+             // instead of asking the engine for a proxy it does not have.
+             xrayServer: xrayServerByName[proxy.name],
+-            tcpHost: xrayServerByName[proxy.name]?.address ??
+-                endpoints[proxy.name]?.host ??
+-                '',
+-            tcpPort: xrayServerByName[proxy.name]?.port ??
+-                endpoints[proxy.name]?.port ??
+-                0,
++            // A row is timed by this process only when it is the child's server. The engine's
++            // rows carry its own delay, which is a proxied measurement; a handshake to an
++            // engine node's name from here would resolve to the engine's fake-IP.
++            tcpHost: xrayServerByName[proxy.name]?.address ?? '',
++            tcpPort: xrayServerByName[proxy.name]?.port ?? 0,
+           ),
+       ],
+     );
+@@ -1475,7 +1466,11 @@ class _ServerRowState extends ConsumerState<_ServerRow>
+     final node = byName.containsKey(widget.proxy.name)
+         ? resolve(widget.proxy.name)
+         : null;
+-    final measurable = widget.tcpHost.isNotEmpty && widget.tcpPort > 0;
++    // One row, one measurement: the child's server is timed by this process, the engine's is
++    // the engine's own delay. Mixing the two is how the engine's rows read single-digit
++    // milliseconds to Finland — that handshake went to the engine's fake-IP.
++    final measurable =
++        widget.xrayServer != null && widget.tcpHost.isNotEmpty && widget.tcpPort > 0;
+     final delay = measurable
+         ? ref.watch(tcpDelayProvider)[widget.proxy.name]
+         : ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
+diff --git a/test/core/xray_ping_test.dart b/test/core/xray_ping_test.dart
+new file mode 100644
+index 00000000..d3d7a3e3
+--- /dev/null
++++ b/test/core/xray_ping_test.dart
+@@ -0,0 +1,55 @@
++import 'dart:io';
++
++import 'package:fl_clash/core/xray_ping.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++/// A ping is only worth drawing when it is a fact about the server. These tests pin the two
++/// cases that made a row lie: a fake-IP from the tunnel's own range, and a loopback address.
++void main() {
++  InternetAddress v4(String address) => InternetAddress(address);
++
++  group('the tunnel owns these addresses, so they are never timed', () {
++    test('the fake-IP range mihomo and Xray answer with', () {
++      expect(isTunnelOwnedAddress(v4('198.18.0.1')), isTrue);
++      expect(isTunnelOwnedAddress(v4('198.18.0.2')), isTrue);
++      expect(isTunnelOwnedAddress(v4('198.18.44.7')), isTrue);
++      expect(isTunnelOwnedAddress(v4('198.19.255.255')), isTrue);
++    });
++
++    test('loopback, the unspecified address and link-local', () {
++      expect(isTunnelOwnedAddress(v4('127.0.0.1')), isTrue);
++      expect(isTunnelOwnedAddress(v4('0.0.0.0')), isTrue);
++      expect(isTunnelOwnedAddress(v4('169.254.1.1')), isTrue);
++      expect(isTunnelOwnedAddress(InternetAddress.loopbackIPv6), isTrue);
++    });
++
++    test('a real server address is not the tunnel', () {
++      expect(isTunnelOwnedAddress(v4('185.155.222.5')), isFalse);
++      expect(isTunnelOwnedAddress(v4('1.1.1.1')), isFalse);
++      expect(isTunnelOwnedAddress(v4('198.17.0.1')), isFalse);
++      expect(isTunnelOwnedAddress(v4('198.20.0.1')), isFalse);
++      expect(isTunnelOwnedAddress(InternetAddress('2a01:4f8::1')), isFalse);
++    });
++  });
++
++  group('a fake address is a dash, never a number', () {
++    test('a literal fake-IP is refused before any handshake', () async {
++      final probe = await probeTcp('198.18.0.5', 443);
++      expect(probe.note, TcpPingNote.fakeAddress);
++      expect(probe.ms, isNull);
++      expect(probe.answered, isFalse);
++      expect(probe.describe(), contains('the tunnel'));
++    });
++
++    test('a literal loopback is refused too', () async {
++      final probe = await probeTcp('127.0.0.1', 7890);
++      expect(probe.note, TcpPingNote.fakeAddress);
++      expect(probe.ms, isNull);
++    });
++
++    test('nothing to measure is not a measurement', () async {
++      expect((await probeTcp('', 443)).note, TcpPingNote.noAddress);
++      expect((await probeTcp('node.example', 0)).note, TcpPingNote.noAddress);
++    });
++  });
++}

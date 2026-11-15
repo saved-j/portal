@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
-import 'package:fl_clash/core/proxy_endpoints.dart';
 import 'package:fl_clash/core/xray_ping.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
 import '../profiles/subscription_facts.dart';
@@ -167,22 +166,15 @@ final portalPendingProvider =
     NotifierProvider<PortalPendingNotifier, Map<String, String>>(
         PortalPendingNotifier.new);
 
-/// Delays timed by the app itself, for servers of either core.
+/// Delays measured by this process, for the servers of the simple portal.
 ///
-/// The engine only reports delays for the servers it holds and never their addresses, so a
-/// TCP handshake from here is the one measurement that works for both lists. A missing key
-/// means "not asked yet"; a null entry means "asked, no answer".
+/// The engine only reports delays for the servers it holds; the child's servers are not among
+/// them, so a TCP handshake from here is the only measurement those rows can have. An engine
+/// row is never put in this map: its number is the engine's own, taken through the tunnel it
+/// built. A missing key means "not asked yet"; a null entry means "asked, no answer" — and a
+/// null is also the honest answer for a name that only resolves to the tunnel's own address.
 final tcpDelayProvider =
     NotifierProvider<TcpDelayNotifier, Map<String, int?>>(TcpDelayNotifier.new);
-
-/// The addresses saved with the profile, so an engine server can be timed directly.
-final proxyEndpointsProvider =
-    FutureProvider.autoDispose<Map<String, ProxyEndpoint>>((ref) async {
-  final profile = ref.watch(currentProfileProvider);
-  if (profile == null) return const {};
-  final path = await appPath.getProfilePath(profile.id.toString());
-  return loadProxyEndpoints(path);
-});
 
 class TcpDelayNotifier extends Notifier<Map<String, int?>> {
   /// Handshakes open at once. A panel list is often a hundred nodes and one unreachable
@@ -217,9 +209,12 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
         final index = next++;
         if (index >= targets.length) return;
         final (name, host, port) = targets[index];
-        final value = await tcpPing(host, port);
+        final probe = await probeTcp(host, port);
         if (generation != _generation) return;
-        state = {...state, name: value};
+        // Every number says what it timed and against which address; a dash is then a fact
+        // from the log — a fake-IP, a timeout — instead of a number that went missing.
+        commonPrint.log('portal delay $name: ${probe.describe()}');
+        state = {...state, name: probe.ms};
       }
     }
 
@@ -231,9 +226,10 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
   Future<void> measureOne(String name, String host, int port) async {
     final generation = _generation;
     state = {...state, name: null};
-    final value = await tcpPing(host, port);
+    final probe = await probeTcp(host, port);
     if (generation != _generation) return;
-    state = {...state, name: value};
+    commonPrint.log('portal delay $name: ${probe.describe()}');
+    state = {...state, name: probe.ms};
   }
 
   /// Revokes every sweep in flight, for a list that is gone or has been replaced.
@@ -708,18 +704,15 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
               : () {
                   HapticFeedback.mediumImpact();
                   // In the simple portal the list is the second core's, so the engine test
-                  // has nothing to measure — its own servers are timed directly instead.
-                  // The app's own measurement serves both lists; the engine test is the
-                  // fallback for a profile whose addresses are unknown.
+                  // has nothing to measure — its own servers are timed directly instead, and
+                  // a fake address is a dash there. In the network mode the engine holds
+                  // every server of the list and answers with its own proxied delay, which is
+                  // the only number that is a fact about the node rather than about a
+                  // handshake the phone performed to a local listener.
                   final servers = ref.read(xrayServersProvider).value ?? const [];
-                  final endpoints = ref.read(proxyEndpointsProvider).value ?? const {};
                   final targets = <(String, String, int)>[
                     for (final server in servers)
                       if (server.port > 0) (server.name, server.address, server.port),
-                    if (servers.isEmpty && group != null)
-                      for (final proxy in group.all)
-                        if (endpoints[proxy.name] case final e? when e.isUsable)
-                          (proxy.name, e.host, e.port),
                   ];
                   if (targets.isNotEmpty) {
                     unawaited(
@@ -874,15 +867,14 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
                 ? xrayPick
                 : (pending ?? chosenName ?? rulesPick);
     // Measure once when the list arrives: a portal whose servers all read "—" until you
-    // press something looks broken, and a closed portal is no reason not to know.
-    final endpoints = ref.watch(proxyEndpointsProvider).value ?? const {};
+    // press something looks broken, and a closed portal is no reason not to know. Only the
+    // simple portal is measured here: those are the servers no engine holds. In the network
+    // mode the delay is the engine's own, taken through the tunnel it built — a TCP handshake
+    // from this process to an engine node's name resolves through the running engine to its
+    // fake-IP, and timing that measures the phone's own listener, not the node.
     final targets = <(String, String, int)>[
       for (final server in xrayServers)
         if (server.port > 0) (server.name, server.address, server.port),
-      if (xrayServers.isEmpty)
-        for (final proxy in group.all)
-          if (endpoints[proxy.name] case final endpoint? when endpoint.isUsable)
-            (proxy.name, endpoint.host, endpoint.port),
     ];
     final xrayServerByName = {
       for (final server in xrayServers) server.name: server,
@@ -955,12 +947,11 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
             // Present only on the child's list: the row then knows a tap starts that node
             // instead of asking the engine for a proxy it does not have.
             xrayServer: xrayServerByName[proxy.name],
-            tcpHost: xrayServerByName[proxy.name]?.address ??
-                endpoints[proxy.name]?.host ??
-                '',
-            tcpPort: xrayServerByName[proxy.name]?.port ??
-                endpoints[proxy.name]?.port ??
-                0,
+            // A row is timed by this process only when it is the child's server. The engine's
+            // rows carry its own delay, which is a proxied measurement; a handshake to an
+            // engine node's name from here would resolve to the engine's fake-IP.
+            tcpHost: xrayServerByName[proxy.name]?.address ?? '',
+            tcpPort: xrayServerByName[proxy.name]?.port ?? 0,
           ),
       ],
     );
@@ -1475,7 +1466,11 @@ class _ServerRowState extends ConsumerState<_ServerRow>
     final node = byName.containsKey(widget.proxy.name)
         ? resolve(widget.proxy.name)
         : null;
-    final measurable = widget.tcpHost.isNotEmpty && widget.tcpPort > 0;
+    // One row, one measurement: the child's server is timed by this process, the engine's is
+    // the engine's own delay. Mixing the two is how the engine's rows read single-digit
+    // milliseconds to Finland — that handshake went to the engine's fake-IP.
+    final measurable =
+        widget.xrayServer != null && widget.tcpHost.isNotEmpty && widget.tcpPort > 0;
     final delay = measurable
         ? ref.watch(tcpDelayProvider)[widget.proxy.name]
         : ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
