@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
+import 'package:fl_clash/core/xray_measure.dart';
 import 'package:fl_clash/core/xray_ping.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
 import 'package:fl_clash/core/portal_feed.dart';
@@ -1483,79 +1484,75 @@ Future<void> _testDelayWithEngine(
   }
 }
 
-/// Measures the child's whole list, one node at a time, through the tunnel.
+/// Times every node of the subscription at once, the way the engine does it.
 ///
-/// One tunnel carries one node, so a sweep is a walk: raise the child, and for every row pick
-/// that node, wait for the child to take it, send a real request through the portal and keep
-/// the answer. The tunnel is put down at the end — a test is a measurement, not a connection —
-/// and the node the owner had picked is left as it was found. Rows that could not be raised
-/// stay without a number instead of borrowing a neighbour's.
+/// One core holds all the nodes, each behind its own local socks port, so a request to one
+/// port is served by one node: twenty-four measurements run side by side instead of
+/// twenty-four restarts. The portal's own child cannot share the library, so it is put down
+/// for the sweep and raised again afterwards on the node the owner had picked — a test is a
+/// measurement, and the portal ends where it started.
 Future<void> _testDelayWithChild(
   WidgetRef ref,
   List<XrayServerConfig> servers, {
   required bool wasRunning,
 }) async {
   if (servers.isEmpty) return;
+  final measure = measureConfig(servers);
+  if (measure.entries.isEmpty) return;
   final delay = ref.read(tcpDelayProvider.notifier);
   final url = ref.read(appSettingProvider).testUrl;
-  final original = ref.read(portalSelectionProvider).xray;
+  final runtime = portalRuntime;
+  final setup = ref.read(setupActionProvider.notifier);
   final watch = Stopwatch()..start();
-  var raised = false;
   var measured = 0;
+  for (final entry in measure.entries) {
+    delay.record(entry.name, null);
+  }
   try {
-    if (!wasRunning) {
-      raised = await ref.read(setupActionProvider.notifier).setRunning(true);
-      if (!raised) {
-        final reason = ref.read(setupActionProvider.notifier).lastPortalFailure;
-        commonPrint.log(
-          'portal test: could not raise the child${reason.isEmpty ? '' : ': $reason'}',
-          logLevel: LogLevel.warning,
-        );
-        unawaited(
-          portalRuntime.noteTest(
-            mode: 'global',
-            raised: 'child',
-            durationMs: watch.elapsedMilliseconds,
-            stoppedAfter: false,
-            detail: 'result=failed${reason.isEmpty ? '' : ' reason=$reason'}',
-          ),
-        );
-        return;
-      }
+    if (wasRunning) {
+      await setup.setRunning(false);
     }
-    for (final server in servers) {
-      final switched = await _restartChildOn(server);
-      if (!switched.ok) {
-        delay.record(server.name, null);
-        continue;
-      }
-      final probe = await probeThroughPortal(url);
-      delay.record(server.name, probe?.ms);
-      if (probe != null) measured++;
+    final started = await runtime.startMeasure(measure.config);
+    if (!started.ok) {
+      final reason = started.message;
       commonPrint.log(
-        'portal delay ${server.name}: ${probe?.describe() ?? 'no answer'}',
+        'portal test: the measuring core did not start${reason.isEmpty ? '' : ': $reason'}',
+        logLevel: LogLevel.warning,
       );
+      return;
+    }
+    // Bounded like the engine's own pool: enough to finish in seconds, few enough that the
+    // numbers are not measuring each other.
+    const batch = 12;
+    for (var index = 0; index < measure.entries.length; index += batch) {
+      final chunk = measure.entries.skip(index).take(batch).toList();
+      final answers = await Future.wait([
+        for (final entry in chunk)
+          measureNode(port: entry.port, url: url),
+      ]);
+      for (var i = 0; i < chunk.length; i++) {
+        delay.record(chunk[i].name, answers[i]);
+        if (answers[i] != null) measured++;
+      }
     }
   } finally {
-    var stopped = false;
-    if (raised) {
-      stopped = !await ref.read(setupActionProvider.notifier).setRunning(false);
-    } else if (original.isNotEmpty) {
-      final back = xrayServerFor(servers, original);
-      if (back != null) await _restartChildOn(back);
+    await runtime.stopMeasure();
+    var restored = false;
+    if (wasRunning) {
+      restored = await setup.setRunning(true);
     }
     watch.stop();
     commonPrint.log(
-      'portal test: sweep rows=${servers.length} measured=$measured '
-      'raised=${raised ? 'child' : 'none'} stopped_after=$stopped',
+      'portal test: sweep rows=${measure.entries.length} measured=$measured '
+      'restored=$restored duration_ms=${watch.elapsedMilliseconds}',
     );
     unawaited(
       portalRuntime.noteTest(
         mode: 'global',
-        raised: raised ? 'child' : 'none',
+        raised: 'none',
         durationMs: watch.elapsedMilliseconds,
-        stoppedAfter: stopped,
-        detail: 'rows=${servers.length} measured=$measured',
+        stoppedAfter: !wasRunning,
+        detail: 'rows=${measure.entries.length} measured=$measured restored=$restored',
       ),
     );
   }

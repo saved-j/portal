@@ -167,8 +167,69 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
                 ),
                 )
             }
+            // A measurement core: the same library, started on a document that listens on
+            // local socks inbounds instead of a tun, so every node can be timed at once
+            // without moving the tunnel. It is not a portal: no coordinator, no generation,
+            // and it refuses to start while the portal's own child is running.
+            "measureStart" -> {
+                val config = call.argument<String>("config")
+                if (config.isNullOrBlank()) {
+                    result.success(mapOf("ok" to false, "message" to "empty config"))
+                    return
+                }
+                GlobalState.launch {
+                    val outcome = executor.submit(Callable { startMeasure(config) })
+                    val answer = try {
+                        outcome.get(START_WAIT_MS, TimeUnit.MILLISECONDS)
+                    } catch (error: Exception) {
+                        mapOf("ok" to false, "message" to (error.message ?: "$error"))
+                    }
+                    replyOnMain(result, answer)
+                }
+            }
+            "measureStop" -> {
+                val task = executor.submit(Callable {
+                    stopCoreHere()
+                    true
+                })
+                val ok = runCatching { task.get(STOP_WAIT_MS, TimeUnit.MILLISECONDS) }.getOrDefault(false)
+                result.success(mapOf("ok" to ok))
+            }
             else -> result.notImplemented()
         }
+    }
+
+    /// Starts the core on a document that carries its own listeners and needs no tunnel.
+    ///
+    /// Called only by the test sweep: every node the subscription holds is an outbound of this
+    /// document, each behind its own local socks inbound, so a request to one port is served
+    /// by one node — the way the engine answers a delay test for its whole list at once.
+    private fun startMeasure(config: String): Map<String, Any> {
+        if (coreRunning) {
+            return mapOf(
+                "ok" to false,
+                "message" to "the portal's own core is running: a measurement needs it to itself",
+            )
+        }
+        val configFile = File(appContext.filesDir, MEASURE_CONFIG_NAME)
+        runCatching { configFile.writeText(config, Charsets.UTF_8) }.onFailure { error ->
+            return mapOf("ok" to false, "message" to "cannot write ${configFile.name}: ${error.message}")
+        }
+        val assets = installGeoAssets()
+        runCatching { Os.setenv(ASSET_ENV, assets.absolutePath, true) }
+        ensureLibrary()?.let { problem -> return mapOf("ok" to false, "message" to problem) }
+        val attempt = runCatching { XrayStart(config, -1, assets.absolutePath) }
+        if (attempt.isFailure) {
+            val error = attempt.exceptionOrNull()
+            Log.e(TAG, "unable to start the measurement core", error)
+            return mapOf("ok" to false, "message" to (error?.message ?: "unable to start"))
+        }
+        val nativeError = attempt.getOrNull()
+        if (nativeError != null) {
+            return mapOf("ok" to false, "message" to nativeError)
+        }
+        coreRunning = true
+        return mapOf("ok" to true, "message" to "")
     }
 
     private fun status(): Map<String, Any> = mapOf(
@@ -777,6 +838,10 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
 
         /// The document the core is started from, and the log this start reads.
         private const val CONFIG_NAME = "xray-tun.json"
+
+        /// The measurement core's own document: a different file, so a sweep can never be
+        /// mistaken for the tunnel's configuration or overwrite it.
+        private const val MEASURE_CONFIG_NAME = "xray-measure.json"
         private const val LOG_NAME = "xray.log"
 
         /// The directory the geodata files are installed into, and the core's variable for it.

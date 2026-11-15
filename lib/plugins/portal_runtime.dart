@@ -316,6 +316,41 @@ class PortalRuntime {
     }
   }
 
+  /// Starts a measurement core on a document that listens on local socks ports.
+  ///
+  /// It is not the portal: nothing is published, no generation moves, the tunnel is untouched.
+  /// The plugin refuses while the portal's own child runs — one core at a time — so the sweep
+  /// puts the portal down first and raises it again afterwards.
+  Future<({bool ok, String message})> startMeasure(String config) async {
+    try {
+      final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+        'measureStart',
+        {'config': config},
+      );
+      return (
+        ok: result?['ok'] == true,
+        message: '${result?['message'] ?? ''}',
+      );
+    } on PlatformException catch (error) {
+      return (ok: false, message: error.message ?? '$error');
+    } on MissingPluginException {
+      return (ok: false, message: 'no child on this platform');
+    }
+  }
+
+  /// Stops the measurement core. A failure is reported, not hidden: the caller restores the
+  /// portal right after, and a core left running would refuse that start.
+  Future<bool> stopMeasure() async {
+    try {
+      final result = await _channel.invokeMethod<Map<Object?, Object?>>('measureStop');
+      return result?['ok'] == true;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   Future<PortalRuntimeAnswer> _invoke(
     String method,
     Map<String, Object?> arguments,

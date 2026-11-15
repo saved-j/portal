@@ -1,0 +1,269 @@
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+index bf6c88c2..e29e4b3c 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -167,10 +167,71 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
+                 ),
+                 )
+             }
++            // A measurement core: the same library, started on a document that listens on
++            // local socks inbounds instead of a tun, so every node can be timed at once
++            // without moving the tunnel. It is not a portal: no coordinator, no generation,
++            // and it refuses to start while the portal's own child is running.
++            "measureStart" -> {
++                val config = call.argument<String>("config")
++                if (config.isNullOrBlank()) {
++                    result.success(mapOf("ok" to false, "message" to "empty config"))
++                    return
++                }
++                GlobalState.launch {
++                    val outcome = executor.submit(Callable { startMeasure(config) })
++                    val answer = try {
++                        outcome.get(START_WAIT_MS, TimeUnit.MILLISECONDS)
++                    } catch (error: Exception) {
++                        mapOf("ok" to false, "message" to (error.message ?: "$error"))
++                    }
++                    replyOnMain(result, answer)
++                }
++            }
++            "measureStop" -> {
++                val task = executor.submit(Callable {
++                    stopCoreHere()
++                    true
++                })
++                val ok = runCatching { task.get(STOP_WAIT_MS, TimeUnit.MILLISECONDS) }.getOrDefault(false)
++                result.success(mapOf("ok" to ok))
++            }
+             else -> result.notImplemented()
+         }
+     }
+ 
++    /// Starts the core on a document that carries its own listeners and needs no tunnel.
++    ///
++    /// Called only by the test sweep: every node the subscription holds is an outbound of this
++    /// document, each behind its own local socks inbound, so a request to one port is served
++    /// by one node — the way the engine answers a delay test for its whole list at once.
++    private fun startMeasure(config: String): Map<String, Any> {
++        if (coreRunning) {
++            return mapOf(
++                "ok" to false,
++                "message" to "the portal's own core is running: a measurement needs it to itself",
++            )
++        }
++        val configFile = File(appContext.filesDir, MEASURE_CONFIG_NAME)
++        runCatching { configFile.writeText(config, Charsets.UTF_8) }.onFailure { error ->
++            return mapOf("ok" to false, "message" to "cannot write ${configFile.name}: ${error.message}")
++        }
++        val assets = installGeoAssets()
++        runCatching { Os.setenv(ASSET_ENV, assets.absolutePath, true) }
++        ensureLibrary()?.let { problem -> return mapOf("ok" to false, "message" to problem) }
++        val attempt = runCatching { XrayStart(config, -1, assets.absolutePath) }
++        if (attempt.isFailure) {
++            val error = attempt.exceptionOrNull()
++            Log.e(TAG, "unable to start the measurement core", error)
++            return mapOf("ok" to false, "message" to (error?.message ?: "unable to start"))
++        }
++        val nativeError = attempt.getOrNull()
++        if (nativeError != null) {
++            return mapOf("ok" to false, "message" to nativeError)
++        }
++        coreRunning = true
++        return mapOf("ok" to true, "message" to "")
++    }
++
+     private fun status(): Map<String, Any> = mapOf(
+         "running" to coreRunning,
+         "lastLine" to lastLine,
+@@ -777,6 +838,10 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
+ 
+         /// The document the core is started from, and the log this start reads.
+         private const val CONFIG_NAME = "xray-tun.json"
++
++        /// The measurement core's own document: a different file, so a sweep can never be
++        /// mistaken for the tunnel's configuration or overwrite it.
++        private const val MEASURE_CONFIG_NAME = "xray-measure.json"
+         private const val LOG_NAME = "xray.log"
+ 
+         /// The directory the geodata files are installed into, and the core's variable for it.
+diff --git a/lib/plugins/portal_runtime.dart b/lib/plugins/portal_runtime.dart
+index 0884f117..102c99d4 100644
+--- a/lib/plugins/portal_runtime.dart
++++ b/lib/plugins/portal_runtime.dart
+@@ -316,6 +316,41 @@ class PortalRuntime {
+     }
+   }
+ 
++  /// Starts a measurement core on a document that listens on local socks ports.
++  ///
++  /// It is not the portal: nothing is published, no generation moves, the tunnel is untouched.
++  /// The plugin refuses while the portal's own child runs — one core at a time — so the sweep
++  /// puts the portal down first and raises it again afterwards.
++  Future<({bool ok, String message})> startMeasure(String config) async {
++    try {
++      final result = await _channel.invokeMethod<Map<Object?, Object?>>(
++        'measureStart',
++        {'config': config},
++      );
++      return (
++        ok: result?['ok'] == true,
++        message: '${result?['message'] ?? ''}',
++      );
++    } on PlatformException catch (error) {
++      return (ok: false, message: error.message ?? '$error');
++    } on MissingPluginException {
++      return (ok: false, message: 'no child on this platform');
++    }
++  }
++
++  /// Stops the measurement core. A failure is reported, not hidden: the caller restores the
++  /// portal right after, and a core left running would refuse that start.
++  Future<bool> stopMeasure() async {
++    try {
++      final result = await _channel.invokeMethod<Map<Object?, Object?>>('measureStop');
++      return result?['ok'] == true;
++    } on PlatformException {
++      return false;
++    } on MissingPluginException {
++      return false;
++    }
++  }
++
+   Future<PortalRuntimeAnswer> _invoke(
+     String method,
+     Map<String, Object?> arguments,
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 8edb45ad..ee7987e9 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:flutter/services.dart';
+ import 'package:material_ui/material_ui.dart';
+ import 'package:fl_clash/common/outbound.dart';
++import 'package:fl_clash/core/xray_measure.dart';
+ import 'package:fl_clash/core/xray_ping.dart';
+ import 'package:fl_clash/core/xray_subscription.dart';
+ import 'package:fl_clash/core/portal_feed.dart';
+@@ -1483,79 +1484,75 @@ Future<void> _testDelayWithEngine(
+   }
+ }
+ 
+-/// Measures the child's whole list, one node at a time, through the tunnel.
++/// Times every node of the subscription at once, the way the engine does it.
+ ///
+-/// One tunnel carries one node, so a sweep is a walk: raise the child, and for every row pick
+-/// that node, wait for the child to take it, send a real request through the portal and keep
+-/// the answer. The tunnel is put down at the end — a test is a measurement, not a connection —
+-/// and the node the owner had picked is left as it was found. Rows that could not be raised
+-/// stay without a number instead of borrowing a neighbour's.
++/// One core holds all the nodes, each behind its own local socks port, so a request to one
++/// port is served by one node: twenty-four measurements run side by side instead of
++/// twenty-four restarts. The portal's own child cannot share the library, so it is put down
++/// for the sweep and raised again afterwards on the node the owner had picked — a test is a
++/// measurement, and the portal ends where it started.
+ Future<void> _testDelayWithChild(
+   WidgetRef ref,
+   List<XrayServerConfig> servers, {
+   required bool wasRunning,
+ }) async {
+   if (servers.isEmpty) return;
++  final measure = measureConfig(servers);
++  if (measure.entries.isEmpty) return;
+   final delay = ref.read(tcpDelayProvider.notifier);
+   final url = ref.read(appSettingProvider).testUrl;
+-  final original = ref.read(portalSelectionProvider).xray;
++  final runtime = portalRuntime;
++  final setup = ref.read(setupActionProvider.notifier);
+   final watch = Stopwatch()..start();
+-  var raised = false;
+   var measured = 0;
++  for (final entry in measure.entries) {
++    delay.record(entry.name, null);
++  }
+   try {
+-    if (!wasRunning) {
+-      raised = await ref.read(setupActionProvider.notifier).setRunning(true);
+-      if (!raised) {
+-        final reason = ref.read(setupActionProvider.notifier).lastPortalFailure;
+-        commonPrint.log(
+-          'portal test: could not raise the child${reason.isEmpty ? '' : ': $reason'}',
+-          logLevel: LogLevel.warning,
+-        );
+-        unawaited(
+-          portalRuntime.noteTest(
+-            mode: 'global',
+-            raised: 'child',
+-            durationMs: watch.elapsedMilliseconds,
+-            stoppedAfter: false,
+-            detail: 'result=failed${reason.isEmpty ? '' : ' reason=$reason'}',
+-          ),
+-        );
+-        return;
+-      }
++    if (wasRunning) {
++      await setup.setRunning(false);
+     }
+-    for (final server in servers) {
+-      final switched = await _restartChildOn(server);
+-      if (!switched.ok) {
+-        delay.record(server.name, null);
+-        continue;
+-      }
+-      final probe = await probeThroughPortal(url);
+-      delay.record(server.name, probe?.ms);
+-      if (probe != null) measured++;
++    final started = await runtime.startMeasure(measure.config);
++    if (!started.ok) {
++      final reason = started.message;
+       commonPrint.log(
+-        'portal delay ${server.name}: ${probe?.describe() ?? 'no answer'}',
++        'portal test: the measuring core did not start${reason.isEmpty ? '' : ': $reason'}',
++        logLevel: LogLevel.warning,
+       );
++      return;
++    }
++    // Bounded like the engine's own pool: enough to finish in seconds, few enough that the
++    // numbers are not measuring each other.
++    const batch = 12;
++    for (var index = 0; index < measure.entries.length; index += batch) {
++      final chunk = measure.entries.skip(index).take(batch).toList();
++      final answers = await Future.wait([
++        for (final entry in chunk)
++          measureNode(port: entry.port, url: url),
++      ]);
++      for (var i = 0; i < chunk.length; i++) {
++        delay.record(chunk[i].name, answers[i]);
++        if (answers[i] != null) measured++;
++      }
+     }
+   } finally {
+-    var stopped = false;
+-    if (raised) {
+-      stopped = !await ref.read(setupActionProvider.notifier).setRunning(false);
+-    } else if (original.isNotEmpty) {
+-      final back = xrayServerFor(servers, original);
+-      if (back != null) await _restartChildOn(back);
++    await runtime.stopMeasure();
++    var restored = false;
++    if (wasRunning) {
++      restored = await setup.setRunning(true);
+     }
+     watch.stop();
+     commonPrint.log(
+-      'portal test: sweep rows=${servers.length} measured=$measured '
+-      'raised=${raised ? 'child' : 'none'} stopped_after=$stopped',
++      'portal test: sweep rows=${measure.entries.length} measured=$measured '
++      'restored=$restored duration_ms=${watch.elapsedMilliseconds}',
+     );
+     unawaited(
+       portalRuntime.noteTest(
+         mode: 'global',
+-        raised: raised ? 'child' : 'none',
++        raised: 'none',
+         durationMs: watch.elapsedMilliseconds,
+-        stoppedAfter: stopped,
+-        detail: 'rows=${servers.length} measured=$measured',
++        stoppedAfter: !wasRunning,
++        detail: 'rows=${measure.entries.length} measured=$measured restored=$restored',
+       ),
+     );
+   }
