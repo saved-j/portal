@@ -196,3 +196,79 @@ List<SubscriptionFormat> formatsOf(SubscriptionAvailability availability) => [
       if (availability.hasMihomo) SubscriptionFormat.mihomo,
       if (availability.hasXray) SubscriptionFormat.xray,
     ];
+
+/// The nodes a ready Xray config actually offers, as engine-shaped proxies.
+///
+/// Happ and Incy get a compiled config, not a link list, so the owner's server list must be
+/// rebuilt from it: the selectors, the nodes and the group that holds them. Without this the
+/// list keeps showing the engine's servers after the switch has already moved the traffic.
+List<Map<String, dynamic>> xrayConfigServers(Map<String, dynamic> config) {
+  final outbounds = config['outbounds'];
+  if (outbounds is! List) return const [];
+
+  /// Tags that carry traffic rather than route it.
+  const routers = {'direct', 'block', 'blocked', 'dns', 'dns-out'};
+  final nodes = <String, Map<String, dynamic>>{};
+  for (final item in outbounds) {
+    if (item is! Map) continue;
+    final tag = '${item['tag'] ?? ''}';
+    final protocol = '${item['protocol'] ?? ''}';
+    if (tag.isEmpty) continue;
+    if (routers.contains(tag.toLowerCase()) || routers.contains(protocol.toLowerCase())) {
+      continue;
+    }
+    // A selector is a chooser, not a server: it is shown as a group, never as an endpoint.
+    if (protocol == 'selector' || protocol == 'urltest' || protocol == 'fallback') continue;
+    if (protocol == 'freedom' || protocol == 'blackhole') continue;
+    nodes[tag] = proxyShapeFor(item);
+  }
+  return nodes.values.toList();
+}
+
+/// The selector groups inside a ready config, each with the members it may pick.
+List<Map<String, dynamic>> xrayConfigGroups(Map<String, dynamic> config) {
+  final outbounds = config['outbounds'];
+  if (outbounds is! List) return const [];
+  final groups = <Map<String, dynamic>>[];
+  for (final item in outbounds) {
+    if (item is! Map) continue;
+    final protocol = '${item['protocol'] ?? ''}';
+    if (protocol != 'selector' && protocol != 'urltest') continue;
+    final tag = '${item['tag'] ?? ''}';
+    final members = item['settings'];
+    final list = members is Map ? members['servers'] : null;
+    groups.add({
+      'name': tag,
+      'type': protocol == 'urltest' ? 'url-test' : 'select',
+      'proxies': [
+        if (list is List) for (final member in list) '$member',
+      ],
+    });
+  }
+  return groups;
+}
+
+/// One outbound as the shape the interface already renders for a server row.
+Map<String, dynamic> proxyShapeFor(Map item) {
+  final settings = item['settings'];
+  final vnext = settings is Map ? settings['vnext'] : null;
+  final servers = settings is Map ? settings['servers'] : null;
+  String server = '';
+  int port = 0;
+  if (vnext is List && vnext.isNotEmpty && vnext.first is Map) {
+    final first = vnext.first as Map;
+    server = '${first['address'] ?? ''}';
+    port = int.tryParse('${first['port']}') ?? 0;
+  } else if (servers is List && servers.isNotEmpty && servers.first is Map) {
+    final first = servers.first as Map;
+    server = '${first['address'] ?? ''}';
+    port = int.tryParse('${first['port']}') ?? 0;
+  }
+  final stream = item['streamSettings'];
+  final transport = stream is Map ? '${stream['network'] ?? 'tcp'}' : 'tcp';
+  return {
+    'name': '${item['tag'] ?? ''}',
+    'type': '${item['protocol'] ?? 'proxy'}',
+    'serverDescription': server.isEmpty ? transport : '$server:$port · $transport',
+  };
+}

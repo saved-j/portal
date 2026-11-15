@@ -203,6 +203,22 @@ List<Group> portalVisibleGroups(List<Group> all, Set<String> hidden, List<String
   return visible;
 }
 
+/// The servers the second core offers, in the shape the list already renders.
+///
+/// In the simple portal the strip must show the compiled Xray nodes instead of the engine's:
+/// the two builds of one subscription name different servers, and the Xray build carries
+/// extras the engine build does not have. An empty result means "keep showing the engine's
+/// list", which is what happens when the panel served only YAML.
+final xrayServersProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final profile = ref.read(currentProfileProvider);
+  if (profile == null) return const [];
+  final body = await profile.readXrayFormat();
+  if (body == null) return const [];
+  final config = decodeClientConfig(body);
+  if (config == null) return const [];
+  return xrayConfigServers(config);
+});
+
 /// Whether the current subscription carries the engine's own format.
 ///
 /// The "Сеть порталов" switch is meaningless without it: rules live in that YAML, and a
@@ -428,6 +444,12 @@ class PortalServerList extends ConsumerWidget {
         ref.read(portalPendingProvider.notifier).clear(group.name);
       });
     }
+    // The simple portal is driven by the second core, whose build of the same subscription
+    // names its own servers. Showing the engine's list here would offer nodes the running
+    // core does not have — and hide the extras it does.
+    final xrayServers = simple
+        ? (ref.watch(xrayServersProvider).value ?? const <Map<String, dynamic>>[])
+        : const <Map<String, dynamic>>[];
     // One source for "what is chosen": the profile's own selection, which changeProxy
     // writes optimistically. No per-filter special cases — if a server was picked, it is
     // picked, whether the group is RF services, Chinese services or YouTube. When the
@@ -435,11 +457,22 @@ class PortalServerList extends ConsumerWidget {
     // up without needing a second rule.
     final bypassedGroup = ref.watch(portalBypassProvider).containsKey(group.name);
     final chosenName = ref.watch(selectedProxyNameProvider(group.name));
-    final selectedName = bypassedGroup ? null : (pending ?? chosenName);
-    final members = [
-      for (final proxy in group.all)
-        if (!_isBuiltinOutbound(proxy.name)) proxy,
-    ];
+    final selectedName = bypassedGroup
+        ? null
+        : (pending ?? (xrayServers.isNotEmpty ? null : chosenName));
+    final members = xrayServers.isNotEmpty
+        ? [
+            for (final server in xrayServers)
+              Proxy(
+                name: '${server['name']}',
+                type: '${server['type']}',
+                serverDescription: server['serverDescription'] as String?,
+              ),
+          ]
+        : [
+            for (final proxy in group.all)
+              if (!_isBuiltinOutbound(proxy.name)) proxy,
+          ];
     if (sort == PortalSort.alphabet) {
       members.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     } else {
@@ -453,7 +486,9 @@ class PortalServerList extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (!simple && groups.length > 1) const _GroupStrip(),
+        // The filter strip belongs to the engine's rules. In the simple portal the list is
+        // the second core's own servers, so there are no filters to show.
+        if (!simple && xrayServers.isEmpty && groups.length > 1) const _GroupStrip(),
         if (!simple && groups.length == 1)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
