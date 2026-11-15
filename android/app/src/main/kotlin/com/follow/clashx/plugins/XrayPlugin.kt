@@ -401,6 +401,10 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
             },
         )
         root.put("inbounds", inbounds)
+        // The tunnel's DNS is the core's own business: the VpnService hands every resolver
+        // query to 198.18.0.2:53, and the core must answer it with its DNS module instead of
+        // routing the packet somewhere that cannot exist.
+        hijackTunnelDns(root)
         // The acknowledgement this start waits for is an info-level line, and it is only
         // written if the core logs at all — the panel's own level may filter it out. `error`
         // is the core's general log; `access` records requests, which is not what a start
@@ -411,6 +415,93 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         log.put("error", logFile.absolutePath)
         root.put("log", log)
         return root.toString()
+    }
+
+    /// Makes the document answer its own DNS inside the tunnel.
+    ///
+    /// The service gives every app the resolver `198.18.0.2` (see `VpnService`), so the
+    /// packets a name lookup produces arrive at the core as ordinary connections to
+    /// `198.18.0.2:53`. A panel document has no reason to hijack that address: its own DNS
+    /// section is written for a machine where the system resolver is real, and its routing
+    /// sends port 53 wherever it sends everything else. The result on the phone is a query
+    /// handed to `direct` for an address nothing answers — `[tun-in -> direct] …
+    /// 198.18.0.2:53` in the core's log — and every name lookup sits there until it times
+    /// out. That is exactly what the panel's balancer document did, and why 'Авто-выбор'
+    /// resolved nothing while a concrete node seemed to work.
+    ///
+    /// Three things make it resolve, and none of them touch the node:
+    ///  1. a `dns` section with at least one server the module can actually query;
+    ///  2. one outbound of protocol `dns` — the document's own if it already has one, else
+    ///     one appended under a tag of ours;
+    ///  3. a routing rule, first in the list, that sends the tunnel inbound's port 53 to it.
+    ///
+    /// Rewritten rather than refused. A document whose DNS cannot be hijacked is not
+    /// unusable — it is a document that has not been told what the tunnel is — and refusing
+    /// it would fall back to a single node, which silently turns 'Авто-выбор' into "the
+    /// first server" and loses the balancer the owner picked. The rewrite keeps a concrete
+    /// node working exactly as it did (the same rule applies to it) and makes the balancer
+    /// pick behave like one.
+    private fun hijackTunnelDns(root: JSONObject) {
+        val dns = root.optJSONObject("dns") ?: JSONObject().also { root.put("dns", it) }
+        val servers = dns.optJSONArray("servers")
+        if (servers == null || servers.length() == 0) {
+            // No resolver of the panel's own: two anycast resolvers are enough to answer,
+            // and their own traffic leaves by whatever the document routes.
+            dns.put("servers", JSONArray(listOf(FALLBACK_DNS_1, FALLBACK_DNS_2)))
+        }
+
+        val outbounds = root.optJSONArray("outbounds") ?: JSONArray().also { root.put("outbounds", it) }
+        var dnsTag: String? = null
+        for (index in 0 until outbounds.length()) {
+            val item = outbounds.optJSONObject(index) ?: continue
+            if (!item.optString("protocol").equals("dns", ignoreCase = true)) continue
+            val tag = item.optString("tag")
+            if (tag.isEmpty()) {
+                item.put("tag", DNS_OUTBOUND_TAG)
+                dnsTag = DNS_OUTBOUND_TAG
+            } else {
+                dnsTag = tag
+            }
+            break
+        }
+        if (dnsTag == null) {
+            dnsTag = DNS_OUTBOUND_TAG
+            outbounds.put(
+                JSONObject().apply {
+                    put("tag", dnsTag)
+                    put("protocol", "dns")
+                },
+            )
+        }
+
+        val routing = root.optJSONObject("routing") ?: JSONObject().also { root.put("routing", it) }
+        val existing = routing.optJSONArray("rules") ?: JSONArray()
+        val rules = JSONArray()
+        rules.put(
+            JSONObject().apply {
+                put("type", "field")
+                put("inboundTag", JSONArray(listOf(TUN_INBOUND_TAG)))
+                put("port", DNS_PORT)
+                put("outboundTag", dnsTag)
+            },
+        )
+        // A rule of this shape that is already there is replaced, not stacked: a document
+        // that is started twice must not arrive at the core with two of them.
+        for (index in 0 until existing.length()) {
+            val item = existing.optJSONObject(index) ?: continue
+            if (isTunnelDnsRule(item)) continue
+            rules.put(item)
+        }
+        routing.put("rules", rules)
+        Log.i(TAG, "tunnel dns goes to outbound $dnsTag; ${rules.length()} routing rules")
+    }
+
+    /// The rule this class writes, whichever tag an older version gave it.
+    private fun isTunnelDnsRule(rule: JSONObject): Boolean {
+        if (!rule.optString("type").equals("field", ignoreCase = true)) return false
+        val inbound = rule.optJSONArray("inboundTag") ?: return false
+        if (inbound.length() != 1 || inbound.optString(0) != TUN_INBOUND_TAG) return false
+        return rule.optString("port") == DNS_PORT.toString()
     }
 
     /// Copies the geodata shipped as assets into filesDir, once per install.
@@ -705,6 +796,14 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
 
         private const val TUN_NAME = "portal0"
         private const val TUN_INBOUND_TAG = "tun-in"
+
+        /// The outbound that answers the tunnel's own DNS queries, and the port they arrive on.
+        private const val DNS_OUTBOUND_TAG = "portal-dns"
+        private const val DNS_PORT = 53
+
+        /// Used only when the document has no resolver of its own to query.
+        private const val FALLBACK_DNS_1 = "1.1.1.1"
+        private const val FALLBACK_DNS_2 = "8.8.8.8"
 
         val CHANNEL = "${Components.PACKAGE_NAME}/xray"
     }
