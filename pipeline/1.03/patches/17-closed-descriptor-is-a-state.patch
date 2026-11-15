@@ -1,0 +1,17 @@
+diff --git a/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+index efcea38c..a01e3de9 100644
+--- a/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
++++ b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+@@ -18,7 +18,11 @@ class XrayTun(
+     val dns: List<String>,
+ ) {
+     /// The number the core is given. Valid only while [descriptor] is open.
+-    val fd: Int get() = descriptor.fd
++    // `ParcelFileDescriptor.getFd()` throws `IllegalStateException: Already closed` on a closed
++    // descriptor instead of answering -1, and this getter is read on a worker thread at the
++    // moment the service tears the tunnel down — that threw and killed the app. A closed tunnel
++    // is a state to report, never an exception to propagate.
++    val fd: Int get() = runCatching { descriptor.fd }.getOrDefault(-1)
+ 
+     /// Whether this still names an open tunnel.
+     ///
