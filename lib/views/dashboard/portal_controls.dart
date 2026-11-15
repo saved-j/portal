@@ -591,7 +591,7 @@ PortalShown _portalShown(
       : childLive != null
           ? (group: childLive, owner: RowsOwner.child)
           : null;
-  return portalShownRows(
+  final shown = portalShownRows(
     mode: mode,
     live: live,
     held: simple ? heldChild : heldEngine,
@@ -630,7 +630,22 @@ PortalShown _portalShown(
           ],
     remember: remember,
   );
+  // What the owner actually sees, and where it came from: two cores, two caches, and the log
+  // must name which one answered. Throttled to changes, so a rebuild storm stays readable.
+  final items = shown.group?.all ?? const <Proxy>[];
+  final mark = '${mode.name}|${shown.source}|${items.length}';
+  if (mark != _portalListMark) {
+    _portalListMark = mark;
+    final names = items.take(10).map((item) => '${item.name}').join(' | ');
+    commonPrint.log(
+      'portal list: mode=${simple ? 'global' : 'rule'} owner=${status.owner?.name} '
+      'source=${shown.source} rows=${items.length} names=$names',
+    );
+  }
+  return shown;
 }
+
+String _portalListMark = '';
 
 /// The servers the second core offers.
 ///
