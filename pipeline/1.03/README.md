@@ -164,6 +164,27 @@ the device, not a redesign.
   owner; before anything answered, the profile's own `proxies:` are the rows; a profile with no
   proxies still ends in the honest empty state. No provider is read after an `await`, and no
   row depends on a config push.
+- `21-switch-push-without-the-debounce` — a mode switch took ~15 s because its own config push
+  went through `applyProfileDebounce`: the 2 s floor / 10 s ceiling an editor needs (measured
+  off the last push's duration) held the engine's first config back while the owner watched a
+  list nothing had filled. `applyProfileNow` cancels the pending debounced push and applies at
+  once, unawaited, for the start of a switch; ordinary edits keep the debounce. Its failure is
+  a log line and a notice, not a reason to take the portal down — the tunnel already has its
+  new owner.
+- `21b-switch-reads-the-acknowledgement` — `_awaitMode` waited up to 12 s for
+  `inputsApplied()`, i.e. for the engine to have taken the profile its start pushed. That is a
+  different question from whether the switch happened, and its answer is already the record's:
+  `PortalRuntime.open` publishes `Active` only after the owner acknowledged its own listener or
+  tunnel, and the start returns on that answer. The switch now reads the record, bounded at
+  1.5 s as a guard against a record that never moves; a missing acknowledgement is a warning
+  over the list and a log line, never a rollback.
+- `21c-switch-timings-in-the-transition-log` — both halves of a switch are now measured from
+  the tap into `portal-transitions.log`: `kind=switch phase=active duration_ms=…` written by
+  the record's own `onPublish` hook (the tap stamped on the native side by a channel call), and
+  `kind=switch phase=list duration_ms=… source=live|held|profile rows=…` written by the screen
+  from its own stopwatch. `source=` is part of the answer: only `live` is the new owner's list;
+  `held`/`profile` are what keeps the screen non-empty. `BUILD.md` documents the shape; the
+  channel methods are `switchStart` and `switchTiming`.
 
 Apply (to a tree that does not already carry the 01..02 commit):
 ```
@@ -181,6 +202,13 @@ for p in pipeline/1.03/patches/*.patch; do git apply --whitespace=nowarn "$p"; d
   `XrayTun.kt` and `VpnService.kt` move — the library source lives outside this tree, see below)
 - tree after 1.03 patches 08..15: `40db3c58f5b1536c28eeef2f250ea8c6cc9fed65`
   (commit `00bb44ed`); 14 and 15 move only `lib/views/dashboard/portal_controls.dart`
+- tree after 1.03 patches 21..21c: `ea7ec87eac06e7933b8b64ce59184e49241a43b8`
+  (pristine `5b6061ed` + 21, 21b, 21c applied in that order; the branch carries the same product
+  files, plus `pipeline/`). 21 moves `lib/providers/actions/setup.dart`; 21b moves
+  `lib/views/dashboard/portal_controls.dart`; 21c moves `BUILD.md`,
+  `lib/plugins/portal_runtime.dart`, the new `lib/plugins/portal_switch_timing.dart`,
+  the new `test/plugins/portal_switch_timing_test.dart`, `PortalTelemetry.kt` and
+  `PortalRuntimePlugin.kt`, and adds the `switchStart`/`switchTiming` channel methods.
 - library built for this series (`build/xray-lib.sh`): `Xray-core v26.11.9`, Go 1.27.4, NDK
   28.2.13676358 — see the `lib_sha256` in the report; `build/libxray/main.go` and
   `jni_bridge.c` are not in this repository, so patches 09 and 12 describe their changes and
@@ -195,3 +223,26 @@ Patches 03 and 04 both edit `XrayPlugin.kt` and 04 edits code 03 introduces, so 
 top of 03 only; `08..13` each edit `XrayPlugin.kt` and 09/12 edit code 08/09 introduce, so they
 apply in order; 14 and 15 each apply on their own line of `portal_controls.dart` and also in
 order.
+
+**Switch timings, measured on the Motorola** (`ZY22BFXN4N`, arm64 APK `d81caaa1…`, installed over
+the 20d build with `install -r`: `lastUpdateTime` 03:36:17 → 04:00:59, subscription kept).
+Six consecutive switches, three each way, from `portal-transitions.log` — click → `phase=Active`
+and click → rows on screen, both in ms:
+
+| # | direction | `phase=active` | `phase=list` | rows source |
+|---|---|---|---|---|
+| 1 | portal → network | 622 | 150 | live, 28 |
+| 2 | network → portal | 256 | 122 | live, 28 |
+| 3 | portal → network | 348 | 136 | live, 28 |
+| 4 | network → portal | 277 | 143 | live, 28 |
+| 5 | portal → network | 375 | 135 | live, 28 |
+| 6 | network → portal | 250 | 124 | live, 28 |
+
+Before 21/21b the same tap took ~15 s: the hand-over was always ~235 ms, and the wait was the
+apply debouncer plus `_awaitMode`'s 12 s deadline. A screenshot 450 ms after a tap shows the
+`Авто-выбор`/`Эстония`/`Финляндия` rows with their pings; another at 651 ms shows the engine's
+`VPN - Main` group strip. One owner per generation throughout (no generation carries both
+`Mihomo` and `Xray`), no `result=failed`, `engine=stopped child=running` with
+`listeners=probed:127.0.0.1:10810` and `egress=185.155.222.5` in the portal, `engine=running`
+`child=stopped` on `:7890` in the network mode, no `[Fatal]` in `xray.log`, no
+`config is not applied` and no `portal switch unconfirmed` in logcat across 14 switches.

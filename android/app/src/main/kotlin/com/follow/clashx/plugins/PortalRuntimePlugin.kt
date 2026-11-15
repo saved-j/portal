@@ -6,6 +6,7 @@ import com.follow.clashx.common.Components
 import com.follow.clashx.common.GlobalState
 import com.follow.clashx.common.PortalOwner
 import com.follow.clashx.common.PortalRuntimeState
+import com.follow.clashx.common.PortalTelemetry
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -78,6 +79,23 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             }
 
             "status" -> result.success(PortalRuntimeCoordinator.status())
+
+            // The switch's own clock: the tap starts it here, and the record's hook writes
+            // `phase=active` when the new owner acknowledges; the screen writes `phase=list`
+            // when it has rows to draw. Both lines land in portal-transitions.log.
+            "switchStart" -> {
+                PortalTelemetry.noteSwitchStart(call.argument<String>("to") ?: "")
+                result.success(null)
+            }
+
+            "switchTiming" -> {
+                PortalTelemetry.noteSwitchTiming(
+                    phase = call.argument<String>("phase") ?: "list",
+                    durationMs = (call.argument<Number>("durationMs") ?: 0).toLong(),
+                    detail = call.argument<String>("detail") ?: "",
+                )
+                result.success(null)
+            }
 
             else -> result.notImplemented()
         }

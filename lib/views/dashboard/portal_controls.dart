@@ -14,6 +14,7 @@ import 'package:fl_clash/core/xray_ping.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
 import '../profiles/subscription_facts.dart';
 import 'package:fl_clash/plugins/portal_runtime.dart';
+import 'package:fl_clash/plugins/portal_switch_timing.dart';
 import 'package:fl_clash/plugins/xray.dart';
 import 'package:yaml/yaml.dart';
 import 'dart:async';
@@ -760,6 +761,18 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
       profileRows: ref.watch(profilePortalRowsProvider).value ?? const [],
       remember: (value) => _held = value,
     );
+    if (group != null && group.all.isNotEmpty) {
+      // The tap → rows on screen, for the transitions file. The clock writes one line per tap
+      // and answers nothing afterwards, so a list rebuilt every frame costs one comparison.
+      portalSwitchClock.listPopulated(
+        source: identical(group, live)
+            ? 'live'
+            : identical(group, _held)
+                ? 'held'
+                : 'profile',
+        rows: group.all.length,
+      );
+    }
     if (group == null) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -1771,6 +1784,9 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
   // dropped, which is what the owner asked for by tapping once.
   if (portalRuntime.status.value.busy) return;
   _portalSwitching = true;
+  // The tap is zero for both measurements: the record writes click → `phase=active` from its
+  // own hook, the screen writes click → rows once it has them.
+  portalSwitchClock.begin(toSimple: toSimple);
   final setup = ref.read(setupActionProvider.notifier);
   final previousMode = ref.read(patchClashConfigProvider.select((s) => s.mode));
   final wasRunning = ref.read(runTimeProvider) != null;
@@ -1832,6 +1848,9 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
       }
     }
   } catch (error) {
+    // The clock stops before the rollback: a switch that failed is reported as a failure, and
+    // the rows the rollback brings back are not this switch's list.
+    portalSwitchClock.end();
     await _rollBackPortal(
       ref,
       previousMode: previousMode,

@@ -49,6 +49,20 @@ object PortalTelemetry {
     @Volatile
     private var lastEgress = "unknown"
 
+    /// When the owner tapped the switch, and where the portal was going.
+    ///
+    /// A switch is measured from the tap, and only the record can say when the owner that
+    /// took the tunnel acknowledged it, so the clock starts here — one channel call from the
+    /// tap — and the `Active` line is written by [noteTransition], the same hook that writes
+    /// every other transition. `0` means no switch is being measured.
+    private val switchClickAt = java.util.concurrent.atomic.AtomicLong(0L)
+
+    @Volatile
+    private var switchFrom = "Off"
+
+    @Volatile
+    private var switchTo = "Off"
+
     /// Set by the app module, which is the only place that can see the service's runtime.
     @Volatile
     var engineProbe: () -> Boolean = { false }
@@ -139,6 +153,48 @@ object PortalTelemetry {
             "time=${stamp.format(Date())} from=${seen.owner?.label ?: "Off"} " +
                 "to=${next.owner?.label ?: "Off"} generation=${next.generation} " +
                 "phase=${next.phase} why=${why.ifEmpty { "unsaid" }} result=$result",
+        )
+        if (next is PortalRuntime.Active) noteSwitchConfirmed(next)
+    }
+
+    /// The tap, from the screen that owns it: where the portal is going and when it started.
+    fun noteSwitchStart(to: String) {
+        switchTo = to
+        switchFrom = PortalRuntimeState.current().owner?.label ?: "Off"
+        switchClickAt.set(System.nanoTime())
+    }
+
+    /// Click → `phase=Active`, written once per tap, by the record's own hook.
+    ///
+    /// The owner's acknowledgement is the switch's end: `Active` is published only after the
+    /// owner holds its listener or tunnel, so this number is the hand-over the owner sees, not
+    /// a wait for a config. `0` means the tap was never registered — a transition from Quick
+    /// Settings or a revoke — and those keep the plain line above and nothing invented.
+    private fun noteSwitchConfirmed(next: PortalRuntime.Active) {
+        val click = switchClickAt.getAndSet(0L)
+        if (click == 0L) return
+        val elapsedMs = (System.nanoTime() - click) / 1_000_000L
+        append(
+            transitionsFile,
+            "time=${stamp.format(Date())} kind=switch phase=active " +
+                "duration_ms=$elapsedMs from=$switchFrom to=${next.owner.label} " +
+                "generation=${next.generation}",
+        )
+    }
+
+    /// The screen's half of the same measurement: the tap → the list with rows in it.
+    ///
+    /// [durationMs] is the app's own clock, started before the tap asked anything, and
+    /// [detail] says where the rows came from — the new owner's own answer (`source=live`),
+    /// the last non-empty group the list drew (`source=held`), or the profile's `proxies:`
+    /// (`source=profile`). The three are different facts and only the first is the new owner's.
+    fun noteSwitchTiming(phase: String, durationMs: Long, detail: String) {
+        val to = switchTo
+        append(
+            transitionsFile,
+            "time=${stamp.format(Date())} kind=switch phase=$phase " +
+                "duration_ms=$durationMs from=$switchFrom to=$to" +
+                (if (detail.isEmpty()) "" else " $detail"),
         )
     }
 

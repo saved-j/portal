@@ -193,6 +193,22 @@ adb shell 'curl -sS -m 10 https://api.ipify.org'
 
 A debug build keeps the same record and the same logcat mirror.
 
+`portal-transitions.log` carries one plain line per transition (`time= from= to= generation=
+phase= why= result=`), and after a tap on the mode switch, two measured ones:
+
+```
+time=... kind=switch phase=active duration_ms=236 from=Xray to=Mihomo generation=7
+time=... kind=switch phase=list duration_ms=41 from=Xray to=Mihomo source=held rows=27
+```
+
+`phase=active` is written by the record's own `onPublish` hook — the tap starts the clock on
+the native side and `Active` is published only after the owner acknowledged its listener or
+tunnel, so the number is the hand-over, not a wait for a config. `phase=list` is the screen's
+clock, from the tap to the first frame with rows, and `source=` says whose rows they were: the
+new owner's (`live`), the last group the list drew (`held`, which is what keeps the screen from
+going empty), or the profile's own `proxies:` (`profile`). A switch that fails writes neither:
+it is reported as a failure, with the plain transition lines of its rollback.
+
 ## Checks
 
 ```bash

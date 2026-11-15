@@ -190,6 +190,50 @@ class PortalRuntime {
     return _invoke('startChild', {'config': config});
   }
 
+  /// The switch's tap, for the record's own clock.
+  ///
+  /// One call, and the native side stamps the instant it arrives: the `phase=active` line in
+  /// `portal-transitions.log` is written by the same hook that writes every transition, so no
+  /// later step of the switch can get in front of it. A build without the channel is a
+  /// desktop build, where nothing of this exists and nothing is measured.
+  Future<void> beginSwitch({required String to}) async {
+    try {
+      await _channel.invokeMethod<void>('switchStart', {'to': to});
+    } on MissingPluginException {
+      // No portal runtime here: nothing to time.
+    } on PlatformException catch (error) {
+      commonPrint.log(
+        'portal switch clock failed: ${error.message}',
+        logLevel: LogLevel.warning,
+      );
+    }
+  }
+
+  /// The screen's half of the measurement: the tap → a list with rows to draw.
+  ///
+  /// [detail] carries where the rows came from (`source=live|held|profile rows=<n>`), because
+  /// they are three different facts and the line should not blur them.
+  Future<void> noteSwitchTiming({
+    required String phase,
+    required int durationMs,
+    String detail = '',
+  }) async {
+    try {
+      await _channel.invokeMethod<void>('switchTiming', {
+        'phase': phase,
+        'durationMs': durationMs,
+        'detail': detail,
+      });
+    } on MissingPluginException {
+      // No portal runtime here: nothing to write.
+    } on PlatformException catch (error) {
+      commonPrint.log(
+        'portal switch timing failed: ${error.message}',
+        logLevel: LogLevel.warning,
+      );
+    }
+  }
+
   Future<PortalRuntimeStatus> refresh() async {
     try {
       final result = await _channel.invokeMethod<Map<Object?, Object?>>('status');
