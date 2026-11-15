@@ -315,6 +315,19 @@ class CoreController {
     return _interface.restartListener();
   }
 
+  /// The Android service alone, with no engine listener: the simple portal's path.
+  Future<bool> startPortalService() async {
+    return _interface.startPortalService();
+  }
+
+  Future<bool> stopPortalService() async {
+    return _interface.stopPortalService();
+  }
+
+  Future<bool> restartPortalService() async {
+    return _interface.restartPortalService();
+  }
+
   Future<bool> getTunFailed() => _interface.getTunFailed();
 
   Future<Delay?> getDelay(

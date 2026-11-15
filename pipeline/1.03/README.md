@@ -90,6 +90,20 @@ the device, not a redesign.
   to the portal network left the engine with nothing applied: groups read empty and the core
   answered "Config is not applied". The return path applies the profile (forced) before asking
   for the mode and fails the switch with its own sentence if the profile is rejected.
+- `19-simple-service-without-mihomo-listener` — the simple portal handed the child a duplicate
+  of the tun while the engine kept reading the same interface: `_startSimplePortal` called
+  `startListener`, which opens the engine's listeners and *then* asks the service for the
+  tunnel, and neither `VpnService.handleStart` (which took a previous tunnel down only when
+  `tunOwnedByChild`) nor `ServiceController.release()` (which skipped the Go stop when
+  `xrayTunActive`) ever stopped a mihomo one. The service is now asked on its own —
+  `CoreLib.startPortalService/stopPortalService` used by the simple start, stop, teardown and
+  restart — `ServiceController.start` closes the engine's listener before it publishes the
+  descriptor for the child, `release()` stops it unconditionally (Go `StopListener` is
+  idempotent), and `handleStart` takes down any previous tunnel, whichever core owned it,
+  before `establish()`. Expected on the device: `XrayCore: core: … portal0 up`, then no new
+  `GoLog … tun-in` line and no `10808 connect error`; the network path is unchanged and
+  `GoLog … tun-in` resumes when the portal returns to it. Rollback: reverse the patch — the
+  engine reads the tunnel beside the child again.
 
 Apply (to a tree that does not already carry the 01..02 commit):
 ```

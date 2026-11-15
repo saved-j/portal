@@ -302,11 +302,11 @@ class SetupAction extends _$SetupAction {
 
   /// One cold start of the simple portal: the tunnel first, then the child that reads it.
   ///
-  /// Nothing of the engine takes part — no config is built for it, none is pushed, and
-  /// GLOBAL keeps whatever the engine last held. If the child does not take the tunnel it is
-  /// taken back down and the reason is shown: a tunnel nothing reads sends every packet into
-  /// a black hole, and a portal reported as running over it is worse than one reported as
-  /// broken.
+  /// Nothing of the engine takes part — no config is built for it, none is pushed, its
+  /// listeners are not opened, and GLOBAL keeps whatever the engine last held. If the child
+  /// does not take the tunnel it is taken back down and the reason is shown: a tunnel nothing
+  /// reads sends every packet into a black hole, and a portal reported as running over it is
+  /// worse than one reported as broken.
   Future<bool> _startSimplePortal(_RunRequest request) async {
     if (_startingChild) {
       return true;
@@ -316,7 +316,7 @@ class SetupAction extends _$SetupAction {
       _lastPortalFailure = '';
       await _syncPortalOptions();
       try {
-        await _startCoreRunning(request);
+        await _startPortalServiceRunning(request);
       } catch (_) {
         _rollbackRunning(request);
         rethrow;
@@ -356,7 +356,7 @@ class SetupAction extends _$SetupAction {
   Future<void> _tearDownSimplePortal() async {
     final stopped = await XrayCore.instance.stop();
     try {
-      await setCoreRunning(false);
+      await setPortalServiceRunning(false);
     } catch (error) {
       commonPrint.log(
         'simple portal teardown failed: ${compactError(error)}',
@@ -417,10 +417,46 @@ class SetupAction extends _$SetupAction {
     }
   }
 
+  /// The service alone, on the way into the simple portal: no engine listener is opened.
+  Future<void> _startPortalServiceRunning(_RunRequest request) async {
+    if (!await _setPortalServiceRunning(request) && _isCurrent(request)) {
+      throw _unansweredPortalService();
+    }
+  }
+
+  Future<bool> _setPortalServiceRunning(_RunRequest request) {
+    return _listenerScheduler.run(() async {
+      if (!_isCurrent(request)) {
+        return true;
+      }
+      if (request.running && ref.read(suspendProvider)) {
+        return true;
+      }
+      if (ref.read(safeModeProvider)) {
+        return true;
+      }
+      return _setPortalListening(request.running);
+    });
+  }
+
+  Future<bool> _setPortalListening(bool running) async {
+    final vpnOptions = await ref.read(vpnOptionsProvider.future);
+    final answered = await setPortalServiceRunning(running);
+    ref.read(runningVpnOptionsProvider.notifier).value = running && answered
+        ? vpnOptions
+        : null;
+    return answered;
+  }
+
   Future<bool> _stop(_RunRequest request) async {
+    // The simple portal's run is the service and the child it carries: stopping it is the
+    // service's own stop on both sides, with no engine listener asked for either way.
+    final simple = _isSimplePortal;
     final bool answered;
     try {
-      answered = await _setCoreRunning(request);
+      answered = simple
+          ? await _setPortalServiceRunning(request)
+          : await _setCoreRunning(request);
     } catch (_) {
       _rollbackRunning(request);
       rethrow;
@@ -431,7 +467,9 @@ class SetupAction extends _$SetupAction {
     _clearTraffic();
     // A silent Core is gone or hung; running again would proxy traffic to it.
     if (!answered) {
-      throw _unanswered(CoreMethod.stopListener);
+      throw simple
+          ? _unansweredPortalService()
+          : _unanswered(CoreMethod.stopListener);
     }
     return true;
   }
@@ -471,6 +509,12 @@ class SetupAction extends _$SetupAction {
     message: 'Core did not answer ${method.name}',
   );
 
+  /// The service's own refusal, not the engine's: no engine listener was asked for here.
+  CoreMethodException _unansweredPortalService() => const CoreMethodException(
+    code: 'no_response',
+    message: 'The Android service did not start the portal tunnel',
+  );
+
   /// An excluded SSID parks the listener without ending the run.
   void syncSuspend() {
     debouncer.call(FunctionTag.suspend, () {
@@ -505,7 +549,9 @@ class SetupAction extends _$SetupAction {
           return null;
         }
         final vpnOptions = await ref.read(vpnOptionsProvider.future);
-        final answered = await restartCoreRunning();
+        final answered = _isSimplePortal
+            ? await restartPortalServiceRunning()
+            : await restartCoreRunning();
         if (answered) {
           ref.read(runningVpnOptionsProvider.notifier).value = vpnOptions;
         }
@@ -565,6 +611,15 @@ class SetupAction extends _$SetupAction {
 
   @protected
   Future<bool> restartCoreRunning() => _core.restartListener();
+
+  /// The Android service alone: the simple portal's start, stop and restart.
+  @protected
+  Future<bool> setPortalServiceRunning(bool running) {
+    return running ? _core.startPortalService() : _core.stopPortalService();
+  }
+
+  @protected
+  Future<bool> restartPortalServiceRunning() => _core.restartPortalService();
 
   @protected
   void resetCoreTraffic() {

@@ -134,6 +134,25 @@ class CoreLib extends CoreHandlerInterface {
     return await _service?.restart() ?? false;
   }
 
+  // The simple portal's tunnel is read by the child, and only the service makes and reads it.
+  // The engine's own listener is not touched on either side: `startListener` above asks the
+  // engine first and the service second, which is exactly what left the engine reading the
+  // interface the child had been handed.
+  @override
+  Future<bool> startPortalService() async {
+    return await _service?.start() ?? false;
+  }
+
+  @override
+  Future<bool> stopPortalService() async {
+    return await _service?.stop() ?? false;
+  }
+
+  @override
+  Future<bool> restartPortalService() async {
+    return await _service?.restart() ?? false;
+  }
+
   @override
   Future<T?> invokeMethod<T>({
     required CoreMethod method,

@@ -49,11 +49,12 @@ object ServiceController {
     private fun release() {
         clearBinding()
         runtime = null
-        // In the simple portal the Core never ran: a stop would reach a listener that was
-        // never started, and the tunnel is torn down by the service that made it.
-        if (!xrayTunActive) {
-            Core.stopListener()
-        }
+        // Also in the simple portal: the Core was not started *here*, but it may have been
+        // started before this run — Dart's `startListener`, or a network run whose tunnel the
+        // child then took — and a listener left behind is a second reader of the interface
+        // that carries the run. `StopListener` in Go is idempotent (it answers at once when
+        // nothing runs), so the call is unconditional.
+        Core.stopListener()
         xrayTunActive = false
     }
 
@@ -81,6 +82,14 @@ object ServiceController {
 
     suspend fun start(options: VpnOptions): Boolean = lock.withLock {
         ServiceConfig.updateVpnOptions(options)
+        // The simple portal's tunnel belongs to the child alone, so anything of the engine
+        // that is still listening goes before the service publishes the descriptor: Dart's
+        // `startListener` opens the engine and *then* asks for the service, which is how the
+        // engine kept reading the interface the child had been handed. The Go call is
+        // idempotent — with nothing running it answers at once — so it is asked every time.
+        if (options.xrayTun) {
+            Core.stopListener()
+        }
         val nextIntent = if (options.enable) {
             VpnService::class.intent
         } else {

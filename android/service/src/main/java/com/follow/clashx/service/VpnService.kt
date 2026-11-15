@@ -133,6 +133,14 @@ class VpnService : SystemVpnService(), ManagedService {
     }
 
     private fun handleStart(options: VpnOptions) {
+        // Whatever read the interface before this start goes first, whichever core it was.
+        // `establish()` replaces the interface, and a previous reader left running either
+        // reads a tunnel that no longer carries anything or — its descriptor still open —
+        // keeps reading the new one beside the reader this start hands it to. The old
+        // condition named the Xray case only (`tunOwnedByChild`), so a mihomo tunnel that
+        // was still running survived the hand-over and became the second reader the simple
+        // portal showed on the device.
+        synchronized(tunLock) { stopTunLocked() }
         val descriptor = with(Builder()) {
             addAddressAndRoutes(options)
             addDnsServers(options)
@@ -208,13 +216,11 @@ class VpnService : SystemVpnService(), ManagedService {
      */
     private fun handOverToChild(descriptor: ParcelFileDescriptor, options: VpnOptions) {
         synchronized(tunLock) {
-            // A tunnel published before this one belongs to the interface this establish has
-            // just replaced: the system no longer routes into it, and the core may still be
-            // reading it. Handing over the new descriptor without taking the old one down
-            // leaves the plugin a live number that carries nothing, so the old tunnel goes
-            // first — the plugin is told to stop, and the descriptor this service owns is
-            // closed before another is published.
-            if (tunOwnedByChild) stopTunLocked()
+            // The previous tunnel was taken down in handleStart, before this establish: the
+            // system routes into the interface this start has just replaced, and the reader
+            // that was on it is stopped — the child told to stop, the descriptor this service
+            // owns closed — before another is published. A live number left behind would be
+            // the second reader again.
             tunOwnedByChild = true
             tunRunning = true
             xrayDescriptor = descriptor

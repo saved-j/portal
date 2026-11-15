@@ -81,6 +81,24 @@ mixin CoreInterface {
 
   Future<bool> restartListener();
 
+  /// Android only: the background service on its own, with no engine listener.
+  ///
+  /// The simple portal's tunnel is read by the child, so the service is asked for it without
+  /// [startListener]: that call opens the engine's listeners and then lets the service hand
+  /// the tun to the child, which is how one interface came to have two readers. The pair
+  /// here moves only the service, and the engine's own state is left as it was.
+  Future<bool> startPortalService() => Future.error(
+    UnsupportedError('The portal service exists on Android only'),
+  );
+
+  Future<bool> stopPortalService() => Future.error(
+    UnsupportedError('The portal service exists on Android only'),
+  );
+
+  Future<bool> restartPortalService() => Future.error(
+    UnsupportedError('The portal service exists on Android only'),
+  );
+
   Future<bool> getTunFailed();
 
   Future<List<ExternalProvider>> getExternalProviders();

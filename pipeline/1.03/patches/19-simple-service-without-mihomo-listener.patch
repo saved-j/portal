@@ -1,0 +1,296 @@
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt b/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
+index cd4a848a..659b3a97 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
+@@ -49,11 +49,12 @@ object ServiceController {
+     private fun release() {
+         clearBinding()
+         runtime = null
+-        // In the simple portal the Core never ran: a stop would reach a listener that was
+-        // never started, and the tunnel is torn down by the service that made it.
+-        if (!xrayTunActive) {
+-            Core.stopListener()
+-        }
++        // Also in the simple portal: the Core was not started *here*, but it may have been
++        // started before this run — Dart's `startListener`, or a network run whose tunnel the
++        // child then took — and a listener left behind is a second reader of the interface
++        // that carries the run. `StopListener` in Go is idempotent (it answers at once when
++        // nothing runs), so the call is unconditional.
++        Core.stopListener()
+         xrayTunActive = false
+     }
+ 
+@@ -81,6 +82,14 @@ object ServiceController {
+ 
+     suspend fun start(options: VpnOptions): Boolean = lock.withLock {
+         ServiceConfig.updateVpnOptions(options)
++        // The simple portal's tunnel belongs to the child alone, so anything of the engine
++        // that is still listening goes before the service publishes the descriptor: Dart's
++        // `startListener` opens the engine and *then* asks for the service, which is how the
++        // engine kept reading the interface the child had been handed. The Go call is
++        // idempotent — with nothing running it answers at once — so it is asked every time.
++        if (options.xrayTun) {
++            Core.stopListener()
++        }
+         val nextIntent = if (options.enable) {
+             VpnService::class.intent
+         } else {
+diff --git a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+index 1852b53d..7123753a 100644
+--- a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
++++ b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+@@ -133,6 +133,14 @@ class VpnService : SystemVpnService(), ManagedService {
+     }
+ 
+     private fun handleStart(options: VpnOptions) {
++        // Whatever read the interface before this start goes first, whichever core it was.
++        // `establish()` replaces the interface, and a previous reader left running either
++        // reads a tunnel that no longer carries anything or — its descriptor still open —
++        // keeps reading the new one beside the reader this start hands it to. The old
++        // condition named the Xray case only (`tunOwnedByChild`), so a mihomo tunnel that
++        // was still running survived the hand-over and became the second reader the simple
++        // portal showed on the device.
++        synchronized(tunLock) { stopTunLocked() }
+         val descriptor = with(Builder()) {
+             addAddressAndRoutes(options)
+             addDnsServers(options)
+@@ -208,13 +216,11 @@ class VpnService : SystemVpnService(), ManagedService {
+      */
+     private fun handOverToChild(descriptor: ParcelFileDescriptor, options: VpnOptions) {
+         synchronized(tunLock) {
+-            // A tunnel published before this one belongs to the interface this establish has
+-            // just replaced: the system no longer routes into it, and the core may still be
+-            // reading it. Handing over the new descriptor without taking the old one down
+-            // leaves the plugin a live number that carries nothing, so the old tunnel goes
+-            // first — the plugin is told to stop, and the descriptor this service owns is
+-            // closed before another is published.
+-            if (tunOwnedByChild) stopTunLocked()
++            // The previous tunnel was taken down in handleStart, before this establish: the
++            // system routes into the interface this start has just replaced, and the reader
++            // that was on it is stopped — the child told to stop, the descriptor this service
++            // owns closed — before another is published. A live number left behind would be
++            // the second reader again.
+             tunOwnedByChild = true
+             tunRunning = true
+             xrayDescriptor = descriptor
+diff --git a/lib/core/controller.dart b/lib/core/controller.dart
+index 37ff23bd..e10f29b1 100644
+--- a/lib/core/controller.dart
++++ b/lib/core/controller.dart
+@@ -315,6 +315,19 @@ class CoreController {
+     return _interface.restartListener();
+   }
+ 
++  /// The Android service alone, with no engine listener: the simple portal's path.
++  Future<bool> startPortalService() async {
++    return _interface.startPortalService();
++  }
++
++  Future<bool> stopPortalService() async {
++    return _interface.stopPortalService();
++  }
++
++  Future<bool> restartPortalService() async {
++    return _interface.restartPortalService();
++  }
++
+   Future<bool> getTunFailed() => _interface.getTunFailed();
+ 
+   Future<Delay?> getDelay(
+diff --git a/lib/core/interface.dart b/lib/core/interface.dart
+index 89bcb3ac..e184b341 100644
+--- a/lib/core/interface.dart
++++ b/lib/core/interface.dart
+@@ -81,6 +81,24 @@ mixin CoreInterface {
+ 
+   Future<bool> restartListener();
+ 
++  /// Android only: the background service on its own, with no engine listener.
++  ///
++  /// The simple portal's tunnel is read by the child, so the service is asked for it without
++  /// [startListener]: that call opens the engine's listeners and then lets the service hand
++  /// the tun to the child, which is how one interface came to have two readers. The pair
++  /// here moves only the service, and the engine's own state is left as it was.
++  Future<bool> startPortalService() => Future.error(
++    UnsupportedError('The portal service exists on Android only'),
++  );
++
++  Future<bool> stopPortalService() => Future.error(
++    UnsupportedError('The portal service exists on Android only'),
++  );
++
++  Future<bool> restartPortalService() => Future.error(
++    UnsupportedError('The portal service exists on Android only'),
++  );
++
+   Future<bool> getTunFailed();
+ 
+   Future<List<ExternalProvider>> getExternalProviders();
+diff --git a/lib/core/lib.dart b/lib/core/lib.dart
+index 0c4f248d..5c7a2f5d 100644
+--- a/lib/core/lib.dart
++++ b/lib/core/lib.dart
+@@ -134,6 +134,25 @@ class CoreLib extends CoreHandlerInterface {
+     return await _service?.restart() ?? false;
+   }
+ 
++  // The simple portal's tunnel is read by the child, and only the service makes and reads it.
++  // The engine's own listener is not touched on either side: `startListener` above asks the
++  // engine first and the service second, which is exactly what left the engine reading the
++  // interface the child had been handed.
++  @override
++  Future<bool> startPortalService() async {
++    return await _service?.start() ?? false;
++  }
++
++  @override
++  Future<bool> stopPortalService() async {
++    return await _service?.stop() ?? false;
++  }
++
++  @override
++  Future<bool> restartPortalService() async {
++    return await _service?.restart() ?? false;
++  }
++
+   @override
+   Future<T?> invokeMethod<T>({
+     required CoreMethod method,
+diff --git a/lib/providers/actions/setup.dart b/lib/providers/actions/setup.dart
+index 4fb660d6..6aec8c63 100644
+--- a/lib/providers/actions/setup.dart
++++ b/lib/providers/actions/setup.dart
+@@ -302,11 +302,11 @@ class SetupAction extends _$SetupAction {
+ 
+   /// One cold start of the simple portal: the tunnel first, then the child that reads it.
+   ///
+-  /// Nothing of the engine takes part — no config is built for it, none is pushed, and
+-  /// GLOBAL keeps whatever the engine last held. If the child does not take the tunnel it is
+-  /// taken back down and the reason is shown: a tunnel nothing reads sends every packet into
+-  /// a black hole, and a portal reported as running over it is worse than one reported as
+-  /// broken.
++  /// Nothing of the engine takes part — no config is built for it, none is pushed, its
++  /// listeners are not opened, and GLOBAL keeps whatever the engine last held. If the child
++  /// does not take the tunnel it is taken back down and the reason is shown: a tunnel nothing
++  /// reads sends every packet into a black hole, and a portal reported as running over it is
++  /// worse than one reported as broken.
+   Future<bool> _startSimplePortal(_RunRequest request) async {
+     if (_startingChild) {
+       return true;
+@@ -316,7 +316,7 @@ class SetupAction extends _$SetupAction {
+       _lastPortalFailure = '';
+       await _syncPortalOptions();
+       try {
+-        await _startCoreRunning(request);
++        await _startPortalServiceRunning(request);
+       } catch (_) {
+         _rollbackRunning(request);
+         rethrow;
+@@ -356,7 +356,7 @@ class SetupAction extends _$SetupAction {
+   Future<void> _tearDownSimplePortal() async {
+     final stopped = await XrayCore.instance.stop();
+     try {
+-      await setCoreRunning(false);
++      await setPortalServiceRunning(false);
+     } catch (error) {
+       commonPrint.log(
+         'simple portal teardown failed: ${compactError(error)}',
+@@ -417,10 +417,46 @@ class SetupAction extends _$SetupAction {
+     }
+   }
+ 
++  /// The service alone, on the way into the simple portal: no engine listener is opened.
++  Future<void> _startPortalServiceRunning(_RunRequest request) async {
++    if (!await _setPortalServiceRunning(request) && _isCurrent(request)) {
++      throw _unansweredPortalService();
++    }
++  }
++
++  Future<bool> _setPortalServiceRunning(_RunRequest request) {
++    return _listenerScheduler.run(() async {
++      if (!_isCurrent(request)) {
++        return true;
++      }
++      if (request.running && ref.read(suspendProvider)) {
++        return true;
++      }
++      if (ref.read(safeModeProvider)) {
++        return true;
++      }
++      return _setPortalListening(request.running);
++    });
++  }
++
++  Future<bool> _setPortalListening(bool running) async {
++    final vpnOptions = await ref.read(vpnOptionsProvider.future);
++    final answered = await setPortalServiceRunning(running);
++    ref.read(runningVpnOptionsProvider.notifier).value = running && answered
++        ? vpnOptions
++        : null;
++    return answered;
++  }
++
+   Future<bool> _stop(_RunRequest request) async {
++    // The simple portal's run is the service and the child it carries: stopping it is the
++    // service's own stop on both sides, with no engine listener asked for either way.
++    final simple = _isSimplePortal;
+     final bool answered;
+     try {
+-      answered = await _setCoreRunning(request);
++      answered = simple
++          ? await _setPortalServiceRunning(request)
++          : await _setCoreRunning(request);
+     } catch (_) {
+       _rollbackRunning(request);
+       rethrow;
+@@ -431,7 +467,9 @@ class SetupAction extends _$SetupAction {
+     _clearTraffic();
+     // A silent Core is gone or hung; running again would proxy traffic to it.
+     if (!answered) {
+-      throw _unanswered(CoreMethod.stopListener);
++      throw simple
++          ? _unansweredPortalService()
++          : _unanswered(CoreMethod.stopListener);
+     }
+     return true;
+   }
+@@ -471,6 +509,12 @@ class SetupAction extends _$SetupAction {
+     message: 'Core did not answer ${method.name}',
+   );
+ 
++  /// The service's own refusal, not the engine's: no engine listener was asked for here.
++  CoreMethodException _unansweredPortalService() => const CoreMethodException(
++    code: 'no_response',
++    message: 'The Android service did not start the portal tunnel',
++  );
++
+   /// An excluded SSID parks the listener without ending the run.
+   void syncSuspend() {
+     debouncer.call(FunctionTag.suspend, () {
+@@ -505,7 +549,9 @@ class SetupAction extends _$SetupAction {
+           return null;
+         }
+         final vpnOptions = await ref.read(vpnOptionsProvider.future);
+-        final answered = await restartCoreRunning();
++        final answered = _isSimplePortal
++            ? await restartPortalServiceRunning()
++            : await restartCoreRunning();
+         if (answered) {
+           ref.read(runningVpnOptionsProvider.notifier).value = vpnOptions;
+         }
+@@ -566,6 +612,15 @@ class SetupAction extends _$SetupAction {
+   @protected
+   Future<bool> restartCoreRunning() => _core.restartListener();
+ 
++  /// The Android service alone: the simple portal's start, stop and restart.
++  @protected
++  Future<bool> setPortalServiceRunning(bool running) {
++    return running ? _core.startPortalService() : _core.stopPortalService();
++  }
++
++  @protected
++  Future<bool> restartPortalServiceRunning() => _core.restartPortalService();
++
+   @protected
+   void resetCoreTraffic() {
+     _core.resetTraffic();
