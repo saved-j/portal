@@ -80,28 +80,64 @@ void main() {
     });
   });
 
-  group('the drawn group says where it came from', () {
+  group('the drawn group says where it came from, and whose it is', () {
     Group groupOf(String name) => Group(
       type: GroupType.Selector,
       name: 'PORTAL',
       all: [Proxy(name: name, type: 'vless')],
     );
 
+    OwnedGroup owned(String name, RowsOwner owner) =>
+        (group: groupOf(name), owner: owner);
+
     test('the current owner wins and is called live', () {
       final shown = portalShownRows(
-        live: groupOf('live-row'),
-        held: groupOf('held-row'),
-        fallbacks: [('cache', groupOf('cache-row'))],
+        mode: RowsOwner.engine,
+        live: owned('live-row', RowsOwner.engine),
+        held: null,
+        fallbacks: const [],
       );
       expect(shown.source, 'live');
+      expect(shown.owner, RowsOwner.engine);
       expect(shown.group!.all.single.name, 'live-row');
     });
 
-    test('an empty answer keeps the held rows', () {
+    test('a live answer from the other owner is not an answer', () {
+      // The engine's groups stay in memory after the engine stops; the simple portal must not
+      // draw them, and vice versa.
       final shown = portalShownRows(
+        mode: RowsOwner.child,
+        live: owned('engine-row', RowsOwner.engine),
+        held: null,
+        fallbacks: [
+          ('servers', groupOf('child-row')),
+        ],
+      );
+      expect(shown.source, 'servers');
+      expect(shown.group!.all.single.name, 'child-row');
+    });
+
+    test('a held group from the other owner is not read', () {
+      final shown = portalShownRows(
+        mode: RowsOwner.engine,
         live: null,
-        held: groupOf('held-row'),
-        fallbacks: [('cache', groupOf('cache-row'))],
+        held: owned('child-row', RowsOwner.child),
+        fallbacks: [
+          ('profile', groupOf('engine-row')),
+        ],
+      );
+      expect(shown.source, 'profile');
+      expect(shown.group!.all.single.name, 'engine-row');
+    });
+
+    test('an empty live answer keeps the own held rows', () {
+      final shown = portalShownRows(
+        mode: RowsOwner.engine,
+        live: null,
+        held: owned('held-row', RowsOwner.engine),
+        fallbacks: [
+          ('cache', groupOf('cache-row')),
+        ],
       );
       expect(shown.source, 'held');
       expect(shown.group!.all.single.name, 'held-row');
@@ -110,6 +146,7 @@ void main() {
     test('with nothing held, the fallbacks answer in the order given', () {
       expect(
         portalShownRows(
+          mode: RowsOwner.engine,
           live: null,
           held: null,
           fallbacks: [
@@ -121,6 +158,7 @@ void main() {
       );
       expect(
         portalShownRows(
+          mode: RowsOwner.engine,
           live: null,
           held: null,
           fallbacks: [
@@ -134,20 +172,40 @@ void main() {
 
     test('a mode with no rows at all is the honest empty state', () {
       final shown = portalShownRows(
+        mode: RowsOwner.child,
         live: null,
         held: null,
         fallbacks: const [],
       );
       expect(shown.group, isNull);
       expect(shown.source, 'none');
+      expect(shown.owner, RowsOwner.child);
     });
 
     test('an empty group is not an answer', () {
       final empty = Group(type: GroupType.Selector, name: 'PORTAL', all: const []);
       expect(
-        portalShownRows(live: empty, held: null, fallbacks: const []).source,
+        portalShownRows(
+          mode: RowsOwner.engine,
+          live: (group: empty, owner: RowsOwner.engine),
+          held: null,
+          fallbacks: const [],
+        ).source,
         'none',
       );
+    });
+
+    test('the group this owner drew is the one it remembers', () {
+      OwnedGroup? kept;
+      portalShownRows(
+        mode: RowsOwner.engine,
+        live: owned('live-row', RowsOwner.engine),
+        held: null,
+        fallbacks: const [],
+        remember: (value) => kept = value,
+      );
+      expect(kept!.owner, RowsOwner.engine);
+      expect(kept!.group.all.single.name, 'live-row');
     });
   });
 }

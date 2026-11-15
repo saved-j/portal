@@ -378,23 +378,50 @@ List<Group> portalVisibleGroups(List<Group> all, Set<String> hidden, List<String
 /// The name of the one group the simple portal draws when no engine serves one.
 const portalSimpleGroupName = portalRowsGroupName;
 
+/// The portal's own record, as a provider: which core holds the tunnel, right now.
+///
+/// The list has to know that before it shows a core's rows: a group stays in memory after its
+/// core stopped, and a list that draws it anyway is showing the previous owner's servers under
+/// the current mode's heading. Only `Active` with the matching owner is a live answer.
+class PortalStatusNotifier extends Notifier<PortalRuntimeStatus> {
+  @override
+  PortalRuntimeStatus build() {
+    final source = portalRuntime.status;
+    void onChange() => state = source.value;
+    source.addListener(onChange);
+    ref.onDispose(() => source.removeListener(onChange));
+    return source.value;
+  }
+}
+
+final portalStatusProvider =
+    NotifierProvider<PortalStatusNotifier, PortalRuntimeStatus>(
+        PortalStatusNotifier.new);
+
 /// The rows this mode draws, from the owner that answers or from the mode's own source.
 ///
 /// The two modes read one subscription in two formats, and each mode reads only its own:
-/// the simple portal's list is the Xray document's servers (its `live` answer, whether or not
-/// the child is running), and the network mode's is the engine's groups, or — with the portal
-/// closed and no groups to ask — the engine's last own answer for this profile, then the
-/// profile's `proxies:`. Neither mode can reach the other's names, and a group held from the
-/// other mode is dropped before it is drawn.
+///
+/// * the simple portal's `live` answer is the child's servers, and only while the child holds
+///   the tunnel; its fallback is the same servers read from the profile, named `servers`;
+/// * the network mode's `live` answer is the engine's groups, and only while the engine holds
+///   the tunnel; with the portal closed it falls back to the engine's last own answer for this
+///   profile and then the profile's engine-format `proxies:`.
+///
+/// A group held from the other mode is dropped before it is drawn, and a `live` group whose
+/// owner is not this mode's is not an answer.
 PortalShown _portalShown(
   WidgetRef ref, {
   required bool simple,
   required List<Group> groups,
   required String? groupName,
-  Group? held,
-  void Function(Group)? remember,
+  OwnedGroup? heldEngine,
+  OwnedGroup? heldChild,
+  void Function(OwnedGroup)? remember,
 }) {
+  final status = ref.watch(portalStatusProvider);
   final profileKey = '${ref.watch(currentProfileIdProvider) ?? ''}';
+  final mode = simple ? RowsOwner.child : RowsOwner.engine;
   final servers = simple
       ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
       : const <XrayServerConfig>[];
@@ -405,14 +432,38 @@ PortalShown _portalShown(
   final profileRows = simple
       ? const <PortalRow>[]
       : (ref.watch(profilePortalRowsProvider).value ?? const <PortalRow>[]);
-  final live = simple
-      ? portalFallbackGroup(simple: true, servers: servers, engineRows: const [])
-      : groups.where((g) => g.name == groupName).firstOrNull ?? groups.firstOrNull;
+  // Whose rows are on offer: only a core that is reading the tunnel now answers for itself.
+  final engineLive = !simple &&
+      status.active &&
+      status.owner == PortalOwner.mihomo
+      ? groups.where((g) => g.name == groupName).firstOrNull ?? groups.firstOrNull
+      : null;
+  final childLive = simple &&
+      status.active &&
+      status.owner == PortalOwner.xray &&
+      servers.isNotEmpty
+      ? portalGroupOfServers(servers)
+      : null;
+  final live = engineLive != null
+      ? (group: engineLive, owner: RowsOwner.engine)
+      : childLive != null
+          ? (group: childLive, owner: RowsOwner.child)
+          : null;
   return portalShownRows(
+    mode: mode,
     live: live,
-    held: held,
+    held: simple ? heldChild : heldEngine,
     fallbacks: simple
-        ? const []
+        ? [
+            (
+              'servers',
+              portalFallbackGroup(
+                simple: true,
+                servers: servers,
+                engineRows: const [],
+              ),
+            ),
+          ]
         : [
             (
               'cache',
@@ -574,15 +625,15 @@ class PortalModeSwitch extends ConsumerStatefulWidget {
 }
 
 class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
-  /// The last group this control drew, kept across a switch.
+  /// The last engine group this control drew, kept across a switch.
   ///
-  /// A state field, not a provider: the list is rebuilt many times a frame and the memory
-  /// has to outlive the rebuild without writing a provider during it.
-  Group? _held;
+  /// A state field, not a provider: the list is rebuilt many times a frame and the memory has
+  /// to outlive the rebuild without writing a provider during it. It is per owner — the
+  /// engine's last group is not a row of the simple portal, and the child's is not a row of
+  /// the network mode.
+  OwnedGroup? _heldEngine;
 
-  /// The mode [_held] was drawn in. A group held from the other mode is a different list of
-  /// servers, so it is dropped instead of shown under a mode it does not belong to.
-  Mode? _heldMode;
+  OwnedGroup? _heldChild;
 
   @override
   Widget build(BuildContext context) {
@@ -604,12 +655,14 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
       simple: simple,
       groups: groups,
       groupName: groupName,
-      // A group held from the other mode is the other mode's list, and drawing it here is
-      // the defect this control must not repeat.
-      held: _heldMode == mode ? _held : null,
+      heldEngine: _heldEngine,
+      heldChild: _heldChild,
       remember: (value) {
-        _held = value;
-        _heldMode = mode;
+        if (value.owner == RowsOwner.engine) {
+          _heldEngine = value;
+        } else {
+          _heldChild = value;
+        }
       },
     );
     final group = shown.group;
@@ -763,14 +816,14 @@ class PortalServerList extends ConsumerStatefulWidget {
 }
 
 class _PortalServerListState extends ConsumerState<PortalServerList> {
-  /// The last group this list drew, and the mode it was drawn in. A switch empties both
-  /// sources for a moment — the engine has no groups until it takes the profile, the child
-  /// has no servers until its subscription is read — and an empty list there is what the
-  /// owner saw as a flicker. The mode is part of the memory: the other mode's rows are a
-  /// different list of servers.
-  Group? _held;
+  /// The last group this list drew, per owner, and the mode it was drawn in. A switch empties
+  /// both sources for a moment — the engine has no groups until it takes the profile, the child
+  /// has no servers until its subscription is read — and an empty list there is what the owner
+  /// saw as a flicker. The owner is part of the memory: the engine's last group is not a row of
+  /// the simple portal, and the child's is not a row of the network mode.
+  OwnedGroup? _heldEngine;
 
-  Mode? _heldMode;
+  OwnedGroup? _heldChild;
 
   @override
   Widget build(BuildContext context) {
@@ -810,10 +863,14 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
       simple: simple,
       groups: groups,
       groupName: groupName,
-      held: _heldMode == mode ? _held : null,
+      heldEngine: _heldEngine,
+      heldChild: _heldChild,
       remember: (value) {
-        _held = value;
-        _heldMode = mode;
+        if (value.owner == RowsOwner.engine) {
+          _heldEngine = value;
+        } else {
+          _heldChild = value;
+        }
       },
     );
     final group = shown.group;
@@ -824,6 +881,8 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
         source: shown.source,
         rows: group.all.length,
         mode: simple ? 'global' : 'rule',
+        owner: shown.owner.label,
+        names: group.all.map((proxy) => proxy.name),
       );
     }
     if (group == null) {

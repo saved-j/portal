@@ -219,6 +219,15 @@ the device, not a redesign.
   it looked for (`noAsset`, detail `Portal.apk | Portal_universal.apk`, shown under the
   message), and no FlClashX file is offered in its place. The download logs
   `update: repository=saved-j/portal asset=Portal.apk url=…`.
+- `25-a-row-belongs-to-its-owner` — 22 gave each mode its own source and the leak survived: the
+  owner switched to 'portal network' with the portal closed and read the child's names again.
+  `held` was a single Group (the simple portal's rows became `held`, then answered the network
+  mode once its own `live` was null), and `live` was never checked against the owner (the
+  engine's groups stay in memory after it stops, the child's servers exist with it stopped —
+  the vivo showed `mode=global source=live` and `mode=rule source=live` while `phase=Off`). Now
+  `live` counts only when the record's `Active` owner is the mode's (`portalStatusProvider`),
+  `held` is kept per owner, and the transition line carries `owner=` and the first three
+  `names=`, so a wrong list cannot pass silently.
 
 Apply (to a tree that does not already carry the 01..02 commit):
 ```

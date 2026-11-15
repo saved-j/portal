@@ -45,9 +45,16 @@ void main() {
     portalSwitchClock.begin(toSimple: false);
     await Future<void>.delayed(Duration.zero);
 
-    portalSwitchClock.listPopulated(mode: 'rule', source: 'held', rows: 27);
+    portalSwitchClock.listPopulated(
+      mode: 'rule',
+      owner: 'engine',
+      source: 'held',
+      rows: 27,
+      names: ['VPN - Main', 'Auto 1', 'Финляндия'],
+    );
     portalSwitchClock.listPopulated(
       mode: 'global',
+      owner: 'child',
       source: 'live',
       rows: 27,
     );
@@ -57,12 +64,21 @@ void main() {
     expect(timed, hasLength(1));
     final arguments = timed.single.arguments as Map;
     expect(arguments['phase'], 'list');
-    expect(arguments['detail'], 'mode=rule source=held rows=27');
+    expect(
+      arguments['detail'],
+      'mode=rule owner=engine source=held rows=27 '
+      'names=VPN - Main | Auto 1 | Финляндия',
+    );
     expect(arguments['durationMs'], isA<int>());
   });
 
   test('a screen with no tap behind it writes nothing', () async {
-    portalSwitchClock.listPopulated(mode: 'rule', source: 'profile', rows: 3);
+    portalSwitchClock.listPopulated(
+      mode: 'rule',
+      owner: 'engine',
+      source: 'profile',
+      rows: 3,
+    );
     await Future<void>.delayed(Duration.zero);
 
     expect(calls.where((call) => call.method == 'switchTiming'), isEmpty);
@@ -71,7 +87,12 @@ void main() {
   test('a switch that failed stops its clock instead of writing a length', () async {
     portalSwitchClock.begin(toSimple: true);
     portalSwitchClock.end();
-    portalSwitchClock.listPopulated(mode: 'global', source: 'held', rows: 27);
+    portalSwitchClock.listPopulated(
+      mode: 'global',
+      owner: 'child',
+      source: 'held',
+      rows: 27,
+    );
     await Future<void>.delayed(Duration.zero);
 
     expect(calls.where((call) => call.method == 'switchTiming'), isEmpty);

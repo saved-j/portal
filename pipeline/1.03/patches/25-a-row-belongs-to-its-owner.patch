@@ -1,0 +1,592 @@
+# portal 1.03 patch 25 — a row belongs to its owner
+#
+# 22 made each mode read its own source, and the leak survived: the owner switched to 'portal
+# network' with the portal closed and again read the child's names. Two things made that
+# possible, and both are in `portalShownRows`:
+#
+#   1. `held` was one Group, not one per owner. The simple portal's rows become `live`, then
+#      `held`; the switch to the network mode makes `live` null (the engine is not running), so
+#      the next answer was `held` — the child's group, drawn under 'Сеть порталов'.
+#   2. `live` was not checked against the owner. The engine's groups stay in memory after the
+#      engine stops, so they still answered as `live` in the simple portal — and the child's
+#      servers answered as `live` in the network mode. The vivo's record showed both modes
+#      claiming `source=live` while `phase=Off`.
+#
+# Now:
+#   * `live` counts only when its owner is the mode's: engine groups when the mode is rule and
+#     the engine is the Active owner of the tunnel, the child's servers when the mode is global
+#     and the child is (`portalStatusProvider` reads the record's own `Active` + owner);
+#   * `held` is kept per owner (`_heldEngine` / `_heldChild`), and a mode reads only its own;
+#   * the order stands: live(own) -> held(own) -> engine `cache` / profile `proxies:` (rule) or
+#     the profile's Xray servers (global) -> honest empty (`source=none`);
+#   * the transition line names the owner and the rows, so a wrong list is visible:
+#
+#     kind=switch phase=list duration_ms=41 from=Xray to=Mihomo mode=rule owner=engine
+#       source=live rows=28 names=VPN - Main | 🇫🇮 Финляндия 01 | ...
+#
+# A closed portal has no live answer in either mode: the network mode draws its own document
+# (`cache` / `profile`), the simple portal its own servers (`servers`), and the line says which.
+diff --git a/BUILD.md b/BUILD.md
+index 96c26655..ff413fd0 100644
+--- a/BUILD.md
++++ b/BUILD.md
+@@ -198,19 +198,27 @@ phase= why= result=`), and after a tap on the mode switch, two measured ones:
+ 
+ ```
+ time=... kind=switch phase=active duration_ms=236 from=Xray to=Mihomo generation=7
+-time=... kind=switch phase=list duration_ms=41 from=Xray to=Mihomo mode=rule source=live rows=28
++time=... kind=switch phase=list duration_ms=41 from=Xray to=Mihomo mode=rule owner=engine source=live rows=28 names=VPN - Main | 🇫🇮 Финляндия 01 | …
+ ```
+ 
+ `phase=active` is written by the record's own `onPublish` hook — the tap starts the clock on
+ the native side and `Active` is published only after the owner acknowledged its listener or
+ tunnel, so the number is the hand-over, not a wait for a config. `phase=list` is the screen's
+ clock, from the tap to the first frame with rows, `mode=` is the mode those rows were drawn in,
+-and `source=` says whose rows they were: the current owner's (`live`), the last group the list
+-drew (`held`, which is what keeps the screen from going empty), the engine's own last answer
++`owner=` is the core they belong to, `names=` is the first three rows it actually showed, and
++`source=` says whose rows they were: the current owner's (`live`), the last group this owner's
++list drew (`held`, which is what keeps the screen from going empty), the engine's own last answer
+ for this profile (`cache`), the profile's own `proxies:` (`profile`) or the simple portal's
+ servers (`servers`). A switch that fails writes neither: it is reported as a failure, with the
+ plain transition lines of its rollback.
+ 
++A row source is the owner's, and only the owner's. `live` counts only when the core that holds
++the tunnel is the mode's own — the engine's groups stay in memory after the engine stops, and a
++list that drew them under the simple portal (or the child's servers under the network mode) was
++showing the previous owner's servers, each name real and the list wrong. `held` is kept per
++owner for the same reason, and the transition line carries `owner=` and `names=` so this cannot
++happen silently again.
++
+ Each mode has one source of rows and no other: the simple portal's list is the Xray document
+ (`xrayServersProvider`, read from the profile's second format), the network mode's is the
+ engine's groups — or, with the portal closed, the engine's own last answer for this profile and
+diff --git a/lib/plugins/portal_switch_timing.dart b/lib/plugins/portal_switch_timing.dart
+index 6738781d..f67f2a56 100644
+--- a/lib/plugins/portal_switch_timing.dart
++++ b/lib/plugins/portal_switch_timing.dart
+@@ -37,29 +37,35 @@ class PortalSwitchClock {
+   /// The first frame after the tap that has rows to draw.
+   ///
+   /// [source] is where they came from: the current owner's own answer (`live`), the last
+-  /// group the list drew (`held`), the engine's own last answer for this profile (`cache`),
+-  /// the profile's own `proxies:` (`profile`), or the simple portal's servers (`servers`).
+-  /// [mode] is the mode they were drawn in, and it is part of the line: a tap that lands in
+-  /// the other mode must show the other mode's names, and a number with no mode beside it
+-  /// cannot tell those two lists apart.
++  /// group this owner's list drew (`held`), the engine's own last answer for this profile
++  /// (`cache`), the profile's own `proxies:` (`profile`), or the simple portal's servers
++  /// (`servers`). [mode] is the mode they were drawn in and [owner] the core they belong to:
++  /// a number with neither beside it cannot tell two lists apart, and a mode that drew the
++  /// other core's rows said so nowhere. [names] is the first few rows, so the line carries
++  /// which servers the mode actually showed.
+   void listPopulated({
+     required String source,
+     required int rows,
+     required String mode,
++    required String owner,
++    Iterable<String> names = const [],
+   }) {
+     final watch = _watched;
+     if (watch == null || _listed) return;
+     _listed = true;
+     watch.stop();
+     final ms = watch.elapsedMilliseconds;
++    final shown = names.take(3).join(' | ');
+     commonPrint.log(
+-      'portal switch: tap → $rows rows in ${ms}ms (mode=$mode source=$source)',
++      'portal switch: tap → $rows rows in ${ms}ms '
++      '(mode=$mode owner=$owner source=$source names=$shown)',
+     );
+     unawaited(
+       portalRuntime.noteSwitchTiming(
+         phase: 'list',
+         durationMs: ms,
+-        detail: 'mode=$mode source=$source rows=$rows',
++        detail:
++            'mode=$mode owner=$owner source=$source rows=$rows names=$shown',
+       ),
+     );
+   }
+diff --git a/lib/providers/state/portal_rows.dart b/lib/providers/state/portal_rows.dart
+index 73177a63..b38f0e7b 100644
+--- a/lib/providers/state/portal_rows.dart
++++ b/lib/providers/state/portal_rows.dart
+@@ -141,39 +141,64 @@ final portalEngineRowsProvider =
+     NotifierProvider<PortalEngineRowsNotifier, Map<String, List<PortalRow>>>(
+         PortalEngineRowsNotifier.new);
+ 
+-/// The rows the list draws right now, and whose they are.
++/// Which core's rows these are.
+ ///
+-/// [live] is what the owner of the moment answered — the engine's groups in the network
+-/// mode, the child's servers in the portal. An empty answer never replaces what is on
+-/// screen: those rows are a name, a protocol and a ping, all of them still true, and an
+-/// empty list in the middle of a switch reads as an empty subscription.
++/// The two lists are two documents and two owners. A name is a name in both, so the owner is
++/// the only thing that says whose row it is — and a group left in memory by a core that has
++/// stopped is not an answer from that core.
++enum RowsOwner {
++  engine('engine'),
++  child('child');
++
++  const RowsOwner(this.label);
++
++  final String label;
++}
++
++/// A group and the owner it came from.
++typedef OwnedGroup = ({Group group, RowsOwner owner});
++
++/// The rows the list draws right now, whose they are, and which core answered.
++///
++/// [mode] is the owner this mode draws from, and nothing from the other one can be returned:
+ ///
+-/// [fallbacks] are the sources this mode can draw with no core answering, in the order it
+-/// trusts them, each with the name the transition log will carry for it. Only `live` is
+-/// proof the new owner has arrived; the rest keep the screen from going empty, and saying
+-/// which one it was is the difference between a measurement and a guess. Only a mode with no
+-/// rows at all ends in no group, which is the honest empty state.
++/// * [live] is the current owner's own answer, and it counts only when its [OwnedGroup.owner]
++///   is [mode] — a mode is not allowed to read the other core's group, however fresh it is.
++/// * [held] is the last group this mode drew, kept per owner by the caller, and only the
++///   mode's own held group is read.
++/// * [fallbacks] are the sources this mode can draw with no core answering, in the order it
++///   trusts them, each with the name the transition log will carry for it.
++///
++/// Only an owner that is holding the tunnel now may answer `live`; the caller decides that.
++/// An empty group is not an answer, and a mode with no rows at all ends in no group, which is
++/// the honest empty state.
+ PortalShown portalShownRows({
+-  required Group? live,
+-  required Group? held,
++  required RowsOwner mode,
++  required OwnedGroup? live,
++  required OwnedGroup? held,
+   required List<(String, Group?)> fallbacks,
+-  void Function(Group)? remember,
++  void Function(OwnedGroup)? remember,
+ }) {
+-  if (live != null && live.all.isNotEmpty) {
+-    remember?.call(live);
+-    return (group: live, source: 'live');
++  final ownLive = live != null && live.owner == mode ? live.group : null;
++  if (ownLive != null && ownLive.all.isNotEmpty) {
++    remember?.call((group: ownLive, owner: mode));
++    return (group: ownLive, source: 'live', owner: mode);
++  }
++  final ownHeld = held != null && held.owner == mode ? held.group : null;
++  if (ownHeld != null && ownHeld.all.isNotEmpty) {
++    return (group: ownHeld, source: 'held', owner: mode);
+   }
+-  if (held != null && held.all.isNotEmpty) return (group: held, source: 'held');
+   for (final (source, group) in fallbacks) {
+     if (group != null && group.all.isNotEmpty) {
+-      return (group: group, source: source);
++      return (group: group, source: source, owner: mode);
+     }
+   }
+-  return (group: live, source: 'none');
++  return (group: null, source: 'none', owner: mode);
+ }
+ 
+-/// A group and where its rows came from: `live`, `held`, `cache`, `profile` or `servers`.
+-typedef PortalShown = ({Group? group, String source});
++/// A group, where its rows came from (`live`, `held`, `cache`, `profile` or `servers`), and
++/// which core's rows they are.
++typedef PortalShown = ({Group? group, String source, RowsOwner owner});
+ 
+ /// The current profile's own servers: the last resort of the list, and never a guess.
+ final profilePortalRowsProvider =
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 2ed14001..084b3837 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -378,23 +378,50 @@ List<Group> portalVisibleGroups(List<Group> all, Set<String> hidden, List<String
+ /// The name of the one group the simple portal draws when no engine serves one.
+ const portalSimpleGroupName = portalRowsGroupName;
+ 
++/// The portal's own record, as a provider: which core holds the tunnel, right now.
++///
++/// The list has to know that before it shows a core's rows: a group stays in memory after its
++/// core stopped, and a list that draws it anyway is showing the previous owner's servers under
++/// the current mode's heading. Only `Active` with the matching owner is a live answer.
++class PortalStatusNotifier extends Notifier<PortalRuntimeStatus> {
++  @override
++  PortalRuntimeStatus build() {
++    final source = portalRuntime.status;
++    void onChange() => state = source.value;
++    source.addListener(onChange);
++    ref.onDispose(() => source.removeListener(onChange));
++    return source.value;
++  }
++}
++
++final portalStatusProvider =
++    NotifierProvider<PortalStatusNotifier, PortalRuntimeStatus>(
++        PortalStatusNotifier.new);
++
+ /// The rows this mode draws, from the owner that answers or from the mode's own source.
+ ///
+ /// The two modes read one subscription in two formats, and each mode reads only its own:
+-/// the simple portal's list is the Xray document's servers (its `live` answer, whether or not
+-/// the child is running), and the network mode's is the engine's groups, or — with the portal
+-/// closed and no groups to ask — the engine's last own answer for this profile, then the
+-/// profile's `proxies:`. Neither mode can reach the other's names, and a group held from the
+-/// other mode is dropped before it is drawn.
++///
++/// * the simple portal's `live` answer is the child's servers, and only while the child holds
++///   the tunnel; its fallback is the same servers read from the profile, named `servers`;
++/// * the network mode's `live` answer is the engine's groups, and only while the engine holds
++///   the tunnel; with the portal closed it falls back to the engine's last own answer for this
++///   profile and then the profile's engine-format `proxies:`.
++///
++/// A group held from the other mode is dropped before it is drawn, and a `live` group whose
++/// owner is not this mode's is not an answer.
+ PortalShown _portalShown(
+   WidgetRef ref, {
+   required bool simple,
+   required List<Group> groups,
+   required String? groupName,
+-  Group? held,
+-  void Function(Group)? remember,
++  OwnedGroup? heldEngine,
++  OwnedGroup? heldChild,
++  void Function(OwnedGroup)? remember,
+ }) {
++  final status = ref.watch(portalStatusProvider);
+   final profileKey = '${ref.watch(currentProfileIdProvider) ?? ''}';
++  final mode = simple ? RowsOwner.child : RowsOwner.engine;
+   final servers = simple
+       ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
+       : const <XrayServerConfig>[];
+@@ -405,14 +432,38 @@ PortalShown _portalShown(
+   final profileRows = simple
+       ? const <PortalRow>[]
+       : (ref.watch(profilePortalRowsProvider).value ?? const <PortalRow>[]);
+-  final live = simple
+-      ? portalFallbackGroup(simple: true, servers: servers, engineRows: const [])
+-      : groups.where((g) => g.name == groupName).firstOrNull ?? groups.firstOrNull;
++  // Whose rows are on offer: only a core that is reading the tunnel now answers for itself.
++  final engineLive = !simple &&
++      status.active &&
++      status.owner == PortalOwner.mihomo
++      ? groups.where((g) => g.name == groupName).firstOrNull ?? groups.firstOrNull
++      : null;
++  final childLive = simple &&
++      status.active &&
++      status.owner == PortalOwner.xray &&
++      servers.isNotEmpty
++      ? portalGroupOfServers(servers)
++      : null;
++  final live = engineLive != null
++      ? (group: engineLive, owner: RowsOwner.engine)
++      : childLive != null
++          ? (group: childLive, owner: RowsOwner.child)
++          : null;
+   return portalShownRows(
++    mode: mode,
+     live: live,
+-    held: held,
++    held: simple ? heldChild : heldEngine,
+     fallbacks: simple
+-        ? const []
++        ? [
++            (
++              'servers',
++              portalFallbackGroup(
++                simple: true,
++                servers: servers,
++                engineRows: const [],
++              ),
++            ),
++          ]
+         : [
+             (
+               'cache',
+@@ -574,15 +625,15 @@ class PortalModeSwitch extends ConsumerStatefulWidget {
+ }
+ 
+ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
+-  /// The last group this control drew, kept across a switch.
++  /// The last engine group this control drew, kept across a switch.
+   ///
+-  /// A state field, not a provider: the list is rebuilt many times a frame and the memory
+-  /// has to outlive the rebuild without writing a provider during it.
+-  Group? _held;
++  /// A state field, not a provider: the list is rebuilt many times a frame and the memory has
++  /// to outlive the rebuild without writing a provider during it. It is per owner — the
++  /// engine's last group is not a row of the simple portal, and the child's is not a row of
++  /// the network mode.
++  OwnedGroup? _heldEngine;
+ 
+-  /// The mode [_held] was drawn in. A group held from the other mode is a different list of
+-  /// servers, so it is dropped instead of shown under a mode it does not belong to.
+-  Mode? _heldMode;
++  OwnedGroup? _heldChild;
+ 
+   @override
+   Widget build(BuildContext context) {
+@@ -604,12 +655,14 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
+       simple: simple,
+       groups: groups,
+       groupName: groupName,
+-      // A group held from the other mode is the other mode's list, and drawing it here is
+-      // the defect this control must not repeat.
+-      held: _heldMode == mode ? _held : null,
++      heldEngine: _heldEngine,
++      heldChild: _heldChild,
+       remember: (value) {
+-        _held = value;
+-        _heldMode = mode;
++        if (value.owner == RowsOwner.engine) {
++          _heldEngine = value;
++        } else {
++          _heldChild = value;
++        }
+       },
+     );
+     final group = shown.group;
+@@ -763,14 +816,14 @@ class PortalServerList extends ConsumerStatefulWidget {
+ }
+ 
+ class _PortalServerListState extends ConsumerState<PortalServerList> {
+-  /// The last group this list drew, and the mode it was drawn in. A switch empties both
+-  /// sources for a moment — the engine has no groups until it takes the profile, the child
+-  /// has no servers until its subscription is read — and an empty list there is what the
+-  /// owner saw as a flicker. The mode is part of the memory: the other mode's rows are a
+-  /// different list of servers.
+-  Group? _held;
++  /// The last group this list drew, per owner, and the mode it was drawn in. A switch empties
++  /// both sources for a moment — the engine has no groups until it takes the profile, the child
++  /// has no servers until its subscription is read — and an empty list there is what the owner
++  /// saw as a flicker. The owner is part of the memory: the engine's last group is not a row of
++  /// the simple portal, and the child's is not a row of the network mode.
++  OwnedGroup? _heldEngine;
+ 
+-  Mode? _heldMode;
++  OwnedGroup? _heldChild;
+ 
+   @override
+   Widget build(BuildContext context) {
+@@ -810,10 +863,14 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
+       simple: simple,
+       groups: groups,
+       groupName: groupName,
+-      held: _heldMode == mode ? _held : null,
++      heldEngine: _heldEngine,
++      heldChild: _heldChild,
+       remember: (value) {
+-        _held = value;
+-        _heldMode = mode;
++        if (value.owner == RowsOwner.engine) {
++          _heldEngine = value;
++        } else {
++          _heldChild = value;
++        }
+       },
+     );
+     final group = shown.group;
+@@ -824,6 +881,8 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
+         source: shown.source,
+         rows: group.all.length,
+         mode: simple ? 'global' : 'rule',
++        owner: shown.owner.label,
++        names: group.all.map((proxy) => proxy.name),
+       );
+     }
+     if (group == null) {
+diff --git a/test/plugins/portal_switch_timing_test.dart b/test/plugins/portal_switch_timing_test.dart
+index e132fc31..f4c40158 100644
+--- a/test/plugins/portal_switch_timing_test.dart
++++ b/test/plugins/portal_switch_timing_test.dart
+@@ -45,9 +45,16 @@ void main() {
+     portalSwitchClock.begin(toSimple: false);
+     await Future<void>.delayed(Duration.zero);
+ 
+-    portalSwitchClock.listPopulated(mode: 'rule', source: 'held', rows: 27);
++    portalSwitchClock.listPopulated(
++      mode: 'rule',
++      owner: 'engine',
++      source: 'held',
++      rows: 27,
++      names: ['VPN - Main', 'Auto 1', 'Финляндия'],
++    );
+     portalSwitchClock.listPopulated(
+       mode: 'global',
++      owner: 'child',
+       source: 'live',
+       rows: 27,
+     );
+@@ -57,12 +64,21 @@ void main() {
+     expect(timed, hasLength(1));
+     final arguments = timed.single.arguments as Map;
+     expect(arguments['phase'], 'list');
+-    expect(arguments['detail'], 'mode=rule source=held rows=27');
++    expect(
++      arguments['detail'],
++      'mode=rule owner=engine source=held rows=27 '
++      'names=VPN - Main | Auto 1 | Финляндия',
++    );
+     expect(arguments['durationMs'], isA<int>());
+   });
+ 
+   test('a screen with no tap behind it writes nothing', () async {
+-    portalSwitchClock.listPopulated(mode: 'rule', source: 'profile', rows: 3);
++    portalSwitchClock.listPopulated(
++      mode: 'rule',
++      owner: 'engine',
++      source: 'profile',
++      rows: 3,
++    );
+     await Future<void>.delayed(Duration.zero);
+ 
+     expect(calls.where((call) => call.method == 'switchTiming'), isEmpty);
+@@ -71,7 +87,12 @@ void main() {
+   test('a switch that failed stops its clock instead of writing a length', () async {
+     portalSwitchClock.begin(toSimple: true);
+     portalSwitchClock.end();
+-    portalSwitchClock.listPopulated(mode: 'global', source: 'held', rows: 27);
++    portalSwitchClock.listPopulated(
++      mode: 'global',
++      owner: 'child',
++      source: 'held',
++      rows: 27,
++    );
+     await Future<void>.delayed(Duration.zero);
+ 
+     expect(calls.where((call) => call.method == 'switchTiming'), isEmpty);
+diff --git a/test/providers/portal_rows_mode_test.dart b/test/providers/portal_rows_mode_test.dart
+index e564287d..8361a65b 100644
+--- a/test/providers/portal_rows_mode_test.dart
++++ b/test/providers/portal_rows_mode_test.dart
+@@ -80,28 +80,64 @@ void main() {
+     });
+   });
+ 
+-  group('the drawn group says where it came from', () {
++  group('the drawn group says where it came from, and whose it is', () {
+     Group groupOf(String name) => Group(
+       type: GroupType.Selector,
+       name: 'PORTAL',
+       all: [Proxy(name: name, type: 'vless')],
+     );
+ 
++    OwnedGroup owned(String name, RowsOwner owner) =>
++        (group: groupOf(name), owner: owner);
++
+     test('the current owner wins and is called live', () {
+       final shown = portalShownRows(
+-        live: groupOf('live-row'),
+-        held: groupOf('held-row'),
+-        fallbacks: [('cache', groupOf('cache-row'))],
++        mode: RowsOwner.engine,
++        live: owned('live-row', RowsOwner.engine),
++        held: null,
++        fallbacks: const [],
+       );
+       expect(shown.source, 'live');
++      expect(shown.owner, RowsOwner.engine);
+       expect(shown.group!.all.single.name, 'live-row');
+     });
+ 
+-    test('an empty answer keeps the held rows', () {
++    test('a live answer from the other owner is not an answer', () {
++      // The engine's groups stay in memory after the engine stops; the simple portal must not
++      // draw them, and vice versa.
+       final shown = portalShownRows(
++        mode: RowsOwner.child,
++        live: owned('engine-row', RowsOwner.engine),
++        held: null,
++        fallbacks: [
++          ('servers', groupOf('child-row')),
++        ],
++      );
++      expect(shown.source, 'servers');
++      expect(shown.group!.all.single.name, 'child-row');
++    });
++
++    test('a held group from the other owner is not read', () {
++      final shown = portalShownRows(
++        mode: RowsOwner.engine,
+         live: null,
+-        held: groupOf('held-row'),
+-        fallbacks: [('cache', groupOf('cache-row'))],
++        held: owned('child-row', RowsOwner.child),
++        fallbacks: [
++          ('profile', groupOf('engine-row')),
++        ],
++      );
++      expect(shown.source, 'profile');
++      expect(shown.group!.all.single.name, 'engine-row');
++    });
++
++    test('an empty live answer keeps the own held rows', () {
++      final shown = portalShownRows(
++        mode: RowsOwner.engine,
++        live: null,
++        held: owned('held-row', RowsOwner.engine),
++        fallbacks: [
++          ('cache', groupOf('cache-row')),
++        ],
+       );
+       expect(shown.source, 'held');
+       expect(shown.group!.all.single.name, 'held-row');
+@@ -110,6 +146,7 @@ void main() {
+     test('with nothing held, the fallbacks answer in the order given', () {
+       expect(
+         portalShownRows(
++          mode: RowsOwner.engine,
+           live: null,
+           held: null,
+           fallbacks: [
+@@ -121,6 +158,7 @@ void main() {
+       );
+       expect(
+         portalShownRows(
++          mode: RowsOwner.engine,
+           live: null,
+           held: null,
+           fallbacks: [
+@@ -134,20 +172,40 @@ void main() {
+ 
+     test('a mode with no rows at all is the honest empty state', () {
+       final shown = portalShownRows(
++        mode: RowsOwner.child,
+         live: null,
+         held: null,
+         fallbacks: const [],
+       );
+       expect(shown.group, isNull);
+       expect(shown.source, 'none');
++      expect(shown.owner, RowsOwner.child);
+     });
+ 
+     test('an empty group is not an answer', () {
+       final empty = Group(type: GroupType.Selector, name: 'PORTAL', all: const []);
+       expect(
+-        portalShownRows(live: empty, held: null, fallbacks: const []).source,
++        portalShownRows(
++          mode: RowsOwner.engine,
++          live: (group: empty, owner: RowsOwner.engine),
++          held: null,
++          fallbacks: const [],
++        ).source,
+         'none',
+       );
+     });
++
++    test('the group this owner drew is the one it remembers', () {
++      OwnedGroup? kept;
++      portalShownRows(
++        mode: RowsOwner.engine,
++        live: owned('live-row', RowsOwner.engine),
++        held: null,
++        fallbacks: const [],
++        remember: (value) => kept = value,
++      );
++      expect(kept!.owner, RowsOwner.engine);
++      expect(kept!.group.all.single.name, 'live-row');
++    });
+   });
+ }

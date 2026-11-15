@@ -141,39 +141,64 @@ final portalEngineRowsProvider =
     NotifierProvider<PortalEngineRowsNotifier, Map<String, List<PortalRow>>>(
         PortalEngineRowsNotifier.new);
 
-/// The rows the list draws right now, and whose they are.
+/// Which core's rows these are.
 ///
-/// [live] is what the owner of the moment answered — the engine's groups in the network
-/// mode, the child's servers in the portal. An empty answer never replaces what is on
-/// screen: those rows are a name, a protocol and a ping, all of them still true, and an
-/// empty list in the middle of a switch reads as an empty subscription.
-///
-/// [fallbacks] are the sources this mode can draw with no core answering, in the order it
-/// trusts them, each with the name the transition log will carry for it. Only `live` is
-/// proof the new owner has arrived; the rest keep the screen from going empty, and saying
-/// which one it was is the difference between a measurement and a guess. Only a mode with no
-/// rows at all ends in no group, which is the honest empty state.
-PortalShown portalShownRows({
-  required Group? live,
-  required Group? held,
-  required List<(String, Group?)> fallbacks,
-  void Function(Group)? remember,
-}) {
-  if (live != null && live.all.isNotEmpty) {
-    remember?.call(live);
-    return (group: live, source: 'live');
-  }
-  if (held != null && held.all.isNotEmpty) return (group: held, source: 'held');
-  for (final (source, group) in fallbacks) {
-    if (group != null && group.all.isNotEmpty) {
-      return (group: group, source: source);
-    }
-  }
-  return (group: live, source: 'none');
+/// The two lists are two documents and two owners. A name is a name in both, so the owner is
+/// the only thing that says whose row it is — and a group left in memory by a core that has
+/// stopped is not an answer from that core.
+enum RowsOwner {
+  engine('engine'),
+  child('child');
+
+  const RowsOwner(this.label);
+
+  final String label;
 }
 
-/// A group and where its rows came from: `live`, `held`, `cache`, `profile` or `servers`.
-typedef PortalShown = ({Group? group, String source});
+/// A group and the owner it came from.
+typedef OwnedGroup = ({Group group, RowsOwner owner});
+
+/// The rows the list draws right now, whose they are, and which core answered.
+///
+/// [mode] is the owner this mode draws from, and nothing from the other one can be returned:
+///
+/// * [live] is the current owner's own answer, and it counts only when its [OwnedGroup.owner]
+///   is [mode] — a mode is not allowed to read the other core's group, however fresh it is.
+/// * [held] is the last group this mode drew, kept per owner by the caller, and only the
+///   mode's own held group is read.
+/// * [fallbacks] are the sources this mode can draw with no core answering, in the order it
+///   trusts them, each with the name the transition log will carry for it.
+///
+/// Only an owner that is holding the tunnel now may answer `live`; the caller decides that.
+/// An empty group is not an answer, and a mode with no rows at all ends in no group, which is
+/// the honest empty state.
+PortalShown portalShownRows({
+  required RowsOwner mode,
+  required OwnedGroup? live,
+  required OwnedGroup? held,
+  required List<(String, Group?)> fallbacks,
+  void Function(OwnedGroup)? remember,
+}) {
+  final ownLive = live != null && live.owner == mode ? live.group : null;
+  if (ownLive != null && ownLive.all.isNotEmpty) {
+    remember?.call((group: ownLive, owner: mode));
+    return (group: ownLive, source: 'live', owner: mode);
+  }
+  final ownHeld = held != null && held.owner == mode ? held.group : null;
+  if (ownHeld != null && ownHeld.all.isNotEmpty) {
+    return (group: ownHeld, source: 'held', owner: mode);
+  }
+  for (final (source, group) in fallbacks) {
+    if (group != null && group.all.isNotEmpty) {
+      return (group: group, source: source, owner: mode);
+    }
+  }
+  return (group: null, source: 'none', owner: mode);
+}
+
+/// A group, where its rows came from (`live`, `held`, `cache`, `profile` or `servers`), and
+/// which core's rows they are.
+typedef PortalShown = ({Group? group, String source, RowsOwner owner});
 
 /// The current profile's own servers: the last resort of the list, and never a guess.
 final profilePortalRowsProvider =
