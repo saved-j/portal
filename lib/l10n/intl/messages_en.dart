@@ -629,7 +629,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "deleteMultipTip": m21,
     "deleteTip": m22,
     "desc": MessageLookupByLibrary.simpleMessage(
-      "A multi-platform proxy client based on Mihomo, simple and easy to use, open-source and ad-free.",
+      "A multi-platform client built on the Prizrak and Xray cores. Open source, no ads, no telemetry.",
     ),
     "destination": MessageLookupByLibrary.simpleMessage("Destination"),
     "destinationGeoIP": MessageLookupByLibrary.simpleMessage(

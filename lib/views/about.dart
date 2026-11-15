@@ -26,9 +26,24 @@ const _forkAuthors = [
   ),
 ];
 
+/// The people whose work this build carries; the fork author above is credited by the
+/// licence, this list is ours.
+const _contributors = [
+  Person(
+    avatar: 'assets/images/avatar/saved-j.png',
+    name: 'saved-j',
+    link: 'https://github.com/saved-j',
+  ),
+];
+
 const _upstreamRepository = 'chen08209/FlClash';
 const _coreRepository = 'MetaCubeX/mihomo';
-const _telegram = 'https://t.me/flclashx';
+const _xrayRepository = 'XTLS/Xray-core';
+const _portalSite = 'https://web.portal-connect.io';
+const _portalChat = 'https://t.me/portalconnect';
+const _portalBot = 'https://t.me/portalconnect_bot';
+const _portalSupport = 'https://t.me/portalconnect_support';
+const _portalVk = 'https://vk.com/markvictorson';
 
 /// The running core's version when it answers, else the one this build was
 /// made with, else nothing.
@@ -108,31 +123,75 @@ class AboutView extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           generateSection(
-            title: appLocalizations.more,
+            title: 'Портал',
+            items: [
+              _buildLinkItem(
+                glyph: AppGlyphs.link,
+                title: '🌐 Сайт',
+                url: _portalSite,
+                label: 'web.portal-connect.io',
+              ),
+              _buildLinkItem(
+                glyph: AppGlyphs.send,
+                title: '💬 Чат',
+                url: _portalChat,
+                label: 't.me/portalconnect',
+              ),
+              _buildLinkItem(
+                glyph: AppGlyphs.send,
+                title: '💳 Оформить подписку',
+                url: _portalBot,
+                label: 't.me/portalconnect_bot',
+              ),
+              _buildLinkItem(
+                glyph: AppGlyphs.send,
+                title: '📱 Поддержка в Telegram',
+                url: _portalSupport,
+                label: 't.me/portalconnect_support',
+              ),
+              _buildLinkItem(
+                glyph: AppGlyphs.link,
+                title: '📱 Поддержка в VK',
+                url: _portalVk,
+                label: 'vk.com/markvictorson',
+              ),
+            ],
+          ),
+          generateSection(
+            title: 'Ядра',
+            items: [
+              _buildLinkItem(
+                glyph: AppGlyphs.cpu,
+                title: 'Prizrak-Core',
+                url: 'https://github.com/$_coreRepository',
+                label: 'ядро сети порталов',
+              ),
+              _buildLinkItem(
+                glyph: AppGlyphs.cpu,
+                title: 'Xray',
+                url: 'https://github.com/$_xrayRepository',
+                label: 'github.com/$_xrayRepository',
+              ),
+            ],
+          ),
+          generateSection(
+            title: 'Контрибуторы',
+            items: const [_PeopleRow(people: _contributors)],
+          ),
+          generateSection(
+            title: 'На чём построено',
             items: [
               _buildLinkItem(
                 glyph: AppGlyphs.code,
-                title: appLocalizations.project,
+                title: 'FlClashX',
                 url: 'https://github.com/$repository',
                 label: 'github.com/$repository',
               ),
               _buildLinkItem(
-                glyph: AppGlyphs.link,
-                title: appLocalizations.originalRepository,
+                glyph: AppGlyphs.code,
+                title: 'FlClash',
                 url: 'https://github.com/$_upstreamRepository',
                 label: 'github.com/$_upstreamRepository',
-              ),
-              _buildLinkItem(
-                glyph: AppGlyphs.cpu,
-                title: appLocalizations.core,
-                url: 'https://github.com/$_coreRepository',
-                label: 'github.com/$_coreRepository',
-              ),
-              _buildLinkItem(
-                glyph: AppGlyphs.send,
-                title: 'Telegram',
-                url: _telegram,
-                label: 't.me/flclashx',
               ),
             ],
           ),

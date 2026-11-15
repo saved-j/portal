@@ -10,6 +10,8 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
 import 'package:fl_clash/core/xray_config.dart';
+import 'package:fl_clash/core/subscription_availability.dart';
+import 'package:fl_clash/core/subscription_formats.dart';
 import 'package:fl_clash/core/xray_switch.dart';
 import 'package:fl_clash/plugins/xray.dart';
 import 'dart:async';
@@ -201,6 +203,22 @@ List<Group> portalVisibleGroups(List<Group> all, Set<String> hidden, List<String
   return visible;
 }
 
+/// Whether the current subscription carries the engine's own format.
+///
+/// The "Сеть порталов" switch is meaningless without it: rules live in that YAML, and a
+/// subscription the panel only serves for Xray has nothing to route. Unknown counts as
+/// available so the switch does not flicker off while the file is being checked.
+final engineFormatAvailableProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final profile = ref.watch(currentProfileProvider);
+  if (profile == null) return false;
+  try {
+    final file = await profile.file;
+    return await file.exists() && await file.length() > 32;
+  } catch (_) {
+    return false;
+  }
+});
+
 /// Hands the traffic to Xray for the simple portal.
 ///
 /// Order matters: the child must answer before the engine is told to send everything to it,
@@ -214,21 +232,42 @@ Future<void> _enterSimplePortal(WidgetRef ref) async {
       ref.read(groupsProvider).firstOrNull?.name;
   final chosen =
       groupName == null ? null : ref.read(selectedProxyNameProvider(groupName));
+  // The second core prefers its own node list: the panel served it for exactly this
+  // purpose, and its names need not exist in the engine's config at all. The engine's
+  // config is the fallback, so a subscription with only YAML still works.
   Map<String, dynamic>? node;
-  if (chosen != null) {
+  final profile = ref.read(currentProfileProvider);
+  if (profile != null) {
+    final body = await profile.readXrayFormat();
+    if (body != null && decodeClientConfig(body) != null) {
+      // The panel wrote the config itself: Happ and Incy are served a ready Xray document.
+      // Nothing to convert — only the socks port is ours to set.
+      final started = await XrayCore.instance.start(withSocksInbound(body));
+      if (started['ok'] != true) return;
+      await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
+      await ref
+          .read(proxiesActionProvider.notifier)
+          .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
+      return;
+    }
+    if (body != null) {
+      node = xrayNodeFor(parseShareLinks(body), chosen);
+    }
+  }
+  if (node == null && chosen != null) {
     final path = await appPath.configFilePath;
     node = await nodeDefinitionFor(path, chosen);
   }
-  if (node != null) {
-    final started = await XrayCore.instance.start(xrayConfigJson(node));
-    if (started['ok'] != true) return;
+  if (node == null) {
+    // No node for the child means the portal would be a dead port, so the mode stays put.
+    return;
   }
+  final started = await XrayCore.instance.start(xrayConfigJson(node));
+  if (started['ok'] != true) return;
   await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
-  if (node != null) {
-    await ref
-        .read(proxiesActionProvider.notifier)
-        .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
-  }
+  await ref
+      .read(proxiesActionProvider.notifier)
+      .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
 }
 
 /// Mode control with the two list controls beside it: sorting and the delay test.
@@ -251,6 +290,8 @@ class PortalModeSwitch extends ConsumerWidget {
     final group = groups.where((g) => g.name == groupName).firstOrNull ??
         groups.firstOrNull;
     final sort = ref.watch(portalSortProvider);
+    final engineAvailable =
+        ref.watch(engineFormatAvailableProvider).value ?? true;
     final testing = group != null &&
         ref.watch(
           delayTestingGroupsProvider.select((s) => s.contains(group.name)),
@@ -273,10 +314,14 @@ class PortalModeSwitch extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Switch(
-                value: mode == Mode.rule,
+                value: mode == Mode.rule && engineAvailable,
                 activeThumbColor: _liveGreen(context),
                 activeTrackColor: _liveGreen(context).withValues(alpha: 0.4),
-                onChanged: (value) {
+                // No engine format, no rules: the control stays visible but dead, so the
+                // owner sees why instead of a switch that does nothing.
+                onChanged: !engineAvailable
+                    ? null
+                    : (value) {
                   HapticFeedback.selectionClick();
                   if (value) {
                     // Back to the portal network: leave the child before the engine starts
@@ -287,8 +332,8 @@ class PortalModeSwitch extends ConsumerWidget {
                   }
                   // The animation has already begun from this tap; the child, the hand-over
                   // and the mode change settle behind it.
-                  unawaited(_enterSimplePortal(ref));
-                },
+                        unawaited(_enterSimplePortal(ref));
+                      },
               ),
               const SizedBox(width: 8),
               Text(

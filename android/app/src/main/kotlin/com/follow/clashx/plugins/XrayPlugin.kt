@@ -69,6 +69,30 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
     }
 
+
+    /// Copies the geodata shipped as assets next to the config, once per install.
+    ///
+    /// Xray reads geosite.dat and geoip.dat from XRAY_LOCATION_ASSET; putting them in
+    /// filesDir keeps them readable to the child without shipping 10 MB in jniLibs, where
+    /// only lib*.so survives packaging.
+    private fun installGeoAssets(): File {
+        val dir = File(appContext.filesDir, "xray-assets")
+        if (!dir.exists()) dir.mkdirs()
+        for (name in listOf("geosite.dat", "geoip.dat")) {
+            val target = File(dir, name)
+            val expected = runCatching {
+                appContext.assets.open("flutter_assets/assets/xray/$name").use { it.readBytes().size }
+            }.getOrDefault(0)
+            if (target.exists() && target.length() == expected.toLong() && expected > 0) continue
+            runCatching {
+                appContext.assets.open("flutter_assets/assets/xray/$name").use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                }
+            }.onFailure { Log.e(TAG, "cannot install $name: ${it.message}") }
+        }
+        return dir
+    }
+
     private fun status(): Map<String, Any> = mapOf(
         "running" to (process?.isAlive == true),
         "lastLine" to lastLine,
@@ -80,10 +104,16 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         val configFile = File(appContext.filesDir, "xray.json")
         configFile.writeText(config, Charsets.UTF_8)
 
+        val assets = installGeoAssets()
+
         return try {
             val builder = ProcessBuilder(binary.absolutePath, "run", "-c", configFile.absolutePath)
                 .directory(appContext.filesDir)
                 .redirectErrorStream(true)
+            // The panel's config names rules as geosite:/geoip:, so the child needs the
+            // data files. By default it looks next to the binary, where an APK cannot put
+            // them, so the directory is stated explicitly.
+            builder.environment()["XRAY_LOCATION_ASSET"] = assets.absolutePath
             val started = builder.start()
             process = started
             drain(started)
@@ -147,7 +177,10 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     private fun drain(started: Process) {
-        executor.execute {
+        // A thread of its own, never the executor that runs start(): that one is still busy
+        // waiting for the port, so a queued drain would only run after the wait ended —
+        // which both hides the child's output and can block it on a full pipe.
+        Thread {
             runCatching {
                 started.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
                     for (line in lines) {
@@ -160,7 +193,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     }
                 }
             }.onFailure { Log.w(TAG, "output stream closed: ${it.message}") }
-        }
+        }.start()
     }
 
     private fun reachable(port: Int): Boolean = runCatching {

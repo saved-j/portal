@@ -1161,10 +1161,10 @@ class AppLocalizations {
     );
   }
 
-  /// `A multi-platform proxy client based on Mihomo, simple and easy to use, open-source and ad-free.`
+  /// `A multi-platform client built on the Prizrak and Xray cores. Open source, no ads, no telemetry.`
   String get desc {
     return Intl.message(
-      'A multi-platform proxy client based on Mihomo, simple and easy to use, open-source and ad-free.',
+      'A multi-platform client built on the Prizrak and Xray cores. Open source, no ads, no telemetry.',
       name: 'desc',
       desc: '',
       args: [],

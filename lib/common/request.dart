@@ -51,6 +51,7 @@ class Request {
     ResponseType responseType, {
     Duration timeout = downloadTimeoutDuration,
     Map<String, String> headers = const {},
+    String? userAgent,
   }) {
     final target = downloadTarget(url);
     final cancelToken = CancelToken();
@@ -60,7 +61,7 @@ class Request {
           target.uri,
           options: Options(
             responseType: responseType,
-            headers: {...headers, ...target.headers},
+            headers: {...headers, ...target.headers, ...?userAgentHeader(userAgent)},
             // Nothing asks for a range, so a 206 is a cut-off copy.
             validateStatus: (status) =>
                 status != null &&
@@ -104,6 +105,10 @@ class Request {
         ResponseType.bytes,
         timeout: timeout,
         headers: headers,
+        // The panel picks the template from this header, so it has to reach the wire as
+        // written. The adapter also sets a client-level agent; dio's per-request value
+        // replaces it rather than appending, which is what a mismatch here would need.
+        userAgent: headers['User-Agent'],
       );
     } catch (e) {
       commonPrint.log(
@@ -355,6 +360,10 @@ final class _CappedSink implements Sink<List<int>> {
 
 /// dart:io turns [Uri.userInfo] into Basic credentials still percent-encoded.
 @visibleForTesting
+/// The per-request user-agent as a one-entry map, or null when there is none to send.
+Map<String, String>? userAgentHeader(String? agent) =>
+    agent == null ? null : {'User-Agent': agent};
+
 ({Uri uri, Map<String, Object> headers}) downloadTarget(String url) {
   final uri = url.webUri ?? Uri.parse(url);
   if (uri.userInfo.isEmpty) {

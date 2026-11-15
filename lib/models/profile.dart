@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/core/subscription_availability.dart';
+import 'package:fl_clash/core/subscription_formats.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -288,6 +291,10 @@ extension ProfileExtension on Profile {
     bool Function()? isCurrent,
   ) async {
     final response = await fetch(url, timeout: timeout, headers: headers);
+    // The same link answers differently per client, so the second format is asked for
+    // separately. A failure here must not fail the profile: the panel may simply not
+    // serve one, and that is a red light, not an error.
+    final xray = await _fetchXrayBody(url, fetch, timeout);
     final disposition = response.headers.value('content-disposition');
     final userinfo = response.headers.value('subscription-userinfo');
     final providerHeaders = providerHeadersOf(response.headers.map);
@@ -303,8 +310,9 @@ extension ProfileExtension on Profile {
           ProviderHeaders(providerHeaders).updateInterval ?? autoUpdateDuration,
     ).saveFile(
       await decompressDownload(response.data ?? Uint8List(0)),
-      validate: validate,
+      validate: _guardEmptyBody(validate),
       isCurrent: isCurrent,
+      xrayBody: xray,
     );
   }
 
@@ -313,6 +321,7 @@ extension ProfileExtension on Profile {
     Uint8List bytes, {
     required ValidateConfig validate,
     bool Function()? isCurrent,
+    Uint8List? xrayBody,
   }) async {
     final target = await _getFile(false);
     final staging = File('${target.path}.$uniqueId.tmp');
@@ -326,11 +335,101 @@ extension ProfileExtension on Profile {
         throw const ProfileUpdateSupersededException();
       }
       staging.renameSync(target.path);
+      // Only a body that parsed replaces the one on disk. A panel that answers 200 with an
+      // error page, or a list that decodes to nothing, must never cost the owner a working
+      // subscription: the lights go dim, the old file stays.
+      await _saveXraySibling(target, xrayBody);
     } catch (_) {
       await staging.safeDelete();
       rethrow;
     }
     return copyWith(lastUpdateDate: DateTime.now());
+  }
+
+  /// Whether [body] is something the second core could actually run.
+  ///
+  /// Two shapes count: a list of share links, and a ready config the panel wrote itself
+  /// (Happ and Incy are served the latter). Anything else — an error page, a broken list —
+  /// must not replace what is already on disk.
+  static bool _usableXrayBody(Uint8List? body) {
+    if (body == null || body.isEmpty) return false;
+    final text = utf8.decode(body, allowMalformed: true);
+    if (decodeClientConfig(text) != null) return true;
+    return parseShareLinks(text).isNotEmpty;
+  }
+
+  /// The second core's body lives beside the profile, named after it.
+  ///
+  /// It is a sibling rather than a field in the profile record because it is a large
+  /// blob that only the Xray path reads; the record stays small enough to keep in memory.
+  Future<void> _saveXraySibling(File profileFile, Uint8List? body) async {
+    final sibling = File('${profileFile.path}.xray.txt');
+    if (!_usableXrayBody(body)) {
+      // Nothing usable arrived. The old body is kept: a subscription that worked five
+      // minutes ago beats an empty file, and the lights already say what is missing.
+      return;
+    }
+    await sibling.safeWriteAsBytes(body!);
+  }
+
+  /// True when this profile has a body for the second core, without reading it whole.
+  Future<bool> hasXrayFormat() async {
+    final file = File(await _xraySiblingPath);
+    return await file.exists() && await file.length() > 20;
+  }
+
+  /// The second core's body as text, or null when the panel never served one.
+  Future<String?> readXrayFormat() async {
+    final file = File(await _xraySiblingPath);
+    if (!await file.exists()) return null;
+    return file.readAsString();
+  }
+
+  Future<String> get _xraySiblingPath async =>
+      '${await appPath.getProfilePath(id.toString())}.xray.txt';
+  /// Refuses to hand an empty download to the validator, which would otherwise accept a
+  /// file that has nothing in it and replace a working config with a blank one.
+  static ValidateConfig _guardEmptyBody(ValidateConfig validate) {
+    return (path, key) async {
+      final file = File(path);
+      if (!await file.exists() || await file.length() < 16) {
+        return 'empty response';
+      }
+      return validate(path, key);
+    };
+  }
+
+  /// Asks the same link for the second core's format.
+  ///
+  /// Which client name a panel accepts is its decision, and it answers 502 to the rest, so
+  /// the candidates are asked in turn until one returns nodes. The first success wins and
+  /// the rest are not tried, which keeps a working panel to a single extra request.
+  Future<Uint8List?> _fetchXrayBody(
+    String url,
+    SubscriptionFetch fetch,
+    Duration timeout,
+  ) async {
+    for (final agent in xrayUserAgentCandidates) {
+      try {
+        final response = await fetch(
+          url,
+          timeout: timeout,
+          headers: {'User-Agent': agent},
+        );
+        final body = response.data;
+        final text = body == null ? '' : utf8.decode(body, allowMalformed: true);
+        final format = detectFormat(text);
+        commonPrint.log(
+          'xray probe [$agent]: http=${response.statusCode} '
+          'bytes=${body?.length ?? 0} format=${format?.name ?? 'none'} '
+          'head=${text.length > 120 ? text.substring(0, 120).replaceAll('\n', ' ') : text}',
+        );
+        if (body != null && format == SubscriptionFormat.xray) return body;
+      } catch (error) {
+        commonPrint.log('xray probe [$agent]: ${compactError(error)}');
+      }
+    }
+    return null;
   }
 }
 

@@ -17,6 +17,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'add.dart';
 import 'edit.dart';
+import 'subscription_lights.dart';
 import 'preview.dart';
 
 const _infoGap = 4.0;
@@ -327,18 +328,34 @@ class ProfileItem extends ConsumerWidget {
   SubscriptionInfo? get _subscriptionInfo =>
       profile.type == ProfileType.url ? profile.subscriptionInfo : null;
 
-  String _subtitle(BuildContext context) {
+  /// One line for traffic, one for the expiry, so the row reads as three facts instead of
+  /// a sentence: what it is, how much is left, until when.
+  List<String> _subtitle(BuildContext context) {
     final info = _subscriptionInfo;
     if (info != null && info.usage != null) {
       final used = info.upload + info.download;
-      return '${used.traffic.show} / ${info.total.traffic.show}';
+      final total = info.total > 0 ? info.total.traffic.show : '♾️';
+      final expire = info.expireDate;
+      return [
+        'Трафик: ${used.traffic.show} / $total',
+        if (expire != null) 'Истекает: ${_dayMonthYear(expire)}',
+      ];
     }
     final appLocalizations = context.appLocalizations;
-    return switch (profile.type) {
-      ProfileType.url => appLocalizations.profileTypeSubscription,
-      ProfileType.file => appLocalizations.profileTypeFile,
-      ProfileType.custom => appLocalizations.profileTypeCustom,
-    };
+    return [
+      switch (profile.type) {
+        ProfileType.url => appLocalizations.profileTypeSubscription,
+        ProfileType.file => appLocalizations.profileTypeFile,
+        ProfileType.custom => appLocalizations.profileTypeCustom,
+      },
+    ];
+  }
+
+  /// ✅ while the plan is alive, ❌ once it is not; nothing when there is no date to judge.
+  String _statusMark() {
+    final expire = _subscriptionInfo?.expireDate;
+    if (expire == null) return '';
+    return expire.isAfter(DateTime.now()) ? '✅' : '❌';
   }
 
   Widget _buildTrailing(BuildContext context, {required bool isUpdating}) {
@@ -506,7 +523,6 @@ class ProfileItem extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isUpdating = ref.watch(isUpdatingProvider(profile.updatingKey));
-    final subscriptionInfo = _subscriptionInfo;
     final isSelected = profile.id == groupValue;
     return ContextMenuRegion(
       menuItems: isUpdating ? null : _menuItems(context, ref),
@@ -525,6 +541,12 @@ class ProfileItem extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             spacing: 8,
             children: [
+              // Which formats this link actually offers, before the timestamp: the lights
+              // answer "can this subscription run on both cores" at a glance.
+              if (profile.type == ProfileType.url) ...[
+                SubscriptionFormatsLights(profile: profile),
+                const SizedBox(width: 2),
+              ],
               if (profile.type == ProfileType.custom)
                 _GroupsCountChip(profileId: profile.id)
               else
@@ -534,8 +556,8 @@ class ProfileItem extends ConsumerWidget {
           ),
           title: _ProfileCardTitle(
             profile: profile,
-            expire: subscriptionInfo?.expireDate,
-            subtitle: _subtitle(context),
+            statusMark: _statusMark(),
+            lines: _subtitle(context),
           ),
         ),
       ),
@@ -543,35 +565,52 @@ class ProfileItem extends ConsumerWidget {
   }
 }
 
+/// 25.12.2026 — the shape the owner reads at a glance, without a locale library.
+String _dayMonthYear(DateTime date) =>
+    '${date.day.toString().padLeft(2, '0')}.'
+    '${date.month.toString().padLeft(2, '0')}.${date.year}';
+
 class _ProfileCardTitle extends StatelessWidget {
   const _ProfileCardTitle({
     required this.profile,
-    required this.expire,
-    required this.subtitle,
+    required this.statusMark,
+    required this.lines,
   });
 
   final Profile profile;
-  final DateTime? expire;
-  final String subtitle;
+  final String statusMark;
+  final List<String> lines;
 
   @override
   Widget build(BuildContext context) {
+    final style = AppTextStyle.footnote.of(context).toLighter;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ChipTitle(
-          title: profile.realLabel,
-          expire: expire,
-          style: AppTextStyle.headline.of(context),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                profile.realLabel,
+                style: AppTextStyle.headline.of(context),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            // The state belongs to the name, not to a column of its own: one glance at the
+            // first line answers "is this subscription alive".
+            if (statusMark.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Text(statusMark, style: style),
+            ],
+          ],
         ),
-        const SizedBox(height: _infoGap),
-        Text(
-          subtitle,
-          style: AppTextStyle.footnote.of(context).toLighter,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        for (final line in lines) ...[
+          const SizedBox(height: _infoGap),
+          Text(line, style: style, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ],
       ],
     );
   }
