@@ -16,6 +16,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:yaml/yaml.dart';
 
 import 'app.dart';
 import 'config.dart';
@@ -32,3 +33,4 @@ part 'state/managed.dart';
 part 'state/profile.dart';
 part 'state/custom.dart';
 part 'state/custom_import.dart';
+part 'state/portal_rows.dart';

@@ -1,0 +1,255 @@
+# portal 1.03 patch 20d — the server list never empties during a switch
+#
+# Switching modes empties both sources for a moment: the engine has no groups until it takes
+# the profile, and the child has no servers until its subscription is read. The screen drew
+# that as an empty list. The list now keeps the last non-empty group it drew — a name, a
+# protocol and a ping, all still true — and only a non-empty answer from the new owner
+# replaces it; before anything has answered, the profile's own `proxies:` are the rows. A
+# profile with no proxies at all still ends in the honest empty state.
+diff --git a/lib/providers/state.dart b/lib/providers/state.dart
+index 78e974b1..41ded4f0 100644
+--- a/lib/providers/state.dart
++++ b/lib/providers/state.dart
+@@ -16,6 +16,7 @@ import 'package:material_ui/material_ui.dart';
+ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:riverpod_annotation/riverpod_annotation.dart';
++import 'package:yaml/yaml.dart';
+ 
+ import 'app.dart';
+ import 'config.dart';
+@@ -32,3 +33,4 @@ part 'state/managed.dart';
+ part 'state/profile.dart';
+ part 'state/custom.dart';
+ part 'state/custom_import.dart';
++part 'state/portal_rows.dart';
+
+diff --git a/lib/providers/state/portal_rows.dart b/lib/providers/state/portal_rows.dart
+new file mode 100644
+index 00000000..55c165ab
+--- /dev/null
++++ b/lib/providers/state/portal_rows.dart
+@@ -0,0 +1,114 @@
++part of '../state.dart';
++
++/// One server row, as it can be drawn without asking any core.
++///
++/// A name, its protocol and the panel's description: exactly what the profile already
++/// carries in its own `proxies:`. Nothing here needs a running engine, a pushed config or a
++/// delay measurement, which is the point — during a switch there is a moment when no core
++/// can answer, and that moment must not look like an empty subscription.
++class PortalRow {
++  const PortalRow({required this.name, this.type = '', this.description = ''});
++
++  final String name;
++  final String type;
++
++  /// The line the panel wrote for this server, when it wrote one.
++  final String description;
++
++  Proxy toProxy() => Proxy(
++        name: name,
++        type: type,
++        serverDescription: description.isEmpty ? name : description,
++      );
++}
++
++/// The group a list of rows is drawn as.
++///
++/// The list widget is shaped around a [Group]: it needs a name, a `now` and members. These
++/// rows have no group of their own — they are the profile's servers, not any core's group —
++/// so they get the portal's own group name, and the same name the simple portal already
++/// uses. Nothing is written to the engine with it.
++const portalRowsGroupName = 'PORTAL';
++
++Group portalGroupOfRows(List<PortalRow> rows) => Group(
++      type: GroupType.Selector,
++      name: portalRowsGroupName,
++      all: [
++        for (final row in rows)
++          if (!isBuiltinOutboundName(row.name)) row.toProxy(),
++      ],
++    );
++
++/// Reads `proxies:` out of a subscription body, for the rows a fresh install has no other
++/// source for.
++///
++/// The engine's groups arrive only after a config has been applied, and the child's list only
++/// after its subscription file has been read; before either, the file itself is the honest
++/// source and it is already on disk.
++List<PortalRow> parsePortalRows(String body) {
++  final text = body.trim();
++  if (text.isEmpty) return const [];
++  Object? document;
++  try {
++    document = loadYaml(text);
++  } catch (_) {
++    return const [];
++  }
++  if (document is! Map) return const [];
++  final proxies = document['proxies'];
++  if (proxies is! List) return const [];
++  final rows = <PortalRow>[];
++  final seen = <String>{};
++  for (final item in proxies) {
++    if (item is! Map) continue;
++    final name = '${item['name'] ?? ''}'.trim();
++    if (name.isEmpty || !seen.add(name)) continue;
++    if (isBuiltinOutboundName(name)) continue;
++    rows.add(
++      PortalRow(
++        name: name,
++        type: '${item['type'] ?? ''}'.trim(),
++      ),
++    );
++  }
++  return rows;
++}
++
++/// The group the list draws while a switch is in flight.
++///
++/// [live] is what the owner of the moment answered — the engine's groups in the network
++/// mode, the child's servers in the portal. An empty answer never replaces what is on
++/// screen: those rows are a name, a protocol and a ping, all of them still true, and an
++/// empty list in the middle of a switch reads as an empty subscription. When nothing has
++/// ever answered, the profile's own `proxies:` are the rows. Only a profile that has no
++/// proxies at all ends in no group, which is the honest empty state.
++Group? portalShownGroup({
++  required Group? live,
++  required Group? held,
++  required List<PortalRow> profileRows,
++  void Function(Group)? remember,
++}) {
++  if (live != null && live.all.isNotEmpty) {
++    remember?.call(live);
++    return live;
++  }
++  if (held != null && held.all.isNotEmpty) return held;
++  final fromProfile = portalGroupOfRows(profileRows);
++  if (fromProfile.all.isNotEmpty) return fromProfile;
++  return live;
++}
++
++/// The current profile's own servers: the last resort of the list, and never a guess.
++final profilePortalRowsProvider =
++    FutureProvider.autoDispose<List<PortalRow>>((ref) async {
++  final profile = ref.watch(currentProfileProvider);
++  if (profile == null) return const [];
++  try {
++    final file = await profile.file;
++    if (!await file.exists()) return const [];
++    return parsePortalRows(await file.readAsString());
++  } catch (_) {
++    // An unreadable profile is not a list of servers; the caller keeps what it had.
++    return const [];
++  }
++});
+
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index aec269f3..5837d676 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -532,11 +533,22 @@ Future<PortalCoreResult> _enterSimplePortal(WidgetRef ref) async {
+ }
+ 
+ /// Mode control with the two list controls beside it: sorting and the delay test.
+-class PortalModeSwitch extends ConsumerWidget {
++class PortalModeSwitch extends ConsumerStatefulWidget {
+   const PortalModeSwitch({super.key});
+ 
+   @override
+-  Widget build(BuildContext context, WidgetRef ref) {
++  ConsumerState<PortalModeSwitch> createState() => _PortalModeSwitchState();
++}
++
++class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
++  /// The last group this control drew, kept across a switch.
++  ///
++  /// A state field, not a provider: the list is rebuilt many times a frame and the memory
++  /// has to outlive the rebuild without writing a provider during it.
++  Group? _held;
++
++  @override
++  Widget build(BuildContext context) {
+     final theme = Theme.of(context);
+     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
+     final modes = ref.watch(availableModesProvider);
+@@ -552,9 +564,16 @@ class PortalModeSwitch extends ConsumerWidget {
+     final xrayServers = simple
+         ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
+         : const <XrayServerConfig>[];
+-    final group = groups.where((g) => g.name == groupName).firstOrNull ??
++    final live = groups.where((g) => g.name == groupName).firstOrNull ??
+         groups.firstOrNull ??
+         (xrayServers.isEmpty ? null : simplePortalGroup(xrayServers));
++    // The owner that answers now wins; until it does, the rows on screen stay.
++    final group = portalShownGroup(
++      live: live,
++      held: _held,
++      profileRows: ref.watch(profilePortalRowsProvider).value ?? const [],
++      remember: (value) => _held = value,
++    );
+     final sort = ref.watch(portalSortProvider);
+     final engineCheck = ref.watch(engineFormatStatusProvider).value;
+     final engineFormat = engineCheck?.status ?? EngineFormatStatus.ok;
+@@ -700,11 +719,21 @@ class PortalModeSwitch extends ConsumerWidget {
+ 
+ /// The working screen's server list: a group strip with arrows (network mode only),
+ /// a tinted row for the chosen server, name left and delay right.
+-class PortalServerList extends ConsumerWidget {
++class PortalServerList extends ConsumerStatefulWidget {
+   const PortalServerList({super.key});
+ 
+   @override
+-  Widget build(BuildContext context, WidgetRef ref) {
++  ConsumerState<PortalServerList> createState() => _PortalServerListState();
++}
++
++class _PortalServerListState extends ConsumerState<PortalServerList> {
++  /// The last group this list drew. A switch empties both sources for a moment — the
++  /// engine has no groups until it takes the profile, the child has no servers until its
++  /// subscription is read — and an empty list there is what the owner saw as a flicker.
++  Group? _held;
++
++  @override
++  Widget build(BuildContext context) {
+     final theme = Theme.of(context);
+     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
+     final simple = mode == Mode.global;
+@@ -722,9 +751,15 @@ class PortalServerList extends ConsumerWidget {
+     final xrayServers = simple
+         ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
+         : const <XrayServerConfig>[];
+-    final group = groups.where((g) => g.name == groupName).firstOrNull ??
++    final live = groups.where((g) => g.name == groupName).firstOrNull ??
+         groups.firstOrNull ??
+         (xrayServers.isEmpty ? null : simplePortalGroup(xrayServers));
++    final group = portalShownGroup(
++      live: live,
++      held: _held,
++      profileRows: ref.watch(profilePortalRowsProvider).value ?? const [],
++      remember: (value) => _held = value,
++    );
+     if (group == null) {
+       return Padding(
+         padding: const EdgeInsets.all(16),
+@@ -753,11 +788,18 @@ class PortalServerList extends ConsumerWidget {
+     final rulesPick = selection.rules[group.name];
+     final xrayPicked =
+         xrayServers.any((server) => server.name == xrayPick) ? xrayPick : null;
++    // While the child's own list has not arrived, the rows on screen are still the ones its
++    // stored pick names — so the highlight stays on the node that was confirmed, and it
++    // moves only when a new pick has been acknowledged.
++    final heldXrayPick =
++        simple && xrayPick.isNotEmpty && group.all.any((p) => p.name == xrayPick);
+     final selectedName = bypassedGroup
+         ? null
+         : xrayServers.isNotEmpty
+             ? xrayPicked
+-            : (pending ?? chosenName ?? rulesPick);
++            : heldXrayPick
++                ? xrayPick
++                : (pending ?? chosenName ?? rulesPick);
+     // Measure once when the list arrives: a portal whose servers all read "—" until you
+     // press something looks broken, and a closed portal is no reason not to know.
+     final endpoints = ref.watch(proxyEndpointsProvider).value ?? const {};

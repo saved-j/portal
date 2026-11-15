@@ -124,6 +124,47 @@ the device, not a redesign.
   skipped instead of thrown. Rollback: reverse 19c; the line comes back, the switch itself
   still completes.
 
+- `20-owner-generation-and-serialized-switch` — the tunnel had three owners and no record:
+  a Dart flag around the mode switch, `ServiceController`'s mutex around the service start,
+  and a row tap that called the child directly, each correct about its own step. `PortalRuntime`
+  (`Off | Starting(g, owner) | Active(g, owner, fdEpoch) | Stopping(g, owner) | Failed(g, reason)`)
+  is now the one record, and `PortalRuntimeCoordinator` the one entry: the power button, a row
+  tap, Quick Settings, the quick action, a revoke and a restart are serialised under one mutex
+  in the order **coordinator → transitionLock → ServiceController.lock → tunLock**. A revoke
+  does not wait for that mutex — it mints a new generation (`PortalRuntimeState.revoke`) and
+  the transaction in flight finds itself stale. `XrayStop` is waited for before a stop reports
+  success, `XrayTunHolder` operations are locked and epoch-bound, `dup()` is reachable only
+  through `XrayTun.duplicate()` (a closed descriptor answers `null`, never `Already closed`),
+  and `Active` is published only after the owner acknowledged the tunnel — the child's
+  `portal0 up`, or the engine's service. Expected record: `PortalRuntime generation=N owner=…
+  phase=…` and `service phase=… generation=N`. Rollback: reverse 20; 19/19b/19c keep the
+  single engine-free start.
+- `20b-simple-portal-dns-hijack` — with a node the child's document carried the panel's own
+  `dns` section, and nothing hijacked the tunnel's resolver: the core dispatched
+  `198.18.0.2:53` to `direct` (`[tun-in -> direct] … 198.18.0.2:53`), so no name resolved and
+  every request timed out (rc=28). A concrete node appeared to work, the balancer pick
+  ('Авто-выбор') did not. The document is now rewritten — a `dns` section with a queryable
+  server, one `dns` -protocol outbound (the document's own if it has one), and a first routing
+  rule sending the tun inbound's port 53 to it. Chosen over rejecting the document, because a
+  fallback would silently turn 'Авто-выбор' into "the first server". Expected:
+  `[tun-in -> <dns outbound>]` for 198.18.0.2:53 and `http=200` by hostname, in both picks.
+- `20c-portal-telemetry-files` — the core's log lived in `filesDir`, which `run-as` refuses on
+  a release build: nothing could be read off the phone. The record now goes to the app's
+  external files directory — `portal-status.log` (heartbeat every ~5 s: `owner= generation=
+  fdEpoch= phase= engine= child= listeners= egress=`), `portal-transitions.log` (one line per
+  transition, written from the record's own `onPublish` hook, so no entry can move the tunnel
+  silently) and `xray.log` (the core's own log). `listeners` is measured — `/proc/self/net/tcp`
+  where allowed, else a loopback handshake against the mixed port and the cores' defaults —
+  and says `unknown` when neither could answer. Paths are constants in `PortalTelemetry.kt` and
+  named in `BUILD.md`.
+- `20d-server-list-never-empties` — a switch empties both row sources for a moment (the engine
+  has no groups until it takes the profile, the child none until its subscription is read) and
+  the list drew that as an empty subscription. Both the mode control and the list now keep the
+  last non-empty group they drew and replace it only with a non-empty answer from the new
+  owner; before anything answered, the profile's own `proxies:` are the rows; a profile with no
+  proxies still ends in the honest empty state. No provider is read after an `await`, and no
+  row depends on a config push.
+
 Apply (to a tree that does not already carry the 01..02 commit):
 ```
 git -C <clone> checkout -B work <1.02a commit>   # tree f8044d71

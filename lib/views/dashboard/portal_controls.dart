@@ -533,11 +533,22 @@ Future<PortalCoreResult> _enterSimplePortal(WidgetRef ref) async {
 }
 
 /// Mode control with the two list controls beside it: sorting and the delay test.
-class PortalModeSwitch extends ConsumerWidget {
+class PortalModeSwitch extends ConsumerStatefulWidget {
   const PortalModeSwitch({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PortalModeSwitch> createState() => _PortalModeSwitchState();
+}
+
+class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
+  /// The last group this control drew, kept across a switch.
+  ///
+  /// A state field, not a provider: the list is rebuilt many times a frame and the memory
+  /// has to outlive the rebuild without writing a provider during it.
+  Group? _held;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
     final modes = ref.watch(availableModesProvider);
@@ -553,9 +564,16 @@ class PortalModeSwitch extends ConsumerWidget {
     final xrayServers = simple
         ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
         : const <XrayServerConfig>[];
-    final group = groups.where((g) => g.name == groupName).firstOrNull ??
+    final live = groups.where((g) => g.name == groupName).firstOrNull ??
         groups.firstOrNull ??
         (xrayServers.isEmpty ? null : simplePortalGroup(xrayServers));
+    // The owner that answers now wins; until it does, the rows on screen stay.
+    final group = portalShownGroup(
+      live: live,
+      held: _held,
+      profileRows: ref.watch(profilePortalRowsProvider).value ?? const [],
+      remember: (value) => _held = value,
+    );
     final sort = ref.watch(portalSortProvider);
     final engineCheck = ref.watch(engineFormatStatusProvider).value;
     final engineFormat = engineCheck?.status ?? EngineFormatStatus.ok;
@@ -701,11 +719,21 @@ class PortalModeSwitch extends ConsumerWidget {
 
 /// The working screen's server list: a group strip with arrows (network mode only),
 /// a tinted row for the chosen server, name left and delay right.
-class PortalServerList extends ConsumerWidget {
+class PortalServerList extends ConsumerStatefulWidget {
   const PortalServerList({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PortalServerList> createState() => _PortalServerListState();
+}
+
+class _PortalServerListState extends ConsumerState<PortalServerList> {
+  /// The last group this list drew. A switch empties both sources for a moment — the
+  /// engine has no groups until it takes the profile, the child has no servers until its
+  /// subscription is read — and an empty list there is what the owner saw as a flicker.
+  Group? _held;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
     final simple = mode == Mode.global;
@@ -723,9 +751,15 @@ class PortalServerList extends ConsumerWidget {
     final xrayServers = simple
         ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
         : const <XrayServerConfig>[];
-    final group = groups.where((g) => g.name == groupName).firstOrNull ??
+    final live = groups.where((g) => g.name == groupName).firstOrNull ??
         groups.firstOrNull ??
         (xrayServers.isEmpty ? null : simplePortalGroup(xrayServers));
+    final group = portalShownGroup(
+      live: live,
+      held: _held,
+      profileRows: ref.watch(profilePortalRowsProvider).value ?? const [],
+      remember: (value) => _held = value,
+    );
     if (group == null) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -754,11 +788,18 @@ class PortalServerList extends ConsumerWidget {
     final rulesPick = selection.rules[group.name];
     final xrayPicked =
         xrayServers.any((server) => server.name == xrayPick) ? xrayPick : null;
+    // While the child's own list has not arrived, the rows on screen are still the ones its
+    // stored pick names — so the highlight stays on the node that was confirmed, and it
+    // moves only when a new pick has been acknowledged.
+    final heldXrayPick =
+        simple && xrayPick.isNotEmpty && group.all.any((p) => p.name == xrayPick);
     final selectedName = bypassedGroup
         ? null
         : xrayServers.isNotEmpty
             ? xrayPicked
-            : (pending ?? chosenName ?? rulesPick);
+            : heldXrayPick
+                ? xrayPick
+                : (pending ?? chosenName ?? rulesPick);
     // Measure once when the list arrives: a portal whose servers all read "—" until you
     // press something looks broken, and a closed portal is no reason not to know.
     final endpoints = ref.watch(proxyEndpointsProvider).value ?? const {};
