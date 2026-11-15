@@ -72,6 +72,10 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            // The Xray binary is shipped as libxray.so so that nativeLibraryDir, the only
+            // directory an app targeting API 29+ may execute from, holds a real file.
+            // Stripping it would corrupt an executable that is not a shared library.
+            keepDebugSymbols += "**/libxray.so"
         }
     }
 

@@ -70,14 +70,12 @@ Map<String, dynamic> withoutXrayBridge(
   String restoreMode = 'rule',
 }) {
   final out = <String, dynamic>{...config};
-  out['proxies'] = [
-    ...?((config['proxies'] as List?) ?? const [])
-        .where((p) => !(p is Map && p['name'] == xrayBridgeTag)),
-  ];
-  out['proxy-groups'] = [
-    ...?((config['proxy-groups'] as List?) ?? const [])
-        .where((g) => !(g is Map && g['name'] == xrayBridgeGroup)),
-  ];
+  out['proxies'] = ((config['proxies'] as List?) ?? const [])
+      .where((p) => !(p is Map && p['name'] == xrayBridgeTag))
+      .toList();
+  out['proxy-groups'] = ((config['proxy-groups'] as List?) ?? const [])
+      .where((g) => !(g is Map && g['name'] == xrayBridgeGroup))
+      .toList();
   if (out['GLOBAL'] == xrayBridgeGroup) {
     out.remove('GLOBAL');
   }

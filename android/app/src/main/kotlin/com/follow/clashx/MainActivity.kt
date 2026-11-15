@@ -5,6 +5,7 @@ import com.follow.clashx.plugins.AppPlugin
 import com.follow.clashx.plugins.BatteryPlugin
 import com.follow.clashx.plugins.ServicePlugin
 import com.follow.clashx.plugins.TilePlugin
+import com.follow.clashx.plugins.XrayPlugin
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
@@ -35,6 +36,7 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(BatteryPlugin())
         flutterEngine.plugins.add(ServicePlugin())
         flutterEngine.plugins.add(TilePlugin())
+        flutterEngine.plugins.add(XrayPlugin())
         ServiceState.attachFlutterEngine(flutterEngine)
         flutterEngine.addEngineLifecycleListener(stopVibrationOnRestart)
     }
