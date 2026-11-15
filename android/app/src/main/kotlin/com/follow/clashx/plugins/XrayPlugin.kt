@@ -85,7 +85,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     /// null on success or the core's error text. The descriptor is this process's, so the
     /// number means the same thing on both sides of the call — which is the whole reason the
     /// core is loaded instead of spawned.
-    private external fun XrayStart(config: String, tunFd: Int): String?
+    private external fun XrayStart(config: String, tunFd: Int, assetDir: String): String?
 
     private external fun XrayStop()
 
@@ -197,7 +197,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         // A line left by the previous start must not acknowledge this one.
         runCatching { logFile.writeText("") }
 
-        val attempt = runCatching { XrayStart(document, tun.fd) }
+        val attempt = runCatching { XrayStart(document, tun.fd, assets.absolutePath) }
         if (attempt.isFailure) {
             val error = attempt.exceptionOrNull()
             Log.e(TAG, "unable to start xray", error)
