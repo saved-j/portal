@@ -185,6 +185,17 @@ the device, not a redesign.
   from its own stopwatch. `source=` is part of the answer: only `live` is the new owner's list;
   `held`/`profile` are what keeps the screen non-empty. `BUILD.md` documents the shape; the
   channel methods are `switchStart` and `switchTiming`.
+- `22-server-list-follows-the-mode` — with the portal closed, a switch to 'Сеть порталов' kept
+  the simple portal's rows ('Авто-выбор', 'Эстония', 'Финляндия', 'Германия' — the Xray
+  document), and the transition log showed the same `rows=28` for both modes. The fallback
+  parsed one source for both modes while `live` existed only while the engine ran. Now each
+  mode reads only its own: the simple portal the profile's Xray document
+  (`xrayServersProvider`), the network mode the engine's groups, and with the portal closed
+  the engine's own last answer for this profile (`portalEngineRowsProvider`, filled from a
+  `ref.listen`) and then the profile's engine-format `proxies:`. A group held from the other
+  mode is dropped, and the list line carries `mode=` beside `source=`: `mode=rule source=live
+  rows=28` / `mode=global source=live rows=3`. 20d's never-empty rule and the honest empty
+  state (`source=none`) stand.
 
 Apply (to a tree that does not already carry the 01..02 commit):
 ```

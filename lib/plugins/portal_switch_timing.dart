@@ -36,22 +36,30 @@ class PortalSwitchClock {
 
   /// The first frame after the tap that has rows to draw.
   ///
-  /// [source] is where they came from: the new owner's own answer (`live`), the last group
-  /// the list drew (`held`), or the profile's own `proxies:` (`profile`). Only the first is
-  /// the new owner's list; the other two are what keeps the screen from going empty while it
-  /// arrives, and the line says which one it was instead of blurring them together.
-  void listPopulated({required String source, required int rows}) {
+  /// [source] is where they came from: the current owner's own answer (`live`), the last
+  /// group the list drew (`held`), the engine's own last answer for this profile (`cache`),
+  /// the profile's own `proxies:` (`profile`), or the simple portal's servers (`servers`).
+  /// [mode] is the mode they were drawn in, and it is part of the line: a tap that lands in
+  /// the other mode must show the other mode's names, and a number with no mode beside it
+  /// cannot tell those two lists apart.
+  void listPopulated({
+    required String source,
+    required int rows,
+    required String mode,
+  }) {
     final watch = _watched;
     if (watch == null || _listed) return;
     _listed = true;
     watch.stop();
     final ms = watch.elapsedMilliseconds;
-    commonPrint.log('portal switch: tap → $rows rows in ${ms}ms (source=$source)');
+    commonPrint.log(
+      'portal switch: tap → $rows rows in ${ms}ms (mode=$mode source=$source)',
+    );
     unawaited(
       portalRuntime.noteSwitchTiming(
         phase: 'list',
         durationMs: ms,
-        detail: 'source=$source rows=$rows',
+        detail: 'mode=$mode source=$source rows=$rows',
       ),
     );
   }

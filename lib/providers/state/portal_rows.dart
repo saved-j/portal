@@ -74,29 +74,106 @@ List<PortalRow> parsePortalRows(String body) {
   return rows;
 }
 
-/// The group the list draws while a switch is in flight.
+/// The simple portal's rows: the child's own servers, named by the child's document.
+///
+/// The list, the row and the mode control are all shaped around a [Group], and in this mode
+/// no engine holds one, so the group is made here — from the Xray document and nothing else.
+/// It is never written to the engine, and it never carries an engine proxy name.
+Group portalGroupOfServers(List<XrayServerConfig> servers) => Group(
+      type: GroupType.Selector,
+      name: portalRowsGroupName,
+      all: [
+        for (final server in servers)
+          Proxy(
+            name: server.name,
+            type: server.protocol,
+            serverDescription: server.label,
+          ),
+      ],
+    );
+
+/// The rows one mode can draw with no core answering, from that mode's own source.
+///
+/// The two modes read the same subscription in two different formats: the simple portal's
+/// names are the Xray document's servers, the network mode's are the engine document's
+/// `proxies:`. Handing one mode the other's rows is how a switch showed the portal's nodes
+/// under 'Сеть порталов' — each name was real, the list was not.
+Group? portalFallbackGroup({
+  required bool simple,
+  required List<XrayServerConfig> servers,
+  required List<PortalRow> engineRows,
+}) {
+  if (simple) {
+    if (servers.isEmpty) return null;
+    return portalGroupOfServers(servers);
+  }
+  final fromEngine = portalGroupOfRows(engineRows);
+  return fromEngine.all.isEmpty ? null : fromEngine;
+}
+
+/// The engine's own rows, kept per profile for as long as the app runs.
+///
+/// A closed portal has no groups to ask, and the profile's `proxies:` are the same document
+/// the engine last applied — so they are a good answer, and the last answer the engine
+/// actually gave is a better one. It is remembered under the profile it came from: another
+/// profile's servers are a different list, and the network mode never draws the child's.
+class PortalEngineRowsNotifier extends Notifier<Map<String, List<PortalRow>>> {
+  @override
+  Map<String, List<PortalRow>> build() => const {};
+
+  void remember({required String profileId, required Group group}) {
+    if (profileId.isEmpty || group.all.isEmpty) return;
+    final rows = <PortalRow>[
+      for (final proxy in group.all)
+        if (!isBuiltinOutboundName(proxy.name))
+          PortalRow(
+            name: proxy.name,
+            type: proxy.type,
+            description: proxy.serverDescription ?? proxy.name,
+          ),
+    ];
+    if (rows.isEmpty) return;
+    state = {...state, profileId: rows};
+  }
+}
+
+final portalEngineRowsProvider =
+    NotifierProvider<PortalEngineRowsNotifier, Map<String, List<PortalRow>>>(
+        PortalEngineRowsNotifier.new);
+
+/// The rows the list draws right now, and whose they are.
 ///
 /// [live] is what the owner of the moment answered — the engine's groups in the network
 /// mode, the child's servers in the portal. An empty answer never replaces what is on
 /// screen: those rows are a name, a protocol and a ping, all of them still true, and an
-/// empty list in the middle of a switch reads as an empty subscription. When nothing has
-/// ever answered, the profile's own `proxies:` are the rows. Only a profile that has no
-/// proxies at all ends in no group, which is the honest empty state.
-Group? portalShownGroup({
+/// empty list in the middle of a switch reads as an empty subscription.
+///
+/// [fallbacks] are the sources this mode can draw with no core answering, in the order it
+/// trusts them, each with the name the transition log will carry for it. Only `live` is
+/// proof the new owner has arrived; the rest keep the screen from going empty, and saying
+/// which one it was is the difference between a measurement and a guess. Only a mode with no
+/// rows at all ends in no group, which is the honest empty state.
+PortalShown portalShownRows({
   required Group? live,
   required Group? held,
-  required List<PortalRow> profileRows,
+  required List<(String, Group?)> fallbacks,
   void Function(Group)? remember,
 }) {
   if (live != null && live.all.isNotEmpty) {
     remember?.call(live);
-    return live;
+    return (group: live, source: 'live');
   }
-  if (held != null && held.all.isNotEmpty) return held;
-  final fromProfile = portalGroupOfRows(profileRows);
-  if (fromProfile.all.isNotEmpty) return fromProfile;
-  return live;
+  if (held != null && held.all.isNotEmpty) return (group: held, source: 'held');
+  for (final (source, group) in fallbacks) {
+    if (group != null && group.all.isNotEmpty) {
+      return (group: group, source: source);
+    }
+  }
+  return (group: live, source: 'none');
 }
+
+/// A group and where its rows came from: `live`, `held`, `cache`, `profile` or `servers`.
+typedef PortalShown = ({Group? group, String source});
 
 /// The current profile's own servers: the last resort of the list, and never a guess.
 final profilePortalRowsProvider =

@@ -198,16 +198,24 @@ phase= why= result=`), and after a tap on the mode switch, two measured ones:
 
 ```
 time=... kind=switch phase=active duration_ms=236 from=Xray to=Mihomo generation=7
-time=... kind=switch phase=list duration_ms=41 from=Xray to=Mihomo source=held rows=27
+time=... kind=switch phase=list duration_ms=41 from=Xray to=Mihomo mode=rule source=live rows=28
 ```
 
 `phase=active` is written by the record's own `onPublish` hook — the tap starts the clock on
 the native side and `Active` is published only after the owner acknowledged its listener or
 tunnel, so the number is the hand-over, not a wait for a config. `phase=list` is the screen's
-clock, from the tap to the first frame with rows, and `source=` says whose rows they were: the
-new owner's (`live`), the last group the list drew (`held`, which is what keeps the screen from
-going empty), or the profile's own `proxies:` (`profile`). A switch that fails writes neither:
-it is reported as a failure, with the plain transition lines of its rollback.
+clock, from the tap to the first frame with rows, `mode=` is the mode those rows were drawn in,
+and `source=` says whose rows they were: the current owner's (`live`), the last group the list
+drew (`held`, which is what keeps the screen from going empty), the engine's own last answer
+for this profile (`cache`), the profile's own `proxies:` (`profile`) or the simple portal's
+servers (`servers`). A switch that fails writes neither: it is reported as a failure, with the
+plain transition lines of its rollback.
+
+Each mode has one source of rows and no other: the simple portal's list is the Xray document
+(`xrayServersProvider`, read from the profile's second format), the network mode's is the
+engine's groups — or, with the portal closed, the engine's own last answer for this profile and
+then the profile's engine-format `proxies:`. Neither mode can draw the other's names, and a
+group held from the other mode is dropped when the mode changes.
 
 ## Checks
 

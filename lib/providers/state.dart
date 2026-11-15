@@ -23,6 +23,7 @@ import 'config.dart';
 import 'core.dart';
 import 'database.dart';
 import 'package:fl_clash/common/outbound.dart';
+import 'package:fl_clash/core/xray_subscription.dart';
 
 part 'generated/state.g.dart';
 part 'state/proxies.dart';
