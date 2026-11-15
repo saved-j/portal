@@ -2,7 +2,6 @@ package com.follow.clashx.plugins
 
 import android.content.Context
 import android.system.Os
-import android.system.OsConstants
 import android.util.Log
 import com.follow.clashx.common.Components
 import com.follow.clashx.common.XrayChildControl
@@ -13,52 +12,66 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.RandomAccessFile
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-import java.util.zip.ZipFile
 
 /**
  * Runs the bundled Xray on the simple portal's tunnel.
  *
- * The VpnService establishes the tun — no other component can — and this plugin hands that
- * very descriptor to the child through its `tun` inbound. There is no engine in front of it
- * and no socks bridge behind it: the system routes packets into the tun, the child reads
- * them, and the node it dials is the one the owner picked.
+ * The VpnService establishes the tun — no other component can — and the core reads that very
+ * descriptor. The core is a c-shared library in this process, not a child: `XrayStart` sets
+ * the descriptor on the core's own tun device, so nothing crosses a process boundary and
+ * nothing has to survive one. An exec'd child could not read the tunnel at all: `Runtime.exec`
+ * spawns with close-on-exec set on every descriptor, so the child started without the tun and
+ * died with "bad file descriptor" before it logged a line.
  *
- * The descriptor crosses exec by inheritance, so the child reads the same number: close-on-
- * exec is cleared on it and the number is stated in `xray.tun.fd`. The start is only a
- * success once the child has acknowledged the tunnel in its own output; a child that exits,
- * or one that never takes the descriptor, fails the start with its last line instead of
- * falling back to a bridge it no longer has.
+ * There is no engine in front of it and no socks bridge behind it: the system routes packets
+ * into the tun, the core reads them, and the node it dials is the one the owner picked.
  *
- * Protecting the child's transport: `VpnService.protect` takes a socket from the calling
- * process, and the child's sockets are created after exec by Go, so it cannot be used here.
- * What it can do is bind every outbound to the interface the tunnel rides on, stated as
- * `autoOutboundsInterface`; the service resolves that interface and refuses to hand over a
- * tunnel without one.
+ * The start is only a success once the core has said it is reading the tunnel in its own log;
+ * a core that refuses the document, or one that never takes the descriptor, fails the start
+ * with its own words instead of falling back to a bridge it no longer has.
+ *
+ * Protecting the core's transport: every outbound is bound to the interface the tunnel rides
+ * on, stated as `autoOutboundsInterface`; the service resolves that interface and refuses to
+ * hand over a tunnel without one. Being in-process would allow `VpnService.protect`, but the
+ * binding is what states the intent, so it stays.
  */
 class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var channel: MethodChannel
     private lateinit var appContext: Context
     private val executor = Executors.newSingleThreadExecutor()
-    @Volatile private var process: Process? = null
+
+    /// Whether the core holds the tunnel right now.
+    ///
+    /// An in-process core has no handle to poll: the native start returning is not the same
+    /// as the core reading the tun, and there is no process that dies to tell the two apart.
+    /// The flag is set when the core accepted the document and cleared by the first stop, and
+    /// the acknowledgement in the log is what decides whether the start may keep it.
+    @Volatile private var coreRunning = false
     @Volatile private var lastLine: String = ""
-    @Volatile private var acknowledged = false
+
+    /// Set once the library is open and its three entry points resolve.
+    @Volatile private var libraryLoaded = false
+
+    /// Why the library is not usable, if it is not: a start reports this instead of throwing.
+    @Volatile private var libraryProblem: String? = null
 
     /// The tunnel this plugin was handed, kept for the life of the VPN.
     ///
-    /// The service publishes it once, when it establishes the interface; the child is
+    /// The service publishes it once, when it establishes the interface; the core is
     /// restarted on every pick, and each restart reads the same descriptor. Taking it once
-    /// and keeping it is what lets a tap replace the process without replacing the tunnel.
+    /// and keeping it is what lets a tap replace the core without replacing the tunnel.
     @Volatile private var cachedTun: XrayTun? = null
 
-    /// Every command takes a number; only the newest one may touch the process.
+    /// Every command takes a number; only the newest one may touch the core.
     ///
     /// A stop has to invalidate a start that is already waiting *and* one still queued
     /// behind it on the executor, which a shared boolean cannot do: the queued start would
-    /// clear it and go on to spawn a child nobody asked for any more. The number only ever
+    /// clear it and go on to open a core nobody asked for any more. The number only ever
     /// grows, so an older command compares false wherever it wakes up.
     private val operation = AtomicLong(0)
 
@@ -66,20 +79,33 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     private fun isCurrent(token: Long): Boolean = operation.get() == token
 
+    /// The core's C API, as exported by the c-shared library that ships in jniLibs.
+    ///
+    /// [XrayStart] sets `xray.tun.fd` on the core's own tun device, starts it, and answers
+    /// null on success or the core's error text. The descriptor is this process's, so the
+    /// number means the same thing on both sides of the call — which is the whole reason the
+    /// core is loaded instead of spawned.
+    private external fun XrayStart(config: String, tunFd: Int): String?
+
+    private external fun XrayStop()
+
+    private external fun XrayVersion(): String?
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         appContext = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
         channel.setMethodCallHandler(this)
-        // The service takes the child down with the tunnel, so a revoked VPN cannot leave a
-        // process reading a descriptor nobody answers for. Taking a number first also kills
-        // any start the service's teardown interrupted before it could spawn.
+        // The service takes the core down with the tunnel, so a revoked VPN cannot leave a
+        // core reading a descriptor nobody answers for. Taking a number first also cancels
+        // any start the service's teardown interrupted before it could open the core.
         XrayChildControl.stop = {
             nextOperation()
             // The service is closing the descriptor it owns: the tunnel in hand is gone with
             // it, and so is whatever is reading it. Called on the service's own thread, so
-            // kill and return — the wait belongs on the executor, not on a stopping service.
+            // record the loss and return — the native stop is queued, not run here.
             cachedTun = null
-            killNow()
+            takeCore()
+            requestNativeStop()
         }
     }
 
@@ -87,7 +113,8 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         channel.setMethodCallHandler(null)
         XrayChildControl.stop = null
         nextOperation()
-        stop()
+        takeCore()
+        requestNativeStop()
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -100,7 +127,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     return
                 }
                 // Numbered here, on the platform thread, so start and stop are ordered by
-                // arrival: the newest command is the one that owns the process.
+                // arrival: the newest command is the one that owns the core.
                 val token = nextOperation()
                 executor.execute {
                     if (!isCurrent(token)) {
@@ -113,16 +140,17 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
             }
             "stop" -> {
-                // Kill the child from this thread, not from the queue: a start that is still
-                // waiting for its acknowledgement holds the only executor slot, and a stop
-                // queued behind it would arrive after the timeout it exists to cut short.
-                // Taking a number first invalidates every start, running or queued.
+                // Take the number first: that is what makes a start — waiting already, or
+                // still queued behind this one — abandon its work instead of overriding the
+                // stop. The native stop is queued rather than run here, so the caller is not
+                // held for the core's wind-down; a start in flight ends on its own when it
+                // sees the new number, which is also when the queue reaches this task.
                 val token = nextOperation()
-                val killed = killNow()
+                takeCore()
+                requestNativeStop()
                 executor.execute {
-                    // The process being reaped belongs to an older command whatever arrived
-                    // since, so it is always reaped; only the state report follows the number.
-                    killed?.let { reap(it) }
+                    // The report follows the stop, whatever arrived in between: what it says
+                    // is the state after the core was asked to go.
                     if (isCurrent(token)) {
                         channel.invokeMethodOnMainThread("state", status())
                     }
@@ -134,75 +162,63 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     private fun status(): Map<String, Any> = mapOf(
-        "running" to (process?.isAlive == true),
+        "running" to coreRunning,
         "lastLine" to lastLine,
-        // Whether this plugin holds a tunnel: the child can only run while it does.
+        // Whether this plugin holds a tunnel: the core can only run while it does.
         "tun" to (cachedTun != null),
     )
 
     private fun start(token: Long, config: String): Map<String, Any> {
-        stop()
-        acknowledged = false
-        val binary = binary() ?: return failure("libxray.so is missing from the APK")
+        // One core at a time: a restart after a tap replaces the core that is reading the
+        // tunnel, and two cores cannot share one descriptor.
+        stopCoreHere()
         // The service publishes as its start returns; a cold start can arrive a few
         // milliseconds earlier than that, which is why this waits rather than assumes. A
         // later start — a tap on another node — reuses the tunnel it already has.
         val tun = tunForChild()
             ?: return failure("the portal has no tunnel yet: nothing established it")
-        // A stop that arrived while the tunnel was being waited for wins: nothing is spawned.
+        // A stop that arrived while the tunnel was being waited for wins: nothing opens.
         if (!isCurrent(token)) return cancelled()
-        val document = runCatching { tunDocument(config, tun) }.getOrElse { error ->
+        val logFile = File(appContext.filesDir, LOG_NAME)
+        val document = runCatching { tunDocument(config, tun, logFile) }.getOrElse { error ->
             return failure("the node's config cannot take a tun inbound: ${error.message}")
         }
-        val configFile = File(appContext.filesDir, "xray-tun.json")
-        configFile.writeText(document, Charsets.UTF_8)
+        val configFile = File(appContext.filesDir, CONFIG_NAME)
+        runCatching { configFile.writeText(document, Charsets.UTF_8) }.onFailure { error ->
+            return failure("cannot write ${configFile.name}: ${error.message}")
+        }
+        // The panel's config names rules as geosite:/geoip:, and the core looks for the data
+        // files under XRAY_LOCATION_ASSET. The variable has to be set before the library is
+        // opened, because the Go runtime copies the environment when the library loads.
         val assets = installGeoAssets()
+        runCatching { Os.setenv(ASSET_ENV, assets.absolutePath, true) }
+            .onFailure { Log.w(TAG, "cannot point xray at ${assets.absolutePath}: ${it.message}") }
+        ensureLibrary()?.let { problem -> return failure(problem) }
+        // A line left by the previous start must not acknowledge this one.
+        runCatching { logFile.writeText("") }
 
+        val attempt = runCatching { XrayStart(document, tun.fd) }
+        if (attempt.isFailure) {
+            val error = attempt.exceptionOrNull()
+            Log.e(TAG, "unable to start xray", error)
+            lastLine = error?.message ?: "unable to start xray"
+            return failure(lastLine)
+        }
+        val nativeError = attempt.getOrNull()
+        if (nativeError != null) {
+            // The library's own words: the core refused the document, or could not take the
+            // descriptor. There is no child left to ask and no exit code to read.
+            lastLine = nativeError
+            Log.e(TAG, "xray refused the start: $nativeError")
+            return failure(nativeError)
+        }
+        coreRunning = true
+        lastLine = ""
         return try {
-            // Close-on-exec is a per-descriptor flag, so clearing it here is what lets the
-            // child inherit the tunnel; the number is the same on both sides of exec. If it
-            // cannot be cleared the child would start without a tunnel and die on its own
-            // terms, so the start is refused here with the reason instead.
-            if (!clearCloseOnExec(tun)) {
-                return failure("cannot hand fd ${tun.fd} to the child: close-on-exec is stuck")
-            }
-            val builder = ProcessBuilder(binary.absolutePath, "run", "-c", configFile.absolutePath)
-                .directory(appContext.filesDir)
-                .redirectErrorStream(true)
-            // The panel's config names rules as geosite:/geoip:, so the child needs the
-            // data files. By default it looks next to the binary, where an APK cannot put
-            // them, so the directory is stated explicitly.
-            builder.environment()["XRAY_LOCATION_ASSET"] = assets.absolutePath
-            builder.environment()[TUN_FD_ENV] = tun.fd.toString()
-            val started = builder.start()
-            process = started
-            drain(started)
-
-            val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
-            while (System.currentTimeMillis() < deadline) {
-                // A newer command — a stop, or another start — owns the process from here.
-                if (!isCurrent(token)) {
-                    stop()
-                    return cancelled()
-                }
-                if (!started.isAlive) {
-                    val code = runCatching { started.exitValue() }.getOrDefault(-1)
-                    stop()
-                    return failure("xray exited with $code: $lastLine")
-                }
-                if (acknowledged) {
-                    Log.i(TAG, "xray is reading the tunnel on fd ${tun.fd}")
-                    return mapOf("ok" to true, "message" to "tunnel on fd ${tun.fd}")
-                }
-                // The wait belongs to the child: it returns the moment the child dies, so a
-                // refused start does not sit out a poll interval before saying so.
-                started.waitFor(POLL_MS, TimeUnit.MILLISECONDS)
-            }
-            stop()
-            failure("xray did not take the tunnel within ${READY_TIMEOUT_MS}ms: $lastLine")
+            awaitAck(token, tun, logFile)
         } catch (e: Exception) {
             Log.e(TAG, "unable to start xray", e)
-            stop()
+            stopCoreHere()
             failure(e.message ?: "unable to start xray")
         }
     }
@@ -212,10 +228,10 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
      *
      * The panel document is passed through as it is — outbounds, routing, dns — and only its
      * inbounds are replaced: a socks listener the panel declared would be a bridge into a
-     * process that no longer has anyone on the other side, so it goes. The tun inbound states
+     * core that no longer has anyone on the other side, so it goes. The tun inbound states
      * the descriptor's number, the tunnel's addresses, and the interface to dial the node on.
      */
-    private fun tunDocument(config: String, tun: XrayTun): String {
+    private fun tunDocument(config: String, tun: XrayTun, logFile: File): String {
         val root = JSONObject(config)
         val inbounds = JSONArray()
         root.optJSONArray("inbounds")?.let { existing ->
@@ -237,7 +253,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                         put("gateway", JSONArray(tun.gateway))
                         put("dns", JSONArray(tun.dns))
                         // The system routes are the VpnService's and are already in place:
-                        // the child has no root to add its own, and must not try to.
+                        // the core has no root to add its own, and must not try to.
                         //
                         // `autoSystemRoutingTable` is absent on purpose: in this core's schema
                         // it is a []string of routes to take over, not a flag, so a boolean
@@ -245,7 +261,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                         // ("cannot unmarshal bool into ... TunConfig.autoSystemRoutingTable of
                         // type []string"). An empty list is the same as leaving it out.
                         put("autoSystemDnsToGateway", false)
-                        // Stated, not inferred: this is the one place the child's own
+                        // Stated, not inferred: this is the one place the core's own
                         // transport is kept out of the tunnel it reads.
                         put("autoOutboundsInterface", tun.interfaceName)
                     },
@@ -253,22 +269,25 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             },
         )
         root.put("inbounds", inbounds)
-        // The acknowledgement this start waits for is an info-level line. A child that never
-        // read the descriptor would otherwise be indistinguishable from one that did, which
-        // is exactly the silent start this mode exists to avoid.
+        // The acknowledgement this start waits for is an info-level line, and it is only
+        // written if the core logs at all — the panel's own level may filter it out. `error`
+        // is the core's general log; `access` records requests, which is not what a start
+        // reads. A file rather than the console: the plugin has to read the core's line, not
+        // only have it appear in logcat.
         val log = root.optJSONObject("log") ?: JSONObject()
         log.put("loglevel", ACK_LOG_LEVEL)
+        log.put("error", logFile.absolutePath)
         root.put("log", log)
         return root.toString()
     }
 
-    /// Copies the geodata shipped as assets next to the config, once per install.
+    /// Copies the geodata shipped as assets into filesDir, once per install.
     ///
-    /// Xray reads geosite.dat and geoip.dat from XRAY_LOCATION_ASSET; putting them in
-    /// filesDir keeps them readable to the child without shipping 10 MB in jniLibs, where
-    /// only lib*.so survives packaging.
+    /// Xray reads geosite.dat and geoip.dat from XRAY_LOCATION_ASSET, and an APK cannot put
+    /// them next to the library: filesDir is where the core can open them, so they go there
+    /// and the variable above points at the directory.
     private fun installGeoAssets(): File {
-        val dir = File(appContext.filesDir, "xray-assets")
+        val dir = File(appContext.filesDir, GEODATA_DIR)
         if (!dir.exists()) dir.mkdirs()
         for (name in listOf("geosite.dat", "geoip.dat")) {
             val target = File(dir, name)
@@ -285,7 +304,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         return dir
     }
 
-    /// The tunnel the child should read: a newly published one, else the one in hand.
+    /// The tunnel the core should read: a newly published one, else the one in hand.
     ///
     /// The service publishes exactly once per VPN start, so a fresh publish always wins; the
     /// cached descriptor is what a restart after a tap uses, since the interface behind it
@@ -298,83 +317,176 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         return cachedTun ?: XrayTunHolder.await(TUN_WAIT_MS)?.also { cachedTun = it }
     }
 
-    private fun clearCloseOnExec(tun: XrayTun): Boolean =
-        runCatching { Os.fcntlInt(tun.descriptor.fileDescriptor, OsConstants.F_SETFD, 0) }
-            .onFailure { Log.w(TAG, "cannot clear close-on-exec on fd ${tun.fd}: ${it.message}") }
-            .isSuccess
-
-    private fun stop() {
-        val current = killNow() ?: return
-        reap(current)
-    }
-
-    /// Takes the child away from the plugin and terminates it, without waiting for it to
-    /// go. Safe from any thread: the platform thread calls this so that a stop is not
-    /// queued behind the start it is meant to interrupt.
-    private fun killNow(): Process? {
-        val current = process ?: return null
-        process = null
-        runCatching { current.destroy() }
-        return current
-    }
-
-    /// Waits for a killed child to go, and insists when it does not.
-    private fun reap(current: Process) {
-        runCatching {
-            if (!current.waitFor(3, TimeUnit.SECONDS)) {
-                current.destroyForcibly()
-                current.waitFor(2, TimeUnit.SECONDS)
+    /// Waits for the core's own line that says the tunnel is being read.
+    ///
+    /// The core runs in this process, so there is no output stream to drain and no exit code
+    /// to read. What it writes to the log the document names is the only evidence: the tun
+    /// reader says it started, or an `[Error]` line says it never will. Both end the wait —
+    /// one as the acknowledgement, one as the failure, each with the core's own words.
+    private fun awaitAck(token: Long, tun: XrayTun, logFile: File): Map<String, Any> {
+        val tail = LogTail(logFile)
+        val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            // A newer command — a stop, or another start — owns the core from here.
+            if (!isCurrent(token)) {
+                stopCoreHere()
+                return cancelled()
             }
-        }.onFailure { Log.w(TAG, "stop: ${it.message}") }
-    }
-
-    /**
-     * Only the APK's native library directory is executable by an app targeting API 29+;
-     * a copy in filesDir fails with EACCES however its mode bits read.
-     */
-    private fun binary(): File? {
-        val native = File(appContext.applicationInfo.nativeLibraryDir, LIB_NAME)
-        if (native.exists()) return native
-        // A build whose native sources were not extracted still carries the file in the zip.
-        return runCatching {
-            ZipFile(appContext.applicationInfo.sourceDir).use { zip ->
-                val entry = zip.getEntry("lib/arm64-v8a/$LIB_NAME")
-                    ?: zip.getEntry("lib/armeabi-v7a/$LIB_NAME")
-                    ?: zip.getEntry("lib/x86_64/$LIB_NAME")
-                    ?: return@use null
-                val out = File(appContext.filesDir, LIB_NAME)
-                zip.getInputStream(entry).use { input ->
-                    out.outputStream().use { output -> input.copyTo(output) }
+            for (line in tail.poll()) {
+                if (line.isBlank()) continue
+                lastLine = line.trim()
+                // The reader's start line is the proof, in either spelling the core prints.
+                // A failure line answers the start now, not at the deadline: a refused
+                // document would otherwise sit out the whole timeout saying nothing.
+                if (ACK_MARKERS.any { lastLine.contains(it, ignoreCase = true) }) {
+                    Log.i(TAG, "xray is reading the tunnel on fd ${tun.fd}")
+                    return mapOf("ok" to true, "message" to "tunnel on fd ${tun.fd}")
                 }
-                out.setExecutable(true)
-                out
+                if (isCoreError(lastLine)) {
+                    Log.e(TAG, "xray failed to take the tunnel: $lastLine")
+                    stopCoreHere()
+                    return failure(lastLine)
+                }
             }
-        }.getOrNull()
+            // The interval is slept, not spun: a stop that arrives in the middle of it ends
+            // the wait on the next slice instead of after a whole poll.
+            if (!pauseUnlessCancelled(token)) {
+                stopCoreHere()
+                return cancelled()
+            }
+        }
+        stopCoreHere()
+        failure("xray did not take the tunnel within ${READY_TIMEOUT_MS}ms: $lastLine")
     }
 
-    private fun drain(started: Process) {
-        // A thread of its own, never the executor that runs start(): that one is still busy
-        // waiting for the acknowledgement, so a queued drain would only run after the wait
-        // ended — which both hides the child's output and can block it on a full pipe.
-        Thread {
+    /// Reads the log the document names, one appended line at a time.
+    ///
+    /// The plugin and the core are one process, so this file is the channel between them:
+    /// the offset is kept between polls, a line is parsed once, and a write caught in the
+    /// middle of a line is completed by the next read instead of being decoded twice.
+    private class LogTail(private val file: File) {
+        private var offset = 0L
+        private val pending = ByteArrayOutputStream()
+
+        fun poll(): List<String> {
+            val lines = ArrayList<String>()
             runCatching {
-                started.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
-                    for (line in lines) {
-                        lastLine = line
-                        // The tunnel's own reader says so once it is up: that line is the
-                        // proof the descriptor was accepted, not the fact the process lives.
-                        if (line.contains(ACK_MARKER, ignoreCase = true)) {
-                            acknowledged = true
-                        }
-                        if (line.contains("error", true) || line.contains("fatal", true)) {
-                            Log.e(TAG, line)
-                        } else {
-                            Log.i(TAG, line)
-                        }
+                if (!file.exists()) return@runCatching
+                RandomAccessFile(file, "r").use { log ->
+                    // The start that opened this log truncated it; an offset past its end no
+                    // longer means anything, so reading starts over.
+                    if (log.length() < offset) {
+                        offset = 0
+                        pending.reset()
+                    }
+                    log.seek(offset)
+                    val buffer = ByteArray(8 * 1024)
+                    while (true) {
+                        val read = log.read(buffer)
+                        if (read <= 0) break
+                        offset += read
+                        pending.write(buffer, 0, read)
                     }
                 }
-            }.onFailure { Log.w(TAG, "output stream closed: ${it.message}") }
-        }.start()
+                val bytes = pending.toByteArray()
+                var start = 0
+                for (index in bytes.indices) {
+                    if (bytes[index] != '\n'.code.toByte()) continue
+                    lines.add(String(bytes, start, index - start, Charsets.UTF_8).trimEnd('\r'))
+                    start = index + 1
+                }
+                pending.reset()
+                if (start < bytes.size) pending.write(bytes, start, bytes.size - start)
+            }.onFailure { Log.w(TAG, "cannot read ${file.name}: ${it.message}") }
+            return lines
+        }
+    }
+
+    /// Whether the core said it cannot go on. Its own log prefixes the level in brackets, and
+    /// the line it prints when a start is refused carries none of them.
+    private fun isCoreError(line: String): Boolean =
+        line.contains("[error]", ignoreCase = true) ||
+            line.contains("[fatal]", ignoreCase = true) ||
+            line.startsWith("failed to start", ignoreCase = true)
+
+    /// Sleeps one poll interval in slices, and answers whether the command is still current.
+    private fun pauseUnlessCancelled(token: Long): Boolean {
+        val until = System.currentTimeMillis() + POLL_MS
+        while (System.currentTimeMillis() < until) {
+            if (!isCurrent(token)) return false
+            Thread.sleep(POLL_SLICE_MS)
+        }
+        return isCurrent(token)
+    }
+
+    /// Opens the core library once, and answers with what a start should say when it cannot.
+    private fun ensureLibrary(): String? {
+        if (libraryLoaded) return null
+        libraryProblem?.let { return it }
+        synchronized(this) {
+            if (libraryLoaded) return null
+            libraryProblem?.let { return it }
+            val problem = loadLibrary()
+            if (problem == null) {
+                libraryLoaded = true
+            } else {
+                libraryProblem = problem
+            }
+            return problem
+        }
+    }
+
+    /// `System.loadLibrary` plus a call that proves the entry points are there.
+    ///
+    /// Guarded, because a missing library must read as a build that cannot do it rather than
+    /// crash the thread that asked. The first call into the library is what resolves its
+    /// symbols, so it is made here: a library that loads but does not export the three JNI
+    /// names would otherwise fail inside a start, where it reads as a core refusing a config.
+    private fun loadLibrary(): String? {
+        runCatching { System.loadLibrary(LIB_NAME) }.onFailure { error ->
+            Log.e(TAG, "$UNAVAILABLE: ${error.message}")
+            return UNAVAILABLE
+        }
+        val version = runCatching { XrayVersion() }.getOrElse { error ->
+            Log.e(TAG, "$NO_ENTRY_POINTS: ${error.message}")
+            return NO_ENTRY_POINTS
+        }
+        Log.i(TAG, "xray ${version ?: "?"} is loaded in this process")
+        return null
+    }
+
+    /// Marks the core as gone, whoever asks: the flag is what a start checks, and the
+    /// invalidation has to happen on the thread that owns the decision, not on the queue.
+    private fun takeCore(): Boolean {
+        val was = coreRunning
+        coreRunning = false
+        return was
+    }
+
+    /// Asks the core to stop on the calling thread.
+    ///
+    /// This is the path a start takes: it already owns the executor slot, so the native call
+    /// belongs here rather than queued behind itself. `XrayStop` returns once the core has let
+    /// go of its tunnels; there is no process to wait for, so the old destroy-then-force pair
+    /// has nothing left to do.
+    private fun stopCoreHere() {
+        if (!takeCore()) return
+        if (!libraryLoaded) return
+        runCatching { XrayStop() }.onFailure { Log.w(TAG, "stop: ${it.message}") }
+    }
+
+    /// Hands `XrayStop` to the executor and returns at once.
+    ///
+    /// Starts are queued on the same single thread, so the native stop can never overlap an
+    /// `XrayStart`, and the caller — a tap, or the service closing its tunnel — is not held
+    /// for the core's lifetime. It is queued even when this plugin believes nothing runs: a
+    /// start in flight may have just opened a core, and a stop with nothing running is a
+    /// no-op on the other side.
+    private fun requestNativeStop() {
+        executor.execute {
+            if (!libraryLoaded) return@execute
+            runCatching { XrayStop() }.onFailure { Log.w(TAG, "stop: ${it.message}") }
+        }
     }
 
     private fun failure(message: String): Map<String, Any> =
@@ -397,18 +509,36 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     companion object {
         private const val TAG = "XrayCore"
-        private const val LIB_NAME = "libxray.so"
+
+        /// The library as `System.loadLibrary` names it: it adds the `lib` prefix and `.so`.
+        private const val LIB_NAME = "xray"
+
         private const val READY_TIMEOUT_MS = 12_000L
+
+        /// How often the log is read, and how finely a sleep is cut so a stop does not wait
+        /// out a whole interval before the start gives up.
         private const val POLL_MS = 200L
+        private const val POLL_SLICE_MS = 50L
 
         /// How long the plugin waits for the service to publish the tunnel it just made.
         private const val TUN_WAIT_MS = 8_000L
 
-        /// The environment variable the bundled Xray reads its tun descriptor from.
-        private const val TUN_FD_ENV = "xray.tun.fd"
+        /// The document the core is started from, and the log this start reads.
+        private const val CONFIG_NAME = "xray-tun.json"
+        private const val LOG_NAME = "xray.log"
 
-        /// The line the tun stack prints once its reader is up.
-        private const val ACK_MARKER = "TUN reader - started"
+        /// The directory the geodata files are installed into, and the core's variable for it.
+        private const val GEODATA_DIR = "xray-assets"
+        private const val ASSET_ENV = "XRAY_LOCATION_ASSET"
+
+        /// What a start answers when the build carries no usable core.
+        private const val UNAVAILABLE = "xray is not available in this build"
+        private const val NO_ENTRY_POINTS = "libxray.so is missing its JNI entry points"
+
+        /// The lines the tun stack prints once its reader is up: the stack's own start line,
+        /// and the one the Android reader logs when it has taken the descriptor. Either is
+        /// proof; a core that never prints one is a core that never read the tun.
+        private val ACK_MARKERS = listOf("TUN reader - started", "read Android Tun Fd")
 
         /// Info, not the panel's level: without it the acknowledgement line is filtered out.
         private const val ACK_LOG_LEVEL = "info"

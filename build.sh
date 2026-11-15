@@ -61,14 +61,17 @@ host_guard() {
   esac
 }
 
-# The child process is not stored in the repository: 33 MB of binary per ABI would bloat
-# every diff. It is fetched once into jniLibs, where nothing but the app build reads it.
+# The core is a c-shared library, not a downloaded executable: it is loaded into the app's
+# own process and given the tun descriptor there, so there is nothing to spawn and nothing
+# to inherit across exec. build/xray-lib.sh produces it — BUILD.md says how — and nothing
+# here fetches a binary over the network any more, nor rebuilds one that is already there.
 #
-# Both pins move together: the version picks the URL, the digest decides whether the archive
-# behind it is the one we shipped before. A download becomes part of an APK only after it
-# matches, so a moved tag or a half-published release fails here instead of inside the APK.
-XRAY_VERSION=26.11.9
-XRAY_SHA256=edcefc25b9b3195b11e18624c8269a969d6aabc39c6298a9a5ab29de15d46f3b
+# A digest is optional, and off by default: a library built from a working tree changes with
+# every change to it, so a pinned value would have to move on every change too. Set
+# XRAY_LIB_SHA256 when the library comes from somewhere fixed — a CI artifact, a release
+# tarball — and a different file fails the build instead of shipping inside an APK.
+XRAY_LIB="android/app/src/main/jniLibs/arm64-v8a/libxray.so"
+XRAY_LIB_SHA256="${XRAY_LIB_SHA256:-}"
 
 xray_digest() {
   # GNU coreutils on Linux, shasum on the Mac; both print "<hash>  <file>". Either is
@@ -80,43 +83,55 @@ xray_digest() {
   fi
 }
 
-# Only asked for when the archive actually has to be hashed: a binary already in jniLibs
-# needs no digest tool, and the check must not veto a build that does not verify anything.
+# Only asked for when a library actually has to be hashed: an unverified one needs no digest
+# tool, and the check must not veto a build that does not verify anything.
 need_digest_tool() {
   if command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1; then
     return 0
   fi
-  echo "error: sha256sum or shasum is required (verifies the Xray release digest)" >&2
+  echo "error: sha256sum or shasum is required (verifies the Xray library digest)" >&2
   exit 1
 }
 
-ensure_xray_android() {
-  local dest="android/app/src/main/jniLibs/arm64-v8a/libxray.so"
-  if [ -f "$dest" ]; then return 0; fi
-  need_digest_tool
-  local url="https://github.com/XTLS/Xray-core/releases/download/v$XRAY_VERSION/Xray-android-arm64-v8a.zip"
-  local work
-  work=$(mktemp -d "${TMPDIR:-/tmp}/xray-fetch.XXXXXX")
-  echo "fetching Xray $XRAY_VERSION for android/arm64"
-  curl -fL --retry 2 -o "$work/x.zip" "$url" || return 1
-  local got
-  got=$(xray_digest "$work/x.zip")
-  if [ "$got" != "$XRAY_SHA256" ]; then
+# The library is an input to the APK, not something this script produces: build/xray-lib.sh
+# does that, and it is not run from here because building the core needs a Go toolchain and
+# a NDK that a machine packaging a release may not have. What is checked is that the file is
+# there, and — when a digest is stated — that it is the one expected.
+ensure_xray_lib() {
+  if [ ! -f "$XRAY_LIB" ]; then
     cat >&2 <<EOF
-error: the Xray archive is not the one build.sh pins.
-  version:  $XRAY_VERSION
-  url:      $url
-  expected: $XRAY_SHA256
-  got:      $got
+error: $XRAY_LIB is missing.
 
-Either the asset behind that URL changed, or XRAY_VERSION was bumped without updating
-XRAY_SHA256. Look at the release page, then move XRAY_VERSION and XRAY_SHA256 together.
+The portal's core is that library; there is no executable to download any more. Build it
+with build/xray-lib.sh (see BUILD.md, "Android APK") and leave the result at
+
+  $XRAY_LIB
+
+An APK packaged without it installs and runs, and every start fails with
+"xray is not available in this build".
 EOF
     return 1
   fi
-  mkdir -p "$work/out" "$(dirname "$dest")"
-  unzip -q -o "$work/x.zip" -d "$work/out" || return 1
-  cp -f "$work/out/xray" "$dest" && chmod 755 "$dest"
+  # Unset means "whatever build/xray-lib.sh produced": see the note next to XRAY_LIB_SHA256.
+  if [ -z "$XRAY_LIB_SHA256" ]; then
+    echo "xray: using $XRAY_LIB (no digest pinned)"
+    return 0
+  fi
+  need_digest_tool
+  local got
+  got=$(xray_digest "$XRAY_LIB")
+  if [ "$got" != "$XRAY_LIB_SHA256" ]; then
+    cat >&2 <<EOF
+error: $XRAY_LIB is not the library this build pins.
+  expected: $XRAY_LIB_SHA256
+  got:      $got
+
+Either the library was rebuilt, in which case XRAY_LIB_SHA256 moves in the same commit, or
+it came from somewhere else, which is a decision to make on purpose rather than to ship.
+EOF
+    return 1
+  fi
+  echo "xray: $XRAY_LIB matches $XRAY_LIB_SHA256"
 }
 
 case "${1:-get}" in
@@ -124,8 +139,8 @@ case "${1:-get}" in
   macos)      need flutter "Flutter SDK"; need xcodebuild "Xcode command line tools"
               APP_ENV=stable; dart setup.dart macos --env "$APP_ENV"
               ls -lh build/macos/Build/Products/Release/*.dmg 2>/dev/null || true ;;
-  apk)        need flutter "Flutter SDK"; need unzip "extracts the Xray release"
-              ensure_xray_android || exit 1
+  apk)        need flutter "Flutter SDK"
+              ensure_xray_lib || exit 1
               dart setup.dart android --env stable
               ls -lh build/app/outputs/flutter-apk/*.apk 2>/dev/null || true ;;
   linux)      host_guard linux;   need dart "Dart SDK"; need flutter "Flutter SDK"

@@ -51,14 +51,37 @@ compile through the pub build hook — there is nothing to build by hand and no 
 
 One ABI only: `dart setup.dart android --env stable --arch arm64`.
 
-The Xray child process is not stored in the repository. `build.sh` downloads the pinned
-release once into `android/app/src/main/jniLibs/arm64-v8a/libxray.so` and refuses an archive
-whose SHA-256 is not the one pinned next to `XRAY_VERSION` in `build.sh`; a version bump has
-to move both values in the same commit. The digest is read with `sha256sum`, or `shasum -a 256`
-where coreutils is not installed — either is enough, and a binary already present needs
-neither. Gradle needs no network beyond the pinned wrapper:
-`android/gradlew`, `gradlew.bat` and `gradle-wrapper.jar` are committed, and the wrapper
-verifies the distribution against the checksum in `gradle-wrapper.properties`.
+The core is not a stored binary and not a child process: it is a c-shared library loaded
+into the app with `System.loadLibrary("xray")` and given the tun descriptor in-process, at
+`android/app/src/main/jniLibs/arm64-v8a/libxray.so`. `build/xray-lib.sh` builds it — that
+script owns the Go and NDK invocation, and this document does not repeat it. It is not built
+by `build.sh`, so a machine that only packages a release needs no Go toolchain; it does need
+the library to be there, and `build.sh apk` refuses to start without it.
+
+The library must export the three JNI entry points the plugin declares —
+`Java_com_follow_clashx_plugins_XrayPlugin_XrayStart`, `…_XrayStop`, `…_XrayVersion` —
+wrapping the plain C API `XrayStart(configJSON, tunFd)`, `XrayStop()`, `XrayVersion()`. A
+library built without them still loads, and then fails the first start with "missing its JNI
+entry points" — a packaging fault, not a core refusing a config, and worth catching by hand
+before an APK carries it.
+
+A digest is optional: set `XRAY_LIB_SHA256` in the environment (or in `build.sh`) to pin one
+and a different file fails the packaging step; leave it unset and whatever
+`build/xray-lib.sh` produced is what ships, which is the normal case for a working tree. The
+digest is read with `sha256sum`, or `shasum -a 256` where coreutils is not installed.
+
+The geodata the panel's rules name (`geosite:`/`geoip:`) stays where it was: `assets/xray/`
+is a Flutter asset directory, and the plugin copies the two `.dat` files into `filesDir` on
+first start and points `XRAY_LOCATION_ASSET` at them.
+
+`jniLibs` is packaged with `useLegacyPackaging = true`: the library is stored uncompressed in
+the APK and extracted to `nativeLibraryDir` at install, which is what `System.loadLibrary`
+reads and the only directory an app targeting API 29+ may map an executable from. Flutter's
+ABI lookup expects the same layout, so the four-ABI split builds keep working.
+
+Gradle needs no network beyond the pinned wrapper: `android/gradlew`, `gradlew.bat` and
+`gradle-wrapper.jar` are committed, and the wrapper verifies the distribution against the
+checksum in `gradle-wrapper.properties`.
 
 ```bash
 cd android && ./gradlew :app:assembleRelease   # the wrapper path, from a fresh clone
@@ -129,7 +152,8 @@ command. Notarization is not part of any build here.
   Without them Gradle falls back to the debug key and adds the `.dev` application id suffix,
   so the APK installs side by side with a release build instead of replacing it. Same code,
   same resources, different signature.
-- **The Xray binary.** Fetched and verified as described above.
+- **The core library.** Built with `build/xray-lib.sh` as described above; `build.sh` checks
+  only that it is present, and verifies its digest when one is pinned.
 - **The Gradle and pub caches.** Anything in `~/.work` on the author's machine is a cache,
   not input.
 

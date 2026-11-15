@@ -73,10 +73,15 @@ android {
 
     packaging {
         jniLibs {
+            // libxray.so is a real shared library, loaded in-process with System.loadLibrary.
+            // Legacy packaging keeps it uncompressed in the APK and extracts it to
+            // nativeLibraryDir at install: that is where the loader looks, the only
+            // directory an app targeting API 29+ may map an executable from, and the layout
+            // Flutter's own ABI lookup expects for every .so it ships.
             useLegacyPackaging = true
-            // The Xray binary is shipped as libxray.so so that nativeLibraryDir, the only
-            // directory an app targeting API 29+ may execute from, holds a real file.
-            // Stripping it would corrupt an executable that is not a shared library.
+            // Unstripped on purpose. The library is Go, built -buildmode=c-shared, and its
+            // symbol table is what turns a core panic into a stack that names a function
+            // instead of an address.
             keepDebugSymbols += "**/libxray.so"
         }
     }

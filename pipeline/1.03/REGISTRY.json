@@ -1,0 +1,74 @@
+{
+  "state": "verified",
+  "series": "1.03",
+  "kind": "point fixes on top of 1.02a",
+  "base": {
+    "sha": "17a216fb",
+    "tree": "f8044d71f91d1f6918352d7957117f2f13959a62",
+    "name": "portal 1.02a applied: 873e0ede + patches 01..34"
+  },
+  "tree": "aabe2839bc7cb7373ac261271b99d98affb9dc24",
+  "apply": "git-apply",
+  "compare": "product",
+  "verified": {
+    "method": "pristine 5d4b8d77 worktree (= 1.02a + 1.03 01..02) + patches 03..05 in order + git add -A + git write-tree",
+    "tree": "aabe2839bc7cb7373ac261271b99d98affb9dc24",
+    "repo_commit": "5d4b8d77",
+    "note": "only the four files 03..05 name moved; pub get and analyze added nothing to the tree"
+  },
+  "checks": {
+    "flutter_pub_get": "ok",
+    "flutter_analyze_lib": "0 errors, 12 issues (1 info, 11 warnings) — all pre-existing, none in a file this series touches",
+    "bash_n_build_sh": "ok",
+    "kotlin_compile": "not run: no APK build in this series' scope",
+    "device_run": "not run: no device and no libxray.so JNI wrapper yet"
+  },
+  "origin": "device log from the vivo on the 1.02a build (tree f8044d71): the exec'd child cannot inherit the tun fd",
+  "groups": [
+    {
+      "file": "patches/01-simple-mode-tun-config-schema.patch",
+      "sha256": "ec04b94f63a446a534e88310c86a25839867396ffd9e24717faa1a718b1286e3",
+      "bytes": 1415,
+      "files": [
+        "android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt"
+      ]
+    },
+    {
+      "file": "patches/02-child-start-serialised.patch",
+      "sha256": "ef4b88d2312c53732d8873ac79d4d088c0dfefb59af1f131947443b84723a03c",
+      "bytes": 2482,
+      "files": [
+        "lib/plugins/xray.dart"
+      ]
+    },
+    {
+      "file": "patches/03-xray-in-process-jni.patch",
+      "sha256": "ec99ca145c73750fce77a2819b0711e1e9f46c33185819320700a510fb1914f5",
+      "bytes": 31777,
+      "files": [
+        "android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt"
+      ]
+    },
+    {
+      "file": "patches/04-xray-tun-ack-from-log.patch",
+      "sha256": "1e33ac93165160610dad115cd1383fe5511b1773d36ae7299069901d5d5047a4",
+      "bytes": 8498,
+      "requires": [
+        "patches/03-xray-in-process-jni.patch"
+      ],
+      "files": [
+        "android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt"
+      ]
+    },
+    {
+      "file": "patches/05-xray-lib-packaging.patch",
+      "sha256": "3356a3dcf4b4f8a1cfdbe51711e8e8a0966d2785272f0f38db0a7a4859bec489",
+      "bytes": 10707,
+      "files": [
+        "BUILD.md",
+        "android/app/build.gradle.kts",
+        "build.sh"
+      ]
+    }
+  ]
+}

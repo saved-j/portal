@@ -1,0 +1,158 @@
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+index 2df4a3c9..6e0094fb 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -12,7 +12,9 @@ import io.flutter.plugin.common.MethodCall
+ import io.flutter.plugin.common.MethodChannel
+ import org.json.JSONArray
+ import org.json.JSONObject
++import java.io.ByteArrayOutputStream
+ import java.io.File
++import java.io.RandomAccessFile
+ import java.util.concurrent.Executors
+ import java.util.concurrent.atomic.AtomicLong
+ 
+@@ -318,9 +320,11 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     /// Waits for the core's own line that says the tunnel is being read.
+     ///
+     /// The core runs in this process, so there is no output stream to drain and no exit code
+-    /// to read: the line it writes after taking the descriptor is the only proof the tunnel
+-    /// is read at all, and a core that dies leaves that line missing until the deadline.
++    /// to read. What it writes to the log the document names is the only evidence: the tun
++    /// reader says it started, or an `[Error]` line says it never will. Both end the wait —
++    /// one as the acknowledgement, one as the failure, each with the core's own words.
+     private fun awaitAck(token: Long, tun: XrayTun, logFile: File): Map<String, Any> {
++        val tail = LogTail(logFile)
+         val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
+         while (System.currentTimeMillis() < deadline) {
+             // A newer command — a stop, or another start — owns the core from here.
+@@ -328,26 +332,91 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+                 stopCoreHere()
+                 return cancelled()
+             }
+-            if (logSaysAck(logFile)) {
+-                Log.i(TAG, "xray is reading the tunnel on fd ${tun.fd}")
+-                return mapOf("ok" to true, "message" to "tunnel on fd ${tun.fd}")
++            for (line in tail.poll()) {
++                if (line.isBlank()) continue
++                lastLine = line.trim()
++                // The reader's start line is the proof, in either spelling the core prints.
++                // A failure line answers the start now, not at the deadline: a refused
++                // document would otherwise sit out the whole timeout saying nothing.
++                if (ACK_MARKERS.any { lastLine.contains(it, ignoreCase = true) }) {
++                    Log.i(TAG, "xray is reading the tunnel on fd ${tun.fd}")
++                    return mapOf("ok" to true, "message" to "tunnel on fd ${tun.fd}")
++                }
++                if (isCoreError(lastLine)) {
++                    Log.e(TAG, "xray failed to take the tunnel: $lastLine")
++                    stopCoreHere()
++                    return failure(lastLine)
++                }
++            }
++            // The interval is slept, not spun: a stop that arrives in the middle of it ends
++            // the wait on the next slice instead of after a whole poll.
++            if (!pauseUnlessCancelled(token)) {
++                stopCoreHere()
++                return cancelled()
+             }
+-            // Not a spin: one read of a small file per interval, and the deadline is what
+-            // bounds it when the line never comes.
+-            Thread.sleep(POLL_MS)
+         }
+         stopCoreHere()
+         failure("xray did not take the tunnel within ${READY_TIMEOUT_MS}ms: $lastLine")
+     }
+ 
+-    /// Whether the core has said it took the descriptor.
++    /// Reads the log the document names, one appended line at a time.
+     ///
+-    /// [lastLine] follows the log, so a failure is reported with the core's own last words
+-    /// instead of an empty message.
+-    private fun logSaysAck(logFile: File): Boolean {
+-        val text = runCatching { logFile.readText() }.getOrDefault("")
+-        text.lineSequence().lastOrNull { it.isNotBlank() }?.let { lastLine = it.trim() }
+-        return text.contains(ACK_MARKER, ignoreCase = true)
++    /// The plugin and the core are one process, so this file is the channel between them:
++    /// the offset is kept between polls, a line is parsed once, and a write caught in the
++    /// middle of a line is completed by the next read instead of being decoded twice.
++    private class LogTail(private val file: File) {
++        private var offset = 0L
++        private val pending = ByteArrayOutputStream()
++
++        fun poll(): List<String> {
++            val lines = ArrayList<String>()
++            runCatching {
++                if (!file.exists()) return@runCatching
++                RandomAccessFile(file, "r").use { log ->
++                    // The start that opened this log truncated it; an offset past its end no
++                    // longer means anything, so reading starts over.
++                    if (log.length() < offset) {
++                        offset = 0
++                        pending.reset()
++                    }
++                    log.seek(offset)
++                    val buffer = ByteArray(8 * 1024)
++                    while (true) {
++                        val read = log.read(buffer)
++                        if (read <= 0) break
++                        offset += read
++                        pending.write(buffer, 0, read)
++                    }
++                }
++                val bytes = pending.toByteArray()
++                var start = 0
++                for (index in bytes.indices) {
++                    if (bytes[index] != '\n'.code.toByte()) continue
++                    lines.add(String(bytes, start, index - start, Charsets.UTF_8).trimEnd('\r'))
++                    start = index + 1
++                }
++                pending.reset()
++                if (start < bytes.size) pending.write(bytes, start, bytes.size - start)
++            }.onFailure { Log.w(TAG, "cannot read ${file.name}: ${it.message}") }
++            return lines
++        }
++    }
++
++    /// Whether the core said it cannot go on. Its own log prefixes the level in brackets, and
++    /// the line it prints when a start is refused carries none of them.
++    private fun isCoreError(line: String): Boolean =
++        line.contains("[error]", ignoreCase = true) ||
++            line.contains("[fatal]", ignoreCase = true) ||
++            line.startsWith("failed to start", ignoreCase = true)
++
++    /// Sleeps one poll interval in slices, and answers whether the command is still current.
++    private fun pauseUnlessCancelled(token: Long): Boolean {
++        val until = System.currentTimeMillis() + POLL_MS
++        while (System.currentTimeMillis() < until) {
++            if (!isCurrent(token)) return false
++            Thread.sleep(POLL_SLICE_MS)
++        }
++        return isCurrent(token)
+     }
+ 
+     /// Opens the core library once, and answers with what a start should say when it cannot.
+@@ -445,7 +514,11 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         private const val LIB_NAME = "xray"
+ 
+         private const val READY_TIMEOUT_MS = 12_000L
++
++        /// How often the log is read, and how finely a sleep is cut so a stop does not wait
++        /// out a whole interval before the start gives up.
+         private const val POLL_MS = 200L
++        private const val POLL_SLICE_MS = 50L
+ 
+         /// How long the plugin waits for the service to publish the tunnel it just made.
+         private const val TUN_WAIT_MS = 8_000L
+@@ -462,8 +535,10 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         private const val UNAVAILABLE = "xray is not available in this build"
+         private const val NO_ENTRY_POINTS = "libxray.so is missing its JNI entry points"
+ 
+-        /// The line the tun stack prints once its reader is up.
+-        private const val ACK_MARKER = "TUN reader - started"
++        /// The lines the tun stack prints once its reader is up: the stack's own start line,
++        /// and the one the Android reader logs when it has taken the descriptor. Either is
++        /// proof; a core that never prints one is a core that never read the tun.
++        private val ACK_MARKERS = listOf("TUN reader - started", "read Android Tun Fd")
+ 
+         /// Info, not the panel's level: without it the acknowledgement line is filtered out.
+         private const val ACK_LOG_LEVEL = "info"
