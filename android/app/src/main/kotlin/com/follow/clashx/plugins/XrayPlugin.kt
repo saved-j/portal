@@ -280,7 +280,10 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
             XrayTunHolder.clear()
             return failure("the tunnel descriptor is closed: nothing to read")
         }
-        val logFile = File(appContext.filesDir, LOG_NAME)
+        // The core's own log, in the directory adb can read: `filesDir` is unreadable on a
+        // release build, which is why a refused start on the phone could only be described.
+        // Named in full on purpose: this file's only business with the telemetry is this path.
+        val logFile = com.follow.clashx.common.PortalTelemetry.xrayFile
         val document = runCatching { tunDocument(config, tun, logFile) }.getOrElse { error ->
             return failure("the node's config cannot take a tun inbound: ${error.message}")
         }

@@ -41,6 +41,12 @@ object ServiceController {
     @Volatile
     private var xrayTunActive = false
 
+    /// Whether the engine is the process's reader right now: a run exists and the child did
+    /// not take the tunnel. A service that carries a descriptor nothing of the engine reads
+    /// is not an engine that is running, and the record must not claim it is.
+    val engineListening: Boolean
+        get() = runtime != null && !xrayTunActive
+
     private fun clearBinding() {
         binding?.unbind()
         binding = null

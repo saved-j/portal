@@ -157,6 +157,42 @@ command. Notarization is not part of any build here.
 - **The Gradle and pub caches.** Anything in `~/.work` on the author's machine is a cache,
   not input.
 
+## Reading a device's own record
+
+The portal writes three files into the app's **external** files directory, which `adb shell`
+can read on a release build (`filesDir` cannot: `run-as` refuses a package that is not
+debuggable). The names are constants in
+`android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt`:
+
+```bash
+DIR=/sdcard/Android/data/io.portal.xfc.dev/files     # the .dev suffix is the unsigned flavour
+adb shell tail -5 $DIR/portal-status.log             # heartbeat, one line every ~5 s
+adb shell tail -20 $DIR/portal-transitions.log       # one line per open/close/switch/revoke
+adb shell tail -40 $DIR/xray.log                     # the core's own log (the tun document's)
+adb pull $DIR/portal-status.log
+```
+
+The heartbeat line is fixed in shape and answers the one question logcat could not:
+
+```
+time=... owner=<Mihomo|Xray|Off> generation=<n> fdEpoch=<n> phase=<Off|Starting|Active|Stopping|Failed> engine=<running|stopped> child=<running|stopped> listeners=<ip:port,...|none|unknown> egress=<ip|unknown>
+```
+
+`listeners` is read from the app's own rows of `/proc/self/net/tcp{,6}`. That read is denied
+to an `untrusted_app` on Android 10+, so the fallback is a measured one: a loopback TCP
+handshake against the mixed port and the cores' defaults, reported as `probed:127.0.0.1:…`
+only for the ports that answered, and `unknown` when none did. In the simple portal there
+must be one reader and one loopback port, never a second core's. `egress` is this app's own
+probe, so in the simple portal it leaves outside the tunnel by design (the service keeps this
+uid out of it); a device-side `curl` is what proves the node's address, e.g.
+
+```bash
+adb shell 'curl -sS -m 15 -o /dev/null -w "%{http_code}\n" https://www.google.com'
+adb shell 'curl -sS -m 10 https://api.ipify.org'
+```
+
+A debug build keeps the same record and the same logcat mirror.
+
 ## Checks
 
 ```bash
