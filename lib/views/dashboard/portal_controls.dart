@@ -942,14 +942,26 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                       // every server of the list and answers with its own proxied delay, which is
                       // the only number that is a fact about the node rather than about a
                       // handshake the phone performed to a local listener.
-                      final servers = ref.read(xrayServersProvider).value ?? const [];
-                      final targets = <(String, String, int)>[
-                        for (final server in servers)
-                          if (server.port > 0) (server.name, server.address, server.port),
-                      ];
-                      if (targets.isNotEmpty) {
+                      // The test is about the list in front of the owner, whichever core it
+                      // belongs to: in the simple portal that is the child's whole list, in the
+                      // network mode every member of the visible groups. One press measures all
+                      // of them; a single node is measured by holding its row.
+                      final simple = ref.read(patchClashConfigProvider).mode == Mode.global;
+                      if (simple) {
+                        final targets = <(String, String, int)>[
+                          for (final server
+                              in ref.read(xrayServersProvider).value ??
+                                  const <XrayServerConfig>[])
+                            if (server.port > 0)
+                              (server.name, server.address, server.port),
+                        ];
+                        if (targets.isEmpty) return;
                         unawaited(
-                          ref.read(tcpDelayProvider.notifier).measureAll(targets),
+                          _testDelayWithChild(
+                            ref,
+                            targets,
+                            wasRunning: running,
+                          ),
                         );
                         return;
                       }
@@ -1429,6 +1441,62 @@ Future<void> _testDelayWithEngine(
           detail: 'result=tests',
         ),
       );
+    }
+  }
+}
+
+/// Measures the child's whole list, raising it for the sweep and putting it back after.
+///
+/// The number is taken through the tunnel (a real request leaves by the node), so the child
+/// must be reading the tunnel while the sweep runs — and only while it runs: the owner asked
+/// for a measurement, not for a portal that stays open behind his back.
+Future<void> _testDelayWithChild(
+  WidgetRef ref,
+  List<(String, String, int)> targets, {
+  required bool wasRunning,
+}) async {
+  if (targets.isEmpty) return;
+  final watch = Stopwatch()..start();
+  var raised = false;
+  var stopped = false;
+  try {
+    if (!wasRunning) {
+      raised = await ref.read(setupActionProvider.notifier).setRunning(true);
+      if (!raised) {
+        final reason = ref.read(setupActionProvider.notifier).lastPortalFailure;
+        commonPrint.log(
+          'portal test: could not raise the child${reason.isEmpty ? '' : ': $reason'}',
+          logLevel: LogLevel.warning,
+        );
+        unawaited(
+          portalRuntime.noteTest(
+            mode: 'global',
+            raised: 'child',
+            durationMs: watch.elapsedMilliseconds,
+            stoppedAfter: false,
+            detail: 'result=failed${reason.isEmpty ? '' : ' reason=$reason'}',
+          ),
+        );
+        return;
+      }
+    }
+    await ref.read(tcpDelayProvider.notifier).measureAll(targets);
+    final delays = ref.read(tcpDelayProvider);
+    final measured = targets.where((t) => delays[t.$1] != null).length;
+    watch.stop();
+    unawaited(
+      portalRuntime.noteTest(
+        mode: 'global',
+        raised: raised ? 'child' : 'none',
+        durationMs: watch.elapsedMilliseconds,
+        stoppedAfter: false,
+        detail: 'rows=${targets.length} measured=$measured',
+      ),
+    );
+  } finally {
+    if (raised) {
+      stopped = !await ref.read(setupActionProvider.notifier).setRunning(false);
+      commonPrint.log('portal test: child put back after the sweep stopped=$stopped');
     }
   }
 }
