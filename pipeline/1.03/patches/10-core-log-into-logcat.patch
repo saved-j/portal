@@ -1,0 +1,28 @@
+# 10 - the core's own log lines are repeated into logcat
+#
+# The acknowledgement a start waits for is the core's line in the file the document names, and
+# that file is the only place the core writes: `log.error` sets it, and a library started in
+# process has no console to fall back on. On the device this build ships to, `run-as
+# io.portal.xfc.dev cat files/xray.log` answers `package not debuggable`, so the one piece of
+# evidence that says what the core did with the descriptor could not be read at all. Every line
+# the tail reads is now repeated under the plugin's tag with a `core:` prefix — the core's own
+# text, unedited — so a start's proof and a refusal's reason are both on the device, and the
+# file stays the channel between the plugin and the core rather than the only copy.
+
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+index a90276e4..5fb19d54 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -355,6 +355,12 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+             for (line in tail.poll()) {
+                 if (line.isBlank()) continue
+                 lastLine = line.trim()
++                // The core writes to the file the document names and nowhere else, and the
++                // shipped build is not debuggable: `run-as` refuses it, so the file cannot be
++                // read on the device that matters. Every line is repeated here in the core's
++                // own words, which is what makes a refusal, or the reader's start line,
++                // evidence on the device instead of a claim about it.
++                Log.i(TAG, "core: $lastLine")
+                 // The reader's start line is the proof, in either spelling the core prints.
+                 // A failure line answers the start now, not at the deadline: a refused
+                 // document would otherwise sit out the whole timeout saying nothing.

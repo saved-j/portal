@@ -355,6 +355,12 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             for (line in tail.poll()) {
                 if (line.isBlank()) continue
                 lastLine = line.trim()
+                // The core writes to the file the document names and nowhere else, and the
+                // shipped build is not debuggable: `run-as` refuses it, so the file cannot be
+                // read on the device that matters. Every line is repeated here in the core's
+                // own words, which is what makes a refusal, or the reader's start line,
+                // evidence on the device instead of a claim about it.
+                Log.i(TAG, "core: $lastLine")
                 // The reader's start line is the proof, in either spelling the core prints.
                 // A failure line answers the start now, not at the deadline: a refused
                 // document would otherwise sit out the whole timeout saying nothing.
