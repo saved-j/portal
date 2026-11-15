@@ -1,7 +1,7 @@
 import 'package:fl_clash/features/update/asset.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _repository = 'pluralplay/FlClashX';
+const _repository = 'saved-j/portal';
 
 Map<String, dynamic> _asset(String name, {int size = 1000, String? url}) => {
   'name': name,
@@ -28,18 +28,15 @@ Matcher _fails(UpdateErrorKind kind) =>
 void main() {
   group('selectUpdateAsset', () {
     const allAssets = [
-      'FlClashX-android-arm64-v8a.apk',
-      'FlClashX-android-armeabi-v7a.apk',
-      'FlClashX-android-universal.apk',
-      'FlClashX-windows-amd64-setup.exe',
-      'FlClashX-windows-amd64.zip',
-      'FlClashX-windows-arm64-setup.exe',
-      'FlClashX-macos-amd64.dmg',
-      'FlClashX-macos-arm64.dmg',
-      'FlClashX-linux-amd64.AppImage',
-      'FlClashX-linux-amd64.deb',
-      'FlClashX-linux-amd64.rpm',
-      'FlClashX-linux-arm64.deb',
+      'Portal.apk',
+      'Portal_legacy.apk',
+      'Portal_universal.apk',
+      'Portal.exe',
+      'Portal.dmg',
+      'Portal-1.0.3-linux-amd64.AppImage',
+      'Portal-1.0.3-linux-amd64.deb',
+      'Portal-1.0.3-linux-amd64.rpm',
+      'Portal-1.0.3-linux-arm64.deb',
     ];
 
     String select(UpdateTarget target, {List<String> names = allAssets}) =>
@@ -59,7 +56,76 @@ void main() {
       );
       expect(
         select(UpdateTarget(UpdateInstallKind.android, archs)),
-        'FlClashX-android-arm64-v8a.apk',
+        'Portal.apk',
+      );
+    });
+
+    test('the asset this app publishes, and the name says the arch', () {
+      expect(portalAndroidAssets['arm64-v8a'], 'Portal.apk');
+      expect(portalAndroidAssets['armeabi-v7a'], 'Portal_legacy.apk');
+      expect(portalAndroidAssets['x86_64'], 'Portal_x86-64.apk');
+      expect(portalAndroidAssets['universal'], 'Portal_universal.apk');
+      expect(
+        const UpdateTarget(UpdateInstallKind.windows, ['amd64']).assetName(
+          'amd64',
+        ),
+        'Portal.exe',
+      );
+      expect(
+        const UpdateTarget(UpdateInstallKind.macos, ['arm64']).assetName(
+          'arm64',
+        ),
+        'Portal.dmg',
+      );
+      expect(
+        const UpdateTarget(UpdateInstallKind.deb, ['amd64']).assetGlob,
+        'Portal-*.deb',
+      );
+    });
+
+    test("another project's asset is never offered", () {
+      // The repository this app used to point at published FlClashX's names. A file for the
+      // same platform is not this app's build: it must be neither chosen nor offered.
+      expect(
+        () => select(
+          const UpdateTarget(UpdateInstallKind.android, ['arm64-v8a']),
+          names: const [
+            'FlClashX-android-' 'arm64-v8a.apk',
+            'FlClashX-android-' 'universal.apk',
+          ],
+        ),
+        _fails(UpdateErrorKind.noAsset),
+      );
+    });
+
+    test('a missing asset says which name it looked for', () {
+      expect(
+        () => select(
+          const UpdateTarget(UpdateInstallKind.android, ['arm64-v8a', 'universal']),
+          names: const ['Portal.exe'],
+        ),
+        throwsA(
+          isA<UpdateException>()
+              .having((e) => e.kind, 'kind', UpdateErrorKind.noAsset)
+              .having((e) => e.detail, 'detail', 'Portal.apk | Portal_universal.apk'),
+        ),
+      );
+    });
+
+    test('also finds the names dist/ writes today', () {
+      expect(
+        select(
+          const UpdateTarget(UpdateInstallKind.android, ['arm64-v8a', 'universal']),
+          names: const ['Portal-android-arm64-v8a.apk'],
+        ),
+        'Portal-android-arm64-v8a.apk',
+      );
+      expect(
+        select(
+          const UpdateTarget(UpdateInstallKind.android, ['arm64-v8a']),
+          names: const ['Portal-android-arm64-v8a.apk', 'Portal.apk'],
+        ),
+        'Portal.apk',
       );
     });
 
@@ -68,30 +134,30 @@ void main() {
         select(
           UpdateTarget(UpdateInstallKind.android, androidUpdateArchs(['x86'])),
         ),
-        'FlClashX-android-universal.apk',
+        'Portal_universal.apk',
       );
     });
 
     test('picks the desktop package for the install type and arch', () {
       expect(
         select(const UpdateTarget(UpdateInstallKind.windows, ['arm64'])),
-        'FlClashX-windows-arm64-setup.exe',
+        'Portal.exe',
       );
       expect(
         select(const UpdateTarget(UpdateInstallKind.macos, ['amd64'])),
-        'FlClashX-macos-amd64.dmg',
+        'Portal.dmg',
       );
       expect(
         select(const UpdateTarget(UpdateInstallKind.appImage, ['amd64'])),
-        'FlClashX-linux-amd64.AppImage',
+        'Portal-1.0.3-linux-amd64.AppImage',
       );
       expect(
         select(const UpdateTarget(UpdateInstallKind.deb, ['arm64'])),
-        'FlClashX-linux-arm64.deb',
+        'Portal-1.0.3-linux-arm64.deb',
       );
       expect(
         select(const UpdateTarget(UpdateInstallKind.rpm, ['amd64'])),
-        'FlClashX-linux-amd64.rpm',
+        'Portal-1.0.3-linux-amd64.rpm',
       );
     });
 
@@ -114,21 +180,21 @@ void main() {
 
     test('holds a release to the channel the app runs on', () {
       final pre = _release(
-        ['FlClashX-macos-arm64.dmg'],
+        ['Portal.dmg'],
         tag: 'v0.5.2-pre.1',
         prerelease: true,
       );
       const target = UpdateTarget(UpdateInstallKind.macos, ['arm64']);
       expect(
         selectUpdateAsset(pre, target, repository: _repository, pre: true).name,
-        'FlClashX-macos-arm64.dmg',
+        'Portal.dmg',
       );
       expect(
         () =>
             selectUpdateAsset(pre, target, repository: _repository, pre: false),
         _fails(UpdateErrorKind.noAsset),
       );
-      final stable = _release(['FlClashX-macos-arm64.dmg'], prerelease: false);
+      final stable = _release(['Portal.dmg'], prerelease: false);
       expect(
         () => selectUpdateAsset(
           stable,
@@ -141,7 +207,7 @@ void main() {
     });
 
     test('rejects a tag that is not a version', () {
-      final release = _release(['FlClashX-macos-arm64.dmg'], tag: 'v1/../x');
+      final release = _release(['Portal.dmg'], tag: 'v1/../x');
       expect(
         () => selectUpdateAsset(
           release,
@@ -156,7 +222,7 @@ void main() {
     test('requires a published checksum', () {
       final release = {
         'tag_name': 'v0.5.1',
-        'assets': [_asset('FlClashX-macos-arm64.dmg')],
+        'assets': [_asset('Portal.dmg')],
       };
       expect(
         () => selectUpdateAsset(
@@ -171,7 +237,7 @@ void main() {
 
     test('caps the size at the release figure and the ceiling', () {
       final asset = selectUpdateAsset(
-        _release(['FlClashX-macos-arm64.dmg']),
+        _release(['Portal.dmg']),
         const UpdateTarget(UpdateInstallKind.macos, ['arm64']),
         repository: _repository,
         pre: false,
@@ -181,8 +247,8 @@ void main() {
       final huge = {
         'tag_name': 'v0.5.1',
         'assets': [
-          _asset('FlClashX-macos-arm64.dmg', size: updateSizeCeiling + 1),
-          _asset('FlClashX-macos-arm64.dmg.sha256'),
+          _asset('Portal.dmg', size: updateSizeCeiling + 1),
+          _asset('Portal.dmg.sha256'),
         ],
       };
       expect(
@@ -201,10 +267,10 @@ void main() {
         'tag_name': 'v0.5.1',
         'assets': [
           _asset(
-            'FlClashX-macos-arm64.dmg',
-            url: 'https://evil.example/FlClashX-macos-arm64.dmg',
+            'Portal.dmg',
+            url: 'https://evil.example/Portal.dmg',
           ),
-          _asset('FlClashX-macos-arm64.dmg.sha256'),
+          _asset('Portal.dmg.sha256'),
         ],
       };
       expect(
@@ -228,9 +294,9 @@ void main() {
       expect(
         asset.url.toString(),
         'https://github.com/$_repository/releases/download/v0.5.1/'
-        'FlClashX-windows-amd64-setup.exe',
+        'Portal.exe',
       );
-      expect(asset.checksumUrl!.path, endsWith('setup.exe.sha256'));
+      expect(asset.checksumUrl!.path, endsWith('Portal.exe.sha256'));
       expect(asset.size, isNull);
       expect(asset.sizeLimit, updateSizeCeiling);
     });
@@ -274,7 +340,7 @@ void main() {
   group('parseChecksum', () {
     const hash =
         '3dad780109d1524106a07cc6499c7f0fb04f08290b0eb931a5f7bbcf2c153058';
-    const name = 'FlClashX-macos-arm64.dmg';
+    const name = 'Portal.dmg';
 
     test('reads the sha256sum line a release publishes', () {
       expect(parseChecksum('$hash  ./$name\n', name), hash);
@@ -313,7 +379,7 @@ void main() {
 
     test('picks the asset for the platform with its inline hash', () {
       final asset = manifestUpdateAsset(
-        manifest('FlClashX-windows-amd64-setup.exe'),
+        manifest('Portal.exe'),
         const UpdateTarget(UpdateInstallKind.windows, ['amd64']),
       );
       expect(asset.url.host, 'mirror.example');
@@ -325,7 +391,7 @@ void main() {
     test('a missing asset for the platform fails', () {
       expect(
         () => manifestUpdateAsset(
-          manifest('FlClashX-windows-amd64-setup.exe'),
+          manifest('Portal.exe'),
           const UpdateTarget(UpdateInstallKind.macos, ['arm64']),
         ),
         _fails(UpdateErrorKind.noAsset),
@@ -336,7 +402,7 @@ void main() {
       expect(
         () => manifestUpdateAsset(
           manifest(
-            'FlClashX-macos-arm64.dmg',
+            'Portal.dmg',
             url: 'http://mirror.example/x.dmg',
           ),
           const UpdateTarget(UpdateInstallKind.macos, ['arm64']),
@@ -349,7 +415,7 @@ void main() {
       for (final bad in ['xyz', 'a' * 63]) {
         expect(
           () => manifestUpdateAsset(
-            manifest('FlClashX-macos-arm64.dmg', sha256: bad),
+            manifest('Portal.dmg', sha256: bad),
             const UpdateTarget(UpdateInstallKind.macos, ['arm64']),
           ),
           _fails(UpdateErrorKind.noChecksum),
@@ -360,7 +426,7 @@ void main() {
           'version': 'v0.5.2',
           'assets': [
             {
-              'name': 'FlClashX-macos-arm64.dmg',
+              'name': 'Portal.dmg',
               'url': 'https://mirror.example/x.dmg',
             },
           ],

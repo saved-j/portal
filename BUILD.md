@@ -232,6 +232,36 @@ portal delay Финляндия: fi.example:443 → 185.155.222.6 214 ms
 
 `adb logcat -s flutter` carries those lines; the dash on the row and the line are the same fact.
 
+## Updates
+
+The updater reads `saved-j/portal` (`repository` in `lib/common/constant.dart`) and looks only
+for the names this project publishes:
+
+| platform | install kind | asset |
+|---|---|---|
+| Android arm64 | `UpdateInstallKind.android` | `Portal.apk` |
+| Android arm32 | same, `armeabi-v7a` | `Portal_legacy.apk` |
+| Android x86_64 | same, `x86_64` | `Portal_x86-64.apk` |
+| Android, any ABI's fallback | same, `universal` | `Portal_universal.apk` |
+| Windows | `windows` | `Portal.exe` |
+| macOS | `macos` | `Portal.dmg` |
+| Linux | `appImage` / `deb` / `rpm` | `Portal-*.AppImage` / `Portal-*.deb` / `Portal-*.rpm` |
+
+`./build.sh apk` writes `dist/Portal-android-<abi>.apk` today; the updater accepts those four
+names too (`portalAndroidDistNames`), after the published ones. Nothing from another project is
+accepted under any name.
+
+The Linux names carry a version, so the release's own `assets` list decides which one it
+published; an arch token in the name (`linux-arm64`, `linux-amd64`) still has to be this
+device's. A release that carries nothing for this platform/arch is reported as
+`updateErrorNoAsset` with the names it looked for, e.g. `This release has no build for this
+device.` over `Portal.apk | Portal_universal.apk` — never another project's file. The download
+line names both facts:
+
+```
+[APP] update: repository=saved-j/portal asset=Portal.apk url=https://github.com/saved-j/portal/releases/download/v1.0.3/Portal.apk
+```
+
 ## Checks
 
 ```bash

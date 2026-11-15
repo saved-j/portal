@@ -207,6 +207,18 @@ the device, not a redesign.
   engine for a test; only the simple portal is timed from here, against the node's real
   address. Every measurement logs what it timed: `portal delay Эстония: … → 198.18.0.5 is the
   tunnel's own address, no number` / `… → 185.155.222.6 214 ms`.
+- `24-updater-points-at-saved-j-portal` — `constant.dart` still named
+  `pluralplay/FlClashX`, and `asset.dart` asked that release for `FlClashX-android-$arch.apk`,
+  `FlClashX-windows-$arch-setup.exe`, `FlClashX-macos-$arch.dmg`,
+  `FlClashX-linux-$arch.{AppImage,deb,rpm}`. The repository is now `saved-j/portal` and the
+  names are this project's: `Portal.apk` (arm64), `Portal_legacy.apk` (arm32),
+  `Portal_x86-64.apk`, `Portal_universal.apk`, `Portal.exe`, `Portal.dmg`, and
+  `Portal-*.AppImage|deb|rpm` matched against the release's own assets (an arch token in the
+  name still has to match this device). `UpdateTarget.pick()` searches the release instead of
+  building a URL from a guess; a release with nothing for this platform says so with the names
+  it looked for (`noAsset`, detail `Portal.apk | Portal_universal.apk`, shown under the
+  message), and no FlClashX file is offered in its place. The download logs
+  `update: repository=saved-j/portal asset=Portal.apk url=…`.
 
 Apply (to a tree that does not already carry the 01..02 commit):
 ```

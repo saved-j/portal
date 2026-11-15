@@ -10,7 +10,7 @@ import 'package:fl_clash/features/update/download.dart';
 import 'package:fl_clash/features/update/platform.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _name = 'FlClashX-macos-arm64.dmg';
+const _name = 'Portal.dmg';
 const _url = 'https://github.com/pluralplay/FlClashX/releases/download/v0.5.1';
 final _payload = Uint8List.fromList(List.generate(4096, (i) => i % 256));
 

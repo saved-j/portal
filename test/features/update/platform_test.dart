@@ -104,7 +104,7 @@ void main() {
       },
       exitApp: () => fail('a package install keeps the app running'),
     );
-    final file = File('/cache/update/1/FlClashX-linux-amd64.deb');
+    final file = File('/cache/update/1/Portal-1.0.3-linux-amd64.deb');
     expect(await platform.install(file), UpdateInstallResult.handedOff);
     expect(calls, [
       ['xdg-open', file.path],
@@ -120,7 +120,7 @@ void main() {
       root = await Directory.systemTemp.createTemp('flclashx_update_macos');
       bundle = '${root.path}/Applications/FlClashX.app';
       await Directory(bundle).create(recursive: true);
-      image = File('${root.path}/cache/1/FlClashX-macos-arm64.dmg');
+      image = File('${root.path}/cache/1/Portal.dmg');
       await image.create(recursive: true);
     });
 

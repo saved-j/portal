@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:fl_clash/common/print.dart';
 import 'package:fl_clash/features/update/asset.dart';
 import 'package:fl_clash/features/update/download.dart';
 import 'package:fl_clash/features/update/platform.dart';
@@ -113,6 +114,11 @@ class UpdateController extends ValueNotifier<UpdateState> {
               repository: repository,
               pre: pre,
             );
+      // The repository and the asset in one line: an update that downloads something else is
+      // then visible in the log, not only in the dialog.
+      commonPrint.log(
+        'update: repository=$repository asset=${asset.name} url=${asset.url}',
+      );
       await downloader.purge();
       final expected = await downloader.fetchChecksum(
         asset,

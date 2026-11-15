@@ -232,7 +232,11 @@ class _UpdateStatus extends StatelessWidget {
   }
 
   bool _showsDetail(UpdateErrorKind kind) =>
-      kind == UpdateErrorKind.network || kind == UpdateErrorKind.installFailed;
+      kind == UpdateErrorKind.network ||
+      kind == UpdateErrorKind.installFailed ||
+      // A missing asset says which name it looked for: "no build for this device" is true
+      // and useless when what the release carries is another platform's file.
+      kind == UpdateErrorKind.noAsset;
 }
 
 /// The primary action while a download runs: its fill sweeps across the

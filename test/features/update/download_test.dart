@@ -9,7 +9,7 @@ import 'package:fl_clash/features/update/asset.dart';
 import 'package:fl_clash/features/update/download.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _name = 'FlClashX-macos-arm64.dmg';
+const _name = 'Portal.dmg';
 const _base = 'https://github.com/pluralplay/FlClashX/releases/download/v0.5.1';
 const _cdn = 'https://release-assets.githubusercontent.com/blob';
 

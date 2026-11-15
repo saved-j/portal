@@ -207,7 +207,7 @@ void main() {
 
   group('Windows', () {
     const own = r'C:\Program Files\FlClashX\FlClashX.exe';
-    const setup = r'C:\cache\update\1\FlClashX-windows-amd64-setup.exe';
+    const setup = r'C:\cache\update\1\Portal.exe';
 
     ProcessRunner signer(Map<String, String> outputs, List<String> paths) =>
         (executable, arguments, {environment}) async {

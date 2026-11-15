@@ -1,0 +1,775 @@
+# portal 1.03 patch 24 — the updater points at this project
+#
+# `const repository = 'pluralplay/FlClashX'` and asset names `FlClashX-android-$arch.apk`,
+# `FlClashX-windows-$arch-setup.exe`, `FlClashX-macos-$arch.dmg`,
+# `FlClashX-linux-$arch.{AppImage,deb,rpm}`: the updater asked another project's repository for
+# another project's files, so a check either found nothing or offered a build that is not this
+# app.
+#
+# Now the repository is `saved-j/portal` and the names are this project's own:
+#
+#   android arm64-v8a   Portal.apk
+#   android armeabi-v7a Portal_legacy.apk
+#   android x86_64      Portal_x86-64.apk
+#   android universal   Portal_universal.apk
+#   windows             Portal.exe
+#   macos               Portal.dmg
+#   linux               Portal-*.AppImage | Portal-*.deb | Portal-*.rpm
+#
+# `build.sh apk` writes those four Android builds into `dist/` as `Portal-android-<abi>.apk`
+# today, so those four names are accepted as well, after the published ones — this project's
+# files under another spelling, not another project's file.
+#
+# The Linux packages carry a version in the name, so they are matched against the release's own
+# `assets` list (and a name that states another arch is still refused). Everything else is an
+# exact name in that list: UpdateTarget.pick() searches the release, it does not build a URL
+# from a guess.
+#
+# A release that carries nothing for this platform/arch now says so, with the names it looked
+# for (`noAsset` with detail `Portal.apk | Portal_universal.apk`), and the dialog shows that
+# detail; no FlClashX file is ever offered in its place. The download logs both facts:
+#
+#   [APP] update: repository=saved-j/portal asset=Portal.apk url=https://github.com/...
+diff --git a/BUILD.md b/BUILD.md
+index 80c4cee0..96c26655 100644
+--- a/BUILD.md
++++ b/BUILD.md
+@@ -232,6 +232,36 @@ portal delay Финляндия: fi.example:443 → 185.155.222.6 214 ms
+ 
+ `adb logcat -s flutter` carries those lines; the dash on the row and the line are the same fact.
+ 
++## Updates
++
++The updater reads `saved-j/portal` (`repository` in `lib/common/constant.dart`) and looks only
++for the names this project publishes:
++
++| platform | install kind | asset |
++|---|---|---|
++| Android arm64 | `UpdateInstallKind.android` | `Portal.apk` |
++| Android arm32 | same, `armeabi-v7a` | `Portal_legacy.apk` |
++| Android x86_64 | same, `x86_64` | `Portal_x86-64.apk` |
++| Android, any ABI's fallback | same, `universal` | `Portal_universal.apk` |
++| Windows | `windows` | `Portal.exe` |
++| macOS | `macos` | `Portal.dmg` |
++| Linux | `appImage` / `deb` / `rpm` | `Portal-*.AppImage` / `Portal-*.deb` / `Portal-*.rpm` |
++
++`./build.sh apk` writes `dist/Portal-android-<abi>.apk` today; the updater accepts those four
++names too (`portalAndroidDistNames`), after the published ones. Nothing from another project is
++accepted under any name.
++
++The Linux names carry a version, so the release's own `assets` list decides which one it
++published; an arch token in the name (`linux-arm64`, `linux-amd64`) still has to be this
++device's. A release that carries nothing for this platform/arch is reported as
++`updateErrorNoAsset` with the names it looked for, e.g. `This release has no build for this
++device.` over `Portal.apk | Portal_universal.apk` — never another project's file. The download
++line names both facts:
++
++```
++[APP] update: repository=saved-j/portal asset=Portal.apk url=https://github.com/saved-j/portal/releases/download/v1.0.3/Portal.apk
++```
++
+ ## Checks
+ 
+ ```bash
+diff --git a/lib/common/constant.dart b/lib/common/constant.dart
+index d168a256..a88e43e1 100644
+--- a/lib/common/constant.dart
++++ b/lib/common/constant.dart
+@@ -130,7 +130,7 @@ const systemProxyAppliedKey = 'system_proxy_applied';
+ const bootRecordKey = 'boot_record';
+ const appliedConfigMd5Key = 'applied_config_md5';
+ const defaultSystemDnsFallback = '1.1.1.1';
+-const repository = 'pluralplay/FlClashX';
++const repository = 'saved-j/portal';
+ const maxMobileWidth = 600;
+ const maxLaptopWidth = 840;
+ const defaultTestUrl = 'https://www.gstatic.com/generate_204';
+diff --git a/lib/features/update/asset.dart b/lib/features/update/asset.dart
+index 963dbd1e..2f3fc644 100644
+--- a/lib/features/update/asset.dart
++++ b/lib/features/update/asset.dart
+@@ -50,6 +50,44 @@ final class UpdateException implements Exception {
+   String toString() => detail == null ? kind.name : '${kind.name}: $detail';
+ }
+ 
++/// The names this project's releases carry, per platform.
++///
++/// The updater used to ask for FlClashX's assets (`FlClashX-android-arm64-v8a.apk` and
++/// friends) in `pluralplay/FlClashX` — a repository this app does not ship from, and names no
++/// release of its own publishes. A name nobody publishes is not a fallback: it is a download
++/// that cannot exist, offered to the owner as an update. Android's name states the ABI, so the
++/// arch list still decides which one is tried first; the desktop packages carry one name each.
++const portalAndroidAssets = <String, String>{
++  'arm64-v8a': 'Portal.apk',
++  'armeabi-v7a': 'Portal_legacy.apk',
++  'x86_64': 'Portal_x86-64.apk',
++  'universal': 'Portal_universal.apk',
++};
++
++/// The same four builds under the names `build.sh apk` writes into `dist/` today.
++///
++/// The release is the contract and `portalAndroidAssets` is what it must publish; this list is
++/// only so a build assembled by this repository's own script can be found by its own updater
++/// before the release is renamed. It names this project's files and nothing else.
++const portalAndroidDistNames = <String, String>{
++  'arm64-v8a': 'Portal-android-arm64-v8a.apk',
++  'armeabi-v7a': 'Portal-android-armeabi-v7a.apk',
++  'x86_64': 'Portal-android-x86_64.apk',
++  'universal': 'Portal-android-universal.apk',
++};
++
++/// `Portal-<version>-<arch>.deb` and its siblings: the version is inside the name, so the
++/// release's own listing says which one it published.
++bool matchesAssetGlob(String pattern, String name) {
++  final star = pattern.indexOf('*');
++  if (star < 0) return pattern == name;
++  final prefix = pattern.substring(0, star);
++  final suffix = pattern.substring(star + 1);
++  return name.length > prefix.length + suffix.length &&
++      name.startsWith(prefix) &&
++      name.endsWith(suffix);
++}
++
+ @immutable
+ class UpdateTarget {
+   final UpdateInstallKind kind;
+@@ -59,19 +97,95 @@ class UpdateTarget {
+ 
+   const UpdateTarget(this.kind, this.archs);
+ 
+-  bool get downloads => archs.isNotEmpty && assetName(archs.first) != null;
+-
++  /// This app's asset for [arch], when the name states the arch.
+   String? assetName(String arch) => switch (kind) {
+-    UpdateInstallKind.android => 'FlClashX-android-$arch.apk',
+-    UpdateInstallKind.windows => 'FlClashX-windows-$arch-setup.exe',
+-    UpdateInstallKind.macos => 'FlClashX-macos-$arch.dmg',
+-    UpdateInstallKind.appImage => 'FlClashX-linux-$arch.AppImage',
+-    UpdateInstallKind.deb => 'FlClashX-linux-$arch.deb',
+-    UpdateInstallKind.rpm => 'FlClashX-linux-$arch.rpm',
++    UpdateInstallKind.android => portalAndroidAssets[arch],
++    UpdateInstallKind.windows => 'Portal.exe',
++    UpdateInstallKind.macos => 'Portal.dmg',
++    // Linux packaging names carry a version, so they are matched, not built.
++    UpdateInstallKind.appImage ||
++    UpdateInstallKind.deb ||
++    UpdateInstallKind.rpm => null,
+     UpdateInstallKind.packageManager || UpdateInstallKind.unsupported => null,
+   };
++
++  /// The glob this target's release assets answer to, for the packages whose name carries a
++  /// version. Null for every other kind.
++  String? get assetGlob => switch (kind) {
++    UpdateInstallKind.appImage => 'Portal-*.AppImage',
++    UpdateInstallKind.deb => 'Portal-*.deb',
++    UpdateInstallKind.rpm => 'Portal-*.rpm',
++    _ => null,
++  };
++
++  bool get downloads =>
++      archs.isNotEmpty && (assetName(archs.first) != null || assetGlob != null);
++
++  /// Every name this target would accept, for the sentence a missing asset gets.
++  String get expected {
++    final names = <String>[];
++    for (final arch in archs) {
++      final name = assetName(arch);
++      if (name != null && !names.contains(name)) names.add(name);
++    }
++    final glob = assetGlob;
++    if (glob != null) names.add(glob);
++    return names.isEmpty ? 'no ${kind.name} asset' : names.join(' | ');
++  }
++
++  /// The release asset this target takes, in the order [archs] are tried.
++  ///
++  /// Only a name from this list is a candidate: the release's own `assets` are searched, never
++  /// another platform's file and never a name the release does not carry.
++  String? pick(Iterable<String> names) {
++    final listed = names.toSet();
++    for (final arch in archs) {
++      final exact = assetName(arch);
++      if (exact != null) {
++        if (listed.contains(exact)) return exact;
++        final dist = kind == UpdateInstallKind.android
++            ? portalAndroidDistNames[arch]
++            : null;
++        if (dist != null && listed.contains(dist)) return dist;
++        continue;
++      }
++      final glob = assetGlob;
++      if (glob == null) continue;
++      final matches = [
++        for (final name in names)
++          if (matchesAssetGlob(glob, name)) name,
++      ];
++      if (matches.isEmpty) continue;
++      // The version is in the name and so is the arch: a package built for another one is not
++      // this device's update. A name that states no arch at all is the published one.
++      final tokens = _archTokens[arch] ?? [arch];
++      final preferred = matches
++          .where((name) => tokens.any(name.contains))
++          .firstOrNull;
++      if (preferred != null) return preferred;
++      final untagged = matches
++          .where((name) => !_knownArchTokens.any(name.contains))
++          .firstOrNull;
++      if (untagged != null) return untagged;
++    }
++    return null;
++  }
+ }
+ 
++/// The way an arch appears inside a package name, most specific first.
++const _archTokens = <String, List<String>>{
++  'arm64': ['arm64', 'aarch64'],
++  'aarch64': ['aarch64', 'arm64'],
++  'amd64': ['amd64', 'x86_64', 'x64'],
++  'x86_64': ['x86_64', 'amd64', 'x64'],
++  'arm64-v8a': ['arm64', 'aarch64'],
++  'armeabi-v7a': ['armeabi', 'armv7', 'arm'],
++};
++
++final _knownArchTokens = <String>{
++  for (final tokens in _archTokens.values) ...tokens,
++};
++
+ @immutable
+ class UpdateAsset {
+   final String name;
+@@ -116,32 +230,29 @@ UpdateAsset manifestUpdateAsset(
+         if (asset is Map && asset['name'] is String)
+           asset['name'] as String: asset,
+   };
+-  for (final arch in target.archs) {
+-    final name = target.assetName(arch);
+-    final asset = name == null ? null : assets[name];
+-    if (name == null || asset == null) {
+-      continue;
+-    }
+-    final rawUrl = asset['url'];
+-    final uri = rawUrl is String ? Uri.tryParse(rawUrl) : null;
+-    if (uri == null ||
+-        uri.scheme != 'https' ||
+-        uri.userInfo.isNotEmpty ||
+-        (uri.hasPort && uri.port != 443)) {
+-      throw UpdateException(UpdateErrorKind.untrustedHost, '$rawUrl');
+-    }
+-    final sha = asset['sha256'];
+-    if (sha is! String || !_sha256Pattern.hasMatch(sha)) {
+-      throw UpdateException(UpdateErrorKind.noChecksum, name);
+-    }
+-    return UpdateAsset(
+-      name: name,
+-      url: uri,
+-      checksum: sha.toLowerCase(),
+-      allowedHosts: {...updateHosts, uri.host.toLowerCase()},
+-    );
++  final name = target.pick(assets.keys);
++  if (name == null) {
++    throw UpdateException(UpdateErrorKind.noAsset, target.expected);
++  }
++  final asset = assets[name]!;
++  final rawUrl = asset['url'];
++  final uri = rawUrl is String ? Uri.tryParse(rawUrl) : null;
++  if (uri == null ||
++      uri.scheme != 'https' ||
++      uri.userInfo.isNotEmpty ||
++      (uri.hasPort && uri.port != 443)) {
++    throw UpdateException(UpdateErrorKind.untrustedHost, '$rawUrl');
++  }
++  final sha = asset['sha256'];
++  if (sha is! String || !_sha256Pattern.hasMatch(sha)) {
++    throw UpdateException(UpdateErrorKind.noChecksum, name);
+   }
+-  throw const UpdateException(UpdateErrorKind.noAsset);
++  return UpdateAsset(
++    name: name,
++    url: uri,
++    checksum: sha.toLowerCase(),
++    allowedHosts: {...updateHosts, uri.host.toLowerCase()},
++  );
+ }
+ 
+ /// Android ABIs as `Build.SUPPORTED_ABIS` lists them, mapped onto the split
+@@ -198,28 +309,25 @@ UpdateAsset selectUpdateAsset(
+       if (asset is Map && asset['name'] is String)
+         asset['name'] as String: asset,
+   };
+-  for (final arch in target.archs) {
+-    final name = target.assetName(arch);
+-    final asset = assets[name];
+-    if (name == null || asset == null) {
+-      continue;
+-    }
+-    final checksum = assets['$name.sha256'];
+-    if (checksum == null) {
+-      throw UpdateException(UpdateErrorKind.noChecksum, name);
+-    }
+-    final size = asset['size'];
+-    if (size is int && size > updateSizeCeiling) {
+-      throw UpdateException(UpdateErrorKind.tooLarge, name);
+-    }
+-    return UpdateAsset(
+-      name: name,
+-      url: _assetUri(asset, name),
+-      checksumUrl: _assetUri(checksum, '$name.sha256'),
+-      size: size is int && size > 0 ? size : null,
+-    );
++  final name = target.pick(assets.keys);
++  if (name == null) {
++    throw UpdateException(UpdateErrorKind.noAsset, target.expected);
+   }
+-  throw const UpdateException(UpdateErrorKind.noAsset);
++  final asset = assets[name]!;
++  final checksum = assets['$name.sha256'];
++  if (checksum == null) {
++    throw UpdateException(UpdateErrorKind.noChecksum, name);
++  }
++  final size = asset['size'];
++  if (size is int && size > updateSizeCeiling) {
++    throw UpdateException(UpdateErrorKind.tooLarge, name);
++  }
++  return UpdateAsset(
++    name: name,
++    url: _assetUri(asset, name),
++    checksumUrl: _assetUri(checksum, '$name.sha256'),
++    size: size is int && size > 0 ? size : null,
++  );
+ }
+ 
+ UpdateAsset _assetFromTag(
+@@ -229,7 +337,9 @@ UpdateAsset _assetFromTag(
+ }) {
+   final name = target.assetName(target.archs.firstOrNull ?? '');
+   if (name == null) {
+-    throw const UpdateException(UpdateErrorKind.noAsset);
++    // A name this build cannot write down is a name it must not guess: the answer is that the
++    // release carries nothing for this platform, not a URL nobody published.
++    throw UpdateException(UpdateErrorKind.noAsset, target.expected);
+   }
+   final base = 'https://github.com/$repository/releases/download/$tag';
+   return UpdateAsset(
+diff --git a/lib/features/update/controller.dart b/lib/features/update/controller.dart
+index b83eb0e5..e2c5c43c 100644
+--- a/lib/features/update/controller.dart
++++ b/lib/features/update/controller.dart
+@@ -2,6 +2,7 @@ import 'dart:async';
+ import 'dart:io';
+ 
+ import 'package:dio/dio.dart';
++import 'package:fl_clash/common/print.dart';
+ import 'package:fl_clash/features/update/asset.dart';
+ import 'package:fl_clash/features/update/download.dart';
+ import 'package:fl_clash/features/update/platform.dart';
+@@ -113,6 +114,11 @@ class UpdateController extends ValueNotifier<UpdateState> {
+               repository: repository,
+               pre: pre,
+             );
++      // The repository and the asset in one line: an update that downloads something else is
++      // then visible in the log, not only in the dialog.
++      commonPrint.log(
++        'update: repository=$repository asset=${asset.name} url=${asset.url}',
++      );
+       await downloader.purge();
+       final expected = await downloader.fetchChecksum(
+         asset,
+diff --git a/lib/features/update/dialog.dart b/lib/features/update/dialog.dart
+index bee7c754..dd19d145 100644
+--- a/lib/features/update/dialog.dart
++++ b/lib/features/update/dialog.dart
+@@ -232,7 +232,11 @@ class _UpdateStatus extends StatelessWidget {
+   }
+ 
+   bool _showsDetail(UpdateErrorKind kind) =>
+-      kind == UpdateErrorKind.network || kind == UpdateErrorKind.installFailed;
++      kind == UpdateErrorKind.network ||
++      kind == UpdateErrorKind.installFailed ||
++      // A missing asset says which name it looked for: "no build for this device" is true
++      // and useless when what the release carries is another platform's file.
++      kind == UpdateErrorKind.noAsset;
+ }
+ 
+ /// The primary action while a download runs: its fill sweeps across the
+diff --git a/test/features/update/asset_test.dart b/test/features/update/asset_test.dart
+index 07b438c9..c822b58e 100644
+--- a/test/features/update/asset_test.dart
++++ b/test/features/update/asset_test.dart
+@@ -1,7 +1,7 @@
+ import 'package:fl_clash/features/update/asset.dart';
+ import 'package:flutter_test/flutter_test.dart';
+ 
+-const _repository = 'pluralplay/FlClashX';
++const _repository = 'saved-j/portal';
+ 
+ Map<String, dynamic> _asset(String name, {int size = 1000, String? url}) => {
+   'name': name,
+@@ -28,18 +28,15 @@ Matcher _fails(UpdateErrorKind kind) =>
+ void main() {
+   group('selectUpdateAsset', () {
+     const allAssets = [
+-      'FlClashX-android-arm64-v8a.apk',
+-      'FlClashX-android-armeabi-v7a.apk',
+-      'FlClashX-android-universal.apk',
+-      'FlClashX-windows-amd64-setup.exe',
+-      'FlClashX-windows-amd64.zip',
+-      'FlClashX-windows-arm64-setup.exe',
+-      'FlClashX-macos-amd64.dmg',
+-      'FlClashX-macos-arm64.dmg',
+-      'FlClashX-linux-amd64.AppImage',
+-      'FlClashX-linux-amd64.deb',
+-      'FlClashX-linux-amd64.rpm',
+-      'FlClashX-linux-arm64.deb',
++      'Portal.apk',
++      'Portal_legacy.apk',
++      'Portal_universal.apk',
++      'Portal.exe',
++      'Portal.dmg',
++      'Portal-1.0.3-linux-amd64.AppImage',
++      'Portal-1.0.3-linux-amd64.deb',
++      'Portal-1.0.3-linux-amd64.rpm',
++      'Portal-1.0.3-linux-arm64.deb',
+     ];
+ 
+     String select(UpdateTarget target, {List<String> names = allAssets}) =>
+@@ -59,7 +56,76 @@ void main() {
+       );
+       expect(
+         select(UpdateTarget(UpdateInstallKind.android, archs)),
+-        'FlClashX-android-arm64-v8a.apk',
++        'Portal.apk',
++      );
++    });
++
++    test('the asset this app publishes, and the name says the arch', () {
++      expect(portalAndroidAssets['arm64-v8a'], 'Portal.apk');
++      expect(portalAndroidAssets['armeabi-v7a'], 'Portal_legacy.apk');
++      expect(portalAndroidAssets['x86_64'], 'Portal_x86-64.apk');
++      expect(portalAndroidAssets['universal'], 'Portal_universal.apk');
++      expect(
++        const UpdateTarget(UpdateInstallKind.windows, ['amd64']).assetName(
++          'amd64',
++        ),
++        'Portal.exe',
++      );
++      expect(
++        const UpdateTarget(UpdateInstallKind.macos, ['arm64']).assetName(
++          'arm64',
++        ),
++        'Portal.dmg',
++      );
++      expect(
++        const UpdateTarget(UpdateInstallKind.deb, ['amd64']).assetGlob,
++        'Portal-*.deb',
++      );
++    });
++
++    test("another project's asset is never offered", () {
++      // The repository this app used to point at published FlClashX's names. A file for the
++      // same platform is not this app's build: it must be neither chosen nor offered.
++      expect(
++        () => select(
++          const UpdateTarget(UpdateInstallKind.android, ['arm64-v8a']),
++          names: const [
++            'FlClashX-android-' 'arm64-v8a.apk',
++            'FlClashX-android-' 'universal.apk',
++          ],
++        ),
++        _fails(UpdateErrorKind.noAsset),
++      );
++    });
++
++    test('a missing asset says which name it looked for', () {
++      expect(
++        () => select(
++          const UpdateTarget(UpdateInstallKind.android, ['arm64-v8a', 'universal']),
++          names: const ['Portal.exe'],
++        ),
++        throwsA(
++          isA<UpdateException>()
++              .having((e) => e.kind, 'kind', UpdateErrorKind.noAsset)
++              .having((e) => e.detail, 'detail', 'Portal.apk | Portal_universal.apk'),
++        ),
++      );
++    });
++
++    test('also finds the names dist/ writes today', () {
++      expect(
++        select(
++          const UpdateTarget(UpdateInstallKind.android, ['arm64-v8a', 'universal']),
++          names: const ['Portal-android-arm64-v8a.apk'],
++        ),
++        'Portal-android-arm64-v8a.apk',
++      );
++      expect(
++        select(
++          const UpdateTarget(UpdateInstallKind.android, ['arm64-v8a']),
++          names: const ['Portal-android-arm64-v8a.apk', 'Portal.apk'],
++        ),
++        'Portal.apk',
+       );
+     });
+ 
+@@ -68,30 +134,30 @@ void main() {
+         select(
+           UpdateTarget(UpdateInstallKind.android, androidUpdateArchs(['x86'])),
+         ),
+-        'FlClashX-android-universal.apk',
++        'Portal_universal.apk',
+       );
+     });
+ 
+     test('picks the desktop package for the install type and arch', () {
+       expect(
+         select(const UpdateTarget(UpdateInstallKind.windows, ['arm64'])),
+-        'FlClashX-windows-arm64-setup.exe',
++        'Portal.exe',
+       );
+       expect(
+         select(const UpdateTarget(UpdateInstallKind.macos, ['amd64'])),
+-        'FlClashX-macos-amd64.dmg',
++        'Portal.dmg',
+       );
+       expect(
+         select(const UpdateTarget(UpdateInstallKind.appImage, ['amd64'])),
+-        'FlClashX-linux-amd64.AppImage',
++        'Portal-1.0.3-linux-amd64.AppImage',
+       );
+       expect(
+         select(const UpdateTarget(UpdateInstallKind.deb, ['arm64'])),
+-        'FlClashX-linux-arm64.deb',
++        'Portal-1.0.3-linux-arm64.deb',
+       );
+       expect(
+         select(const UpdateTarget(UpdateInstallKind.rpm, ['amd64'])),
+-        'FlClashX-linux-amd64.rpm',
++        'Portal-1.0.3-linux-amd64.rpm',
+       );
+     });
+ 
+@@ -114,21 +180,21 @@ void main() {
+ 
+     test('holds a release to the channel the app runs on', () {
+       final pre = _release(
+-        ['FlClashX-macos-arm64.dmg'],
++        ['Portal.dmg'],
+         tag: 'v0.5.2-pre.1',
+         prerelease: true,
+       );
+       const target = UpdateTarget(UpdateInstallKind.macos, ['arm64']);
+       expect(
+         selectUpdateAsset(pre, target, repository: _repository, pre: true).name,
+-        'FlClashX-macos-arm64.dmg',
++        'Portal.dmg',
+       );
+       expect(
+         () =>
+             selectUpdateAsset(pre, target, repository: _repository, pre: false),
+         _fails(UpdateErrorKind.noAsset),
+       );
+-      final stable = _release(['FlClashX-macos-arm64.dmg'], prerelease: false);
++      final stable = _release(['Portal.dmg'], prerelease: false);
+       expect(
+         () => selectUpdateAsset(
+           stable,
+@@ -141,7 +207,7 @@ void main() {
+     });
+ 
+     test('rejects a tag that is not a version', () {
+-      final release = _release(['FlClashX-macos-arm64.dmg'], tag: 'v1/../x');
++      final release = _release(['Portal.dmg'], tag: 'v1/../x');
+       expect(
+         () => selectUpdateAsset(
+           release,
+@@ -156,7 +222,7 @@ void main() {
+     test('requires a published checksum', () {
+       final release = {
+         'tag_name': 'v0.5.1',
+-        'assets': [_asset('FlClashX-macos-arm64.dmg')],
++        'assets': [_asset('Portal.dmg')],
+       };
+       expect(
+         () => selectUpdateAsset(
+@@ -171,7 +237,7 @@ void main() {
+ 
+     test('caps the size at the release figure and the ceiling', () {
+       final asset = selectUpdateAsset(
+-        _release(['FlClashX-macos-arm64.dmg']),
++        _release(['Portal.dmg']),
+         const UpdateTarget(UpdateInstallKind.macos, ['arm64']),
+         repository: _repository,
+         pre: false,
+@@ -181,8 +247,8 @@ void main() {
+       final huge = {
+         'tag_name': 'v0.5.1',
+         'assets': [
+-          _asset('FlClashX-macos-arm64.dmg', size: updateSizeCeiling + 1),
+-          _asset('FlClashX-macos-arm64.dmg.sha256'),
++          _asset('Portal.dmg', size: updateSizeCeiling + 1),
++          _asset('Portal.dmg.sha256'),
+         ],
+       };
+       expect(
+@@ -201,10 +267,10 @@ void main() {
+         'tag_name': 'v0.5.1',
+         'assets': [
+           _asset(
+-            'FlClashX-macos-arm64.dmg',
+-            url: 'https://evil.example/FlClashX-macos-arm64.dmg',
++            'Portal.dmg',
++            url: 'https://evil.example/Portal.dmg',
+           ),
+-          _asset('FlClashX-macos-arm64.dmg.sha256'),
++          _asset('Portal.dmg.sha256'),
+         ],
+       };
+       expect(
+@@ -228,9 +294,9 @@ void main() {
+       expect(
+         asset.url.toString(),
+         'https://github.com/$_repository/releases/download/v0.5.1/'
+-        'FlClashX-windows-amd64-setup.exe',
++        'Portal.exe',
+       );
+-      expect(asset.checksumUrl!.path, endsWith('setup.exe.sha256'));
++      expect(asset.checksumUrl!.path, endsWith('Portal.exe.sha256'));
+       expect(asset.size, isNull);
+       expect(asset.sizeLimit, updateSizeCeiling);
+     });
+@@ -274,7 +340,7 @@ void main() {
+   group('parseChecksum', () {
+     const hash =
+         '3dad780109d1524106a07cc6499c7f0fb04f08290b0eb931a5f7bbcf2c153058';
+-    const name = 'FlClashX-macos-arm64.dmg';
++    const name = 'Portal.dmg';
+ 
+     test('reads the sha256sum line a release publishes', () {
+       expect(parseChecksum('$hash  ./$name\n', name), hash);
+@@ -313,7 +379,7 @@ void main() {
+ 
+     test('picks the asset for the platform with its inline hash', () {
+       final asset = manifestUpdateAsset(
+-        manifest('FlClashX-windows-amd64-setup.exe'),
++        manifest('Portal.exe'),
+         const UpdateTarget(UpdateInstallKind.windows, ['amd64']),
+       );
+       expect(asset.url.host, 'mirror.example');
+@@ -325,7 +391,7 @@ void main() {
+     test('a missing asset for the platform fails', () {
+       expect(
+         () => manifestUpdateAsset(
+-          manifest('FlClashX-windows-amd64-setup.exe'),
++          manifest('Portal.exe'),
+           const UpdateTarget(UpdateInstallKind.macos, ['arm64']),
+         ),
+         _fails(UpdateErrorKind.noAsset),
+@@ -336,7 +402,7 @@ void main() {
+       expect(
+         () => manifestUpdateAsset(
+           manifest(
+-            'FlClashX-macos-arm64.dmg',
++            'Portal.dmg',
+             url: 'http://mirror.example/x.dmg',
+           ),
+           const UpdateTarget(UpdateInstallKind.macos, ['arm64']),
+@@ -349,7 +415,7 @@ void main() {
+       for (final bad in ['xyz', 'a' * 63]) {
+         expect(
+           () => manifestUpdateAsset(
+-            manifest('FlClashX-macos-arm64.dmg', sha256: bad),
++            manifest('Portal.dmg', sha256: bad),
+             const UpdateTarget(UpdateInstallKind.macos, ['arm64']),
+           ),
+           _fails(UpdateErrorKind.noChecksum),
+@@ -360,7 +426,7 @@ void main() {
+           'version': 'v0.5.2',
+           'assets': [
+             {
+-              'name': 'FlClashX-macos-arm64.dmg',
++              'name': 'Portal.dmg',
+               'url': 'https://mirror.example/x.dmg',
+             },
+           ],
+diff --git a/test/features/update/controller_test.dart b/test/features/update/controller_test.dart
+index 7295ed32..842aba8d 100644
+--- a/test/features/update/controller_test.dart
++++ b/test/features/update/controller_test.dart
+@@ -10,7 +10,7 @@ import 'package:fl_clash/features/update/download.dart';
+ import 'package:fl_clash/features/update/platform.dart';
+ import 'package:flutter_test/flutter_test.dart';
+ 
+-const _name = 'FlClashX-macos-arm64.dmg';
++const _name = 'Portal.dmg';
+ const _url = 'https://github.com/pluralplay/FlClashX/releases/download/v0.5.1';
+ final _payload = Uint8List.fromList(List.generate(4096, (i) => i % 256));
+ 
+diff --git a/test/features/update/download_test.dart b/test/features/update/download_test.dart
+index 22224a02..dd7f892c 100644
+--- a/test/features/update/download_test.dart
++++ b/test/features/update/download_test.dart
+@@ -9,7 +9,7 @@ import 'package:fl_clash/features/update/asset.dart';
+ import 'package:fl_clash/features/update/download.dart';
+ import 'package:flutter_test/flutter_test.dart';
+ 
+-const _name = 'FlClashX-macos-arm64.dmg';
++const _name = 'Portal.dmg';
+ const _base = 'https://github.com/pluralplay/FlClashX/releases/download/v0.5.1';
+ const _cdn = 'https://release-assets.githubusercontent.com/blob';
+ 
+diff --git a/test/features/update/identity_test.dart b/test/features/update/identity_test.dart
+index cd4dccf2..7efd2dec 100644
+--- a/test/features/update/identity_test.dart
++++ b/test/features/update/identity_test.dart
+@@ -207,7 +207,7 @@ void main() {
+ 
+   group('Windows', () {
+     const own = r'C:\Program Files\FlClashX\FlClashX.exe';
+-    const setup = r'C:\cache\update\1\FlClashX-windows-amd64-setup.exe';
++    const setup = r'C:\cache\update\1\Portal.exe';
+ 
+     ProcessRunner signer(Map<String, String> outputs, List<String> paths) =>
+         (executable, arguments, {environment}) async {
+diff --git a/test/features/update/manifest_test.dart b/test/features/update/manifest_test.dart
+index 5df2155a..d4aea84c 100644
+--- a/test/features/update/manifest_test.dart
++++ b/test/features/update/manifest_test.dart
+@@ -43,7 +43,7 @@ ResponseBody _json(Object body) =>
+ 
+ Map<String, dynamic> _manifest(
+   String version, {
+-  List<String> names = const ['FlClashX-macos-arm64.dmg'],
++  List<String> names = const ['Portal.dmg'],
+ }) => {
+   'version': version,
+   'assets': [
+@@ -257,7 +257,7 @@ void main() {
+     });
+ 
+     test('duplicate asset names are refused', () async {
+-      const name = 'FlClashX-macos-arm64.dmg';
++      const name = 'Portal.dmg';
+       await expectLater(
+         serve({
+           ..._manifest('v0.5.2', names: [name, name]),
+diff --git a/test/features/update/platform_test.dart b/test/features/update/platform_test.dart
+index 880b1c45..875ce395 100644
+--- a/test/features/update/platform_test.dart
++++ b/test/features/update/platform_test.dart
+@@ -104,7 +104,7 @@ void main() {
+       },
+       exitApp: () => fail('a package install keeps the app running'),
+     );
+-    final file = File('/cache/update/1/FlClashX-linux-amd64.deb');
++    final file = File('/cache/update/1/Portal-1.0.3-linux-amd64.deb');
+     expect(await platform.install(file), UpdateInstallResult.handedOff);
+     expect(calls, [
+       ['xdg-open', file.path],
+@@ -120,7 +120,7 @@ void main() {
+       root = await Directory.systemTemp.createTemp('flclashx_update_macos');
+       bundle = '${root.path}/Applications/FlClashX.app';
+       await Directory(bundle).create(recursive: true);
+-      image = File('${root.path}/cache/1/FlClashX-macos-arm64.dmg');
++      image = File('${root.path}/cache/1/Portal.dmg');
+       await image.create(recursive: true);
+     });
+ 

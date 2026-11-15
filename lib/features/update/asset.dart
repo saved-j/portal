@@ -50,6 +50,44 @@ final class UpdateException implements Exception {
   String toString() => detail == null ? kind.name : '${kind.name}: $detail';
 }
 
+/// The names this project's releases carry, per platform.
+///
+/// The updater used to ask for FlClashX's assets (`FlClashX-android-arm64-v8a.apk` and
+/// friends) in `pluralplay/FlClashX` — a repository this app does not ship from, and names no
+/// release of its own publishes. A name nobody publishes is not a fallback: it is a download
+/// that cannot exist, offered to the owner as an update. Android's name states the ABI, so the
+/// arch list still decides which one is tried first; the desktop packages carry one name each.
+const portalAndroidAssets = <String, String>{
+  'arm64-v8a': 'Portal.apk',
+  'armeabi-v7a': 'Portal_legacy.apk',
+  'x86_64': 'Portal_x86-64.apk',
+  'universal': 'Portal_universal.apk',
+};
+
+/// The same four builds under the names `build.sh apk` writes into `dist/` today.
+///
+/// The release is the contract and `portalAndroidAssets` is what it must publish; this list is
+/// only so a build assembled by this repository's own script can be found by its own updater
+/// before the release is renamed. It names this project's files and nothing else.
+const portalAndroidDistNames = <String, String>{
+  'arm64-v8a': 'Portal-android-arm64-v8a.apk',
+  'armeabi-v7a': 'Portal-android-armeabi-v7a.apk',
+  'x86_64': 'Portal-android-x86_64.apk',
+  'universal': 'Portal-android-universal.apk',
+};
+
+/// `Portal-<version>-<arch>.deb` and its siblings: the version is inside the name, so the
+/// release's own listing says which one it published.
+bool matchesAssetGlob(String pattern, String name) {
+  final star = pattern.indexOf('*');
+  if (star < 0) return pattern == name;
+  final prefix = pattern.substring(0, star);
+  final suffix = pattern.substring(star + 1);
+  return name.length > prefix.length + suffix.length &&
+      name.startsWith(prefix) &&
+      name.endsWith(suffix);
+}
+
 @immutable
 class UpdateTarget {
   final UpdateInstallKind kind;
@@ -59,18 +97,94 @@ class UpdateTarget {
 
   const UpdateTarget(this.kind, this.archs);
 
-  bool get downloads => archs.isNotEmpty && assetName(archs.first) != null;
-
+  /// This app's asset for [arch], when the name states the arch.
   String? assetName(String arch) => switch (kind) {
-    UpdateInstallKind.android => 'FlClashX-android-$arch.apk',
-    UpdateInstallKind.windows => 'FlClashX-windows-$arch-setup.exe',
-    UpdateInstallKind.macos => 'FlClashX-macos-$arch.dmg',
-    UpdateInstallKind.appImage => 'FlClashX-linux-$arch.AppImage',
-    UpdateInstallKind.deb => 'FlClashX-linux-$arch.deb',
-    UpdateInstallKind.rpm => 'FlClashX-linux-$arch.rpm',
+    UpdateInstallKind.android => portalAndroidAssets[arch],
+    UpdateInstallKind.windows => 'Portal.exe',
+    UpdateInstallKind.macos => 'Portal.dmg',
+    // Linux packaging names carry a version, so they are matched, not built.
+    UpdateInstallKind.appImage ||
+    UpdateInstallKind.deb ||
+    UpdateInstallKind.rpm => null,
     UpdateInstallKind.packageManager || UpdateInstallKind.unsupported => null,
   };
+
+  /// The glob this target's release assets answer to, for the packages whose name carries a
+  /// version. Null for every other kind.
+  String? get assetGlob => switch (kind) {
+    UpdateInstallKind.appImage => 'Portal-*.AppImage',
+    UpdateInstallKind.deb => 'Portal-*.deb',
+    UpdateInstallKind.rpm => 'Portal-*.rpm',
+    _ => null,
+  };
+
+  bool get downloads =>
+      archs.isNotEmpty && (assetName(archs.first) != null || assetGlob != null);
+
+  /// Every name this target would accept, for the sentence a missing asset gets.
+  String get expected {
+    final names = <String>[];
+    for (final arch in archs) {
+      final name = assetName(arch);
+      if (name != null && !names.contains(name)) names.add(name);
+    }
+    final glob = assetGlob;
+    if (glob != null) names.add(glob);
+    return names.isEmpty ? 'no ${kind.name} asset' : names.join(' | ');
+  }
+
+  /// The release asset this target takes, in the order [archs] are tried.
+  ///
+  /// Only a name from this list is a candidate: the release's own `assets` are searched, never
+  /// another platform's file and never a name the release does not carry.
+  String? pick(Iterable<String> names) {
+    final listed = names.toSet();
+    for (final arch in archs) {
+      final exact = assetName(arch);
+      if (exact != null) {
+        if (listed.contains(exact)) return exact;
+        final dist = kind == UpdateInstallKind.android
+            ? portalAndroidDistNames[arch]
+            : null;
+        if (dist != null && listed.contains(dist)) return dist;
+        continue;
+      }
+      final glob = assetGlob;
+      if (glob == null) continue;
+      final matches = [
+        for (final name in names)
+          if (matchesAssetGlob(glob, name)) name,
+      ];
+      if (matches.isEmpty) continue;
+      // The version is in the name and so is the arch: a package built for another one is not
+      // this device's update. A name that states no arch at all is the published one.
+      final tokens = _archTokens[arch] ?? [arch];
+      final preferred = matches
+          .where((name) => tokens.any(name.contains))
+          .firstOrNull;
+      if (preferred != null) return preferred;
+      final untagged = matches
+          .where((name) => !_knownArchTokens.any(name.contains))
+          .firstOrNull;
+      if (untagged != null) return untagged;
+    }
+    return null;
+  }
 }
+
+/// The way an arch appears inside a package name, most specific first.
+const _archTokens = <String, List<String>>{
+  'arm64': ['arm64', 'aarch64'],
+  'aarch64': ['aarch64', 'arm64'],
+  'amd64': ['amd64', 'x86_64', 'x64'],
+  'x86_64': ['x86_64', 'amd64', 'x64'],
+  'arm64-v8a': ['arm64', 'aarch64'],
+  'armeabi-v7a': ['armeabi', 'armv7', 'arm'],
+};
+
+final _knownArchTokens = <String>{
+  for (final tokens in _archTokens.values) ...tokens,
+};
 
 @immutable
 class UpdateAsset {
@@ -116,32 +230,29 @@ UpdateAsset manifestUpdateAsset(
         if (asset is Map && asset['name'] is String)
           asset['name'] as String: asset,
   };
-  for (final arch in target.archs) {
-    final name = target.assetName(arch);
-    final asset = name == null ? null : assets[name];
-    if (name == null || asset == null) {
-      continue;
-    }
-    final rawUrl = asset['url'];
-    final uri = rawUrl is String ? Uri.tryParse(rawUrl) : null;
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        uri.userInfo.isNotEmpty ||
-        (uri.hasPort && uri.port != 443)) {
-      throw UpdateException(UpdateErrorKind.untrustedHost, '$rawUrl');
-    }
-    final sha = asset['sha256'];
-    if (sha is! String || !_sha256Pattern.hasMatch(sha)) {
-      throw UpdateException(UpdateErrorKind.noChecksum, name);
-    }
-    return UpdateAsset(
-      name: name,
-      url: uri,
-      checksum: sha.toLowerCase(),
-      allowedHosts: {...updateHosts, uri.host.toLowerCase()},
-    );
+  final name = target.pick(assets.keys);
+  if (name == null) {
+    throw UpdateException(UpdateErrorKind.noAsset, target.expected);
   }
-  throw const UpdateException(UpdateErrorKind.noAsset);
+  final asset = assets[name]!;
+  final rawUrl = asset['url'];
+  final uri = rawUrl is String ? Uri.tryParse(rawUrl) : null;
+  if (uri == null ||
+      uri.scheme != 'https' ||
+      uri.userInfo.isNotEmpty ||
+      (uri.hasPort && uri.port != 443)) {
+    throw UpdateException(UpdateErrorKind.untrustedHost, '$rawUrl');
+  }
+  final sha = asset['sha256'];
+  if (sha is! String || !_sha256Pattern.hasMatch(sha)) {
+    throw UpdateException(UpdateErrorKind.noChecksum, name);
+  }
+  return UpdateAsset(
+    name: name,
+    url: uri,
+    checksum: sha.toLowerCase(),
+    allowedHosts: {...updateHosts, uri.host.toLowerCase()},
+  );
 }
 
 /// Android ABIs as `Build.SUPPORTED_ABIS` lists them, mapped onto the split
@@ -198,28 +309,25 @@ UpdateAsset selectUpdateAsset(
       if (asset is Map && asset['name'] is String)
         asset['name'] as String: asset,
   };
-  for (final arch in target.archs) {
-    final name = target.assetName(arch);
-    final asset = assets[name];
-    if (name == null || asset == null) {
-      continue;
-    }
-    final checksum = assets['$name.sha256'];
-    if (checksum == null) {
-      throw UpdateException(UpdateErrorKind.noChecksum, name);
-    }
-    final size = asset['size'];
-    if (size is int && size > updateSizeCeiling) {
-      throw UpdateException(UpdateErrorKind.tooLarge, name);
-    }
-    return UpdateAsset(
-      name: name,
-      url: _assetUri(asset, name),
-      checksumUrl: _assetUri(checksum, '$name.sha256'),
-      size: size is int && size > 0 ? size : null,
-    );
+  final name = target.pick(assets.keys);
+  if (name == null) {
+    throw UpdateException(UpdateErrorKind.noAsset, target.expected);
   }
-  throw const UpdateException(UpdateErrorKind.noAsset);
+  final asset = assets[name]!;
+  final checksum = assets['$name.sha256'];
+  if (checksum == null) {
+    throw UpdateException(UpdateErrorKind.noChecksum, name);
+  }
+  final size = asset['size'];
+  if (size is int && size > updateSizeCeiling) {
+    throw UpdateException(UpdateErrorKind.tooLarge, name);
+  }
+  return UpdateAsset(
+    name: name,
+    url: _assetUri(asset, name),
+    checksumUrl: _assetUri(checksum, '$name.sha256'),
+    size: size is int && size > 0 ? size : null,
+  );
 }
 
 UpdateAsset _assetFromTag(
@@ -229,7 +337,9 @@ UpdateAsset _assetFromTag(
 }) {
   final name = target.assetName(target.archs.firstOrNull ?? '');
   if (name == null) {
-    throw const UpdateException(UpdateErrorKind.noAsset);
+    // A name this build cannot write down is a name it must not guess: the answer is that the
+    // release carries nothing for this platform, not a URL nobody published.
+    throw UpdateException(UpdateErrorKind.noAsset, target.expected);
   }
   final base = 'https://github.com/$repository/releases/download/$tag';
   return UpdateAsset(
