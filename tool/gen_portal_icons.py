@@ -19,20 +19,9 @@ MACOS_SET = os.path.join(ROOT, "macos/Runner/Assets.xcassets/AppIcon.appiconset"
 ASSETS = os.path.join(ROOT, "assets/images")
 WINDOWS = os.path.join(ROOT, "windows/runner/resources")
 
-# The art fills the whole canvas: the source carries its own dark frame, so the frame is
-# scaled out of view and the picture reaches every edge. Android then applies its own
-# mask and shape — nothing here reserves a margin for it.
-ZOOM = 0.78
-_source = Image.open(SRC).convert("RGB")
-_side = int(min(_source.size) * ZOOM)
-_left = (_source.size[0] - _side) // 2
-_top = (_source.size[1] - _side) // 2
-BASE = _source.crop((_left, _top, _left + _side, _top + _side))
-# The owner's mark is a dark scene; at 48 px on a phone screen it reads as a black
-# square. Lift it enough to keep the door and the stars visible without washing it out.
-BASE = ImageEnhance.Brightness(BASE).enhance(112 / 100)
-BASE = ImageEnhance.Contrast(BASE).enhance(1.06)
-BASE = ImageEnhance.Color(BASE).enhance(1.08)
+# The owner's file is used whole — no crop, no zoom, no padding. Each slot is exactly one
+# resize of this image to its target size.
+BASE = Image.open(SRC).convert("RGB")
 BACKGROUND = BASE.getpixel((2, 2))
 VOID = "#0B0F1E"
 

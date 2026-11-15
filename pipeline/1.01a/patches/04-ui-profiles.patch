@@ -1,0 +1,968 @@
+diff --git a/lib/models/config.dart b/lib/models/config.dart
+index f9aef7e5694186e0f77d07d46a47cadfc97dca6a..72334908645063f7c577685ccafa373b6af4c24b 100644
+--- a/lib/models/config.dart
++++ b/lib/models/config.dart
+@@ -260,6 +260,11 @@ abstract class AppSettingProps with _$AppSettingProps {
+     @Default(RequestFeed.live) RequestFeed requestFeed,
+     @Default(defaultTestUrl) String testUrl,
+     @Default(defaultDelayTestTimeout) int delayTestTimeout,
++
++    /// The server-list order in each mode, stored separately: the rules list and the simple
++    /// portal show different builds of one subscription and are ordered for different reasons.
++    @Default('') String portalSortRules,
++    @Default('') String portalSortXray,
+     @Default(TabAnimation.fade)
+     @JsonKey(readValue: _readTabAnimation)
+     TabAnimation tabAnimation,
+diff --git a/lib/models/generated/config.freezed.dart b/lib/models/generated/config.freezed.dart
+index ab07d2ca440fb09bbc979d371c6aa115c3659d22..d53c35eedac68ba78d793402bf8cfe4652b86047 100644
+--- a/lib/models/generated/config.freezed.dart
++++ b/lib/models/generated/config.freezed.dart
+@@ -303,7 +303,9 @@ as String,
+ mixin _$AppSettingProps implements DiagnosticableTreeMixin {
+ 
+  String? get locale;@JsonKey(fromJson: dashboardWidgetsFromJson) List<DashboardWidget> get dashboardWidgets;/// The wide dashboard keeps its full arrangement until this is set.
+-@JsonKey(readValue: _readDashboardWidgetsChosen) bool get dashboardWidgetsChosen; bool get onlyStatisticsProxy; bool get showNotificationStopAction; bool get autoLaunch; bool get silentLaunch; bool get autoRun; bool get openLogs; bool get closeConnections; RequestFeed get requestFeed; String get testUrl; int get delayTestTimeout;@JsonKey(readValue: _readTabAnimation) TabAnimation get tabAnimation; bool get floatingNavigationBar; bool get autoCheckUpdate;/// The release tag the user hid; automatic checks skip only that one.
++@JsonKey(readValue: _readDashboardWidgetsChosen) bool get dashboardWidgetsChosen; bool get onlyStatisticsProxy; bool get showNotificationStopAction; bool get autoLaunch; bool get silentLaunch; bool get autoRun; bool get openLogs; bool get closeConnections; RequestFeed get requestFeed; String get testUrl; int get delayTestTimeout;/// The server-list order in each mode, stored separately: the rules list and the simple
++/// portal show different builds of one subscription and are ordered for different reasons.
++ String get portalSortRules; String get portalSortXray;@JsonKey(readValue: _readTabAnimation) TabAnimation get tabAnimation; bool get floatingNavigationBar; bool get autoCheckUpdate;/// The release tag the user hid; automatic checks skip only that one.
+  String? get hiddenUpdate;@JsonKey(readValue: _readSidebarExpanded) bool get sidebarExpanded; int get acceptedDisclaimerVersion; bool get minimizeOnExit; bool get menuBarMode; bool get hidden; bool get developerMode; RestoreStrategy get restoreStrategy; bool get showTrayTitle; bool get monochromeTrayIcon;@JsonKey(includeFromJson: false, includeToJson: false) bool get checkCertificate; List<Filter> get filters; bool get hideIp; bool get vibration; bool get editorLineWrap; EditorFontSize get editorFontSize; List<String> get serviceOrder; List<String> get disabledServices; Map<String, Map<String, double>> get tableColumnWidths; Map<String, int> get subscriptionNotices; Set<String> get ownedSettings;/// Special flags the panel set, put back once its headers drop them.
+  Set<String> get panelSetSettings;/// The profile update whose panel headers the settings last took.
+  String? get appliedHeadersUpdate;
+@@ -321,26 +323,26 @@ void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+   final _this = this as AppSettingProps;
+   properties
+     ..add(DiagnosticsProperty('type', 'AppSettingProps'))
+-    ..add(DiagnosticsProperty('locale', _this.locale))..add(DiagnosticsProperty('dashboardWidgets', _this.dashboardWidgets))..add(DiagnosticsProperty('dashboardWidgetsChosen', _this.dashboardWidgetsChosen))..add(DiagnosticsProperty('onlyStatisticsProxy', _this.onlyStatisticsProxy))..add(DiagnosticsProperty('showNotificationStopAction', _this.showNotificationStopAction))..add(DiagnosticsProperty('autoLaunch', _this.autoLaunch))..add(DiagnosticsProperty('silentLaunch', _this.silentLaunch))..add(DiagnosticsProperty('autoRun', _this.autoRun))..add(DiagnosticsProperty('openLogs', _this.openLogs))..add(DiagnosticsProperty('closeConnections', _this.closeConnections))..add(DiagnosticsProperty('requestFeed', _this.requestFeed))..add(DiagnosticsProperty('testUrl', _this.testUrl))..add(DiagnosticsProperty('delayTestTimeout', _this.delayTestTimeout))..add(DiagnosticsProperty('tabAnimation', _this.tabAnimation))..add(DiagnosticsProperty('floatingNavigationBar', _this.floatingNavigationBar))..add(DiagnosticsProperty('autoCheckUpdate', _this.autoCheckUpdate))..add(DiagnosticsProperty('hiddenUpdate', _this.hiddenUpdate))..add(DiagnosticsProperty('sidebarExpanded', _this.sidebarExpanded))..add(DiagnosticsProperty('acceptedDisclaimerVersion', _this.acceptedDisclaimerVersion))..add(DiagnosticsProperty('minimizeOnExit', _this.minimizeOnExit))..add(DiagnosticsProperty('menuBarMode', _this.menuBarMode))..add(DiagnosticsProperty('hidden', _this.hidden))..add(DiagnosticsProperty('developerMode', _this.developerMode))..add(DiagnosticsProperty('restoreStrategy', _this.restoreStrategy))..add(DiagnosticsProperty('showTrayTitle', _this.showTrayTitle))..add(DiagnosticsProperty('monochromeTrayIcon', _this.monochromeTrayIcon))..add(DiagnosticsProperty('checkCertificate', _this.checkCertificate))..add(DiagnosticsProperty('filters', _this.filters))..add(DiagnosticsProperty('hideIp', _this.hideIp))..add(DiagnosticsProperty('vibration', _this.vibration))..add(DiagnosticsProperty('editorLineWrap', _this.editorLineWrap))..add(DiagnosticsProperty('editorFontSize', _this.editorFontSize))..add(DiagnosticsProperty('serviceOrder', _this.serviceOrder))..add(DiagnosticsProperty('disabledServices', _this.disabledServices))..add(DiagnosticsProperty('tableColumnWidths', _this.tableColumnWidths))..add(DiagnosticsProperty('subscriptionNotices', _this.subscriptionNotices))..add(DiagnosticsProperty('ownedSettings', _this.ownedSettings))..add(DiagnosticsProperty('panelSetSettings', _this.panelSetSettings))..add(DiagnosticsProperty('appliedHeadersUpdate', _this.appliedHeadersUpdate));
++    ..add(DiagnosticsProperty('locale', _this.locale))..add(DiagnosticsProperty('dashboardWidgets', _this.dashboardWidgets))..add(DiagnosticsProperty('dashboardWidgetsChosen', _this.dashboardWidgetsChosen))..add(DiagnosticsProperty('onlyStatisticsProxy', _this.onlyStatisticsProxy))..add(DiagnosticsProperty('showNotificationStopAction', _this.showNotificationStopAction))..add(DiagnosticsProperty('autoLaunch', _this.autoLaunch))..add(DiagnosticsProperty('silentLaunch', _this.silentLaunch))..add(DiagnosticsProperty('autoRun', _this.autoRun))..add(DiagnosticsProperty('openLogs', _this.openLogs))..add(DiagnosticsProperty('closeConnections', _this.closeConnections))..add(DiagnosticsProperty('requestFeed', _this.requestFeed))..add(DiagnosticsProperty('testUrl', _this.testUrl))..add(DiagnosticsProperty('delayTestTimeout', _this.delayTestTimeout))..add(DiagnosticsProperty('portalSortRules', _this.portalSortRules))..add(DiagnosticsProperty('portalSortXray', _this.portalSortXray))..add(DiagnosticsProperty('tabAnimation', _this.tabAnimation))..add(DiagnosticsProperty('floatingNavigationBar', _this.floatingNavigationBar))..add(DiagnosticsProperty('autoCheckUpdate', _this.autoCheckUpdate))..add(DiagnosticsProperty('hiddenUpdate', _this.hiddenUpdate))..add(DiagnosticsProperty('sidebarExpanded', _this.sidebarExpanded))..add(DiagnosticsProperty('acceptedDisclaimerVersion', _this.acceptedDisclaimerVersion))..add(DiagnosticsProperty('minimizeOnExit', _this.minimizeOnExit))..add(DiagnosticsProperty('menuBarMode', _this.menuBarMode))..add(DiagnosticsProperty('hidden', _this.hidden))..add(DiagnosticsProperty('developerMode', _this.developerMode))..add(DiagnosticsProperty('restoreStrategy', _this.restoreStrategy))..add(DiagnosticsProperty('showTrayTitle', _this.showTrayTitle))..add(DiagnosticsProperty('monochromeTrayIcon', _this.monochromeTrayIcon))..add(DiagnosticsProperty('checkCertificate', _this.checkCertificate))..add(DiagnosticsProperty('filters', _this.filters))..add(DiagnosticsProperty('hideIp', _this.hideIp))..add(DiagnosticsProperty('vibration', _this.vibration))..add(DiagnosticsProperty('editorLineWrap', _this.editorLineWrap))..add(DiagnosticsProperty('editorFontSize', _this.editorFontSize))..add(DiagnosticsProperty('serviceOrder', _this.serviceOrder))..add(DiagnosticsProperty('disabledServices', _this.disabledServices))..add(DiagnosticsProperty('tableColumnWidths', _this.tableColumnWidths))..add(DiagnosticsProperty('subscriptionNotices', _this.subscriptionNotices))..add(DiagnosticsProperty('ownedSettings', _this.ownedSettings))..add(DiagnosticsProperty('panelSetSettings', _this.panelSetSettings))..add(DiagnosticsProperty('appliedHeadersUpdate', _this.appliedHeadersUpdate));
+ }
+ 
+ @override
+ bool operator ==(Object other) {
+   final _this = this as AppSettingProps;
+-  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppSettingProps&&(identical(other.locale, _this.locale) || other.locale == _this.locale)&&const DeepCollectionEquality().equals(other.dashboardWidgets, _this.dashboardWidgets)&&(identical(other.dashboardWidgetsChosen, _this.dashboardWidgetsChosen) || other.dashboardWidgetsChosen == _this.dashboardWidgetsChosen)&&(identical(other.onlyStatisticsProxy, _this.onlyStatisticsProxy) || other.onlyStatisticsProxy == _this.onlyStatisticsProxy)&&(identical(other.showNotificationStopAction, _this.showNotificationStopAction) || other.showNotificationStopAction == _this.showNotificationStopAction)&&(identical(other.autoLaunch, _this.autoLaunch) || other.autoLaunch == _this.autoLaunch)&&(identical(other.silentLaunch, _this.silentLaunch) || other.silentLaunch == _this.silentLaunch)&&(identical(other.autoRun, _this.autoRun) || other.autoRun == _this.autoRun)&&(identical(other.openLogs, _this.openLogs) || other.openLogs == _this.openLogs)&&(identical(other.closeConnections, _this.closeConnections) || other.closeConnections == _this.closeConnections)&&(identical(other.requestFeed, _this.requestFeed) || other.requestFeed == _this.requestFeed)&&(identical(other.testUrl, _this.testUrl) || other.testUrl == _this.testUrl)&&(identical(other.delayTestTimeout, _this.delayTestTimeout) || other.delayTestTimeout == _this.delayTestTimeout)&&(identical(other.tabAnimation, _this.tabAnimation) || other.tabAnimation == _this.tabAnimation)&&(identical(other.floatingNavigationBar, _this.floatingNavigationBar) || other.floatingNavigationBar == _this.floatingNavigationBar)&&(identical(other.autoCheckUpdate, _this.autoCheckUpdate) || other.autoCheckUpdate == _this.autoCheckUpdate)&&(identical(other.hiddenUpdate, _this.hiddenUpdate) || other.hiddenUpdate == _this.hiddenUpdate)&&(identical(other.sidebarExpanded, _this.sidebarExpanded) || other.sidebarExpanded == _this.sidebarExpanded)&&(identical(other.acceptedDisclaimerVersion, _this.acceptedDisclaimerVersion) || other.acceptedDisclaimerVersion == _this.acceptedDisclaimerVersion)&&(identical(other.minimizeOnExit, _this.minimizeOnExit) || other.minimizeOnExit == _this.minimizeOnExit)&&(identical(other.menuBarMode, _this.menuBarMode) || other.menuBarMode == _this.menuBarMode)&&(identical(other.hidden, _this.hidden) || other.hidden == _this.hidden)&&(identical(other.developerMode, _this.developerMode) || other.developerMode == _this.developerMode)&&(identical(other.restoreStrategy, _this.restoreStrategy) || other.restoreStrategy == _this.restoreStrategy)&&(identical(other.showTrayTitle, _this.showTrayTitle) || other.showTrayTitle == _this.showTrayTitle)&&(identical(other.monochromeTrayIcon, _this.monochromeTrayIcon) || other.monochromeTrayIcon == _this.monochromeTrayIcon)&&(identical(other.checkCertificate, _this.checkCertificate) || other.checkCertificate == _this.checkCertificate)&&const DeepCollectionEquality().equals(other.filters, _this.filters)&&(identical(other.hideIp, _this.hideIp) || other.hideIp == _this.hideIp)&&(identical(other.vibration, _this.vibration) || other.vibration == _this.vibration)&&(identical(other.editorLineWrap, _this.editorLineWrap) || other.editorLineWrap == _this.editorLineWrap)&&(identical(other.editorFontSize, _this.editorFontSize) || other.editorFontSize == _this.editorFontSize)&&const DeepCollectionEquality().equals(other.serviceOrder, _this.serviceOrder)&&const DeepCollectionEquality().equals(other.disabledServices, _this.disabledServices)&&const DeepCollectionEquality().equals(other.tableColumnWidths, _this.tableColumnWidths)&&const DeepCollectionEquality().equals(other.subscriptionNotices, _this.subscriptionNotices)&&const DeepCollectionEquality().equals(other.ownedSettings, _this.ownedSettings)&&const DeepCollectionEquality().equals(other.panelSetSettings, _this.panelSetSettings)&&(identical(other.appliedHeadersUpdate, _this.appliedHeadersUpdate) || other.appliedHeadersUpdate == _this.appliedHeadersUpdate));
++  return identical(this, other) || (other.runtimeType == runtimeType&&other is AppSettingProps&&(identical(other.locale, _this.locale) || other.locale == _this.locale)&&const DeepCollectionEquality().equals(other.dashboardWidgets, _this.dashboardWidgets)&&(identical(other.dashboardWidgetsChosen, _this.dashboardWidgetsChosen) || other.dashboardWidgetsChosen == _this.dashboardWidgetsChosen)&&(identical(other.onlyStatisticsProxy, _this.onlyStatisticsProxy) || other.onlyStatisticsProxy == _this.onlyStatisticsProxy)&&(identical(other.showNotificationStopAction, _this.showNotificationStopAction) || other.showNotificationStopAction == _this.showNotificationStopAction)&&(identical(other.autoLaunch, _this.autoLaunch) || other.autoLaunch == _this.autoLaunch)&&(identical(other.silentLaunch, _this.silentLaunch) || other.silentLaunch == _this.silentLaunch)&&(identical(other.autoRun, _this.autoRun) || other.autoRun == _this.autoRun)&&(identical(other.openLogs, _this.openLogs) || other.openLogs == _this.openLogs)&&(identical(other.closeConnections, _this.closeConnections) || other.closeConnections == _this.closeConnections)&&(identical(other.requestFeed, _this.requestFeed) || other.requestFeed == _this.requestFeed)&&(identical(other.testUrl, _this.testUrl) || other.testUrl == _this.testUrl)&&(identical(other.delayTestTimeout, _this.delayTestTimeout) || other.delayTestTimeout == _this.delayTestTimeout)&&(identical(other.portalSortRules, _this.portalSortRules) || other.portalSortRules == _this.portalSortRules)&&(identical(other.portalSortXray, _this.portalSortXray) || other.portalSortXray == _this.portalSortXray)&&(identical(other.tabAnimation, _this.tabAnimation) || other.tabAnimation == _this.tabAnimation)&&(identical(other.floatingNavigationBar, _this.floatingNavigationBar) || other.floatingNavigationBar == _this.floatingNavigationBar)&&(identical(other.autoCheckUpdate, _this.autoCheckUpdate) || other.autoCheckUpdate == _this.autoCheckUpdate)&&(identical(other.hiddenUpdate, _this.hiddenUpdate) || other.hiddenUpdate == _this.hiddenUpdate)&&(identical(other.sidebarExpanded, _this.sidebarExpanded) || other.sidebarExpanded == _this.sidebarExpanded)&&(identical(other.acceptedDisclaimerVersion, _this.acceptedDisclaimerVersion) || other.acceptedDisclaimerVersion == _this.acceptedDisclaimerVersion)&&(identical(other.minimizeOnExit, _this.minimizeOnExit) || other.minimizeOnExit == _this.minimizeOnExit)&&(identical(other.menuBarMode, _this.menuBarMode) || other.menuBarMode == _this.menuBarMode)&&(identical(other.hidden, _this.hidden) || other.hidden == _this.hidden)&&(identical(other.developerMode, _this.developerMode) || other.developerMode == _this.developerMode)&&(identical(other.restoreStrategy, _this.restoreStrategy) || other.restoreStrategy == _this.restoreStrategy)&&(identical(other.showTrayTitle, _this.showTrayTitle) || other.showTrayTitle == _this.showTrayTitle)&&(identical(other.monochromeTrayIcon, _this.monochromeTrayIcon) || other.monochromeTrayIcon == _this.monochromeTrayIcon)&&(identical(other.checkCertificate, _this.checkCertificate) || other.checkCertificate == _this.checkCertificate)&&const DeepCollectionEquality().equals(other.filters, _this.filters)&&(identical(other.hideIp, _this.hideIp) || other.hideIp == _this.hideIp)&&(identical(other.vibration, _this.vibration) || other.vibration == _this.vibration)&&(identical(other.editorLineWrap, _this.editorLineWrap) || other.editorLineWrap == _this.editorLineWrap)&&(identical(other.editorFontSize, _this.editorFontSize) || other.editorFontSize == _this.editorFontSize)&&const DeepCollectionEquality().equals(other.serviceOrder, _this.serviceOrder)&&const DeepCollectionEquality().equals(other.disabledServices, _this.disabledServices)&&const DeepCollectionEquality().equals(other.tableColumnWidths, _this.tableColumnWidths)&&const DeepCollectionEquality().equals(other.subscriptionNotices, _this.subscriptionNotices)&&const DeepCollectionEquality().equals(other.ownedSettings, _this.ownedSettings)&&const DeepCollectionEquality().equals(other.panelSetSettings, _this.panelSetSettings)&&(identical(other.appliedHeadersUpdate, _this.appliedHeadersUpdate) || other.appliedHeadersUpdate == _this.appliedHeadersUpdate));
+ }
+ 
+ @JsonKey(includeFromJson: false, includeToJson: false)
+ @override
+ int get hashCode {
+   final _this = this as AppSettingProps;
+-  return Object.hashAll([runtimeType,_this.locale,const DeepCollectionEquality().hash(_this.dashboardWidgets),_this.dashboardWidgetsChosen,_this.onlyStatisticsProxy,_this.showNotificationStopAction,_this.autoLaunch,_this.silentLaunch,_this.autoRun,_this.openLogs,_this.closeConnections,_this.requestFeed,_this.testUrl,_this.delayTestTimeout,_this.tabAnimation,_this.floatingNavigationBar,_this.autoCheckUpdate,_this.hiddenUpdate,_this.sidebarExpanded,_this.acceptedDisclaimerVersion,_this.minimizeOnExit,_this.menuBarMode,_this.hidden,_this.developerMode,_this.restoreStrategy,_this.showTrayTitle,_this.monochromeTrayIcon,_this.checkCertificate,const DeepCollectionEquality().hash(_this.filters),_this.hideIp,_this.vibration,_this.editorLineWrap,_this.editorFontSize,const DeepCollectionEquality().hash(_this.serviceOrder),const DeepCollectionEquality().hash(_this.disabledServices),const DeepCollectionEquality().hash(_this.tableColumnWidths),const DeepCollectionEquality().hash(_this.subscriptionNotices),const DeepCollectionEquality().hash(_this.ownedSettings),const DeepCollectionEquality().hash(_this.panelSetSettings),_this.appliedHeadersUpdate]);
++  return Object.hashAll([runtimeType,_this.locale,const DeepCollectionEquality().hash(_this.dashboardWidgets),_this.dashboardWidgetsChosen,_this.onlyStatisticsProxy,_this.showNotificationStopAction,_this.autoLaunch,_this.silentLaunch,_this.autoRun,_this.openLogs,_this.closeConnections,_this.requestFeed,_this.testUrl,_this.delayTestTimeout,_this.portalSortRules,_this.portalSortXray,_this.tabAnimation,_this.floatingNavigationBar,_this.autoCheckUpdate,_this.hiddenUpdate,_this.sidebarExpanded,_this.acceptedDisclaimerVersion,_this.minimizeOnExit,_this.menuBarMode,_this.hidden,_this.developerMode,_this.restoreStrategy,_this.showTrayTitle,_this.monochromeTrayIcon,_this.checkCertificate,const DeepCollectionEquality().hash(_this.filters),_this.hideIp,_this.vibration,_this.editorLineWrap,_this.editorFontSize,const DeepCollectionEquality().hash(_this.serviceOrder),const DeepCollectionEquality().hash(_this.disabledServices),const DeepCollectionEquality().hash(_this.tableColumnWidths),const DeepCollectionEquality().hash(_this.subscriptionNotices),const DeepCollectionEquality().hash(_this.ownedSettings),const DeepCollectionEquality().hash(_this.panelSetSettings),_this.appliedHeadersUpdate]);
+ }
+ 
+ @override
+ String toString({ DiagnosticLevel minLevel = DiagnosticLevel.info }) {
+   final _this = this as AppSettingProps;
+-  return 'AppSettingProps(locale: ${_this.locale}, dashboardWidgets: ${_this.dashboardWidgets}, dashboardWidgetsChosen: ${_this.dashboardWidgetsChosen}, onlyStatisticsProxy: ${_this.onlyStatisticsProxy}, showNotificationStopAction: ${_this.showNotificationStopAction}, autoLaunch: ${_this.autoLaunch}, silentLaunch: ${_this.silentLaunch}, autoRun: ${_this.autoRun}, openLogs: ${_this.openLogs}, closeConnections: ${_this.closeConnections}, requestFeed: ${_this.requestFeed}, testUrl: ${_this.testUrl}, delayTestTimeout: ${_this.delayTestTimeout}, tabAnimation: ${_this.tabAnimation}, floatingNavigationBar: ${_this.floatingNavigationBar}, autoCheckUpdate: ${_this.autoCheckUpdate}, hiddenUpdate: ${_this.hiddenUpdate}, sidebarExpanded: ${_this.sidebarExpanded}, acceptedDisclaimerVersion: ${_this.acceptedDisclaimerVersion}, minimizeOnExit: ${_this.minimizeOnExit}, menuBarMode: ${_this.menuBarMode}, hidden: ${_this.hidden}, developerMode: ${_this.developerMode}, restoreStrategy: ${_this.restoreStrategy}, showTrayTitle: ${_this.showTrayTitle}, monochromeTrayIcon: ${_this.monochromeTrayIcon}, checkCertificate: ${_this.checkCertificate}, filters: ${_this.filters}, hideIp: ${_this.hideIp}, vibration: ${_this.vibration}, editorLineWrap: ${_this.editorLineWrap}, editorFontSize: ${_this.editorFontSize}, serviceOrder: ${_this.serviceOrder}, disabledServices: ${_this.disabledServices}, tableColumnWidths: ${_this.tableColumnWidths}, subscriptionNotices: ${_this.subscriptionNotices}, ownedSettings: ${_this.ownedSettings}, panelSetSettings: ${_this.panelSetSettings}, appliedHeadersUpdate: ${_this.appliedHeadersUpdate})';
++  return 'AppSettingProps(locale: ${_this.locale}, dashboardWidgets: ${_this.dashboardWidgets}, dashboardWidgetsChosen: ${_this.dashboardWidgetsChosen}, onlyStatisticsProxy: ${_this.onlyStatisticsProxy}, showNotificationStopAction: ${_this.showNotificationStopAction}, autoLaunch: ${_this.autoLaunch}, silentLaunch: ${_this.silentLaunch}, autoRun: ${_this.autoRun}, openLogs: ${_this.openLogs}, closeConnections: ${_this.closeConnections}, requestFeed: ${_this.requestFeed}, testUrl: ${_this.testUrl}, delayTestTimeout: ${_this.delayTestTimeout}, portalSortRules: ${_this.portalSortRules}, portalSortXray: ${_this.portalSortXray}, tabAnimation: ${_this.tabAnimation}, floatingNavigationBar: ${_this.floatingNavigationBar}, autoCheckUpdate: ${_this.autoCheckUpdate}, hiddenUpdate: ${_this.hiddenUpdate}, sidebarExpanded: ${_this.sidebarExpanded}, acceptedDisclaimerVersion: ${_this.acceptedDisclaimerVersion}, minimizeOnExit: ${_this.minimizeOnExit}, menuBarMode: ${_this.menuBarMode}, hidden: ${_this.hidden}, developerMode: ${_this.developerMode}, restoreStrategy: ${_this.restoreStrategy}, showTrayTitle: ${_this.showTrayTitle}, monochromeTrayIcon: ${_this.monochromeTrayIcon}, checkCertificate: ${_this.checkCertificate}, filters: ${_this.filters}, hideIp: ${_this.hideIp}, vibration: ${_this.vibration}, editorLineWrap: ${_this.editorLineWrap}, editorFontSize: ${_this.editorFontSize}, serviceOrder: ${_this.serviceOrder}, disabledServices: ${_this.disabledServices}, tableColumnWidths: ${_this.tableColumnWidths}, subscriptionNotices: ${_this.subscriptionNotices}, ownedSettings: ${_this.ownedSettings}, panelSetSettings: ${_this.panelSetSettings}, appliedHeadersUpdate: ${_this.appliedHeadersUpdate})';
+ }
+ 
+ 
+@@ -351,7 +353,7 @@ abstract mixin class $AppSettingPropsCopyWith<$Res>  {
+   factory $AppSettingPropsCopyWith(AppSettingProps value, $Res Function(AppSettingProps) _then) = _$AppSettingPropsCopyWithImpl;
+ @useResult
+ $Res call({
+- String? locale,@JsonKey(fromJson: dashboardWidgetsFromJson) List<DashboardWidget> dashboardWidgets,@JsonKey(readValue: _readDashboardWidgetsChosen) bool dashboardWidgetsChosen, bool onlyStatisticsProxy, bool showNotificationStopAction, bool autoLaunch, bool silentLaunch, bool autoRun, bool openLogs, bool closeConnections, RequestFeed requestFeed, String testUrl, int delayTestTimeout,@JsonKey(readValue: _readTabAnimation) TabAnimation tabAnimation, bool floatingNavigationBar, bool autoCheckUpdate, String? hiddenUpdate,@JsonKey(readValue: _readSidebarExpanded) bool sidebarExpanded, int acceptedDisclaimerVersion, bool minimizeOnExit, bool menuBarMode, bool hidden, bool developerMode, RestoreStrategy restoreStrategy, bool showTrayTitle, bool monochromeTrayIcon,@JsonKey(includeFromJson: false, includeToJson: false) bool checkCertificate, List<Filter> filters, bool hideIp, bool vibration, bool editorLineWrap, EditorFontSize editorFontSize, List<String> serviceOrder, List<String> disabledServices, Map<String, Map<String, double>> tableColumnWidths, Map<String, int> subscriptionNotices, Set<String> ownedSettings, Set<String> panelSetSettings, String? appliedHeadersUpdate
++ String? locale,@JsonKey(fromJson: dashboardWidgetsFromJson) List<DashboardWidget> dashboardWidgets,@JsonKey(readValue: _readDashboardWidgetsChosen) bool dashboardWidgetsChosen, bool onlyStatisticsProxy, bool showNotificationStopAction, bool autoLaunch, bool silentLaunch, bool autoRun, bool openLogs, bool closeConnections, RequestFeed requestFeed, String testUrl, int delayTestTimeout, String portalSortRules, String portalSortXray,@JsonKey(readValue: _readTabAnimation) TabAnimation tabAnimation, bool floatingNavigationBar, bool autoCheckUpdate, String? hiddenUpdate,@JsonKey(readValue: _readSidebarExpanded) bool sidebarExpanded, int acceptedDisclaimerVersion, bool minimizeOnExit, bool menuBarMode, bool hidden, bool developerMode, RestoreStrategy restoreStrategy, bool showTrayTitle, bool monochromeTrayIcon,@JsonKey(includeFromJson: false, includeToJson: false) bool checkCertificate, List<Filter> filters, bool hideIp, bool vibration, bool editorLineWrap, EditorFontSize editorFontSize, List<String> serviceOrder, List<String> disabledServices, Map<String, Map<String, double>> tableColumnWidths, Map<String, int> subscriptionNotices, Set<String> ownedSettings, Set<String> panelSetSettings, String? appliedHeadersUpdate
+ });
+ 
+ 
+@@ -368,7 +370,7 @@ class _$AppSettingPropsCopyWithImpl<$Res>
+ 
+ /// Create a copy of AppSettingProps
+ /// with the given fields replaced by the non-null parameter values.
+-@pragma('vm:prefer-inline') @override $Res call({Object? locale = freezed,Object? dashboardWidgets = null,Object? dashboardWidgetsChosen = null,Object? onlyStatisticsProxy = null,Object? showNotificationStopAction = null,Object? autoLaunch = null,Object? silentLaunch = null,Object? autoRun = null,Object? openLogs = null,Object? closeConnections = null,Object? requestFeed = null,Object? testUrl = null,Object? delayTestTimeout = null,Object? tabAnimation = null,Object? floatingNavigationBar = null,Object? autoCheckUpdate = null,Object? hiddenUpdate = freezed,Object? sidebarExpanded = null,Object? acceptedDisclaimerVersion = null,Object? minimizeOnExit = null,Object? menuBarMode = null,Object? hidden = null,Object? developerMode = null,Object? restoreStrategy = null,Object? showTrayTitle = null,Object? monochromeTrayIcon = null,Object? checkCertificate = null,Object? filters = null,Object? hideIp = null,Object? vibration = null,Object? editorLineWrap = null,Object? editorFontSize = null,Object? serviceOrder = null,Object? disabledServices = null,Object? tableColumnWidths = null,Object? subscriptionNotices = null,Object? ownedSettings = null,Object? panelSetSettings = null,Object? appliedHeadersUpdate = freezed,}) {
++@pragma('vm:prefer-inline') @override $Res call({Object? locale = freezed,Object? dashboardWidgets = null,Object? dashboardWidgetsChosen = null,Object? onlyStatisticsProxy = null,Object? showNotificationStopAction = null,Object? autoLaunch = null,Object? silentLaunch = null,Object? autoRun = null,Object? openLogs = null,Object? closeConnections = null,Object? requestFeed = null,Object? testUrl = null,Object? delayTestTimeout = null,Object? portalSortRules = null,Object? portalSortXray = null,Object? tabAnimation = null,Object? floatingNavigationBar = null,Object? autoCheckUpdate = null,Object? hiddenUpdate = freezed,Object? sidebarExpanded = null,Object? acceptedDisclaimerVersion = null,Object? minimizeOnExit = null,Object? menuBarMode = null,Object? hidden = null,Object? developerMode = null,Object? restoreStrategy = null,Object? showTrayTitle = null,Object? monochromeTrayIcon = null,Object? checkCertificate = null,Object? filters = null,Object? hideIp = null,Object? vibration = null,Object? editorLineWrap = null,Object? editorFontSize = null,Object? serviceOrder = null,Object? disabledServices = null,Object? tableColumnWidths = null,Object? subscriptionNotices = null,Object? ownedSettings = null,Object? panelSetSettings = null,Object? appliedHeadersUpdate = freezed,}) {
+   return _then(AppSettingProps(
+ locale: freezed == locale ? _self.locale : locale // ignore: cast_nullable_to_non_nullable
+ as String?,dashboardWidgets: null == dashboardWidgets ? _self.dashboardWidgets : dashboardWidgets // ignore: cast_nullable_to_non_nullable
+@@ -383,7 +385,9 @@ as bool,closeConnections: null == closeConnections ? _self.closeConnections : cl
+ as bool,requestFeed: null == requestFeed ? _self.requestFeed : requestFeed // ignore: cast_nullable_to_non_nullable
+ as RequestFeed,testUrl: null == testUrl ? _self.testUrl : testUrl // ignore: cast_nullable_to_non_nullable
+ as String,delayTestTimeout: null == delayTestTimeout ? _self.delayTestTimeout : delayTestTimeout // ignore: cast_nullable_to_non_nullable
+-as int,tabAnimation: null == tabAnimation ? _self.tabAnimation : tabAnimation // ignore: cast_nullable_to_non_nullable
++as int,portalSortRules: null == portalSortRules ? _self.portalSortRules : portalSortRules // ignore: cast_nullable_to_non_nullable
++as String,portalSortXray: null == portalSortXray ? _self.portalSortXray : portalSortXray // ignore: cast_nullable_to_non_nullable
++as String,tabAnimation: null == tabAnimation ? _self.tabAnimation : tabAnimation // ignore: cast_nullable_to_non_nullable
+ as TabAnimation,floatingNavigationBar: null == floatingNavigationBar ? _self.floatingNavigationBar : floatingNavigationBar // ignore: cast_nullable_to_non_nullable
+ as bool,autoCheckUpdate: null == autoCheckUpdate ? _self.autoCheckUpdate : autoCheckUpdate // ignore: cast_nullable_to_non_nullable
+ as bool,hiddenUpdate: freezed == hiddenUpdate ? _self.hiddenUpdate : hiddenUpdate // ignore: cast_nullable_to_non_nullable
+@@ -494,10 +498,10 @@ return $default(_that);case _:
+ /// }
+ /// ```
+ 
+-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen)  bool dashboardWidgetsChosen,  bool onlyStatisticsProxy,  bool showNotificationStopAction,  bool autoLaunch,  bool silentLaunch,  bool autoRun,  bool openLogs,  bool closeConnections,  RequestFeed requestFeed,  String testUrl,  int delayTestTimeout, @JsonKey(readValue: _readTabAnimation)  TabAnimation tabAnimation,  bool floatingNavigationBar,  bool autoCheckUpdate,  String? hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded)  bool sidebarExpanded,  int acceptedDisclaimerVersion,  bool minimizeOnExit,  bool menuBarMode,  bool hidden,  bool developerMode,  RestoreStrategy restoreStrategy,  bool showTrayTitle,  bool monochromeTrayIcon, @JsonKey(includeFromJson: false, includeToJson: false)  bool checkCertificate,  List<Filter> filters,  bool hideIp,  bool vibration,  bool editorLineWrap,  EditorFontSize editorFontSize,  List<String> serviceOrder,  List<String> disabledServices,  Map<String, Map<String, double>> tableColumnWidths,  Map<String, int> subscriptionNotices,  Set<String> ownedSettings,  Set<String> panelSetSettings,  String? appliedHeadersUpdate)?  $default,{required TResult orElse(),}) {final _that = this;
++@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen)  bool dashboardWidgetsChosen,  bool onlyStatisticsProxy,  bool showNotificationStopAction,  bool autoLaunch,  bool silentLaunch,  bool autoRun,  bool openLogs,  bool closeConnections,  RequestFeed requestFeed,  String testUrl,  int delayTestTimeout,  String portalSortRules,  String portalSortXray, @JsonKey(readValue: _readTabAnimation)  TabAnimation tabAnimation,  bool floatingNavigationBar,  bool autoCheckUpdate,  String? hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded)  bool sidebarExpanded,  int acceptedDisclaimerVersion,  bool minimizeOnExit,  bool menuBarMode,  bool hidden,  bool developerMode,  RestoreStrategy restoreStrategy,  bool showTrayTitle,  bool monochromeTrayIcon, @JsonKey(includeFromJson: false, includeToJson: false)  bool checkCertificate,  List<Filter> filters,  bool hideIp,  bool vibration,  bool editorLineWrap,  EditorFontSize editorFontSize,  List<String> serviceOrder,  List<String> disabledServices,  Map<String, Map<String, double>> tableColumnWidths,  Map<String, int> subscriptionNotices,  Set<String> ownedSettings,  Set<String> panelSetSettings,  String? appliedHeadersUpdate)?  $default,{required TResult orElse(),}) {final _that = this;
+ switch (_that) {
+ case _AppSettingProps() when $default != null:
+-return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen,_that.onlyStatisticsProxy,_that.showNotificationStopAction,_that.autoLaunch,_that.silentLaunch,_that.autoRun,_that.openLogs,_that.closeConnections,_that.requestFeed,_that.testUrl,_that.delayTestTimeout,_that.tabAnimation,_that.floatingNavigationBar,_that.autoCheckUpdate,_that.hiddenUpdate,_that.sidebarExpanded,_that.acceptedDisclaimerVersion,_that.minimizeOnExit,_that.menuBarMode,_that.hidden,_that.developerMode,_that.restoreStrategy,_that.showTrayTitle,_that.monochromeTrayIcon,_that.checkCertificate,_that.filters,_that.hideIp,_that.vibration,_that.editorLineWrap,_that.editorFontSize,_that.serviceOrder,_that.disabledServices,_that.tableColumnWidths,_that.subscriptionNotices,_that.ownedSettings,_that.panelSetSettings,_that.appliedHeadersUpdate);case _:
++return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen,_that.onlyStatisticsProxy,_that.showNotificationStopAction,_that.autoLaunch,_that.silentLaunch,_that.autoRun,_that.openLogs,_that.closeConnections,_that.requestFeed,_that.testUrl,_that.delayTestTimeout,_that.portalSortRules,_that.portalSortXray,_that.tabAnimation,_that.floatingNavigationBar,_that.autoCheckUpdate,_that.hiddenUpdate,_that.sidebarExpanded,_that.acceptedDisclaimerVersion,_that.minimizeOnExit,_that.menuBarMode,_that.hidden,_that.developerMode,_that.restoreStrategy,_that.showTrayTitle,_that.monochromeTrayIcon,_that.checkCertificate,_that.filters,_that.hideIp,_that.vibration,_that.editorLineWrap,_that.editorFontSize,_that.serviceOrder,_that.disabledServices,_that.tableColumnWidths,_that.subscriptionNotices,_that.ownedSettings,_that.panelSetSettings,_that.appliedHeadersUpdate);case _:
+   return orElse();
+ 
+ }
+@@ -515,10 +519,10 @@ return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen
+ /// }
+ /// ```
+ 
+-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen)  bool dashboardWidgetsChosen,  bool onlyStatisticsProxy,  bool showNotificationStopAction,  bool autoLaunch,  bool silentLaunch,  bool autoRun,  bool openLogs,  bool closeConnections,  RequestFeed requestFeed,  String testUrl,  int delayTestTimeout, @JsonKey(readValue: _readTabAnimation)  TabAnimation tabAnimation,  bool floatingNavigationBar,  bool autoCheckUpdate,  String? hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded)  bool sidebarExpanded,  int acceptedDisclaimerVersion,  bool minimizeOnExit,  bool menuBarMode,  bool hidden,  bool developerMode,  RestoreStrategy restoreStrategy,  bool showTrayTitle,  bool monochromeTrayIcon, @JsonKey(includeFromJson: false, includeToJson: false)  bool checkCertificate,  List<Filter> filters,  bool hideIp,  bool vibration,  bool editorLineWrap,  EditorFontSize editorFontSize,  List<String> serviceOrder,  List<String> disabledServices,  Map<String, Map<String, double>> tableColumnWidths,  Map<String, int> subscriptionNotices,  Set<String> ownedSettings,  Set<String> panelSetSettings,  String? appliedHeadersUpdate)  $default,) {final _that = this;
++@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen)  bool dashboardWidgetsChosen,  bool onlyStatisticsProxy,  bool showNotificationStopAction,  bool autoLaunch,  bool silentLaunch,  bool autoRun,  bool openLogs,  bool closeConnections,  RequestFeed requestFeed,  String testUrl,  int delayTestTimeout,  String portalSortRules,  String portalSortXray, @JsonKey(readValue: _readTabAnimation)  TabAnimation tabAnimation,  bool floatingNavigationBar,  bool autoCheckUpdate,  String? hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded)  bool sidebarExpanded,  int acceptedDisclaimerVersion,  bool minimizeOnExit,  bool menuBarMode,  bool hidden,  bool developerMode,  RestoreStrategy restoreStrategy,  bool showTrayTitle,  bool monochromeTrayIcon, @JsonKey(includeFromJson: false, includeToJson: false)  bool checkCertificate,  List<Filter> filters,  bool hideIp,  bool vibration,  bool editorLineWrap,  EditorFontSize editorFontSize,  List<String> serviceOrder,  List<String> disabledServices,  Map<String, Map<String, double>> tableColumnWidths,  Map<String, int> subscriptionNotices,  Set<String> ownedSettings,  Set<String> panelSetSettings,  String? appliedHeadersUpdate)  $default,) {final _that = this;
+ switch (_that) {
+ case _AppSettingProps():
+-return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen,_that.onlyStatisticsProxy,_that.showNotificationStopAction,_that.autoLaunch,_that.silentLaunch,_that.autoRun,_that.openLogs,_that.closeConnections,_that.requestFeed,_that.testUrl,_that.delayTestTimeout,_that.tabAnimation,_that.floatingNavigationBar,_that.autoCheckUpdate,_that.hiddenUpdate,_that.sidebarExpanded,_that.acceptedDisclaimerVersion,_that.minimizeOnExit,_that.menuBarMode,_that.hidden,_that.developerMode,_that.restoreStrategy,_that.showTrayTitle,_that.monochromeTrayIcon,_that.checkCertificate,_that.filters,_that.hideIp,_that.vibration,_that.editorLineWrap,_that.editorFontSize,_that.serviceOrder,_that.disabledServices,_that.tableColumnWidths,_that.subscriptionNotices,_that.ownedSettings,_that.panelSetSettings,_that.appliedHeadersUpdate);case _:
++return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen,_that.onlyStatisticsProxy,_that.showNotificationStopAction,_that.autoLaunch,_that.silentLaunch,_that.autoRun,_that.openLogs,_that.closeConnections,_that.requestFeed,_that.testUrl,_that.delayTestTimeout,_that.portalSortRules,_that.portalSortXray,_that.tabAnimation,_that.floatingNavigationBar,_that.autoCheckUpdate,_that.hiddenUpdate,_that.sidebarExpanded,_that.acceptedDisclaimerVersion,_that.minimizeOnExit,_that.menuBarMode,_that.hidden,_that.developerMode,_that.restoreStrategy,_that.showTrayTitle,_that.monochromeTrayIcon,_that.checkCertificate,_that.filters,_that.hideIp,_that.vibration,_that.editorLineWrap,_that.editorFontSize,_that.serviceOrder,_that.disabledServices,_that.tableColumnWidths,_that.subscriptionNotices,_that.ownedSettings,_that.panelSetSettings,_that.appliedHeadersUpdate);case _:
+   throw StateError('Unexpected subclass');
+ 
+ }
+@@ -535,10 +539,10 @@ return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen
+ /// }
+ /// ```
+ 
+-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen)  bool dashboardWidgetsChosen,  bool onlyStatisticsProxy,  bool showNotificationStopAction,  bool autoLaunch,  bool silentLaunch,  bool autoRun,  bool openLogs,  bool closeConnections,  RequestFeed requestFeed,  String testUrl,  int delayTestTimeout, @JsonKey(readValue: _readTabAnimation)  TabAnimation tabAnimation,  bool floatingNavigationBar,  bool autoCheckUpdate,  String? hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded)  bool sidebarExpanded,  int acceptedDisclaimerVersion,  bool minimizeOnExit,  bool menuBarMode,  bool hidden,  bool developerMode,  RestoreStrategy restoreStrategy,  bool showTrayTitle,  bool monochromeTrayIcon, @JsonKey(includeFromJson: false, includeToJson: false)  bool checkCertificate,  List<Filter> filters,  bool hideIp,  bool vibration,  bool editorLineWrap,  EditorFontSize editorFontSize,  List<String> serviceOrder,  List<String> disabledServices,  Map<String, Map<String, double>> tableColumnWidths,  Map<String, int> subscriptionNotices,  Set<String> ownedSettings,  Set<String> panelSetSettings,  String? appliedHeadersUpdate)?  $default,) {final _that = this;
++@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen)  bool dashboardWidgetsChosen,  bool onlyStatisticsProxy,  bool showNotificationStopAction,  bool autoLaunch,  bool silentLaunch,  bool autoRun,  bool openLogs,  bool closeConnections,  RequestFeed requestFeed,  String testUrl,  int delayTestTimeout,  String portalSortRules,  String portalSortXray, @JsonKey(readValue: _readTabAnimation)  TabAnimation tabAnimation,  bool floatingNavigationBar,  bool autoCheckUpdate,  String? hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded)  bool sidebarExpanded,  int acceptedDisclaimerVersion,  bool minimizeOnExit,  bool menuBarMode,  bool hidden,  bool developerMode,  RestoreStrategy restoreStrategy,  bool showTrayTitle,  bool monochromeTrayIcon, @JsonKey(includeFromJson: false, includeToJson: false)  bool checkCertificate,  List<Filter> filters,  bool hideIp,  bool vibration,  bool editorLineWrap,  EditorFontSize editorFontSize,  List<String> serviceOrder,  List<String> disabledServices,  Map<String, Map<String, double>> tableColumnWidths,  Map<String, int> subscriptionNotices,  Set<String> ownedSettings,  Set<String> panelSetSettings,  String? appliedHeadersUpdate)?  $default,) {final _that = this;
+ switch (_that) {
+ case _AppSettingProps() when $default != null:
+-return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen,_that.onlyStatisticsProxy,_that.showNotificationStopAction,_that.autoLaunch,_that.silentLaunch,_that.autoRun,_that.openLogs,_that.closeConnections,_that.requestFeed,_that.testUrl,_that.delayTestTimeout,_that.tabAnimation,_that.floatingNavigationBar,_that.autoCheckUpdate,_that.hiddenUpdate,_that.sidebarExpanded,_that.acceptedDisclaimerVersion,_that.minimizeOnExit,_that.menuBarMode,_that.hidden,_that.developerMode,_that.restoreStrategy,_that.showTrayTitle,_that.monochromeTrayIcon,_that.checkCertificate,_that.filters,_that.hideIp,_that.vibration,_that.editorLineWrap,_that.editorFontSize,_that.serviceOrder,_that.disabledServices,_that.tableColumnWidths,_that.subscriptionNotices,_that.ownedSettings,_that.panelSetSettings,_that.appliedHeadersUpdate);case _:
++return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen,_that.onlyStatisticsProxy,_that.showNotificationStopAction,_that.autoLaunch,_that.silentLaunch,_that.autoRun,_that.openLogs,_that.closeConnections,_that.requestFeed,_that.testUrl,_that.delayTestTimeout,_that.portalSortRules,_that.portalSortXray,_that.tabAnimation,_that.floatingNavigationBar,_that.autoCheckUpdate,_that.hiddenUpdate,_that.sidebarExpanded,_that.acceptedDisclaimerVersion,_that.minimizeOnExit,_that.menuBarMode,_that.hidden,_that.developerMode,_that.restoreStrategy,_that.showTrayTitle,_that.monochromeTrayIcon,_that.checkCertificate,_that.filters,_that.hideIp,_that.vibration,_that.editorLineWrap,_that.editorFontSize,_that.serviceOrder,_that.disabledServices,_that.tableColumnWidths,_that.subscriptionNotices,_that.ownedSettings,_that.panelSetSettings,_that.appliedHeadersUpdate);case _:
+   return null;
+ 
+ }
+@@ -550,7 +554,7 @@ return $default(_that.locale,_that.dashboardWidgets,_that.dashboardWidgetsChosen
+ @JsonSerializable()
+ 
+ class _AppSettingProps with DiagnosticableTreeMixin implements AppSettingProps {
+-  const _AppSettingProps({this.locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets = defaultDashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen) this.dashboardWidgetsChosen = false, this.onlyStatisticsProxy = false, this.showNotificationStopAction = true, this.autoLaunch = false, this.silentLaunch = false, this.autoRun = false, this.openLogs = false, this.closeConnections = true, this.requestFeed = RequestFeed.live, this.testUrl = defaultTestUrl, this.delayTestTimeout = defaultDelayTestTimeout, @JsonKey(readValue: _readTabAnimation) this.tabAnimation = TabAnimation.fade, this.floatingNavigationBar = true, this.autoCheckUpdate = false, this.hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded) this.sidebarExpanded = true, this.acceptedDisclaimerVersion = 0, this.minimizeOnExit = false, this.menuBarMode = false, this.hidden = false, this.developerMode = false, this.restoreStrategy = RestoreStrategy.compatible, this.showTrayTitle = true, this.monochromeTrayIcon = true, @JsonKey(includeFromJson: false, includeToJson: false) this.checkCertificate = true,  List<Filter> filters = defaultFilters, this.hideIp = false, this.vibration = true, this.editorLineWrap = false, this.editorFontSize = EditorFontSize.standard,  List<String> serviceOrder = const [],  List<String> disabledServices = const [],  Map<String, Map<String, double>> tableColumnWidths = const {},  Map<String, int> subscriptionNotices = const {},  Set<String> ownedSettings = const {},  Set<String> panelSetSettings = const {}, this.appliedHeadersUpdate}): _dashboardWidgets = dashboardWidgets,_filters = filters,_serviceOrder = serviceOrder,_disabledServices = disabledServices,_tableColumnWidths = tableColumnWidths,_subscriptionNotices = subscriptionNotices,_ownedSettings = ownedSettings,_panelSetSettings = panelSetSettings;
++  const _AppSettingProps({this.locale, @JsonKey(fromJson: dashboardWidgetsFromJson)  List<DashboardWidget> dashboardWidgets = defaultDashboardWidgets, @JsonKey(readValue: _readDashboardWidgetsChosen) this.dashboardWidgetsChosen = false, this.onlyStatisticsProxy = false, this.showNotificationStopAction = true, this.autoLaunch = false, this.silentLaunch = false, this.autoRun = false, this.openLogs = false, this.closeConnections = true, this.requestFeed = RequestFeed.live, this.testUrl = defaultTestUrl, this.delayTestTimeout = defaultDelayTestTimeout, this.portalSortRules = '', this.portalSortXray = '', @JsonKey(readValue: _readTabAnimation) this.tabAnimation = TabAnimation.fade, this.floatingNavigationBar = true, this.autoCheckUpdate = false, this.hiddenUpdate, @JsonKey(readValue: _readSidebarExpanded) this.sidebarExpanded = true, this.acceptedDisclaimerVersion = 0, this.minimizeOnExit = false, this.menuBarMode = false, this.hidden = false, this.developerMode = false, this.restoreStrategy = RestoreStrategy.compatible, this.showTrayTitle = true, this.monochromeTrayIcon = true, @JsonKey(includeFromJson: false, includeToJson: false) this.checkCertificate = true,  List<Filter> filters = defaultFilters, this.hideIp = false, this.vibration = true, this.editorLineWrap = false, this.editorFontSize = EditorFontSize.standard,  List<String> serviceOrder = const [],  List<String> disabledServices = const [],  Map<String, Map<String, double>> tableColumnWidths = const {},  Map<String, int> subscriptionNotices = const {},  Set<String> ownedSettings = const {},  Set<String> panelSetSettings = const {}, this.appliedHeadersUpdate}): _dashboardWidgets = dashboardWidgets,_filters = filters,_serviceOrder = serviceOrder,_disabledServices = disabledServices,_tableColumnWidths = tableColumnWidths,_subscriptionNotices = subscriptionNotices,_ownedSettings = ownedSettings,_panelSetSettings = panelSetSettings;
+   factory _AppSettingProps.fromJson(Map<String, dynamic> json) => _$AppSettingPropsFromJson(json);
+ 
+ @override final  String? locale;
+@@ -573,6 +577,10 @@ class _AppSettingProps with DiagnosticableTreeMixin implements AppSettingProps {
+ @override@JsonKey() final  RequestFeed requestFeed;
+ @override@JsonKey() final  String testUrl;
+ @override@JsonKey() final  int delayTestTimeout;
++/// The server-list order in each mode, stored separately: the rules list and the simple
++/// portal show different builds of one subscription and are ordered for different reasons.
++@override@JsonKey() final  String portalSortRules;
++@override@JsonKey() final  String portalSortXray;
+ @override@JsonKey(readValue: _readTabAnimation) final  TabAnimation tabAnimation;
+ @override@JsonKey() final  bool floatingNavigationBar;
+ @override@JsonKey() final  bool autoCheckUpdate;
+@@ -660,23 +668,23 @@ Map<String, dynamic> toJson() {
+ void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+     properties
+     ..add(DiagnosticsProperty('type', 'AppSettingProps'))
+-    ..add(DiagnosticsProperty('locale', locale))..add(DiagnosticsProperty('dashboardWidgets', dashboardWidgets))..add(DiagnosticsProperty('dashboardWidgetsChosen', dashboardWidgetsChosen))..add(DiagnosticsProperty('onlyStatisticsProxy', onlyStatisticsProxy))..add(DiagnosticsProperty('showNotificationStopAction', showNotificationStopAction))..add(DiagnosticsProperty('autoLaunch', autoLaunch))..add(DiagnosticsProperty('silentLaunch', silentLaunch))..add(DiagnosticsProperty('autoRun', autoRun))..add(DiagnosticsProperty('openLogs', openLogs))..add(DiagnosticsProperty('closeConnections', closeConnections))..add(DiagnosticsProperty('requestFeed', requestFeed))..add(DiagnosticsProperty('testUrl', testUrl))..add(DiagnosticsProperty('delayTestTimeout', delayTestTimeout))..add(DiagnosticsProperty('tabAnimation', tabAnimation))..add(DiagnosticsProperty('floatingNavigationBar', floatingNavigationBar))..add(DiagnosticsProperty('autoCheckUpdate', autoCheckUpdate))..add(DiagnosticsProperty('hiddenUpdate', hiddenUpdate))..add(DiagnosticsProperty('sidebarExpanded', sidebarExpanded))..add(DiagnosticsProperty('acceptedDisclaimerVersion', acceptedDisclaimerVersion))..add(DiagnosticsProperty('minimizeOnExit', minimizeOnExit))..add(DiagnosticsProperty('menuBarMode', menuBarMode))..add(DiagnosticsProperty('hidden', hidden))..add(DiagnosticsProperty('developerMode', developerMode))..add(DiagnosticsProperty('restoreStrategy', restoreStrategy))..add(DiagnosticsProperty('showTrayTitle', showTrayTitle))..add(DiagnosticsProperty('monochromeTrayIcon', monochromeTrayIcon))..add(DiagnosticsProperty('checkCertificate', checkCertificate))..add(DiagnosticsProperty('filters', filters))..add(DiagnosticsProperty('hideIp', hideIp))..add(DiagnosticsProperty('vibration', vibration))..add(DiagnosticsProperty('editorLineWrap', editorLineWrap))..add(DiagnosticsProperty('editorFontSize', editorFontSize))..add(DiagnosticsProperty('serviceOrder', serviceOrder))..add(DiagnosticsProperty('disabledServices', disabledServices))..add(DiagnosticsProperty('tableColumnWidths', tableColumnWidths))..add(DiagnosticsProperty('subscriptionNotices', subscriptionNotices))..add(DiagnosticsProperty('ownedSettings', ownedSettings))..add(DiagnosticsProperty('panelSetSettings', panelSetSettings))..add(DiagnosticsProperty('appliedHeadersUpdate', appliedHeadersUpdate));
++    ..add(DiagnosticsProperty('locale', locale))..add(DiagnosticsProperty('dashboardWidgets', dashboardWidgets))..add(DiagnosticsProperty('dashboardWidgetsChosen', dashboardWidgetsChosen))..add(DiagnosticsProperty('onlyStatisticsProxy', onlyStatisticsProxy))..add(DiagnosticsProperty('showNotificationStopAction', showNotificationStopAction))..add(DiagnosticsProperty('autoLaunch', autoLaunch))..add(DiagnosticsProperty('silentLaunch', silentLaunch))..add(DiagnosticsProperty('autoRun', autoRun))..add(DiagnosticsProperty('openLogs', openLogs))..add(DiagnosticsProperty('closeConnections', closeConnections))..add(DiagnosticsProperty('requestFeed', requestFeed))..add(DiagnosticsProperty('testUrl', testUrl))..add(DiagnosticsProperty('delayTestTimeout', delayTestTimeout))..add(DiagnosticsProperty('portalSortRules', portalSortRules))..add(DiagnosticsProperty('portalSortXray', portalSortXray))..add(DiagnosticsProperty('tabAnimation', tabAnimation))..add(DiagnosticsProperty('floatingNavigationBar', floatingNavigationBar))..add(DiagnosticsProperty('autoCheckUpdate', autoCheckUpdate))..add(DiagnosticsProperty('hiddenUpdate', hiddenUpdate))..add(DiagnosticsProperty('sidebarExpanded', sidebarExpanded))..add(DiagnosticsProperty('acceptedDisclaimerVersion', acceptedDisclaimerVersion))..add(DiagnosticsProperty('minimizeOnExit', minimizeOnExit))..add(DiagnosticsProperty('menuBarMode', menuBarMode))..add(DiagnosticsProperty('hidden', hidden))..add(DiagnosticsProperty('developerMode', developerMode))..add(DiagnosticsProperty('restoreStrategy', restoreStrategy))..add(DiagnosticsProperty('showTrayTitle', showTrayTitle))..add(DiagnosticsProperty('monochromeTrayIcon', monochromeTrayIcon))..add(DiagnosticsProperty('checkCertificate', checkCertificate))..add(DiagnosticsProperty('filters', filters))..add(DiagnosticsProperty('hideIp', hideIp))..add(DiagnosticsProperty('vibration', vibration))..add(DiagnosticsProperty('editorLineWrap', editorLineWrap))..add(DiagnosticsProperty('editorFontSize', editorFontSize))..add(DiagnosticsProperty('serviceOrder', serviceOrder))..add(DiagnosticsProperty('disabledServices', disabledServices))..add(DiagnosticsProperty('tableColumnWidths', tableColumnWidths))..add(DiagnosticsProperty('subscriptionNotices', subscriptionNotices))..add(DiagnosticsProperty('ownedSettings', ownedSettings))..add(DiagnosticsProperty('panelSetSettings', panelSetSettings))..add(DiagnosticsProperty('appliedHeadersUpdate', appliedHeadersUpdate));
+ }
+ 
+ @override
+ bool operator ==(Object other) {
+-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _AppSettingProps&&(identical(other.locale, locale) || other.locale == locale)&&const DeepCollectionEquality().equals(other.dashboardWidgets, _dashboardWidgets)&&(identical(other.dashboardWidgetsChosen, dashboardWidgetsChosen) || other.dashboardWidgetsChosen == dashboardWidgetsChosen)&&(identical(other.onlyStatisticsProxy, onlyStatisticsProxy) || other.onlyStatisticsProxy == onlyStatisticsProxy)&&(identical(other.showNotificationStopAction, showNotificationStopAction) || other.showNotificationStopAction == showNotificationStopAction)&&(identical(other.autoLaunch, autoLaunch) || other.autoLaunch == autoLaunch)&&(identical(other.silentLaunch, silentLaunch) || other.silentLaunch == silentLaunch)&&(identical(other.autoRun, autoRun) || other.autoRun == autoRun)&&(identical(other.openLogs, openLogs) || other.openLogs == openLogs)&&(identical(other.closeConnections, closeConnections) || other.closeConnections == closeConnections)&&(identical(other.requestFeed, requestFeed) || other.requestFeed == requestFeed)&&(identical(other.testUrl, testUrl) || other.testUrl == testUrl)&&(identical(other.delayTestTimeout, delayTestTimeout) || other.delayTestTimeout == delayTestTimeout)&&(identical(other.tabAnimation, tabAnimation) || other.tabAnimation == tabAnimation)&&(identical(other.floatingNavigationBar, floatingNavigationBar) || other.floatingNavigationBar == floatingNavigationBar)&&(identical(other.autoCheckUpdate, autoCheckUpdate) || other.autoCheckUpdate == autoCheckUpdate)&&(identical(other.hiddenUpdate, hiddenUpdate) || other.hiddenUpdate == hiddenUpdate)&&(identical(other.sidebarExpanded, sidebarExpanded) || other.sidebarExpanded == sidebarExpanded)&&(identical(other.acceptedDisclaimerVersion, acceptedDisclaimerVersion) || other.acceptedDisclaimerVersion == acceptedDisclaimerVersion)&&(identical(other.minimizeOnExit, minimizeOnExit) || other.minimizeOnExit == minimizeOnExit)&&(identical(other.menuBarMode, menuBarMode) || other.menuBarMode == menuBarMode)&&(identical(other.hidden, hidden) || other.hidden == hidden)&&(identical(other.developerMode, developerMode) || other.developerMode == developerMode)&&(identical(other.restoreStrategy, restoreStrategy) || other.restoreStrategy == restoreStrategy)&&(identical(other.showTrayTitle, showTrayTitle) || other.showTrayTitle == showTrayTitle)&&(identical(other.monochromeTrayIcon, monochromeTrayIcon) || other.monochromeTrayIcon == monochromeTrayIcon)&&(identical(other.checkCertificate, checkCertificate) || other.checkCertificate == checkCertificate)&&const DeepCollectionEquality().equals(other.filters, _filters)&&(identical(other.hideIp, hideIp) || other.hideIp == hideIp)&&(identical(other.vibration, vibration) || other.vibration == vibration)&&(identical(other.editorLineWrap, editorLineWrap) || other.editorLineWrap == editorLineWrap)&&(identical(other.editorFontSize, editorFontSize) || other.editorFontSize == editorFontSize)&&const DeepCollectionEquality().equals(other.serviceOrder, _serviceOrder)&&const DeepCollectionEquality().equals(other.disabledServices, _disabledServices)&&const DeepCollectionEquality().equals(other.tableColumnWidths, _tableColumnWidths)&&const DeepCollectionEquality().equals(other.subscriptionNotices, _subscriptionNotices)&&const DeepCollectionEquality().equals(other.ownedSettings, _ownedSettings)&&const DeepCollectionEquality().equals(other.panelSetSettings, _panelSetSettings)&&(identical(other.appliedHeadersUpdate, appliedHeadersUpdate) || other.appliedHeadersUpdate == appliedHeadersUpdate));
++    return identical(this, other) || (other.runtimeType == runtimeType&&other is _AppSettingProps&&(identical(other.locale, locale) || other.locale == locale)&&const DeepCollectionEquality().equals(other.dashboardWidgets, _dashboardWidgets)&&(identical(other.dashboardWidgetsChosen, dashboardWidgetsChosen) || other.dashboardWidgetsChosen == dashboardWidgetsChosen)&&(identical(other.onlyStatisticsProxy, onlyStatisticsProxy) || other.onlyStatisticsProxy == onlyStatisticsProxy)&&(identical(other.showNotificationStopAction, showNotificationStopAction) || other.showNotificationStopAction == showNotificationStopAction)&&(identical(other.autoLaunch, autoLaunch) || other.autoLaunch == autoLaunch)&&(identical(other.silentLaunch, silentLaunch) || other.silentLaunch == silentLaunch)&&(identical(other.autoRun, autoRun) || other.autoRun == autoRun)&&(identical(other.openLogs, openLogs) || other.openLogs == openLogs)&&(identical(other.closeConnections, closeConnections) || other.closeConnections == closeConnections)&&(identical(other.requestFeed, requestFeed) || other.requestFeed == requestFeed)&&(identical(other.testUrl, testUrl) || other.testUrl == testUrl)&&(identical(other.delayTestTimeout, delayTestTimeout) || other.delayTestTimeout == delayTestTimeout)&&(identical(other.portalSortRules, portalSortRules) || other.portalSortRules == portalSortRules)&&(identical(other.portalSortXray, portalSortXray) || other.portalSortXray == portalSortXray)&&(identical(other.tabAnimation, tabAnimation) || other.tabAnimation == tabAnimation)&&(identical(other.floatingNavigationBar, floatingNavigationBar) || other.floatingNavigationBar == floatingNavigationBar)&&(identical(other.autoCheckUpdate, autoCheckUpdate) || other.autoCheckUpdate == autoCheckUpdate)&&(identical(other.hiddenUpdate, hiddenUpdate) || other.hiddenUpdate == hiddenUpdate)&&(identical(other.sidebarExpanded, sidebarExpanded) || other.sidebarExpanded == sidebarExpanded)&&(identical(other.acceptedDisclaimerVersion, acceptedDisclaimerVersion) || other.acceptedDisclaimerVersion == acceptedDisclaimerVersion)&&(identical(other.minimizeOnExit, minimizeOnExit) || other.minimizeOnExit == minimizeOnExit)&&(identical(other.menuBarMode, menuBarMode) || other.menuBarMode == menuBarMode)&&(identical(other.hidden, hidden) || other.hidden == hidden)&&(identical(other.developerMode, developerMode) || other.developerMode == developerMode)&&(identical(other.restoreStrategy, restoreStrategy) || other.restoreStrategy == restoreStrategy)&&(identical(other.showTrayTitle, showTrayTitle) || other.showTrayTitle == showTrayTitle)&&(identical(other.monochromeTrayIcon, monochromeTrayIcon) || other.monochromeTrayIcon == monochromeTrayIcon)&&(identical(other.checkCertificate, checkCertificate) || other.checkCertificate == checkCertificate)&&const DeepCollectionEquality().equals(other.filters, _filters)&&(identical(other.hideIp, hideIp) || other.hideIp == hideIp)&&(identical(other.vibration, vibration) || other.vibration == vibration)&&(identical(other.editorLineWrap, editorLineWrap) || other.editorLineWrap == editorLineWrap)&&(identical(other.editorFontSize, editorFontSize) || other.editorFontSize == editorFontSize)&&const DeepCollectionEquality().equals(other.serviceOrder, _serviceOrder)&&const DeepCollectionEquality().equals(other.disabledServices, _disabledServices)&&const DeepCollectionEquality().equals(other.tableColumnWidths, _tableColumnWidths)&&const DeepCollectionEquality().equals(other.subscriptionNotices, _subscriptionNotices)&&const DeepCollectionEquality().equals(other.ownedSettings, _ownedSettings)&&const DeepCollectionEquality().equals(other.panelSetSettings, _panelSetSettings)&&(identical(other.appliedHeadersUpdate, appliedHeadersUpdate) || other.appliedHeadersUpdate == appliedHeadersUpdate));
+ }
+ 
+ @JsonKey(includeFromJson: false, includeToJson: false)
+ @override
+ int get hashCode {
+-    return Object.hashAll([runtimeType,locale,const DeepCollectionEquality().hash(_dashboardWidgets),dashboardWidgetsChosen,onlyStatisticsProxy,showNotificationStopAction,autoLaunch,silentLaunch,autoRun,openLogs,closeConnections,requestFeed,testUrl,delayTestTimeout,tabAnimation,floatingNavigationBar,autoCheckUpdate,hiddenUpdate,sidebarExpanded,acceptedDisclaimerVersion,minimizeOnExit,menuBarMode,hidden,developerMode,restoreStrategy,showTrayTitle,monochromeTrayIcon,checkCertificate,const DeepCollectionEquality().hash(_filters),hideIp,vibration,editorLineWrap,editorFontSize,const DeepCollectionEquality().hash(_serviceOrder),const DeepCollectionEquality().hash(_disabledServices),const DeepCollectionEquality().hash(_tableColumnWidths),const DeepCollectionEquality().hash(_subscriptionNotices),const DeepCollectionEquality().hash(_ownedSettings),const DeepCollectionEquality().hash(_panelSetSettings),appliedHeadersUpdate]);
++    return Object.hashAll([runtimeType,locale,const DeepCollectionEquality().hash(_dashboardWidgets),dashboardWidgetsChosen,onlyStatisticsProxy,showNotificationStopAction,autoLaunch,silentLaunch,autoRun,openLogs,closeConnections,requestFeed,testUrl,delayTestTimeout,portalSortRules,portalSortXray,tabAnimation,floatingNavigationBar,autoCheckUpdate,hiddenUpdate,sidebarExpanded,acceptedDisclaimerVersion,minimizeOnExit,menuBarMode,hidden,developerMode,restoreStrategy,showTrayTitle,monochromeTrayIcon,checkCertificate,const DeepCollectionEquality().hash(_filters),hideIp,vibration,editorLineWrap,editorFontSize,const DeepCollectionEquality().hash(_serviceOrder),const DeepCollectionEquality().hash(_disabledServices),const DeepCollectionEquality().hash(_tableColumnWidths),const DeepCollectionEquality().hash(_subscriptionNotices),const DeepCollectionEquality().hash(_ownedSettings),const DeepCollectionEquality().hash(_panelSetSettings),appliedHeadersUpdate]);
+ }
+ 
+ @override
+ String toString({ DiagnosticLevel minLevel = DiagnosticLevel.info }) {
+-    return 'AppSettingProps(locale: $locale, dashboardWidgets: $dashboardWidgets, dashboardWidgetsChosen: $dashboardWidgetsChosen, onlyStatisticsProxy: $onlyStatisticsProxy, showNotificationStopAction: $showNotificationStopAction, autoLaunch: $autoLaunch, silentLaunch: $silentLaunch, autoRun: $autoRun, openLogs: $openLogs, closeConnections: $closeConnections, requestFeed: $requestFeed, testUrl: $testUrl, delayTestTimeout: $delayTestTimeout, tabAnimation: $tabAnimation, floatingNavigationBar: $floatingNavigationBar, autoCheckUpdate: $autoCheckUpdate, hiddenUpdate: $hiddenUpdate, sidebarExpanded: $sidebarExpanded, acceptedDisclaimerVersion: $acceptedDisclaimerVersion, minimizeOnExit: $minimizeOnExit, menuBarMode: $menuBarMode, hidden: $hidden, developerMode: $developerMode, restoreStrategy: $restoreStrategy, showTrayTitle: $showTrayTitle, monochromeTrayIcon: $monochromeTrayIcon, checkCertificate: $checkCertificate, filters: $filters, hideIp: $hideIp, vibration: $vibration, editorLineWrap: $editorLineWrap, editorFontSize: $editorFontSize, serviceOrder: $serviceOrder, disabledServices: $disabledServices, tableColumnWidths: $tableColumnWidths, subscriptionNotices: $subscriptionNotices, ownedSettings: $ownedSettings, panelSetSettings: $panelSetSettings, appliedHeadersUpdate: $appliedHeadersUpdate)';
++    return 'AppSettingProps(locale: $locale, dashboardWidgets: $dashboardWidgets, dashboardWidgetsChosen: $dashboardWidgetsChosen, onlyStatisticsProxy: $onlyStatisticsProxy, showNotificationStopAction: $showNotificationStopAction, autoLaunch: $autoLaunch, silentLaunch: $silentLaunch, autoRun: $autoRun, openLogs: $openLogs, closeConnections: $closeConnections, requestFeed: $requestFeed, testUrl: $testUrl, delayTestTimeout: $delayTestTimeout, portalSortRules: $portalSortRules, portalSortXray: $portalSortXray, tabAnimation: $tabAnimation, floatingNavigationBar: $floatingNavigationBar, autoCheckUpdate: $autoCheckUpdate, hiddenUpdate: $hiddenUpdate, sidebarExpanded: $sidebarExpanded, acceptedDisclaimerVersion: $acceptedDisclaimerVersion, minimizeOnExit: $minimizeOnExit, menuBarMode: $menuBarMode, hidden: $hidden, developerMode: $developerMode, restoreStrategy: $restoreStrategy, showTrayTitle: $showTrayTitle, monochromeTrayIcon: $monochromeTrayIcon, checkCertificate: $checkCertificate, filters: $filters, hideIp: $hideIp, vibration: $vibration, editorLineWrap: $editorLineWrap, editorFontSize: $editorFontSize, serviceOrder: $serviceOrder, disabledServices: $disabledServices, tableColumnWidths: $tableColumnWidths, subscriptionNotices: $subscriptionNotices, ownedSettings: $ownedSettings, panelSetSettings: $panelSetSettings, appliedHeadersUpdate: $appliedHeadersUpdate)';
+ }
+ 
+ 
+@@ -687,7 +695,7 @@ abstract mixin class _$AppSettingPropsCopyWith<$Res> implements $AppSettingProps
+   factory _$AppSettingPropsCopyWith(_AppSettingProps value, $Res Function(_AppSettingProps) _then) = __$AppSettingPropsCopyWithImpl;
+ @override @useResult
+ $Res call({
+- String? locale,@JsonKey(fromJson: dashboardWidgetsFromJson) List<DashboardWidget> dashboardWidgets,@JsonKey(readValue: _readDashboardWidgetsChosen) bool dashboardWidgetsChosen, bool onlyStatisticsProxy, bool showNotificationStopAction, bool autoLaunch, bool silentLaunch, bool autoRun, bool openLogs, bool closeConnections, RequestFeed requestFeed, String testUrl, int delayTestTimeout,@JsonKey(readValue: _readTabAnimation) TabAnimation tabAnimation, bool floatingNavigationBar, bool autoCheckUpdate, String? hiddenUpdate,@JsonKey(readValue: _readSidebarExpanded) bool sidebarExpanded, int acceptedDisclaimerVersion, bool minimizeOnExit, bool menuBarMode, bool hidden, bool developerMode, RestoreStrategy restoreStrategy, bool showTrayTitle, bool monochromeTrayIcon,@JsonKey(includeFromJson: false, includeToJson: false) bool checkCertificate, List<Filter> filters, bool hideIp, bool vibration, bool editorLineWrap, EditorFontSize editorFontSize, List<String> serviceOrder, List<String> disabledServices, Map<String, Map<String, double>> tableColumnWidths, Map<String, int> subscriptionNotices, Set<String> ownedSettings, Set<String> panelSetSettings, String? appliedHeadersUpdate
++ String? locale,@JsonKey(fromJson: dashboardWidgetsFromJson) List<DashboardWidget> dashboardWidgets,@JsonKey(readValue: _readDashboardWidgetsChosen) bool dashboardWidgetsChosen, bool onlyStatisticsProxy, bool showNotificationStopAction, bool autoLaunch, bool silentLaunch, bool autoRun, bool openLogs, bool closeConnections, RequestFeed requestFeed, String testUrl, int delayTestTimeout, String portalSortRules, String portalSortXray,@JsonKey(readValue: _readTabAnimation) TabAnimation tabAnimation, bool floatingNavigationBar, bool autoCheckUpdate, String? hiddenUpdate,@JsonKey(readValue: _readSidebarExpanded) bool sidebarExpanded, int acceptedDisclaimerVersion, bool minimizeOnExit, bool menuBarMode, bool hidden, bool developerMode, RestoreStrategy restoreStrategy, bool showTrayTitle, bool monochromeTrayIcon,@JsonKey(includeFromJson: false, includeToJson: false) bool checkCertificate, List<Filter> filters, bool hideIp, bool vibration, bool editorLineWrap, EditorFontSize editorFontSize, List<String> serviceOrder, List<String> disabledServices, Map<String, Map<String, double>> tableColumnWidths, Map<String, int> subscriptionNotices, Set<String> ownedSettings, Set<String> panelSetSettings, String? appliedHeadersUpdate
+ });
+ 
+ 
+@@ -704,7 +712,7 @@ class __$AppSettingPropsCopyWithImpl<$Res>
+ 
+ /// Create a copy of AppSettingProps
+ /// with the given fields replaced by the non-null parameter values.
+-@override @pragma('vm:prefer-inline') $Res call({Object? locale = freezed,Object? dashboardWidgets = null,Object? dashboardWidgetsChosen = null,Object? onlyStatisticsProxy = null,Object? showNotificationStopAction = null,Object? autoLaunch = null,Object? silentLaunch = null,Object? autoRun = null,Object? openLogs = null,Object? closeConnections = null,Object? requestFeed = null,Object? testUrl = null,Object? delayTestTimeout = null,Object? tabAnimation = null,Object? floatingNavigationBar = null,Object? autoCheckUpdate = null,Object? hiddenUpdate = freezed,Object? sidebarExpanded = null,Object? acceptedDisclaimerVersion = null,Object? minimizeOnExit = null,Object? menuBarMode = null,Object? hidden = null,Object? developerMode = null,Object? restoreStrategy = null,Object? showTrayTitle = null,Object? monochromeTrayIcon = null,Object? checkCertificate = null,Object? filters = null,Object? hideIp = null,Object? vibration = null,Object? editorLineWrap = null,Object? editorFontSize = null,Object? serviceOrder = null,Object? disabledServices = null,Object? tableColumnWidths = null,Object? subscriptionNotices = null,Object? ownedSettings = null,Object? panelSetSettings = null,Object? appliedHeadersUpdate = freezed,}) {
++@override @pragma('vm:prefer-inline') $Res call({Object? locale = freezed,Object? dashboardWidgets = null,Object? dashboardWidgetsChosen = null,Object? onlyStatisticsProxy = null,Object? showNotificationStopAction = null,Object? autoLaunch = null,Object? silentLaunch = null,Object? autoRun = null,Object? openLogs = null,Object? closeConnections = null,Object? requestFeed = null,Object? testUrl = null,Object? delayTestTimeout = null,Object? portalSortRules = null,Object? portalSortXray = null,Object? tabAnimation = null,Object? floatingNavigationBar = null,Object? autoCheckUpdate = null,Object? hiddenUpdate = freezed,Object? sidebarExpanded = null,Object? acceptedDisclaimerVersion = null,Object? minimizeOnExit = null,Object? menuBarMode = null,Object? hidden = null,Object? developerMode = null,Object? restoreStrategy = null,Object? showTrayTitle = null,Object? monochromeTrayIcon = null,Object? checkCertificate = null,Object? filters = null,Object? hideIp = null,Object? vibration = null,Object? editorLineWrap = null,Object? editorFontSize = null,Object? serviceOrder = null,Object? disabledServices = null,Object? tableColumnWidths = null,Object? subscriptionNotices = null,Object? ownedSettings = null,Object? panelSetSettings = null,Object? appliedHeadersUpdate = freezed,}) {
+   return _then(_AppSettingProps(
+ locale: freezed == locale ? _self.locale : locale // ignore: cast_nullable_to_non_nullable
+ as String?,dashboardWidgets: null == dashboardWidgets ? _self._dashboardWidgets : dashboardWidgets // ignore: cast_nullable_to_non_nullable
+@@ -719,7 +727,9 @@ as bool,closeConnections: null == closeConnections ? _self.closeConnections : cl
+ as bool,requestFeed: null == requestFeed ? _self.requestFeed : requestFeed // ignore: cast_nullable_to_non_nullable
+ as RequestFeed,testUrl: null == testUrl ? _self.testUrl : testUrl // ignore: cast_nullable_to_non_nullable
+ as String,delayTestTimeout: null == delayTestTimeout ? _self.delayTestTimeout : delayTestTimeout // ignore: cast_nullable_to_non_nullable
+-as int,tabAnimation: null == tabAnimation ? _self.tabAnimation : tabAnimation // ignore: cast_nullable_to_non_nullable
++as int,portalSortRules: null == portalSortRules ? _self.portalSortRules : portalSortRules // ignore: cast_nullable_to_non_nullable
++as String,portalSortXray: null == portalSortXray ? _self.portalSortXray : portalSortXray // ignore: cast_nullable_to_non_nullable
++as String,tabAnimation: null == tabAnimation ? _self.tabAnimation : tabAnimation // ignore: cast_nullable_to_non_nullable
+ as TabAnimation,floatingNavigationBar: null == floatingNavigationBar ? _self.floatingNavigationBar : floatingNavigationBar // ignore: cast_nullable_to_non_nullable
+ as bool,autoCheckUpdate: null == autoCheckUpdate ? _self.autoCheckUpdate : autoCheckUpdate // ignore: cast_nullable_to_non_nullable
+ as bool,hiddenUpdate: freezed == hiddenUpdate ? _self.hiddenUpdate : hiddenUpdate // ignore: cast_nullable_to_non_nullable
+diff --git a/lib/models/generated/config.g.dart b/lib/models/generated/config.g.dart
+index 48fb15bc3a2be0bed8fb2b6b27754068fe8dc4a2..4bedc0029725289a1ee296ac985b3fcb788552aa 100644
+--- a/lib/models/generated/config.g.dart
++++ b/lib/models/generated/config.g.dart
+@@ -38,6 +38,8 @@ _AppSettingProps _$AppSettingPropsFromJson(
+   testUrl: json['testUrl'] as String? ?? defaultTestUrl,
+   delayTestTimeout:
+       (json['delayTestTimeout'] as num?)?.toInt() ?? defaultDelayTestTimeout,
++  portalSortRules: json['portalSortRules'] as String? ?? '',
++  portalSortXray: json['portalSortXray'] as String? ?? '',
+   tabAnimation:
+       $enumDecodeNullable(
+         _$TabAnimationEnumMap,
+@@ -126,6 +128,8 @@ Map<String, dynamic> _$AppSettingPropsToJson(_AppSettingProps instance) =>
+       'requestFeed': _$RequestFeedEnumMap[instance.requestFeed]!,
+       'testUrl': instance.testUrl,
+       'delayTestTimeout': instance.delayTestTimeout,
++      'portalSortRules': instance.portalSortRules,
++      'portalSortXray': instance.portalSortXray,
+       'tabAnimation': _$TabAnimationEnumMap[instance.tabAnimation]!,
+       'floatingNavigationBar': instance.floatingNavigationBar,
+       'autoCheckUpdate': instance.autoCheckUpdate,
+diff --git a/lib/models/profile.dart b/lib/models/profile.dart
+index f5605a0a36b7190fca054f9e31ad936d4bc37cb7..fa864ffafee70a5ace355b471437bca49305f11d 100644
+--- a/lib/models/profile.dart
++++ b/lib/models/profile.dart
+@@ -1,8 +1,14 @@
++import 'dart:async';
++import 'dart:convert';
+ import 'dart:io';
+ import 'dart:typed_data';
+ 
+ import 'package:dio/dio.dart';
+ import 'package:fl_clash/common/common.dart';
++import 'package:fl_clash/core/subscription_availability.dart';
++import 'package:fl_clash/core/panel_api.dart';
++import 'package:fl_clash/core/proxy_endpoints.dart';
++import 'package:fl_clash/core/subscription_formats.dart';
+ import 'package:fl_clash/enum/enum.dart';
+ import 'package:freezed_annotation/freezed_annotation.dart';
+ 
+@@ -155,7 +161,13 @@ extension ProfilesExt on List<Profile> {
+ }
+ 
+ extension ProfileExtension on Profile {
+-  String get realLabel => label.takeFirstValid([defaultLabel]);
++  /// The name a person reads: the panel's title without its status sentence.
++  ///
++  /// Panels pack `portal-connect Статус Active 163.76 GiB | 0` into the title header, and
++  /// that becomes the profile's label; showing it whole made the header and the card look
++  /// broken. One getter cleans it for every screen at once.
++  String get realLabel =>
++      label.takeFirstValid([headers.displayName, defaultLabel]);
+ 
+   String get defaultLabel => url.webUri?.host ?? id.toString();
+ 
+@@ -288,9 +300,29 @@ extension ProfileExtension on Profile {
+     bool Function()? isCurrent,
+   ) async {
+     final response = await fetch(url, timeout: timeout, headers: headers);
++    // The same link answers differently per client, so the second format is asked for
++    // separately. A failure here must not fail the profile: the panel may simply not
++    // serve one, and that is a red light, not an error.
++    final xray = await _fetchXrayBody(url, fetch, timeout);
+     final disposition = response.headers.value('content-disposition');
+     final userinfo = response.headers.value('subscription-userinfo');
+     final providerHeaders = providerHeadersOf(response.headers.map);
++    // The row can only show traffic and an expiry if the panel sends them; this line says
++    // which of the two shapes arrived, since a missing header and a mis-parsed one look the
++    // same from the screen.
++    commonPrint.log(
++      'sub headers: userinfo=[$userinfo] provider=${providerHeaders.entries.map((e) => '${e.key}=${e.value.length > 40 ? '${e.value.substring(0, 40)}…' : e.value}').join(', ')}',
++    );
++    for (final entry in providerHeaders.entries) {
++      if (!entry.value.startsWith('base64:')) continue;
++      final decoded = _decodeProviderBase64(entry.value);
++      if (decoded != null) {
++        commonPrint.log('sub header ${entry.key} decoded=[$decoded]');
++      }
++    }
++    // The panel names its servers behind its own API, so the same link is asked once for the
++    // names. A failure here is normal (a panel without that endpoint) and changes nothing.
++    unawaited(_probePanelNames(url));
+     return copyWith(
+       label: label.takeFirstValid([
+         ProviderHeaders(providerHeaders).title,
+@@ -303,8 +335,9 @@ extension ProfileExtension on Profile {
+           ProviderHeaders(providerHeaders).updateInterval ?? autoUpdateDuration,
+     ).saveFile(
+       await decompressDownload(response.data ?? Uint8List(0)),
+-      validate: validate,
++      validate: _guardEmptyBody(validate),
+       isCurrent: isCurrent,
++      xrayBody: xray,
+     );
+   }
+ 
+@@ -313,8 +346,15 @@ extension ProfileExtension on Profile {
+     Uint8List bytes, {
+     required ValidateConfig validate,
+     bool Function()? isCurrent,
++    Uint8List? xrayBody,
+   }) async {
+     final target = await _getFile(false);
++    // The engine never reveals addresses, so remember them while the body is here: this is
++    // what lets the server row time a TCP handshake later, with no engine involved.
++    final endpoints = parseProxyEndpoints(
++      utf8.decode(bytes, allowMalformed: true),
++    );
++    unawaited(saveProxyEndpoints(target.path, endpoints));
+     final staging = File('${target.path}.$uniqueId.tmp');
+     try {
+       await staging.safeWriteAsBytes(bytes);
+@@ -326,12 +366,131 @@ extension ProfileExtension on Profile {
+         throw const ProfileUpdateSupersededException();
+       }
+       staging.renameSync(target.path);
++      // Only a body that parsed replaces the one on disk. A panel that answers 200 with an
++      // error page, or a list that decodes to nothing, must never cost the owner a working
++      // subscription: the lights go dim, the old file stays.
++      await _saveXraySibling(target, xrayBody);
+     } catch (_) {
+       await staging.safeDelete();
+       rethrow;
+     }
+     return copyWith(lastUpdateDate: DateTime.now());
+   }
++
++  /// Whether [body] is something the second core could actually run.
++  ///
++  /// Two shapes count: a list of share links, and a ready config the panel wrote itself
++  /// (Happ and Incy are served the latter). Anything else — an error page, a broken list —
++  /// must not replace what is already on disk.
++  static bool _usableXrayBody(Uint8List? body) {
++    if (body == null || body.isEmpty) return false;
++    final text = utf8.decode(body, allowMalformed: true);
++    if (decodeClientConfig(text) != null) return true;
++    return parseShareLinks(text).isNotEmpty;
++  }
++
++
++  /// Asks the panel's own API for the names it gives its servers, and logs what arrives.
++  ///
++  /// This is how the panel's own clients do it: same link, client identified by the user
++  /// agent, JSON back. A failure changes nothing — the app still has its nodes.
++  static Future<PanelSubscription?> _probePanelNames(String subscriptionUrl) async {
++    try {
++      final api = PanelApi(
++        subscriptionUrl: subscriptionUrl,
++        get: (url, headers) async {
++          final response = await request.getTextResponseForUrl(url, headers: headers);
++          return response.data;
++        },
++      );
++      final panel = await api.fetch();
++      if (panel == null) {
++        commonPrint.log('panel resolve: no json at ${api.endpoint}');
++        return null;
++      }
++      commonPrint.log(
++        'panel resolve: ${panel.servers.length} servers, '
++        'first=${panel.servers.take(3).map((s) => s.label).join(' | ')}',
++      );
++      return panel;
++    } catch (error) {
++      commonPrint.log('panel resolve failed: ${compactError(error)}');
++      return null;
++    }
++  }
++  /// The second core's body lives beside the profile, named after it.
++  ///
++  /// It is a sibling rather than a field in the profile record because it is a large
++  /// blob that only the Xray path reads; the record stays small enough to keep in memory.
++  Future<void> _saveXraySibling(File profileFile, Uint8List? body) async {
++    final sibling = File('${profileFile.path}.xray.txt');
++    if (!_usableXrayBody(body)) {
++      // Nothing usable arrived. The old body is kept: a subscription that worked five
++      // minutes ago beats an empty file, and the lights already say what is missing.
++      return;
++    }
++    await sibling.safeWriteAsBytes(body!);
++  }
++
++  /// True when this profile has a body for the second core, without reading it whole.
++  Future<bool> hasXrayFormat() async {
++    final file = File(await _xraySiblingPath);
++    return await file.exists() && await file.length() > 20;
++  }
++
++  /// The second core's body as text, or null when the panel never served one.
++  Future<String?> readXrayFormat() async {
++    final file = File(await _xraySiblingPath);
++    if (!await file.exists()) return null;
++    return file.readAsString();
++  }
++
++  Future<String> get _xraySiblingPath async =>
++      '${await appPath.getProfilePath(id.toString())}.xray.txt';
++  /// Refuses to hand an empty download to the validator, which would otherwise accept a
++  /// file that has nothing in it and replace a working config with a blank one.
++  static ValidateConfig _guardEmptyBody(ValidateConfig validate) {
++    return (path, key) async {
++      final file = File(path);
++      if (!await file.exists() || await file.length() < 16) {
++        return 'empty response';
++      }
++      return validate(path, key);
++    };
++  }
++
++  /// Asks the same link for the second core's format.
++  ///
++  /// Which client name a panel accepts is its decision, and it answers 502 to the rest, so
++  /// the candidates are asked in turn until one returns nodes. The first success wins and
++  /// the rest are not tried, which keeps a working panel to a single extra request.
++  Future<Uint8List?> _fetchXrayBody(
++    String url,
++    SubscriptionFetch fetch,
++    Duration timeout,
++  ) async {
++    for (final agent in xrayUserAgentCandidates) {
++      try {
++        final response = await fetch(
++          url,
++          timeout: timeout,
++          headers: {'User-Agent': agent},
++        );
++        final body = response.data;
++        final text = body == null ? '' : utf8.decode(body, allowMalformed: true);
++        final format = detectFormat(text);
++        commonPrint.log(
++          'xray probe [$agent]: http=${response.statusCode} '
++          'bytes=${body?.length ?? 0} format=${format?.name ?? 'none'} '
++          'head=${text.length > 120 ? text.substring(0, 120).replaceAll('\n', ' ') : text}',
++        );
++        if (body != null && format == SubscriptionFormat.xray) return body;
++      } catch (error) {
++        commonPrint.log('xray probe [$agent]: ${compactError(error)}');
++      }
++    }
++    return null;
++  }
+ }
+ 
+ typedef SubscriptionFetch =
+@@ -367,3 +526,13 @@ Map<String, String> providerHeadersOf(Map<String, List<String>> headers) {
+           key.toLowerCase(): value.first,
+   };
+ }
++
++/// The panel base64-encodes some headers so they survive any transport; this decodes one.
++String? _decodeProviderBase64(String value) {
++  try {
++    final payload = value.substring('base64:'.length).trim();
++    return utf8.decode(base64Decode(base64Url.normalize(payload)));
++  } catch (_) {
++    return null;
++  }
++}
+diff --git a/lib/models/provider_headers.dart b/lib/models/provider_headers.dart
+index ab1a2a780afb5a61e629e21cd8d5f4f95161f728..76acfd1f49ac41e43284fa708984b5072999e6ec 100644
+--- a/lib/models/provider_headers.dart
++++ b/lib/models/provider_headers.dart
+@@ -28,6 +28,34 @@ class ProviderHeaders {
+ 
+   String? get title => _plainOrBase64(text('profile-title'));
+ 
++  /// The traffic the panel prints in its own title, e.g. `163.76 GiB`.
++  ///
++  /// There is no `subscription-userinfo` header from this panel, so the number in the title
++  /// is the only usage it ever states. Returned as written; the caller adds the total.
++  String? get trafficText {
++    final raw = title;
++    if (raw == null) return null;
++    final match = RegExp(r'([\d.,]+\s*(?:[KMGT]i?B|[KMGT]B)\b)').firstMatch(raw);
++    return match?.group(1)?.trim();
++  }
++
++  /// The title without the panel's own status sentence.
++  ///
++  /// Panels pack `portal-connect Статус Active 163.70 GiB | 0` into profile-title, and that
++  /// whole line is not a name. The part before the first marker is.
++  String? get displayName {
++    final raw = title?.trim();
++    if (raw == null || raw.isEmpty) return null;
++    const markers = [' Статус', ' Статус:', ' Status', ' ·', ' |'];
++    var cut = raw.length;
++    for (final marker in markers) {
++      final index = raw.indexOf(marker);
++      if (index > 0 && index < cut) cut = index;
++    }
++    final name = raw.substring(0, cut).trim();
++    return name.isEmpty ? raw : name;
++  }
++
+   String? get webPageUrl {
+     final url = text('profile-web-page-url');
+     return url != null && url.isUrl ? url : null;
+diff --git a/lib/providers/state/profile.dart b/lib/providers/state/profile.dart
+index 1b93c8f9ee9f9a61d77e97f7991f5f91d9f337f6..d90e2ee4b7634c72ceddaf15daa50f6cc614bd6d 100644
+--- a/lib/providers/state/profile.dart
++++ b/lib/providers/state/profile.dart
+@@ -133,12 +133,16 @@ bool widgetEditingDenied(Ref ref) {
+ }
+ 
+ /// The outbound modes the current panel leaves on offer.
++///
++/// Portal Connect has no user-facing "direct": the only way to get untunnelled
++/// traffic is to switch the portal off, so the mode is never offered here even
++/// though the engine still understands it.
+ @riverpod
+ List<Mode> availableModes(Ref ref) {
+   final globalAllowed = ref.watch(globalModeAllowedProvider);
+   return [
+     for (final mode in Mode.values)
+-      if (globalAllowed || mode != Mode.global) mode,
++      if (mode != Mode.direct && (globalAllowed || mode != Mode.global)) mode,
+   ];
+ }
+ 
+diff --git a/lib/views/profiles/add.dart b/lib/views/profiles/add.dart
+index 8c88c54ea28ce76d6ca84045f25df683d7660dd1..22597cc2ef92f00da6f24376652c4274d8e1ae71 100644
+--- a/lib/views/profiles/add.dart
++++ b/lib/views/profiles/add.dart
+@@ -68,21 +68,21 @@ class AddProfileMenu extends ConsumerWidget {
+       case null:
+         return;
+       case [final single]:
+-        unawaited(
+-          profilesAction.addProfileFromLink(
+-            single.url,
+-            label: single.label,
+-            ageSecretKey: single.ageSecretKey,
+-            sendDeviceHeaders: single.sendDeviceHeaders,
+-          ),
++        await profilesAction.addProfileFromLink(
++          single.url,
++          label: single.label,
++          ageSecretKey: single.ageSecretKey,
++          sendDeviceHeaders: single.sendDeviceHeaders,
+         );
+       default:
+-        unawaited(
+-          profilesAction.addProfilesFromLinks([
+-            for (final item in res) item.url,
+-          ]),
+-        );
++        await profilesAction.addProfilesFromLinks([
++          for (final item in res) item.url,
++        ]);
+     }
++    // The subscription is in: land on the working screen, not on the list of
++    // subscriptions, and leave nothing on the stack that Back would exit from.
++    if (!context.mounted) return;
++    Navigator.of(context).popUntil((route) => route.isFirst);
+   }
+ 
+   Future<void> _toSendFromPhone(WidgetRef ref) async {
+diff --git a/lib/views/profiles/profiles.dart b/lib/views/profiles/profiles.dart
+index c17d108ea8ca88031bee989d31413904cb13540e..9b4da251a5061109d056cf005ce55bdf8f8ea4d5 100644
+--- a/lib/views/profiles/profiles.dart
++++ b/lib/views/profiles/profiles.dart
+@@ -17,13 +17,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ 
+ import 'add.dart';
+ import 'edit.dart';
++import 'subscription_facts.dart';
++import 'subscription_lights.dart';
+ import 'preview.dart';
+ 
+ const _infoGap = 4.0;
+ 
++/// Tall enough for the name and both facts, since every subscription row carries three
++/// lines by design; a two-line height clipped the expiry.
+ double get _profileItemHeight {
+   final measure = globalState.measure;
+   return measure.textHeight(AppTextStyle.headline) +
++      _infoGap +
++      measure.textHeight(AppTextStyle.footnote) +
+       _infoGap +
+       measure.textHeight(AppTextStyle.footnote) +
+       2 * listRowVerticalPadding;
+@@ -327,20 +333,27 @@ class ProfileItem extends ConsumerWidget {
+   SubscriptionInfo? get _subscriptionInfo =>
+       profile.type == ProfileType.url ? profile.subscriptionInfo : null;
+ 
+-  String _subtitle(BuildContext context) {
+-    final info = _subscriptionInfo;
+-    if (info != null && info.usage != null) {
+-      final used = info.upload + info.download;
+-      return '${used.traffic.show} / ${info.total.traffic.show}';
++  /// Three lines, always the same three: what it is, how much is used, until when.
++  /// A panel that sends no numbers still gets the shape — with dashes, never a missing line.
++  List<String> _subtitle(BuildContext context) {
++    if (_subscriptionInfo == null) {
++      final appLocalizations = context.appLocalizations;
++      return [
++        switch (profile.type) {
++          ProfileType.url => appLocalizations.profileTypeSubscription,
++          ProfileType.file => appLocalizations.profileTypeFile,
++          ProfileType.custom => appLocalizations.profileTypeCustom,
++        },
++      ];
+     }
+-    final appLocalizations = context.appLocalizations;
+-    return switch (profile.type) {
+-      ProfileType.url => appLocalizations.profileTypeSubscription,
+-      ProfileType.file => appLocalizations.profileTypeFile,
+-      ProfileType.custom => appLocalizations.profileTypeCustom,
+-    };
++    final facts = SubscriptionFacts.of(profile);
++    final l10n = context.appLocalizations;
++    return [l10n.trafficLine(facts.traffic), l10n.expiresLine(facts.expiry)];
+   }
+ 
++  /// ✅ while the plan is alive, ❌ once it is not, ⏳ when the panel gave no date.
++  String _statusMark() => SubscriptionFacts.of(profile).mark;
++
+   Widget _buildTrailing(BuildContext context, {required bool isUpdating}) {
+     return AnimatedSwitcher(
+       duration: context.motionDuration(commonDuration),
+@@ -463,14 +476,10 @@ class ProfileItem extends ConsumerWidget {
+                 _handlePreview(context);
+               },
+             ),
+-            if (isUrl)
+-              CommonPopupMenuItem(
+-                glyph: AppGlyphs.copy,
+-                label: appLocalizations.copyLink,
+-                onPressed: () {
+-                  _handleCopyLink(context);
+-                },
+-              ),
++            // The QR is how a subscription moves to another device without the link ever
++            // being readable on screen: it stays for subscriptions. Copying the link as
++            // text and exporting the file are gone — those hand out a credential in the
++            // clear. A hand-built profile keeps both, since its content is the owner's own.
+             if (isUrl)
+               CommonPopupMenuItem(
+                 glyph: AppGlyphs.qrCode,
+@@ -482,14 +491,23 @@ class ProfileItem extends ConsumerWidget {
+                     message: appLocalizations.shareQrcodeTip,
+                   );
+                 },
++              )
++            else ...[
++              CommonPopupMenuItem(
++                glyph: AppGlyphs.copy,
++                label: appLocalizations.copyLink,
++                onPressed: () {
++                  _handleCopyLink(context);
++                },
+               ),
+-            CommonPopupMenuItem(
+-              glyph: AppGlyphs.export,
+-              label: appLocalizations.exportFile,
+-              onPressed: () {
+-                _handleExportFile(context);
+-              },
+-            ),
++              CommonPopupMenuItem(
++                glyph: AppGlyphs.export,
++                label: appLocalizations.exportFile,
++                onPressed: () {
++                  _handleExportFile(context);
++                },
++              ),
++            ],
+           ],
+         ),
+       CommonPopupMenuItem(
+@@ -506,7 +524,6 @@ class ProfileItem extends ConsumerWidget {
+   @override
+   Widget build(BuildContext context, WidgetRef ref) {
+     final isUpdating = ref.watch(isUpdatingProvider(profile.updatingKey));
+-    final subscriptionInfo = _subscriptionInfo;
+     final isSelected = profile.id == groupValue;
+     return ContextMenuRegion(
+       menuItems: isUpdating ? null : _menuItems(context, ref),
+@@ -525,6 +542,12 @@ class ProfileItem extends ConsumerWidget {
+             mainAxisSize: MainAxisSize.min,
+             spacing: 8,
+             children: [
++              // Which formats this link actually offers, before the timestamp: the lights
++              // answer "can this subscription run on both cores" at a glance.
++              if (profile.type == ProfileType.url) ...[
++                SubscriptionFormatsLights(profile: profile),
++                const SizedBox(width: 2),
++              ],
+               if (profile.type == ProfileType.custom)
+                 _GroupsCountChip(profileId: profile.id)
+               else
+@@ -534,8 +557,8 @@ class ProfileItem extends ConsumerWidget {
+           ),
+           title: _ProfileCardTitle(
+             profile: profile,
+-            expire: subscriptionInfo?.expireDate,
+-            subtitle: _subtitle(context),
++            statusMark: _statusMark(),
++            lines: _subtitle(context),
+           ),
+         ),
+       ),
+@@ -546,32 +569,44 @@ class ProfileItem extends ConsumerWidget {
+ class _ProfileCardTitle extends StatelessWidget {
+   const _ProfileCardTitle({
+     required this.profile,
+-    required this.expire,
+-    required this.subtitle,
++    required this.statusMark,
++    required this.lines,
+   });
+ 
+   final Profile profile;
+-  final DateTime? expire;
+-  final String subtitle;
++  final String statusMark;
++  final List<String> lines;
+ 
+   @override
+   Widget build(BuildContext context) {
++    final style = AppTextStyle.footnote.of(context).toLighter;
+     return Column(
+       mainAxisSize: MainAxisSize.min,
+       crossAxisAlignment: CrossAxisAlignment.start,
+       children: [
+-        ChipTitle(
+-          title: profile.realLabel,
+-          expire: expire,
+-          style: AppTextStyle.headline.of(context),
+-        ),
+-        const SizedBox(height: _infoGap),
+-        Text(
+-          subtitle,
+-          style: AppTextStyle.footnote.of(context).toLighter,
+-          maxLines: 1,
+-          overflow: TextOverflow.ellipsis,
++        Row(
++          mainAxisSize: MainAxisSize.min,
++          children: [
++            Flexible(
++              child: Text(
++                profile.headers.displayName ?? profile.realLabel,
++                style: AppTextStyle.headline.of(context),
++                maxLines: 1,
++                overflow: TextOverflow.ellipsis,
++              ),
++            ),
++            // The state belongs to the name, not to a column of its own: one glance at the
++            // first line answers "is this subscription alive".
++            if (statusMark.isNotEmpty) ...[
++              const SizedBox(width: 6),
++              Text(statusMark, style: style),
++            ],
++          ],
+         ),
++        for (final line in lines) ...[
++          const SizedBox(height: _infoGap),
++          Text(line, style: style, maxLines: 1, overflow: TextOverflow.ellipsis),
++        ],
+       ],
+     );
+   }
+diff --git a/lib/views/profiles/subscription_facts.dart b/lib/views/profiles/subscription_facts.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..caeba579a5dea00970debafa672d9103f2c0a87f
+--- /dev/null
++++ b/lib/views/profiles/subscription_facts.dart
+@@ -0,0 +1,46 @@
++import 'package:fl_clash/common/common.dart';
++import 'package:fl_clash/models/common.dart';
++import 'package:fl_clash/models/profile.dart';
++import 'package:fl_clash/models/provider_headers.dart';
++
++/// The two facts every subscription shows, in one place.
++///
++/// The list and the working screen must say the same thing, and a panel that sends no usage
++/// must still produce the same shape — a dash, never a missing line.
++class SubscriptionFacts {
++  const SubscriptionFacts._(this.traffic, this.expiry, this.mark);
++
++  final String traffic;
++  final String expiry;
++  final String mark;
++
++  static SubscriptionFacts of(Profile profile) {
++    final info = profile.subscriptionInfo;
++    final used = (info?.upload ?? 0) + (info?.download ?? 0);
++    final total = info?.total ?? 0;
++    final spendable = info != null && (used > 0 || total > 0);
++    // The panel states usage only in its own title for this account; that text stands in
++    // when there is no usage header. The total is unknown there, shown as unlimited.
++    final stated = profile.headers.trafficText;
++    final traffic = spendable
++        ? '${used.traffic.show} / ${total > 0 ? total.traffic.show : '♾️'}'
++        : stated != null
++            ? '$stated / ♾️'
++            : '— / —';
++    final expire = info?.expireDate;
++    final mark = expire == null
++        ? '⏳'
++        : expire.isAfter(DateTime.now())
++            ? '✅'
++            : '❌';
++    return SubscriptionFacts._(traffic, expire == null ? '—' : _dayMonthYear(expire), mark);
++  }
++
++  /// Words for the two facts live in the ARB files, not here: a hardcoded Russian label
++  /// spilled into the English and Chinese interface.
++}
++
++/// 25.12.2026 — the shape the owner reads at a glance, without a locale library.
++String _dayMonthYear(DateTime date) =>
++    '${date.day.toString().padLeft(2, '0')}.'
++    '${date.month.toString().padLeft(2, '0')}.${date.year}';
+diff --git a/lib/views/profiles/subscription_lights.dart b/lib/views/profiles/subscription_lights.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..d1e5ed199e44b8f4da6d37aa24407c07d6dc71f1
+--- /dev/null
++++ b/lib/views/profiles/subscription_lights.dart
+@@ -0,0 +1,140 @@
++import 'dart:async';
++
++import 'package:fl_clash/enum/enum.dart';
++import 'package:fl_clash/models/profile.dart';
++import 'package:material_ui/material_ui.dart';
++
++/// The two lights on a subscription row.
++///
++/// A panel decides what to serve per client, so one link can carry the engine's YAML, the
++/// second core's node list, both, or neither. Each light is a fact: green when the format
++/// was downloaded and parsed, dim when this link does not offer it.
++class SubscriptionFormatsLights extends StatefulWidget {
++  const SubscriptionFormatsLights({super.key, required this.profile});
++
++  final Profile profile;
++
++  @override
++  State<SubscriptionFormatsLights> createState() =>
++      _SubscriptionFormatsLightsState();
++}
++
++class _SubscriptionFormatsLightsState extends State<SubscriptionFormatsLights> {
++  bool _mihomo = false;
++  bool _xray = false;
++  bool _loaded = false;
++
++  /// The engine's format is the profile file itself; a save only lands when it parsed.
++  Future<bool> _hasEngineFormat() async {
++    try {
++      final file = await widget.profile.file;
++      return await file.exists() && await file.length() > 32;
++    } catch (_) {
++      return false;
++    }
++  }
++
++  @override
++  void initState() {
++    super.initState();
++    unawaited(_load());
++  }
++
++  @override
++  void didUpdateWidget(SubscriptionFormatsLights oldWidget) {
++    super.didUpdateWidget(oldWidget);
++    if (oldWidget.profile.lastUpdateDate != widget.profile.lastUpdateDate) {
++      unawaited(_load());
++    }
++  }
++
++  Future<void> _load() async {
++    final results = await Future.wait([
++      widget.profile.hasXrayFormat(),
++      _hasEngineFormat(),
++    ]);
++    if (!mounted) return;
++    setState(() {
++      _xray = results[0];
++      _mihomo = results[1];
++      _loaded = true;
++    });
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    if (widget.profile.type != ProfileType.url) return const SizedBox.shrink();
++    final theme = Theme.of(context);
++    return Row(
++      mainAxisSize: MainAxisSize.min,
++      children: [
++        _Light(
++          on: _mihomo,
++          label: 'M',
++          tooltip: _mihomo
++              ? 'Mihomo / призрак: формат есть'
++              : 'Mihomo / призрак: формат не отдаётся',
++          color: theme.colorScheme.onSurfaceVariant,
++        ),
++        const SizedBox(width: 6),
++        _Light(
++          on: _loaded && _xray,
++          label: 'X',
++          tooltip: _xray
++              ? 'Xray: формат есть'
++              : 'Xray: формат не отдаётся',
++          color: theme.colorScheme.onSurfaceVariant,
++        ),
++      ],
++    );
++  }
++}
++
++class _Light extends StatelessWidget {
++  const _Light({
++    required this.on,
++    required this.label,
++    required this.tooltip,
++    required this.color,
++  });
++
++  final bool on;
++  final String label;
++  final String tooltip;
++  final Color color;
++
++  /// The green the app already uses for a live portal, so the lights read as the same
++  /// language rather than a new palette.
++  static const _live = Color(0xFF00F5A0);
++  static const _liveLight = Color(0xFF0E9F6E);
++
++  @override
++  Widget build(BuildContext context) {
++    final isDark = Theme.of(context).brightness == Brightness.dark;
++    final active = isDark ? _live : _liveLight;
++    final dot = on ? active : Theme.of(context).colorScheme.outlineVariant;
++    return Tooltip(
++      message: tooltip,
++      child: Container(
++        width: 22,
++        height: 22,
++        alignment: Alignment.center,
++        decoration: BoxDecoration(
++          shape: BoxShape.circle,
++          color: on ? active.withValues(alpha: 0.18) : Colors.transparent,
++          border: Border.all(
++            color: on ? active.withValues(alpha: 0.7) : Theme.of(context).colorScheme.outlineVariant,
++          ),
++        ),
++        child: Text(
++          label,
++          style: TextStyle(
++            fontSize: 11,
++            fontWeight: FontWeight.w700,
++            color: on ? dot : color.withValues(alpha: 0.6),
++          ),
++        ),
++      ),
++    );
++  }
++}

@@ -1,0 +1,580 @@
+diff --git a/lib/common/constant.dart b/lib/common/constant.dart
+index 5ff6bba78236ba564c6d74465ec9df738e17b061..d168a256ea54d88c94ea225ede9109f41c45e052 100644
+--- a/lib/common/constant.dart
++++ b/lib/common/constant.dart
+@@ -9,7 +9,7 @@ import 'package:fl_clash/enum/enum.dart';
+ import 'package:fl_clash/models/models.dart';
+ import 'package:material_ui/material_ui.dart';
+ 
+-const appName = 'FlClashX';
++const appName = 'Portal';
+ final appHelperService = helperServiceFor(pre: isPreDesktopApp);
+ final appSystemName = isPreDesktopApp ? '$appName Pre' : appName;
+ const coreManifestName = 'manifest.json';
+@@ -177,7 +177,8 @@ const proxiesListStoreKey = PageStorageKey<String>('proxies_list');
+ const toolsStoreKey = PageStorageKey<String>('tools');
+ const profilesStoreKey = PageStorageKey<String>('profiles');
+ 
+-const defaultPrimaryColor = 0xFF03A9F4;
++// Portal Connect accent: the cyan of the legacy PortalVPN gateway button.
++const defaultPrimaryColor = 0xFF00E5FF;
+ 
+ const maxLogsLength = 5000;
+ const maxRequestsLength = 2000;
+@@ -192,6 +193,7 @@ const trafficSampleLength = 30;
+ // macOS accent colors.
+ const defaultPrimaryColors = [
+   defaultPrimaryColor,
++  0xFFA855F7, // Portal purple, the second half of the legacy palette
+   0xFF007AFF,
+   0xFFCB30E0,
+   0xFFFF2D55,
+diff --git a/lib/common/l10n_labels.dart b/lib/common/l10n_labels.dart
+index bec3867eea51050bef99fd89ce5dd0fd614a4b04..d78d2febab228f46e898fd900c763c88c34ec35b 100644
+--- a/lib/common/l10n_labels.dart
++++ b/lib/common/l10n_labels.dart
+@@ -49,7 +49,7 @@ extension ModeL10n on Mode {
+   String get label {
+     final appLocalizations = currentAppLocalizations;
+     return switch (this) {
+-      Mode.rule => appLocalizations.rule,
++      Mode.rule => appLocalizations.rules,
+       Mode.global => appLocalizations.global,
+       Mode.direct => appLocalizations.direct,
+     };
+diff --git a/lib/common/outbound.dart b/lib/common/outbound.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..bee0207743bf887fd68bfadc523265a34e89cf6c
+--- /dev/null
++++ b/lib/common/outbound.dart
+@@ -0,0 +1,10 @@
++/// The engine ships built-in outbounds whose names are decorated by the panel
++/// (`DIRECT 🇷🇺`, `DIRECT `, `Reject`). DIRECT and REJECT are routing targets, not
++/// portals: picking one by hand is how a user silently ends up without a tunnel.
++///
++/// One predicate for the whole app — state layer, chip filter and the portal's own
++/// fallback must agree, or a built-in reappears somewhere it was already banned.
++bool isBuiltinOutboundName(String name) {
++  final word = name.trim().split(RegExp(r'[\s_\-|·/]+')).first.toUpperCase();
++  return word == 'DIRECT' || word == 'REJECT';
++}
+diff --git a/lib/common/package.dart b/lib/common/package.dart
+index 2d92cec46bbba32eea04168d1953f8dac5b64a5c..d90cf96398315ffe47802db73fed4fab49af4353 100644
+--- a/lib/common/package.dart
++++ b/lib/common/package.dart
+@@ -1,5 +1,3 @@
+-import 'dart:io';
+-
+ import 'package:package_info_plus/package_info_plus.dart';
+ 
+ import 'common.dart';
+@@ -8,13 +6,12 @@ extension PackageInfoExtension on PackageInfo {
+   String get displayVersion =>
+       appVersionDefine.isNotEmpty ? appVersionDefine : version;
+ 
+-  /// `FlClashX/v<app> core/<mihomo> Platform/<os>`; the core token is left
+-  /// out until a version is known.
+-  String uaWith(String coreVersion) => [
+-    '$appName/v$displayVersion',
+-    if (coreVersion.isNotEmpty) 'core/$coreVersion',
+-    'Platform/${Platform.operatingSystem}',
+-  ].join(' ');
++  /// Presents the client as mihomo so panels serve the Mihomo YAML template:
++  /// `mihomo/v<core>`. Without a core version yet, the app version stands in.
++  String uaWith(String coreVersion) {
++    final version = coreVersion.replaceFirst(RegExp('^v'), '');
++    return 'mihomo/v${version.isNotEmpty ? version : displayVersion}';
++  }
+ }
+ 
+ int compareVersions(String version1, String version2) {
+diff --git a/lib/common/request.dart b/lib/common/request.dart
+index 89c3ecb5ee19c609641675948496b587f6d5feb7..e6fd23cd5959e40cb6beab89a938a810ad5e276a 100644
+--- a/lib/common/request.dart
++++ b/lib/common/request.dart
+@@ -51,6 +51,7 @@ class Request {
+     ResponseType responseType, {
+     Duration timeout = downloadTimeoutDuration,
+     Map<String, String> headers = const {},
++    String? userAgent,
+   }) {
+     final target = downloadTarget(url);
+     final cancelToken = CancelToken();
+@@ -60,7 +61,7 @@ class Request {
+           target.uri,
+           options: Options(
+             responseType: responseType,
+-            headers: {...headers, ...target.headers},
++            headers: {...headers, ...target.headers, ...?userAgentHeader(userAgent)},
+             // Nothing asks for a range, so a 206 is a cut-off copy.
+             validateStatus: (status) =>
+                 status != null &&
+@@ -104,6 +105,10 @@ class Request {
+         ResponseType.bytes,
+         timeout: timeout,
+         headers: headers,
++        // The panel picks the template from this header, so it has to reach the wire as
++        // written. The adapter also sets a client-level agent; dio's per-request value
++        // replaces it rather than appending, which is what a mismatch here would need.
++        userAgent: headers['User-Agent'],
+       );
+     } catch (e) {
+       commonPrint.log(
+@@ -114,9 +119,17 @@ class Request {
+     }
+   }
+ 
+-  Future<Response<String>> getTextResponseForUrl(String url) async {
++  Future<Response<String>> getTextResponseForUrl(
++    String url, {
++    Map<String, String> headers = const {},
++  }) async {
+     try {
+-      return await _download<String>(url, ResponseType.plain);
++      return await _download<String>(
++        url,
++        ResponseType.plain,
++        headers: headers,
++        userAgent: headers['User-Agent'],
++      );
+     } catch (e) {
+       commonPrint.log(
+         'getTextResponseForUrl error ${compactError(e)}',
+@@ -355,6 +368,10 @@ final class _CappedSink implements Sink<List<int>> {
+ 
+ /// dart:io turns [Uri.userInfo] into Basic credentials still percent-encoded.
+ @visibleForTesting
++/// The per-request user-agent as a one-entry map, or null when there is none to send.
++Map<String, String>? userAgentHeader(String? agent) =>
++    agent == null ? null : {'User-Agent': agent};
++
+ ({Uri uri, Map<String, Object> headers}) downloadTarget(String url) {
+   final uri = url.webUri ?? Uri.parse(url);
+   if (uri.userInfo.isEmpty) {
+diff --git a/lib/common/task.dart b/lib/common/task.dart
+index 83389803d81562fd125318af5ca13f00f16317db..8414bfac6354499a3523aa3b6430e4d77bfe12a6 100644
+--- a/lib/common/task.dart
++++ b/lib/common/task.dart
+@@ -394,6 +394,32 @@ Future<RealProfile> _makeRealProfileTask(MakeRealProfileState data) async {
+         .toList();
+   }
+   applyProxyChains(rawConfig, data.proxyChains);
++  // The local Xray owns the real node when the portal network is off. Its socks inbound is
++  // always declared so the switch is a pure mode change: nothing has to be rebuilt, and no
++  // connection is dropped when the owner flips it.
++  rawConfig['proxies'] = [
++    ...?(rawConfig['proxies'] as List?)?.where(
++      (item) => item is! Map || item['name'] != 'XRAY-SOCKS',
++    ),
++    {
++      'name': 'XRAY-SOCKS',
++      'type': 'socks5',
++      'server': '127.0.0.1',
++      'port': 10808,
++      'udp': false,
++    },
++  ];
++  rawConfig['proxy-groups'] = [
++    {
++      'name': 'PORTAL-XRAY',
++      'type': 'select',
++      'proxies': ['XRAY-SOCKS'],
++      'hidden': true,
++    },
++    ...?(rawConfig['proxy-groups'] as List?)?.where(
++      (item) => item is! Map || item['name'] != 'PORTAL-XRAY',
++    ),
++  ];
+   rawConfig['rules'] = rules;
+   final yaml = await _encodeYaml(Map<String, dynamic>.from(rawConfig));
+   return (yaml: yaml, md5: yaml.toMd5(), counts: configCountsOf(rawConfig));
+diff --git a/lib/common/tray.dart b/lib/common/tray.dart
+index 08ef8e815da34fbc884b6c9c66c81b0c5cb0da27..33cedf1fe81e1111adcb2369abbcd54286876966 100644
+--- a/lib/common/tray.dart
++++ b/lib/common/tray.dart
+@@ -182,7 +182,7 @@ class AppTray implements TrayPort {
+         ),
+       if (trayState.globalModeAllowed) ...[
+         const TrayMenuSeparator(),
+-        for (final mode in Mode.values)
++        for (final mode in Mode.values.where((mode) => mode != Mode.direct))
+           TrayMenuCheckbox(
+             label: mode.label,
+             checked: mode == trayState.mode,
+diff --git a/lib/pages/home.dart b/lib/pages/home.dart
+index d4e913ba19d5b510a0572008208c85fe895a7bd1..40e929b13f37cd157d59cd66ec497455b336f920 100644
+--- a/lib/pages/home.dart
++++ b/lib/pages/home.dart
+@@ -55,6 +55,10 @@ class HomePage extends ConsumerWidget {
+ class _HomeShell extends ConsumerWidget {
+   const _HomeShell({required this.child});
+ 
++  /// Portal Connect ships without the bottom dock; `--dart-define=PORTAL_SHOW_DOCK=true`
++  /// brings it back for debugging the old navigation.
++  static final bool _showDock = bool.fromEnvironment('PORTAL_SHOW_DOCK');
++
+   final Widget child;
+ 
+   void _handleToPage(PageLabel pageLabel, WidgetRef ref) {
+@@ -92,7 +96,10 @@ class _HomeShell extends ConsumerWidget {
+                   end: 0,
+                   bottom: 0,
+                   child: AnimatedVisibility.bottomNavigation(
+-                    visible: isMobile && floating,
++                    // Portal Connect is one surface: the dock is retired, the corners
++                    // of the page carry settings and subscriptions instead. The
++                    // environment flag keeps the old dock reachable for debugging.
++                    visible: _showDock && isMobile && floating,
+                     child: _NavigationPadding(
+                       child: NavigationDock(
+                         destinations: [
+@@ -114,7 +121,7 @@ class _HomeShell extends ConsumerWidget {
+             ),
+           ),
+           AnimatedVisibility.bottomNavigation(
+-            visible: isMobile && !floating,
++            visible: _showDock && isMobile && !floating,
+             child: _NavigationPadding(
+               child: NavigationBar(
+                 destinations: [
+diff --git a/lib/providers/generated/action.g.dart b/lib/providers/generated/action.g.dart
+index fbb4b28a2025c2e04b6b273c9905d51d6809eee2..44aca0309f7c83a28987a866530f647015719e16 100644
+--- a/lib/providers/generated/action.g.dart
++++ b/lib/providers/generated/action.g.dart
+@@ -40,7 +40,7 @@ final class CommonActionProvider extends $NotifierProvider<CommonAction, void> {
+   }
+ }
+ 
+-String _$commonActionHash() => r'c6f5289eeec410fc7852d7e496c3e9a14f7220eb';
++String _$commonActionHash() => r'ac604ee78837182b2d152ec09cb748805c9df112';
+ 
+ abstract class _$CommonAction extends $Notifier<void> {
+   void build();
+@@ -150,7 +150,7 @@ final class ProfileHeadersActionProvider
+ }
+ 
+ String _$profileHeadersActionHash() =>
+-    r'175ee9ee62e3c674705374d2039f4e8151a1b30c';
++    r'52a310d12d09d105325337eaa9e0478988d74349';
+ 
+ /// Lands once per update of, or switch to, a profile; edits in between stay.
+ 
+diff --git a/lib/providers/generated/state.g.dart b/lib/providers/generated/state.g.dart
+index b7ef49048d7a7e03dadd85a8a5981e6c410bfa7e..7a5dc5f8f6668b2b638e916e84f5bc8e2a862cc0 100644
+--- a/lib/providers/generated/state.g.dart
++++ b/lib/providers/generated/state.g.dart
+@@ -2089,7 +2089,7 @@ final class CurrentGroupsStateProvider
+ }
+ 
+ String _$currentGroupsStateHash() =>
+-    r'b334885e3b790e3c5f70bf05addff9d98cb93178';
++    r'ee0289ead2087c2f0cc724081400c79fa981eefc';
+ 
+ @ProviderFor(proxyState)
+ final proxyStateProvider = ProxyStateProvider._();
+@@ -3991,16 +3991,28 @@ String _$widgetEditingDeniedHash() =>
+     r'7b80292720b5fa889e0e8a79cebaf93e2208ad1a';
+ 
+ /// The outbound modes the current panel leaves on offer.
++///
++/// Portal Connect has no user-facing "direct": the only way to get untunnelled
++/// traffic is to switch the portal off, so the mode is never offered here even
++/// though the engine still understands it.
+ 
+ @ProviderFor(availableModes)
+ final availableModesProvider = AvailableModesProvider._();
+ 
+ /// The outbound modes the current panel leaves on offer.
++///
++/// Portal Connect has no user-facing "direct": the only way to get untunnelled
++/// traffic is to switch the portal off, so the mode is never offered here even
++/// though the engine still understands it.
+ 
+ final class AvailableModesProvider
+     extends $FunctionalProvider<List<Mode>, List<Mode>, List<Mode>>
+     with $Provider<List<Mode>> {
+   /// The outbound modes the current panel leaves on offer.
++  ///
++  /// Portal Connect has no user-facing "direct": the only way to get untunnelled
++  /// traffic is to switch the portal off, so the mode is never offered here even
++  /// though the engine still understands it.
+   AvailableModesProvider._()
+     : super(
+         from: null,
+@@ -4034,7 +4046,7 @@ final class AvailableModesProvider
+   }
+ }
+ 
+-String _$availableModesHash() => r'd62b18b7ed38014dc69828fbf893ba404bfa0a77';
++String _$availableModesHash() => r'dc4dd8b2ea972aaf80083b422a1c1d8b5578d239';
+ 
+ @ProviderFor(announcement)
+ final announcementProvider = AnnouncementProvider._();
+diff --git a/lib/providers/state.dart b/lib/providers/state.dart
+index 2b0ab5d7f47d2cc2a43186bea8226d711eaa5ea8..78e974b193ebc3efdc1b0f24a3d491b4c99b9387 100644
+--- a/lib/providers/state.dart
++++ b/lib/providers/state.dart
+@@ -21,6 +21,7 @@ import 'app.dart';
+ import 'config.dart';
+ import 'core.dart';
+ import 'database.dart';
++import 'package:fl_clash/common/outbound.dart';
+ 
+ part 'generated/state.g.dart';
+ part 'state/proxies.dart';
+diff --git a/lib/providers/state/proxies.dart b/lib/providers/state/proxies.dart
+index b06ce18d2154a15ae6d7f949a2189e07c40cec04..f5459882f9c53b4ff3f84c6b38f231ae3f8e8ae0 100644
+--- a/lib/providers/state/proxies.dart
++++ b/lib/providers/state/proxies.dart
+@@ -11,14 +11,23 @@ GroupsState currentGroupsState(Ref ref) {
+   final shown = switch (mode) {
+     Mode.direct => const <Group>[],
+     Mode.global when globalOverride => groups.where(isGlobal),
+-    Mode.global => groups,
++    Mode.global => groups.where(_selectable),
+     Mode.rule => groups.where(
+-      (item) => item.hidden == false && !(globalOverride && isGlobal(item)),
++      (item) =>
++          item.hidden == false &&
++          _selectable(item) &&
++          !(globalOverride && isGlobal(item)),
+     ),
+   };
+   return GroupsState(value: shown.map(_withoutSelection).toList());
+ }
+ 
++/// Portal Connect never shows the engine's built-in outbounds as choices: DIRECT
++/// and REJECT are routing targets, not portals, and picking one by hand is how a
++/// user silently ends up without a tunnel. GLOBAL stays: it is the mihomo
++/// selector the global mode relies on.
++bool _selectable(Group group) => !isBuiltinOutboundName(group.name);
++
+ Group _withoutSelection(Group group) {
+   final all = group.all.any(_hasSelection)
+       ? [
+@@ -26,9 +35,18 @@ Group _withoutSelection(Group group) {
+             _hasSelection(proxy) ? proxy.copyWith(now: '') : proxy,
+         ]
+       : group.all;
+-  return group.copyWith(now: '', all: all);
++  // The GLOBAL group lists every outbound the engine knows, including the built-in
++  // DIRECT and REJECT. They are routing targets, not portals, so they never reach
++  // the picker even when they sit as members of a selectable group.
++  final selectable = [
++    for (final proxy in all)
++      if (_selectableMember(proxy)) proxy,
++  ];
++  return group.copyWith(now: '', all: selectable);
+ }
+ 
++bool _selectableMember(Proxy proxy) => !isBuiltinOutboundName(proxy.name);
++
+ bool _hasSelection(Proxy proxy) => proxy.now?.isNotEmpty ?? false;
+ 
+ @riverpod
+diff --git a/lib/ui/null_status.dart b/lib/ui/null_status.dart
+index f4b6ae27c623e01d6451bb2d95a5e1e8198a47ed..a7e5cabc4c1eae33bcd806453de88e0e8dafa128 100644
+--- a/lib/ui/null_status.dart
++++ b/lib/ui/null_status.dart
+@@ -11,7 +11,8 @@ import 'package:fl_clash/ui/metrics.dart';
+ import 'package:fl_clash/ui/navigator.dart';
+ import 'package:fl_clash/ui/typography.dart';
+ import 'package:material_new_shapes/material_new_shapes.dart';
+-import 'package:material_ui/material_ui.dart';
++// MaterialShapes is exported by both packages; take it from material_new_shapes.
++import 'package:material_ui/material_ui.dart' hide MaterialShapes, RoundedPolygon;
+ 
+ enum NullStatusIllustration {
+   data,
+diff --git a/lib/views/about.dart b/lib/views/about.dart
+index 5a1371293164e79f14848fc46cacd42f88f6736b..4cfae1a809aa95984f5354f19f0963586738e5da 100644
+--- a/lib/views/about.dart
++++ b/lib/views/about.dart
+@@ -26,9 +26,24 @@ const _forkAuthors = [
+   ),
+ ];
+ 
++/// The people whose work this build carries; the fork author above is credited by the
++/// licence, this list is ours.
++const _contributors = [
++  Person(
++    avatar: 'assets/images/avatar/saved-j.png',
++    name: 'saved-j',
++    link: 'https://github.com/saved-j',
++  ),
++];
++
+ const _upstreamRepository = 'chen08209/FlClash';
+ const _coreRepository = 'MetaCubeX/mihomo';
+-const _telegram = 'https://t.me/flclashx';
++const _xrayRepository = 'XTLS/Xray-core';
++const _portalSite = 'https://web.portal-connect.io';
++const _portalChat = 'https://t.me/portalconnect';
++const _portalBot = 'https://t.me/portalconnect_bot';
++const _portalSupport = 'https://t.me/portalconnect_support';
++const _portalVk = 'https://vk.com/markvictorson';
+ 
+ /// The running core's version when it answers, else the one this build was
+ /// made with, else nothing.
+@@ -108,31 +123,75 @@ class AboutView extends ConsumerWidget {
+           ),
+           const SizedBox(height: 8),
+           generateSection(
+-            title: appLocalizations.more,
++            title: context.appLocalizations.aboutPortal,
+             items: [
+               _buildLinkItem(
+-                glyph: AppGlyphs.code,
+-                title: appLocalizations.project,
+-                url: 'https://github.com/$repository',
+-                label: 'github.com/$repository',
++                glyph: AppGlyphs.link,
++                title: '🌐 Сайт',
++                url: _portalSite,
++                label: 'web.portal-connect.io',
++              ),
++              _buildLinkItem(
++                glyph: AppGlyphs.send,
++                title: '💬 Чат',
++                url: _portalChat,
++                label: 't.me/portalconnect',
++              ),
++              _buildLinkItem(
++                glyph: AppGlyphs.send,
++                title: '💳 Оформить подписку',
++                url: _portalBot,
++                label: 't.me/portalconnect_bot',
++              ),
++              _buildLinkItem(
++                glyph: AppGlyphs.send,
++                title: '📱 Поддержка в Telegram',
++                url: _portalSupport,
++                label: 't.me/portalconnect_support',
+               ),
+               _buildLinkItem(
+                 glyph: AppGlyphs.link,
+-                title: appLocalizations.originalRepository,
+-                url: 'https://github.com/$_upstreamRepository',
+-                label: 'github.com/$_upstreamRepository',
++                title: '📱 Поддержка в VK',
++                url: _portalVk,
++                label: 'vk.com/markvictorson',
+               ),
++            ],
++          ),
++          generateSection(
++            title: context.appLocalizations.aboutCores,
++            items: [
+               _buildLinkItem(
+                 glyph: AppGlyphs.cpu,
+-                title: appLocalizations.core,
++                title: 'Prizrak-Core',
+                 url: 'https://github.com/$_coreRepository',
+-                label: 'github.com/$_coreRepository',
++                label: context.appLocalizations.aboutPortalNetworkCore,
+               ),
+               _buildLinkItem(
+-                glyph: AppGlyphs.send,
+-                title: 'Telegram',
+-                url: _telegram,
+-                label: 't.me/flclashx',
++                glyph: AppGlyphs.cpu,
++                title: 'Xray',
++                url: 'https://github.com/$_xrayRepository',
++                label: 'github.com/$_xrayRepository',
++              ),
++            ],
++          ),
++          generateSection(
++            title: context.appLocalizations.aboutContributors,
++            items: const [_PeopleRow(people: _contributors)],
++          ),
++          generateSection(
++            title: context.appLocalizations.aboutBuiltOn,
++            items: [
++              _buildLinkItem(
++                glyph: AppGlyphs.code,
++                title: 'FlClashX',
++                url: 'https://github.com/$repository',
++                label: 'github.com/$repository',
++              ),
++              _buildLinkItem(
++                glyph: AppGlyphs.code,
++                title: 'FlClash',
++                url: 'https://github.com/$_upstreamRepository',
++                label: 'github.com/$_upstreamRepository',
+               ),
+             ],
+           ),
+@@ -175,8 +234,7 @@ class _AboutHero extends ConsumerWidget {
+     required this.onEasterEgg,
+   });
+ 
+-  static const _logoSize = 96.0;
+-  static const _logoInset = 14.0;
++  static const _logoSize = 148.0;
+ 
+   @override
+   Widget build(BuildContext context, WidgetRef ref) {
+@@ -191,18 +249,16 @@ class _AboutHero extends ConsumerWidget {
+           _TapCounter(
+             onEnterDeveloperMode: onEnterDeveloperMode,
+             onEasterEgg: onEasterEgg,
+-            child: DecoratedBox(
+-              decoration: ShapeDecoration(
+-                color: raised,
+-                shape: AppShape.all(AppCorner.fit(_logoSize)),
+-              ),
+-              child: Padding(
+-                padding: const EdgeInsets.all(_logoInset),
+-                child: Image.asset(
+-                  'assets/images/icon.png',
+-                  width: _logoSize - _logoInset * 2,
+-                  height: _logoSize - _logoInset * 2,
+-                ),
++            // The mark fills the plate and is cropped by its rounding: no inset, no
++            // frame of background colour around it.
++            child: ClipRRect(
++              borderRadius: BorderRadius.circular(_logoSize * 0.24),
++              child: Image.asset(
++                'assets/images/icon.png',
++                width: _logoSize,
++                height: _logoSize,
++                fit: BoxFit.cover,
++                filterQuality: FilterQuality.medium,
+               ),
+             ),
+           ),
+diff --git a/lib/views/hotkey.dart b/lib/views/hotkey.dart
+index 460627c385f58e7354bdd2e6ff60a1a16475370e..d8e346e61b6a41dd59a4df52c34a745425f09ac8 100644
+--- a/lib/views/hotkey.dart
++++ b/lib/views/hotkey.dart
+@@ -38,7 +38,6 @@ List<(String, List<HotAction>)> _sections(AppLocalizations appLocalizations) {
+         HotAction.mode,
+         HotAction.ruleMode,
+         HotAction.globalMode,
+-        HotAction.directMode,
+       ],
+     ),
+     (
+diff --git a/pubspec.yaml b/pubspec.yaml
+index 7bc1003b686c2b1aa83e1ad9d69a3745ddd38145..8ebf6f3fc369f016986e43d4db5ee2f5b4f9c096 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -1,7 +1,7 @@
+ name: fl_clash
+ description: FlClashX, a fork of FlClash - a multi-platform proxy client based on ClashMeta for Remnawave users.
+ publish_to: 'none'
+-version: 0.5.3+2026111401
++version: 0.5.3-portal-duo+2026111401
+ environment:
+   sdk: '>=3.10.0 <4.0.0'
+ 
+@@ -103,6 +103,7 @@ flutter:
+     - assets/fonts/
+     - assets/images/
+     - assets/images/avatar/
++    - assets/xray/
+     - assets/images/flags/
+     - assets/images/services/
+     - assets/ca/ca-certificates.crt

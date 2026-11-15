@@ -1,0 +1,2873 @@
+diff --git a/lib/views/dashboard/dashboard.dart b/lib/views/dashboard/dashboard.dart
+index 66821acb77b0a0fa59ff034c8ae2e96d8a6fb22e..4dcce94acb0ff77038fb2e39d4d99835069288a7 100644
+--- a/lib/views/dashboard/dashboard.dart
++++ b/lib/views/dashboard/dashboard.dart
+@@ -70,12 +70,29 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
+     final editing = _editing;
+     final gap = cardSpacingOf(context, ref.watch(viewModeProvider));
+     final appLocalizations = context.appLocalizations;
++    if (hero) {
++      // No app bar at all on the working screen: an empty bar still reserves its
++      // height and reads as a hole above the portal.
++      return Material(
++        color: DashboardColors.of(context).page,
++        child: SafeArea(
++          bottom: false,
++          child: DashboardDensityScope(
++            density: DashboardDensity.mobile,
++            scale: scale,
++            child: const HeroDashboard(),
++          ),
++        ),
++      );
++    }
+     return CommonScaffold(
+       backgroundColor: DashboardColors.of(context).page,
++      // The hero screen carries its own header: a title bar with the page name,
++      // a mode toggle and the developer core-reset button is noise there.
+       title: editing
+           ? appLocalizations.editDashboard
+-          : appLocalizations.dashboard,
+-      actions: [if (!editing) const CoreStatusButton()],
++          : (hero ? '' : appLocalizations.dashboard),
++      actions: [if (!editing && !hero) const CoreStatusButton()],
+       confirmationAction: editing
+           ? IconButtonData(
+               glyph: AppGlyphs.check,
+@@ -84,12 +101,11 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
+             )
+           : null,
+       iconActions: [
+-        if (mode != null && ref.watch(globalModeAllowedProvider))
++        if (mode != null && !hero && ref.watch(globalModeAllowedProvider))
+           IconButtonData(
+             glyph: mode == Mode.global ? AppGlyphs.proxies : AppGlyphs.rules,
+             tooltip:
+-                '${appLocalizations.outboundMode}: '
+-                '${mode == Mode.global ? appLocalizations.global : appLocalizations.rule}',
++                '${appLocalizations.outboundMode}: ${mode.label}',
+             onPressed: () => ref
+                 .read(setupActionProvider.notifier)
+                 .pickMode(mode == Mode.global ? Mode.rule : Mode.global),
+diff --git a/lib/views/dashboard/hero.dart b/lib/views/dashboard/hero.dart
+index bff7fb331bc423a6fef223bf1854ccfc2188700f..5e7d3d266999a4606c34c0fb4db3fa53624b5eda 100644
+--- a/lib/views/dashboard/hero.dart
++++ b/lib/views/dashboard/hero.dart
+@@ -1,28 +1,29 @@
+-import 'dart:io';
+ 
+ import 'package:collection/collection.dart';
+ import 'package:fl_clash/common/common.dart';
+ import 'package:fl_clash/common/service_probe.dart' show routedOutbound;
+-import 'package:fl_clash/features/features.dart';
+ import 'package:fl_clash/models/models.dart';
+ import 'package:fl_clash/providers/outbound_ip.dart';
+ import 'package:fl_clash/providers/providers.dart';
+ import 'package:fl_clash/ui/icons/icons.dart';
+ import 'package:fl_clash/views/profiles/add.dart';
++import 'package:fl_clash/views/access.dart';
++import 'package:fl_clash/views/profiles/profiles.dart';
++import 'package:fl_clash/views/tools.dart';
++import 'package:fl_clash/views/connection/connection_feeds.dart';
+ import 'package:fl_clash/widgets/widgets.dart';
++import 'portal_controls.dart';
++import '../profiles/subscription_facts.dart';
++import 'portal_gateway.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+-import 'package:flutter_svg/flutter_svg.dart';
+ import 'package:material_ui/material_ui.dart';
+ 
+-import 'style.dart';
+-import 'widgets/card.dart';
+-import 'widgets/widgets.dart';
++import 'package:fl_clash/common/outbound.dart';
++import 'package:flutter/services.dart';
+ 
+ const heroMaxWidth = 520.0;
+ 
+ const _logoSize = 96.0;
+-const _inlineLogoSize = 56.0;
+-const _flagSize = 52.0;
+ const _connectHeight = 56.0;
+ const _gap = 12.0;
+ 
+@@ -84,42 +85,138 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
+                   crossAxisAlignment: CrossAxisAlignment.stretch,
+                   children: [
+                     Row(
+-                      mainAxisAlignment: MainAxisAlignment.center,
+-                      spacing: 12,
+                       children: [
+-                        _ServiceLogo(
+-                          url: headers.serviceLogo,
+-                          size: _inlineLogoSize,
+-                          radius: AppRadius.md,
++                        IconButton(
++                          tooltip: context.appLocalizations.tools,
++                          // Pushed, not page-switched: a page index has no history, so
++                          // Back walked out of the app instead of returning here.
++                          onPressed: () => Navigator.of(context).push(
++                            MaterialPageRoute(
++                              builder: (_) => const ToolsView(),
++                            ),
++                          ),
++                          icon: const GlyphIcon(
++                            AppGlyphs.settings,
++                            size: 22,
++                          ),
++                        ),
++                        IconButton(
++                          // Shortcut to the per-app bypass list: the one setting a
++                          // user reaches for while looking at the server list.
++                          tooltip: context.appLocalizations.accessControl,
++                          onPressed: () => Navigator.of(context).push(
++                            MaterialPageRoute(
++                              builder: (_) => const AccessView(),
++                            ),
++                          ),
++                          icon: const GlyphIcon(
++                            AppGlyphs.appsList,
++                            size: 22,
++                          ),
+                         ),
+-                        Flexible(
+-                          child: EmojiText(
+-                            headers.serviceName ?? appName,
+-                            maxLines: 1,
+-                            overflow: TextOverflow.ellipsis,
+-                            style: AppTextStyle.title2.of(
+-                              context,
+-                              emphasized: true,
++                        // No app icon and no app name here: the screen shows the
++                        // service the subscription belongs to, not the product that
++                        // opened the door.
++                        Expanded(
++                          child: Center(
++                            child: Consumer(
++                              // The working screen says the same two facts the list does:
++                              // name, then traffic, then expiry, in one column.
++                              builder: (context, ref, _) {
++                                // Only the name lives in the header. Traffic, expiry and the
++                                // state mark belong to the subscription card, which is where a
++                                // person looks for them.
++                                return EmojiText(
++                                  headers.displayName ??
++                                      headers.serviceName ??
++                                      'portal-connect',
++                                  maxLines: 1,
++                                  overflow: TextOverflow.ellipsis,
++                                  style: AppTextStyle.title3.of(
++                                    context,
++                                    emphasized: true,
++                                  ),
++                                );
++                              },
++                            ),
++                          ),
++                        ),
++                        GestureDetector(
++                          onDoubleTap: () => ref
++                              .read(portalConnectionsBadgeProvider.notifier)
++                              .toggle(),
++                          child: IconButton(
++                            tooltip: context.appLocalizations.connections,
++                          // The connections page is not in the phone navigation any
++                          // more, so switching the page index did nothing: push it.
++                            onPressed: () => Navigator.of(context).push(
++                              MaterialPageRoute(
++                                builder: (_) => const ConnectionFeedsView(),
++                              ),
++                            ),
++                            icon: Badge(
++                              // Fixed colours: the hero is dark in both themes, so a
++                              // theme-derived label turned black-on-black on white.
++                              backgroundColor: const Color(0xFF00F5A0),
++                              textColor: const Color(0xFF07110C),
++                              isLabelVisible:
++                                  ref.watch(portalConnectionsBadgeProvider),
++                              label: Text(
++                                '${ref.watch(requestsProvider).list.length}',
++                              ),
++                              child: const GlyphIcon(
++                                AppGlyphs.connections,
++                                size: 22,
++                              ),
++                            ),
++                          ),
++                        ),
++                        GestureDetector(
++                          onDoubleTap: () => ref
++                              .read(portalProfilesBadgeProvider.notifier)
++                              .toggle(),
++                          child: IconButton(
++                            tooltip: context.appLocalizations.profiles,
++                            onPressed: () => Navigator.of(context).push(
++                              MaterialPageRoute(
++                                builder: (_) => const ProfilesView(),
++                              ),
++                            ),
++                            icon: Badge(
++                              backgroundColor: const Color(0xFF00F5A0),
++                              textColor: const Color(0xFF07110C),
++                              isLabelVisible:
++                                  ref.watch(portalProfilesBadgeProvider),
++                              label: Text(
++                                '${ref.watch(profilesProvider).length}',
++                              ),
++                              child: const GlyphIcon(
++                                AppGlyphs.profiles,
++                                size: 22,
++                              ),
+                             ),
+                           ),
+                         ),
+                       ],
+                     ),
+-                    const SizedBox(height: 16),
+-                    const AnnouncementCard(),
+-                    if (ref.watch(announcementProvider) != null)
+-                      const SizedBox(height: _gap),
+-                    _ServerPanel(group: headers.serverGroup),
++                    const SizedBox(height: 8),
++                    // The portal comes first and the choice comes after it, the
++                    // order Happ and Incy taught people: the button you press
++                    // before the list you read.
++                    const _ConnectButton(),
++                    const SizedBox(height: 12),
++                    // Announcement and subscription sit together right under the
++                    // button, the way Happ and Incy put plan status next to the
++                    // switch: visible, but out of the way of choosing a server.
++                    const PortalPlanCard(),
+                     const SizedBox(height: _gap),
+-                    const ProfilesCard(),
++                    const PortalModeSwitch(),
++                    const SizedBox(height: 4),
++                    const PortalServerList(),
+                   ],
+                 ),
+               ),
+             ),
+-            Padding(
+-              padding: padding.copyWith(top: 0),
+-              child: const _ConnectButton(),
+-            ),
+           ],
+         ),
+       ),
+@@ -160,471 +257,145 @@ class _EmptyHero extends StatelessWidget {
+   }
+ }
+ 
+-/// The panel's logo, png or svg, else the app's own icon.
+-class _ServiceLogo extends ConsumerWidget {
+-  const _ServiceLogo({
+-    this.url,
+-    this.size = _logoSize,
+-    this.radius = AppRadius.xxl,
+-  });
+-
+-  final String? url;
+-  final double size;
+-  final BorderRadius radius;
++/// The app's own icon. The panel-logo branch that used to live here was unreachable —
++/// no call site ever passed a url — so the widget is what it always did in practice.
++class _ServiceLogo extends StatelessWidget {
++  const _ServiceLogo();
+ 
+   @override
+-  Widget build(BuildContext context, WidgetRef ref) {
+-    final url = this.url;
+-    final fallback = Image.asset(
+-      'assets/images/icon.png',
+-      width: size,
+-      height: size,
+-      fit: BoxFit.cover,
+-    );
+-    final path = url == null
+-        ? null
+-        : ref.watch(panelLogoPathProvider(url)).value;
+-    final Widget logo = url == null || path == null
+-        ? fallback
+-        : url.toLowerCase().endsWith('.svg')
+-        ? SvgPicture.file(
+-            File(path),
+-            width: size,
+-            height: size,
+-            fit: BoxFit.cover,
+-            placeholderBuilder: (_) => fallback,
+-          )
+-        : Image.file(
+-            File(path),
+-            width: size,
+-            height: size,
+-            fit: BoxFit.cover,
+-            errorBuilder: (_, _, _) => fallback,
+-          );
+-    return Center(
+-      child: ClipRSuperellipse(
+-        borderRadius: radius,
+-        child: SizedBox.square(dimension: size, child: logo),
++  Widget build(BuildContext context) {
++    return ClipRRect(
++      borderRadius: BorderRadius.circular(_logoSize / 4),
++      child: Image.asset(
++        'assets/images/icon.png',
++        width: _logoSize,
++        height: _logoSize,
++        fit: BoxFit.cover,
+       ),
+     );
+   }
+ }
+ 
+-/// The selection the panel's group, or the first group with one, is on,
+-/// with its flag, the exit address while running and its delay; a tap
+-/// opens the picker.
+-class _ServerPanel extends ConsumerWidget {
+-  const _ServerPanel({required this.group});
++/// When the portal was switched off, in wall-clock milliseconds. Top-level because the
++/// closing iris outlives the widget that started it.
++final ValueNotifier<int?> portalClosedAtMs = ValueNotifier<int?>(null);
+ 
+-  /// The group the panel named, else the first with a live pick.
+-  final String? group;
++/// When the portal was switched on. The ignition runs from the press, not from the
++/// moment the engine reports a tunnel — the picture leads, the task follows.
++final ValueNotifier<int?> portalOpenedAtMs = ValueNotifier<int?>(null);
+ 
+-  @override
+-  Widget build(BuildContext context, WidgetRef ref) {
+-    final appLocalizations = context.appLocalizations;
+-    final colorScheme = context.colorScheme;
+-    final colors = DashboardColors.of(context);
+-    final groups = ref.watch(currentGroupsStateProvider).value;
+-    final picked = _pickedGroupOf(groups, group);
+-    final groupName = picked?.name;
+-    final selected = groupName == null
+-        ? null
+-        : ref.watch(selectedProxyNameProvider(groupName));
+-    final leaf = selected == null || selected.isEmpty
+-        ? null
+-        : ref.watch(realSelectedProxyStateProvider(selected));
+-    final serverName = selected ?? '';
+-    final delay = serverName.isEmpty
+-        ? null
+-        : ref.watch(
+-            delayProvider(
+-              proxyName: serverName,
+-              testUrl: leaf?.testUrl ?? picked?.testUrl,
+-            ),
+-          );
+-    final isStart = ref.watch(isStartProvider);
+-    final entry = ref.watch(
+-      outboundIpProbeProvider.select((state) => state.entryOf(routedOutbound)),
+-    );
+-    final ipInfo = entry.value;
+-    final hideIp = ref.watch(
+-      appSettingProvider.select((state) => state.hideIp),
+-    );
+-    final server = picked?.all.firstWhereOrNull(
+-      (proxy) => proxy.name == serverName,
+-    );
+-    final nameCode =
+-        serverName.flagCountryCode ??
+-        server?.serverDescription?.flagCountryCode ??
+-        leaf?.proxyName.flagCountryCode;
+-    final code = nameCode ?? (isStart ? ipInfo?.countryCode : null);
+-    final others = picked == null
+-        ? const <String>[]
+-        : ref
+-              .watch(groupFlagsProvider(picked.name))
+-              .where((other) => other != nameCode)
+-              .toList();
+-    final otherCount = others.isNotEmpty
+-        ? others.length
+-        : picked == null
+-        ? 0
+-        : (picked.all.length - 1).clamp(0, 999);
+-    final title = serverName.isEmpty
+-        ? appLocalizations.changeServer
+-        : serverName.withoutLeadingFlag;
+-    final ipStyle = DashboardText.label(context);
+-    final Widget? ip = !isStart || serverName.isEmpty || hideIp
+-        ? null
+-        : ipInfo != null
+-        ? Tooltip(
+-            message: appLocalizations.details(appLocalizations.outboundIp),
+-            child: InkWell(
+-              mouseCursor: clickableCursor,
+-              onTap: () => showIpQualitySheet(context, ip: ipInfo.ip),
+-              customBorder: AppShape.xs,
+-              child: Text(
+-                ipInfo.ip,
+-                maxLines: 1,
+-                overflow: TextOverflow.ellipsis,
+-                style: ipStyle,
+-              ),
+-            ),
+-          )
+-        : entry.isLoading
+-        ? SkeletonText(width: 110, style: ipStyle)
+-        : null;
+-    final recheck = isStart && !entry.isLoading
+-        ? () => ref.read(outboundIpProbeProvider.notifier).refresh(const [
+-            routedOutbound,
+-          ])
+-        : null;
+-    void changeServer() => showProxiesSheet(context, groupName: groupName);
+-    final swap = groups.isEmpty || hideIp
+-        ? null
+-        : SizedBox(
+-            height: AppTextStyle.headline.leading,
+-            child: DashboardIconButton(
+-              glyph: AppGlyphs.swap,
+-              tooltip: appLocalizations.changeServer,
+-              onPressed: changeServer,
+-            ),
+-          );
+-    return DashboardCard(
+-      semanticLabel: appLocalizations.changeServer,
+-      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+-      child: Row(
+-        spacing: 12,
+-        children: [
+-          _FlagBadge(
+-            code: code,
+-            count: otherCount,
+-            active: isStart,
+-            checking: entry.isLoading,
+-            onRefresh: recheck ?? () {},
+-          ),
+-          Expanded(
+-            child: Column(
+-              crossAxisAlignment: CrossAxisAlignment.start,
+-              mainAxisSize: MainAxisSize.min,
+-              children: [
+-                Row(
+-                  children: [
+-                    Flexible(
+-                      child: hideIp
+-                          ? Tooltip(
+-                              message: appLocalizations.changeServer,
+-                              child: FocusRing(
+-                                shape: AppShape.xs,
+-                                standsOff: true,
+-                                child: InkWell(
+-                                  mouseCursor: clickableCursor,
+-                                  onTap: groups.isEmpty ? null : changeServer,
+-                                  customBorder: AppShape.xs,
+-                                  hoverColor: Colors.transparent,
+-                                  splashColor: Colors.transparent,
+-                                  highlightColor: Colors.transparent,
+-                                  child: ConstrainedBox(
+-                                    constraints: const BoxConstraints(
+-                                      minHeight: kMinInteractiveDimension,
+-                                    ),
+-                                    child: Align(
+-                                      alignment:
+-                                          AlignmentDirectional.centerStart,
+-                                      widthFactor: 1,
+-                                      child: EmojiText(
+-                                        title,
+-                                        maxLines: 1,
+-                                        overflow: TextOverflow.ellipsis,
+-                                        style: AppTextStyle.title3.of(
+-                                          context,
+-                                          emphasized: true,
+-                                        ),
+-                                      ),
+-                                    ),
+-                                  ),
+-                                ),
+-                              ),
+-                            )
+-                          : EmojiText(
+-                              title,
+-                              maxLines: 1,
+-                              overflow: TextOverflow.ellipsis,
+-                              style: AppTextStyle.headline.of(
+-                                context,
+-                                emphasized: true,
+-                              ),
+-                            ),
+-                    ),
+-                    ?swap,
+-                  ],
+-                ),
+-                if (ip != null) ...[const SizedBox(height: 2), ip],
+-              ],
+-            ),
+-          ),
+-          if (serverName.isNotEmpty)
+-            Tooltip(
+-              message: appLocalizations.changeServer,
+-              child: InkWell(
+-                mouseCursor: clickableCursor,
+-                onTap: groups.isEmpty ? null : changeServer,
+-                customBorder: AppShape.xs,
+-                child: SizedBox(
+-                  width: 52,
+-                  child: Column(
+-                    mainAxisSize: MainAxisSize.min,
+-                    children: [
+-                      _SignalBars(delay: delay),
+-                      if (delay != null && delay > 0)
+-                        Text(
+-                          '$delay ms',
+-                          maxLines: 1,
+-                          style: DashboardText.figure(
+-                            context,
+-                            AppTextStyle.caption1,
+-                            color:
+-                                colorScheme.delayColor(delay) ?? colors.thumb,
+-                          ),
+-                        ),
+-                    ],
+-                  ),
+-                ),
+-              ),
+-            ),
+-        ],
+-      ),
+-    );
+-  }
+-}
++class _ConnectButton extends ConsumerWidget {
+ 
+-Group? _pickedGroupOf(List<Group> groups, String? name) {
+-  if (name != null) {
+-    final named = groups.getGroup(name);
+-    if (named != null) {
+-      return named;
++  /// The press answers with its own rhythm: opening is a heavier double beat, closing a
++  /// softer pair — the hand should feel which way the portal is going.
++  void _portalHaptics({required bool starting}) {
++    if (starting) {
++      HapticFeedback.heavyImpact();
++      Future<void>.delayed(const Duration(milliseconds: 130), HapticFeedback.mediumImpact);
++    } else {
++      HapticFeedback.mediumImpact();
++      Future<void>.delayed(const Duration(milliseconds: 150), HapticFeedback.lightImpact);
+     }
+   }
+-  for (final group in groups) {
+-    if (group.realNow.isNotEmpty && !isBuiltinOutbound(group.realNow)) {
+-      return group;
+-    }
+-  }
+-  return groups.firstOrNull;
+-}
+-
+-/// The server's flag in a circle and a count of the group's other
+-/// countries.
+-class _FlagBadge extends StatelessWidget {
+-  const _FlagBadge({
+-    required this.code,
+-    required this.count,
+-    required this.active,
+-    required this.checking,
+-    required this.onRefresh,
+-  });
+ 
+-  final String? code;
+-  final int count;
+-  final bool active;
+-  final bool checking;
+-  final VoidCallback onRefresh;
+-
+-  @override
+-  Widget build(BuildContext context) {
+-    final colorScheme = context.colorScheme;
+-    final colors = DashboardColors.of(context);
++  /// The mark of whatever is carrying traffic right now: the group's own icon when
++  /// the panel ships one, its monogram otherwise.
++  Widget? _connectedMark(WidgetRef ref) {
++    final groups = ref.watch(groupsProvider);
++    if (groups.isEmpty) return null;
++    final current = ref.watch(
++      currentProfileProvider.select((profile) => profile?.currentGroupName),
++    );
++    final group = groups.where((g) => g.name == current).firstOrNull ??
++        groups.firstWhere(
++          (g) => !isBuiltinOutboundName(g.name),
++          orElse: () => groups.first,
++        );
++    // Only a real icon from the panel: a monogram letter inside the portal reads as a
++    // stray glyph, not as a server.
++    if (group.icon.isEmpty) return null;
+     return SizedBox.square(
+-      dimension: _flagSize + 6,
+-      child: Stack(
+-        clipBehavior: Clip.none,
+-        children: [
+-          Center(
+-            child: CountryBadge(
+-              countryCode: code,
+-              size: _flagSize,
+-              active: active,
+-              checking: checking,
+-              onRefresh: onRefresh,
+-            ),
+-          ),
+-          if (count > 0)
+-            Positioned(
+-              right: 0,
+-              bottom: 0,
+-              child: Container(
+-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+-                decoration: ShapeDecoration(
+-                  color: colorScheme.primary,
+-                  shape: AppShape.full.copyWith(
+-                    side: BorderSide(color: colors.card, width: 1.5),
+-                  ),
+-                ),
+-                child: Text(
+-                  '+$count',
+-                  style: DashboardText.figure(
+-                    context,
+-                    AppTextStyle.caption2,
+-                    color: colorScheme.onPrimary,
+-                  ),
+-                ),
+-              ),
+-            ),
+-        ],
++      dimension: 56,
++      child: CommonTargetIcon(
++        src: group.icon,
++        fallback: const SizedBox.shrink(),
+       ),
+     );
+   }
+-}
+-
+-/// Four bars, as a phone shows its signal, lit by how low the delay is.
+-class _SignalBars extends StatelessWidget {
+-  const _SignalBars({required this.delay});
+-
+-  static const _heights = [8.0, 12.0, 16.0, 20.0];
+-
+-  final int? delay;
+-
+-  @override
+-  Widget build(BuildContext context) {
+-    final colorScheme = context.colorScheme;
+-    final dim = colorScheme.onSurfaceVariant.withValues(alpha: 0.25);
+-    final delay = this.delay;
+-    final level = switch (delay) {
+-      null || 0 => 0,
+-      < 0 => 0,
+-      < 150 => 4,
+-      < 300 => 3,
+-      < 600 => 2,
+-      _ => 1,
+-    };
+-    final lit = colorScheme.delayColor(delay) ?? dim;
+-    return Row(
+-      mainAxisSize: MainAxisSize.min,
+-      crossAxisAlignment: CrossAxisAlignment.end,
+-      spacing: 3,
+-      children: [
+-        for (final (index, height) in _heights.indexed)
+-          Container(
+-            width: 4,
+-            height: height,
+-            decoration: ShapeDecoration(
+-              color: index < level ? lit : dim,
+-              shape: AppShape.full,
+-            ),
+-          ),
+-      ],
+-    );
+-  }
+-}
+-
+-/// Full width: filled with a play glyph while stopped, easing into an
+-/// outline in the primary color with a stop glyph and the run time while
+-/// running.
+-class _ConnectButton extends ConsumerWidget {
+   const _ConnectButton();
+ 
+-  static const _duration = Duration(milliseconds: 300);
+-
+   @override
+   Widget build(BuildContext context, WidgetRef ref) {
+     final appLocalizations = context.appLocalizations;
+-    final colorScheme = context.colorScheme;
+     final isStart = ref.watch(isStartProvider);
+     final suspended = isStart && ref.watch(suspendProvider);
+     final runTime = ref.watch(runTimeProvider);
++    // Live traffic sets how busy the portal looks: 2 MB/s and above is a full flow.
++    final live = ref.watch(portalLiveProvider);
++    final rate = (live.up + live.down).toDouble();
++    // No connections, no motion: the animation is the wire, not a loop.
++    final intensity = live.connections == 0
++        ? 0.0
++        : (rate / (2 * 1024 * 1024)).clamp(0.08, 1.0);
+     final label = suspended
+         ? appLocalizations.suspended
+         : isStart
+-        ? appLocalizations.stop
+-        : appLocalizations.start;
+-    final duration = context.motionDuration(_duration);
++        ? appLocalizations.closePortal
++        : appLocalizations.openPortal;
+     void toggle() => ref.read(commonActionProvider.notifier).toggleRunning();
+-    return Tooltip(
+-      message: label,
+-      child: Semantics(
+-        button: true,
+-        label: label,
+-        child: RisingHold(
+-          enabled: system.isAndroid,
+-          onHeld: toggle,
+-          child: SizedBox(
+-            width: double.infinity,
+-            height: _connectHeight,
+-            child: TweenAnimationBuilder<double>(
+-              tween: Tween(end: isStart ? 1 : 0),
+-              duration: duration,
+-              curve: Curves.easeInOut,
+-              builder: (context, progress, _) {
+-                final ink = Color.lerp(
+-                  colorScheme.onPrimary,
+-                  colorScheme.primary,
+-                  progress,
+-                )!;
+-                final content = suspended
+-                    ? const GlyphIcon(AppGlyphs.wifiOff, size: 26, fill: 1)
+-                    : isStart
+-                    ? Row(
+-                        mainAxisSize: MainAxisSize.min,
+-                        spacing: 10,
+-                        children: [
+-                          const GlyphIcon(AppGlyphs.stop, size: 22, fill: 1),
+-                          Text(
+-                            getTimeText(runTime),
+-                            style: DashboardText.figure(
+-                              context,
+-                              AppTextStyle.headline,
+-                              color: ink,
+-                            ),
+-                          ),
+-                        ],
+-                      )
+-                    : GlyphIcon(AppGlyphs.playPause(0), size: 28, fill: 1);
+-                return FilledButton(
+-                  style: FilledButton.styleFrom(
+-                    backgroundColor: colorScheme.primary.withValues(
+-                      alpha: 1 - progress,
+-                    ),
+-                    foregroundColor: ink,
+-                    side: BorderSide(
+-                      color: colorScheme.primary.withValues(alpha: progress),
+-                      width: 1.5,
+-                    ),
+-                  ),
+-                  onPressed: toggle,
+-                  child: AnimatedSwitcher(
+-                    duration: duration,
+-                    switchInCurve: Curves.easeInOut,
+-                    switchOutCurve: Curves.easeInOut,
+-                    child: KeyedSubtree(
+-                      key: ValueKey((isStart, suspended)),
+-                      child: content,
+-                    ),
+-                  ),
+-                );
++    return Column(
++      mainAxisSize: MainAxisSize.min,
++      children: [
++        Tooltip(
++          message: label,
++          child: Semantics(
++            button: true,
++            label: label,
++            child: RisingHold(
++              enabled: system.isAndroid,
++              onHeld: () {
++                _portalHaptics(starting: !isStart);
++                if (isStart) {
++                  portalClosedAtMs.value = DateTime.now().millisecondsSinceEpoch;
++                } else {
++                  portalOpenedAtMs.value = DateTime.now().millisecondsSinceEpoch;
++                }
++                toggle();
+               },
++              child: GestureDetector(
++                behavior: HitTestBehavior.opaque,
++                onTap: () {
++                  _portalHaptics(starting: !isStart);
++                  if (isStart) {
++                    portalClosedAtMs.value = DateTime.now().millisecondsSinceEpoch;
++                  } else {
++                    portalOpenedAtMs.value = DateTime.now().millisecondsSinceEpoch;
++                  }
++                  toggle();
++                },
++                child: PortalGatewayCore(
++                  isStart: isStart,
++                  closedAtMs: portalClosedAtMs.value,
++                  openedAtMs: portalOpenedAtMs.value,
++                  suspended: suspended,
++                  runTime: runTime,
++                  center: _connectedMark(ref),
++                  intensity: intensity,
++                  connections: live.connections,
++                  rateText: live.connections == 0
++                      ? null
++                      : '${(rate / 1024).toStringAsFixed(0)} КБ/с',
++                ),
++              ),
+             ),
+           ),
+         ),
+-      ),
++        const SizedBox(height: 10),
++        Text(
++          label,
++          style: AppTextStyle.headline.of(context, emphasized: true),
++        ),
++      ],
+     );
+   }
+ }
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..c54f64c708d51f22d9ca6ff80f85433a564b3f5a
+--- /dev/null
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -0,0 +1,1330 @@
++import 'package:fl_clash/common/common.dart';
++import 'package:fl_clash/enum/enum.dart';
++import 'package:fl_clash/models/models.dart';
++import 'package:fl_clash/providers/providers.dart';
++import 'package:fl_clash/views/proxies/proxies.dart';
++import 'package:fl_clash/ui/icons/icons.dart';
++import 'package:fl_clash/widgets/widgets.dart';
++import 'package:flutter_riverpod/flutter_riverpod.dart';
++import 'package:flutter/services.dart';
++import 'package:material_ui/material_ui.dart';
++import 'package:fl_clash/common/outbound.dart';
++import 'package:fl_clash/core/xray_config.dart';
++import 'package:fl_clash/core/proxy_endpoints.dart';
++import 'package:fl_clash/core/xray_ping.dart';
++import 'package:fl_clash/core/subscription_availability.dart';
++import 'package:fl_clash/core/xray_subscription.dart';
++import '../profiles/subscription_facts.dart';
++import 'package:fl_clash/core/xray_switch.dart';
++import 'package:fl_clash/plugins/xray.dart';
++import 'dart:async';
++import 'dart:convert';
++
++/// How the server list is ordered; the switch sits next to the mode control.
++enum PortalSort {
++  /// The panel's own order, which is often the order the owner paid for.
++  subscription,
++  ping,
++  alphabet,
++}
++
++extension PortalSortExt on PortalSort {
++  String get label => switch (this) {
++        PortalSort.subscription => 'asInSubscription',
++        PortalSort.ping => 'byPing',
++        PortalSort.alphabet => 'byName',
++      };
++
++  PortalSort get next => switch (this) {
++        PortalSort.subscription => PortalSort.ping,
++        PortalSort.ping => PortalSort.alphabet,
++        PortalSort.alphabet => PortalSort.subscription,
++      };
++}
++
++/// The order of the server list, kept per mode.
++///
++/// The two modes show different servers from different builds of the same subscription, and
++/// the owner wants them ordered differently: rules by ping, the simple portal as the panel
++/// sent it. One stored value per mode, so switching never rewrites the other's choice.
++class PortalSortNotifier extends Notifier<PortalSort> {
++  bool get _simple =>
++      ref.read(patchClashConfigProvider.select((s) => s.mode)) == Mode.global;
++
++  @override
++  PortalSort build() {
++    // Watched, so flipping the switch re-reads the other mode's stored order.
++    final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
++    final settings = ref.watch(appSettingProvider);
++    final stored = mode == Mode.global ? settings.portalSortXray : settings.portalSortRules;
++    return PortalSort.values.firstWhere(
++      (value) => value.name == stored,
++      orElse: () => PortalSort.subscription,
++    );
++  }
++
++  void cycle() {
++    final next = state.next;
++    ref.read(appSettingProvider.notifier).update(
++          (settings) => _simple
++              ? settings.copyWith(portalSortXray: next.name)
++              : settings.copyWith(portalSortRules: next.name),
++        );
++  }
++}
++
++final portalSortProvider =
++    NotifierProvider<PortalSortNotifier, PortalSort>(PortalSortNotifier.new);
++
++/// Which group the strip shows. Null means "the first one the panel offers",
++/// which survives subscription updates that reorder groups.
++class PortalGroupNotifier extends Notifier<String?> {
++  @override
++  String? build() => null;
++
++  void pick(String? name) => state = name;
++}
++
++final portalGroupProvider =
++    NotifierProvider<PortalGroupNotifier, String?>(PortalGroupNotifier.new);
++
++/// The row the user just tapped. The engine may take a moment to switch, so the
++/// highlight moves at once and this clears when the group reports the same choice.
++class PortalPendingNotifier extends Notifier<Map<String, String>> {
++  @override
++  Map<String, String> build() => const {};
++
++  void pick(String group, String proxy) => state = {...state, group: proxy};
++
++  void clear(String group) {
++    if (!state.containsKey(group)) return;
++    state = {...state}..remove(group);
++  }
++}
++
++final portalPendingProvider =
++    NotifierProvider<PortalPendingNotifier, Map<String, String>>(
++        PortalPendingNotifier.new);
++
++/// Delays timed by the app itself, for servers of either core.
++///
++/// The engine only reports delays for the servers it holds and never their addresses, so a
++/// TCP handshake from here is the one measurement that works for both lists. A missing key
++/// means "not asked yet"; a null entry means "asked, no answer".
++final tcpDelayProvider =
++    NotifierProvider<TcpDelayNotifier, Map<String, int?>>(TcpDelayNotifier.new);
++
++/// The addresses saved with the profile, so an engine server can be timed directly.
++final proxyEndpointsProvider =
++    FutureProvider.autoDispose<Map<String, ProxyEndpoint>>((ref) async {
++  final profile = ref.watch(currentProfileProvider);
++  if (profile == null) return const {};
++  final path = await appPath.getProfilePath(profile.id.toString());
++  return loadProxyEndpoints(path);
++});
++
++class TcpDelayNotifier extends Notifier<Map<String, int?>> {
++  @override
++  Map<String, int?> build() => const {};
++
++  Future<void> measureAll(List<(String, String, int)> targets) async {
++    if (targets.isEmpty) return;
++    state = {...state, for (final t in targets) t.$1: null};
++    for (final (name, host, port) in targets) {
++      final value = await tcpPing(host, port);
++      state = {...state, name: value};
++    }
++  }
++
++  Future<void> measureOne(String name, String host, int port) async {
++    state = {...state, name: null};
++    final value = await tcpPing(host, port);
++    state = {...state, name: value};
++  }
++}
++
++/// Groups the user turned into a bypass: their outbound is DIRECT, so the chip can
++/// simply go grey. The name people know for that state is 'не идёт через портал'.
++class PortalBypassNotifier extends Notifier<Map<String, String?>> {
++  @override
++  Map<String, String?> build() => const {};
++
++  /// Drops the remembered state without touching the proxy — used when the user picks a
++  /// portal by hand for a filter that was out of the portal from the start.
++  void forget(String name) {
++    if (!state.containsKey(name)) return;
++    state = {...state}..remove(name);
++  }
++
++  /// The press answers in the UI at once; the engine is told afterwards and its answer
++  /// is not waited for. A chip that greys only when the core confirms reads as a dead
++  /// control, and the user's job is not to watch the tunnel.
++  void toggle(WidgetRef ref, Group group) {
++    final action = ref.read(proxiesActionProvider.notifier);
++    if (state.containsKey(group.name)) {
++      final restore = state[group.name];
++      state = {...state}..remove(group.name);
++      if (restore != null) {
++        action.changeProxy(groupName: group.name, proxyName: restore);
++      }
++      return;
++    }
++    // Bypass routes to the engine's own built-in, whatever the panel calls it.
++    final target = group.all
++            .where((proxy) => _isBuiltinOutbound(proxy.name))
++            .map((proxy) => proxy.name)
++            .firstOrNull ??
++        'DIRECT';
++    state = {...state, group.name: group.now};
++    action.changeProxy(groupName: group.name, proxyName: target);
++  }
++}
++
++final portalBypassProvider =
++    NotifierProvider<PortalBypassNotifier, Map<String, String?>>(
++        PortalBypassNotifier.new);
++
++/// How the filter chips are drawn. Default 2 is 'name + server + icon'. Lives in a
++/// provider so switching the mode does not reset the user's choice.
++class PortalDisplayNotifier extends Notifier<int> {
++  @override
++  int build() => 2;
++
++  void cycle() => state = (state + 1) % 5;
++}
++
++final portalDisplayProvider =
++    NotifierProvider<PortalDisplayNotifier, int>(PortalDisplayNotifier.new);
++
++
++/// What is actually crossing the wire right now, taken from the engine's own connection
++/// list: how many connections are open, how fast they move, and how much belongs to each
++/// filter. Nothing here is inferred or animated for show.
++typedef PortalLive = ({
++  int connections,
++  int down,
++  int up,
++});
++
++final portalLiveProvider = Provider<PortalLive>((ref) {
++  final list = ref.watch(requestsProvider).list;
++  var down = 0;
++  var up = 0;
++  for (final request in list) {
++    final requestDown = request.downloadSpeed ?? 0;
++    final requestUp = request.uploadSpeed ?? 0;
++    down += requestDown;
++    up += requestUp;
++  }
++  return (
++    connections: list.length,
++    down: down,
++    up: up,
++  );
++});
++
++class PortalFiltersNotifier extends Notifier<({Set<String> hidden, List<String> order})> {
++  @override
++  ({Set<String> hidden, List<String> order}) build() =>
++      (hidden: <String>{}, order: const <String>[]);
++
++  void toggle(String name) {
++    final hidden = {...state.hidden};
++    if (!hidden.remove(name)) hidden.add(name);
++    state = (hidden: hidden, order: state.order);
++  }
++
++  void reorder(List<String> order) =>
++      state = (hidden: state.hidden, order: order);
++
++}
++
++final portalFiltersProvider = NotifierProvider<PortalFiltersNotifier,
++    ({Set<String> hidden, List<String> order})>(PortalFiltersNotifier.new);
++
++/// The engine's built-in outbounds sometimes arrive decorated ('DIRECT 🇷🇺',
++/// 'Direct '), so the check is on the leading word, not on an exact match.
++bool _isBuiltinOutbound(String name) => isBuiltinOutboundName(name);
++
++List<Group> portalGroups(List<Group> all) => [
++      for (final item in all)
++        if (item.hidden != true && !_isBuiltinOutbound(item.name)) item,
++    ];
++
++/// Same list, after the user's own order and hidden set.
++List<Group> portalVisibleGroups(List<Group> all, Set<String> hidden, List<String> order) {
++  final visible = [
++    for (final group in portalGroups(all))
++      if (!hidden.contains(group.name)) group,
++  ];
++  if (order.isEmpty) return visible;
++  visible.sort((a, b) {
++    final ia = order.indexOf(a.name);
++    final ib = order.indexOf(b.name);
++    if (ia == -1 && ib == -1) return 0;
++    if (ia == -1) return 1;
++    if (ib == -1) return -1;
++    return ia.compareTo(ib);
++  });
++  return visible;
++}
++
++/// The servers the second core offers.
++///
++/// The subscription body is an array of full xray configurations and each element is one
++/// server, so the list is built from those elements — name, description and the config that
++/// would be started if it were chosen.
++final xrayServersProvider =
++    FutureProvider.autoDispose<List<XrayServerConfig>>((ref) async {
++  final profile = ref.read(currentProfileProvider);
++  if (profile == null) return const [];
++  final body = await profile.readXrayFormat();
++  if (body == null) return const [];
++  final servers = parseXraySubscription(body);
++  if (servers.isNotEmpty) {
++    commonPrint.log(
++      'xray subscription: ${servers.length} servers, '
++      'first=${servers.take(3).map((s) => s.label).join(' | ')}',
++    );
++  }
++  return servers;
++});
++
++/// Whether the current subscription carries the engine's own format.
++///
++/// The "Сеть порталов" switch is meaningless without it: rules live in that YAML, and a
++/// subscription the panel only serves for Xray has nothing to route. Unknown counts as
++/// available so the switch does not flicker off while the file is being checked.
++final engineFormatAvailableProvider = FutureProvider.autoDispose<bool>((ref) async {
++  final profile = ref.watch(currentProfileProvider);
++  if (profile == null) return false;
++  try {
++    final file = await profile.file;
++    return await file.exists() && await file.length() > 32;
++  } catch (_) {
++    return false;
++  }
++});
++
++/// Hands the traffic to Xray for the simple portal.
++///
++/// Order matters: the child must answer before the engine is told to send everything to it,
++/// otherwise the switch would show a portal that cannot carry a packet. If the pick cannot
++/// be resolved — a builtin, or a name the applied config no longer has — the mode is left
++/// alone rather than pointing at a dead port.
++Future<void> _enterSimplePortal(WidgetRef ref) async {
++  // The strip keeps a null group name until the owner picks one; the first group is what
++  // the list is showing in that case, so the pick lives there.
++  final groupName = ref.read(portalGroupProvider) ??
++      ref.read(groupsProvider).firstOrNull?.name;
++  final chosen =
++      groupName == null ? null : ref.read(selectedProxyNameProvider(groupName));
++  // The second core prefers its own node list: the panel served it for exactly this
++  // purpose, and its names need not exist in the engine's config at all. The engine's
++  // config is the fallback, so a subscription with only YAML still works.
++  Map<String, dynamic>? node;
++  final profile = ref.read(currentProfileProvider);
++  if (profile != null) {
++    final body = await profile.readXrayFormat();
++    if (body != null) {
++      final servers = parseXraySubscription(body);
++      final server = xrayServerFor(servers, chosen);
++      if (server != null) {
++        // Each server is its own full configuration; the chosen one is what the core runs.
++        // Only the socks entry point is ours to set.
++        final started = await XrayCore.instance.start(
++          withSocksInbound(jsonEncode(server.config)),
++        );
++        if (started['ok'] != true) return;
++        await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
++        await ref
++            .read(proxiesActionProvider.notifier)
++            .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
++        return;
++      }
++      node = xrayNodeFor(parseShareLinks(body), chosen);
++    }
++  }
++  if (node == null && chosen != null) {
++    final path = await appPath.configFilePath;
++    node = await nodeDefinitionFor(path, chosen);
++  }
++  if (node == null) {
++    // No node for the child means the portal would be a dead port, so the mode stays put.
++    return;
++  }
++  final started = await XrayCore.instance.start(xrayConfigJson(node));
++  if (started['ok'] != true) return;
++  await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
++  await ref
++      .read(proxiesActionProvider.notifier)
++      .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
++}
++
++/// Mode control with the two list controls beside it: sorting and the delay test.
++class PortalModeSwitch extends ConsumerWidget {
++  const PortalModeSwitch({super.key});
++
++  @override
++  Widget build(BuildContext context, WidgetRef ref) {
++    final theme = Theme.of(context);
++    final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
++    final modes = ref.watch(availableModesProvider);
++    final running = ref.watch(runTimeProvider) != null;
++    final filters = ref.watch(portalFiltersProvider);
++    final groups = portalVisibleGroups(
++      ref.watch(groupsProvider),
++      filters.hidden,
++      filters.order,
++    );
++    final groupName = ref.watch(portalGroupProvider);
++    final group = groups.where((g) => g.name == groupName).firstOrNull ??
++        groups.firstOrNull;
++    final sort = ref.watch(portalSortProvider);
++    final engineAvailable =
++        ref.watch(engineFormatAvailableProvider).value ?? true;
++    final testing = group != null &&
++        ref.watch(
++          delayTestingGroupsProvider.select((s) => s.contains(group.name)),
++        );
++    if (modes.length < 2) return const SizedBox.shrink();
++    return Row(
++      children: [
++        // Switch at the left edge, its label to the right of it.
++        // Centred pair: a larger label in the legacy green while the network is on,
++        // and a switch that reads as a switch. The editor button only exists in the
++        // network mode, so 'Сеть порталов' has somewhere obvious to lead.
++        GestureDetector(
++          // A plain tap on 'Сеть порталов' opens the proxies dashboard: that is what
++          // the network mode is for. The double tap still edits the filter strip.
++          onTap: () => Navigator.of(context).push(
++            MaterialPageRoute(builder: (_) => const ProxiesView()),
++          ),
++
++          child: Row(
++            mainAxisSize: MainAxisSize.min,
++            children: [
++              Switch(
++                value: mode == Mode.rule && engineAvailable,
++                activeThumbColor: _liveGreen(context),
++                activeTrackColor: _liveGreen(context).withValues(alpha: 0.4),
++                // No engine format, no rules: the control stays visible but dead, so the
++                // owner sees why instead of a switch that does nothing.
++                onChanged: !engineAvailable
++                    ? null
++                    : (value) {
++                  HapticFeedback.selectionClick();
++                  if (value) {
++                    // Back to the portal network: leave the child before the engine starts
++                    // routing again, so nothing is left holding the port.
++                    ref.read(setupActionProvider.notifier).pickMode(Mode.rule);
++                    XrayCore.instance.stop();
++                    return;
++                  }
++                  // The animation has already begun from this tap; the child, the hand-over
++                  // and the mode change settle behind it.
++                        unawaited(_enterSimplePortal(ref));
++                      },
++              ),
++              const SizedBox(width: 8),
++              Text(
++                context.appLocalizations.rules,
++                style: theme.textTheme.titleMedium?.copyWith(
++                  color: mode == Mode.rule
++                      ? _liveGreen(context)
++                      : theme.colorScheme.onSurfaceVariant,
++                  fontWeight: FontWeight.w600,
++                ),
++              ),
++            ],
++          ),
++        ),
++        const Spacer(),
++        const SizedBox(width: 4),
++        IconButton(
++          tooltip: context.appLocalizations.sortTooltip(sortLabelFor(context, sort)),
++          onPressed: () {
++            HapticFeedback.selectionClick();
++            ref.read(portalSortProvider.notifier).cycle();
++          },
++          icon: GlyphIcon(
++            switch (sort) {
++              PortalSort.subscription => AppGlyphs.sliders,
++              PortalSort.ping => AppGlyphs.sort,
++              PortalSort.alphabet => AppGlyphs.textShort,
++            },
++            size: 18,
++          ),
++        ),
++        IconButton(
++          tooltip: context.appLocalizations.delayTest,
++          // A delay test says which servers answer, so it must not depend on the portal
++          // being open: the test wakes the engine for its duration and closes it again.
++          onPressed: testing
++              ? null
++              : () {
++                  HapticFeedback.mediumImpact();
++                  // In the simple portal the list is the second core's, so the engine test
++                  // has nothing to measure — its own servers are timed directly instead.
++                  // The app's own measurement serves both lists; the engine test is the
++                  // fallback for a profile whose addresses are unknown.
++                  final servers = ref.read(xrayServersProvider).value ?? const [];
++                  final endpoints = ref.read(proxyEndpointsProvider).value ?? const {};
++                  final targets = <(String, String, int)>[
++                    for (final server in servers)
++                      if (server.port > 0) (server.name, server.address, server.port),
++                    if (servers.isEmpty && group != null)
++                      for (final proxy in group.all)
++                        if (endpoints[proxy.name] case final e? when e.isUsable)
++                          (proxy.name, e.host, e.port),
++                  ];
++                  if (targets.isNotEmpty) {
++                    unawaited(
++                      ref.read(tcpDelayProvider.notifier).measureAll(targets),
++                    );
++                    return;
++                  }
++                  if (group == null) return;
++                  unawaited(
++                    _testDelayWithEngine(
++                      ref,
++                      [
++                        for (final proxy in group.all)
++                          if (!_isBuiltinOutbound(proxy.name)) proxy,
++                      ],
++                      testUrl: group.testUrl,
++                      wasRunning: running,
++                    ),
++                  );
++                },
++          // A test in flight spins instead of pretending nothing is happening.
++          icon: testing
++              ? SizedBox.square(
++                  dimension: 16,
++                  child: CircularProgressIndicator(
++                    strokeWidth: 2,
++                    color: theme.colorScheme.primary,
++                  ),
++                )
++              : GlyphIcon(
++                  AppGlyphs.bolt,
++                  size: 18,
++                  color: theme.colorScheme.onSurfaceVariant,
++                ),
++        ),
++      ],
++    );
++  }
++}
++
++/// The working screen's server list: a group strip with arrows (network mode only),
++/// a tinted row for the chosen server, name left and delay right.
++class PortalServerList extends ConsumerWidget {
++  const PortalServerList({super.key});
++
++  @override
++  Widget build(BuildContext context, WidgetRef ref) {
++    final theme = Theme.of(context);
++    final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
++    final simple = mode == Mode.global;
++    final filters = ref.watch(portalFiltersProvider);
++    final groups = portalVisibleGroups(
++      ref.watch(groupsProvider),
++      filters.hidden,
++      filters.order,
++    );
++    final groupName = ref.watch(portalGroupProvider);
++    final group = groups.where((g) => g.name == groupName).firstOrNull ??
++        groups.firstOrNull;
++    if (group == null) {
++      return Padding(
++        padding: const EdgeInsets.all(16),
++        child: Text(
++          context.appLocalizations.proxyGroupEmpty,
++          style: theme.textTheme.bodyMedium
++              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
++        ),
++      );
++    }
++    final sort = ref.watch(portalSortProvider);
++    final pending = ref.watch(portalPendingProvider)[group.name];
++    if (pending != null && group.now == pending) {
++      // Applied for real: drop the optimistic marker on the next frame.
++      WidgetsBinding.instance.addPostFrameCallback((_) {
++        ref.read(portalPendingProvider.notifier).clear(group.name);
++      });
++    }
++    // The simple portal is driven by the second core, whose build of the same subscription
++    // names its own servers. Showing the engine's list here would offer nodes the running
++    // core does not have — and hide the extras it does.
++    final xrayServers = simple
++        ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
++        : const <XrayServerConfig>[];
++    // One source for "what is chosen": the profile's own selection, which changeProxy
++    // writes optimistically. No per-filter special cases — if a server was picked, it is
++    // picked, whether the group is RF services, Chinese services or YouTube. When the
++    // group routes to a built-in, its name is not in the member list, so nothing lights
++    // up without needing a second rule.
++    final bypassedGroup = ref.watch(portalBypassProvider).containsKey(group.name);
++    final chosenName = ref.watch(selectedProxyNameProvider(group.name));
++    final selectedName = bypassedGroup
++        ? null
++        : (pending ?? (xrayServers.isNotEmpty ? null : chosenName));
++    // Measure once when the list arrives: a portal whose servers all read "—" until you
++    // press something looks broken, and a closed portal is no reason not to know.
++    final endpoints = ref.watch(proxyEndpointsProvider).value ?? const {};
++    final targets = <(String, String, int)>[
++      for (final server in xrayServers)
++        if (server.port > 0) (server.name, server.address, server.port),
++      if (xrayServers.isEmpty)
++        for (final proxy in group.all)
++          if (endpoints[proxy.name] case final endpoint? when endpoint.isUsable)
++            (proxy.name, endpoint.host, endpoint.port),
++    ];
++    if (targets.isNotEmpty &&
++        !ref.watch(tcpDelayProvider.select((m) => m.isNotEmpty))) {
++      WidgetsBinding.instance.addPostFrameCallback((_) {
++        if (!context.mounted) return;
++        unawaited(ref.read(tcpDelayProvider.notifier).measureAll(targets));
++      });
++    }
++    final xrayServerByName = {
++      for (final server in xrayServers) server.name: server,
++    };
++    final members = xrayServers.isNotEmpty
++        ? [
++            for (final server in xrayServers)
++              Proxy(
++                name: server.name,
++                // The row shows this as the protocol badge: it comes from the server's own
++                // configuration, not from the fact that Xray is the core running it.
++                type: server.protocol,
++                serverDescription: server.label,
++              ),
++          ]
++        : [
++            for (final proxy in group.all)
++              if (!_isBuiltinOutbound(proxy.name)) proxy,
++          ];
++    switch (sort) {
++      case PortalSort.subscription:
++        // The panel's order is the order it wants: leave it exactly as delivered.
++        break;
++      case PortalSort.alphabet:
++        members.sort(
++          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
++        );
++      case PortalSort.ping:
++        final xrayDelays = ref.watch(tcpDelayProvider);
++        int rank(Proxy p) {
++          final value = xrayServerByName.containsKey(p.name)
++              ? xrayDelays[p.name]
++              : ref.watch(delayProvider(proxyName: p.name));
++          // -1 is mihomo's timeout marker, not a fast server.
++          return value == null || value <= 0 ? 1 << 30 : value;
++        }
++        members.sort((a, b) => rank(a).compareTo(rank(b)));
++    }
++    return Column(
++      crossAxisAlignment: CrossAxisAlignment.stretch,
++      children: [
++        // The filter strip belongs to the engine's rules. In the simple portal the list is
++        // the second core's own servers, so there are no filters to show.
++        if (!simple && xrayServers.isEmpty && groups.length > 1) const _GroupStrip(),
++        if (!simple && groups.length == 1)
++          Padding(
++            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
++            child: Text(
++              group.name,
++              style: theme.textTheme.labelLarge
++                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
++            ),
++          ),
++        for (final proxy in members)
++          _ServerRow(
++            group: group,
++            proxy: proxy,
++            selected: selectedName == proxy.name,
++            tcpHost: xrayServerByName[proxy.name]?.address ??
++                endpoints[proxy.name]?.host ??
++                '',
++            tcpPort: xrayServerByName[proxy.name]?.port ??
++                endpoints[proxy.name]?.port ??
++                0,
++          ),
++      ],
++    );
++  }
++}
++
++
++/// Waits until the engine reports a running proxy, so the first test is not queued into a
++/// core that has not applied its config yet.
++Future<void> _waitForEngine(WidgetRef ref) async {
++  for (var attempt = 0; attempt < 40; attempt++) {
++    if (ref.read(runTimeProvider) != null) return;
++    await Future<void>.delayed(const Duration(milliseconds: 150));
++  }
++}
++
++/// Runs a delay test, opening the engine for it when the portal is closed.
++///
++/// The engine answers a delay test for any proxy in its applied config, but it needs to be
++/// running to have that config and to reach the nodes. So a closed portal is opened for the
++/// duration of the test, without any of the portal's own animation or state, and closed
++/// again afterwards. If the portal was already open, nothing is toggled.
++Future<void> _testDelayWithEngine(
++  WidgetRef ref,
++  List<Proxy> proxies, {
++  String? testUrl,
++  required bool wasRunning,
++}) async {
++  if (proxies.isEmpty) return;
++  if (wasRunning) {
++    await ref.read(proxiesActionProvider.notifier).delayTest(proxies, testUrl);
++    return;
++  }
++  final testing = ref.read(delayTestingGroupsProvider.notifier);
++  try {
++    // Opened behind the scenes: the portal's own button and timer never see this state.
++    await ref.read(setupActionProvider.notifier).setRunning(true);
++    await _waitForEngine(ref);
++    await ref.read(proxiesActionProvider.notifier).delayTest(proxies, testUrl);
++  } finally {
++    await ref.read(setupActionProvider.notifier).setRunning(false);
++    testing.stop('');
++  }
++}
++
++/// Horizontal group filter. The chevrons are hints, not buttons: they say the strip
++/// can be dragged and hide themselves once that direction is exhausted. A double tap
++/// reveals an icon on every filter — a hidden trick, not a visible control.
++class _GroupStrip extends ConsumerStatefulWidget {
++  const _GroupStrip();
++
++  @override
++  ConsumerState<_GroupStrip> createState() => _GroupStripState();
++}
++
++class _GroupStripState extends ConsumerState<_GroupStrip> {
++  final _controller = ScrollController();
++  var _canBack = false;
++  var _canForward = false;
++
++
++  @override
++  void initState() {
++    super.initState();
++    _controller.addListener(_syncEdges);
++    WidgetsBinding.instance.addPostFrameCallback((_) => _syncEdges());
++  }
++
++  @override
++  void dispose() {
++    _controller.removeListener(_syncEdges);
++    _controller.dispose();
++    super.dispose();
++  }
++
++  void _syncEdges() {
++    if (!mounted || !_controller.hasClients) return;
++    final position = _controller.position;
++    final back = position.pixels > position.minScrollExtent + 1;
++    final forward = position.pixels < position.maxScrollExtent - 1;
++    if (back != _canBack || forward != _canForward) {
++      setState(() {
++        _canBack = back;
++        _canForward = forward;
++      });
++    }
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final theme = Theme.of(context);
++    final allGroups = ref.watch(groupsProvider);
++    final filters = ref.watch(portalFiltersProvider);
++    final groups = portalVisibleGroups(allGroups, filters.hidden, filters.order);
++    final display = ref.watch(portalDisplayProvider);
++    final active = ref.watch(portalGroupProvider) ?? groups.firstOrNull?.name;
++    final bypassedNames = ref.watch(portalBypassProvider).keys.toSet();
++    final pendingByGroup = ref.watch(portalPendingProvider);
++    final hint = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7);
++    return Row(
++      children: [
++        // Leftmost control of the strip: tap for the filter editor, hold for the
++        // proxies dashboard. Sorting lives on its own button and is not repeated here.
++        GestureDetector(
++          onTap: () {
++            HapticFeedback.selectionClick();
++            showPortalFilterEditor(context);
++          },
++          onLongPress: () {
++            HapticFeedback.mediumImpact();
++            Navigator.of(context).push(
++              MaterialPageRoute(builder: (_) => const ProxiesView()),
++            );
++          },
++          child: const Padding(
++            padding: EdgeInsets.only(right: 6),
++            child: GlyphIcon(AppGlyphs.sliders, size: 20),
++          ),
++        ),
++        SizedBox(
++          width: 18,
++          child: _canBack
++              ? GlyphIcon(AppGlyphs.chevronBack, size: 14, color: hint)
++              : null,
++        ),
++        Expanded(
++          child: GestureDetector(
++            onDoubleTap: () {
++              // Changing the layout re-measures every chip; keep the strip where the
++              // user left it instead of snapping back to the first one.
++              final offset = _controller.hasClients ? _controller.offset : 0.0;
++              ref.read(portalDisplayProvider.notifier).cycle();
++              WidgetsBinding.instance.addPostFrameCallback((_) {
++                if (!_controller.hasClients) return;
++                final max = _controller.position.maxScrollExtent;
++                _controller.jumpTo(offset.clamp(0.0, max));
++              });
++            },
++            child: NotificationListener<ScrollMetricsNotification>(
++              onNotification: (_) {
++                _syncEdges();
++                return false;
++              },
++              child: SingleChildScrollView(
++                controller: _controller,
++                scrollDirection: Axis.horizontal,
++                child: Row(
++                  children: [
++                    for (final item in groups)
++                      Builder(builder: (context) {
++                        // A filter the panel already routes to DIRECT is a bypass by
++                        // definition: it should look that way before anyone touches it.
++                        // A hand-picked server wins over the panel's DIRECT at once:
++                        // the chip colours the moment the user chooses, without
++                        // waiting for the engine to confirm the route.
++                        final picked = pendingByGroup[item.name] != null;
++                        final bypassed = bypassedNames.contains(item.name) ||
++                            (_isBuiltinOutbound(item.now ?? '') && !picked);
++                        return Padding(
++                        padding: const EdgeInsets.symmetric(horizontal: 3),
++                        child: GestureDetector(
++                          // Long press turns the filter into a bypass: the engine gets
++                          // DIRECT, the chip goes grey, nobody has to hunt for DIRECT
++                          // in the server list.
++                          onLongPress: () {
++                            HapticFeedback.mediumImpact();
++                            ref
++                                .read(portalBypassProvider.notifier)
++                                .toggle(ref, item);
++                          },
++                          child: Opacity(
++                            opacity: bypassed ? 0.45 : 1,
++                            child: ChoiceChip(
++                          showCheckmark: false,
++                          // Five layouts, one row each: name, name+server,
++                          // icon+server, icon. Everything centres by construction.
++                          label: Builder(
++                            builder: (context) {
++                              // 0 name · 1 name+server · 2 name+server+icon ·
++                              // 3 icon+server · 4 icon
++                              final showIcon = display >= 2;
++                              final showName = display <= 2;
++                              final showServer =
++                                  display == 1 || display == 2 || display == 3;
++                              final mark = SizedBox.square(
++                                dimension: 16,
++                                child: CommonTargetIcon(
++                                  src: item.icon,
++                                  fallback: GroupMonogram(item.name),
++                                ),
++                              );
++                              // A bypassed filter has no server on screen at all:
++                              // the user should see "nothing goes through here", not
++                              // the word DIRECT.
++                              // What the user just picked wins over what the engine
++                              // has confirmed: the chip must name the chosen server
++                              // in the same frame as the tap.
++                              final server =
++                                  bypassed ? null : (picked ? pendingByGroup[item.name] : item.now);
++                              final text = [
++                                if (showName) item.name,
++                                if (showServer &&
++                                    server != null &&
++                                    server != item.name)
++                                  server,
++                              ].join(' · ');
++                              if (!showIcon) {
++                                return Text(text.isEmpty ? item.name : text);
++                              }
++                              if (text.isEmpty) return mark;
++                              return Row(
++                                mainAxisSize: MainAxisSize.min,
++                                mainAxisAlignment: MainAxisAlignment.center,
++                                children: [
++                                  mark,
++                                  const SizedBox(width: 6),
++                                  Text(text),
++                                ],
++                              );
++                            },
++                          ),
++                          selected: item.name == active,
++                          onSelected: (_) {
++                            HapticFeedback.selectionClick();
++                            ref
++                                .read(portalGroupProvider.notifier)
++                                .pick(item.name);
++                            // The porthole's mark reads the profile's current group; a
++                            // chip that only moved its own state left the two disagreeing.
++                            ref
++                                .read(proxiesActionProvider.notifier)
++                                .updateCurrentGroupName(item.name);
++                          },
++                            ),
++                          ),
++                        ),
++                      );
++                      }),
++                  ],
++                ),
++              ),
++            ),
++          ),
++        ),
++        SizedBox(
++          width: 18,
++          child: _canForward
++              ? GlyphIcon(AppGlyphs.chevronForward, size: 14, color: hint)
++              : null,
++        ),
++      ],
++    );
++  }
++}
++
++/// The legacy palette's three traffic lights: fast, tolerable, bad.
++/// The live green of the portal controls. The neon version is right on the dark screen
++/// and reads as "salad" on white, so light theme gets a deeper emerald instead.
++Color _liveGreen(BuildContext context) =>
++    Theme.of(context).brightness == Brightness.dark
++        ? const Color(0xFF00F5A0)
++        : const Color(0xFF0E9F6E);
++
++// Theme-aware: the neon palette is right on the dark screen and unreadable on white.
++Color _delayFast(BuildContext context) => Theme.of(context).brightness == Brightness.dark
++    ? const Color(0xFF00F5A0)
++    : const Color(0xFF0E9F6E);
++Color _delaySlow(BuildContext context) => Theme.of(context).brightness == Brightness.dark
++    ? const Color(0xFFFFC107)
++    : const Color(0xFFB26A00);
++Color _delayBad(BuildContext context) => Theme.of(context).brightness == Brightness.dark
++    ? const Color(0xFFFF4B6E)
++    : const Color(0xFFB3261E);
++
++Color _delayColor(BuildContext context, int? value) {
++  if (value == null) {
++    return Theme.of(context).brightness == Brightness.dark
++        ? const Color(0xFF7C8699)
++        : const Color(0xFF5F6B7A);
++  }
++  if (value <= 0) return _delayBad(context); // timeout
++  if (value <= 399) return _delayFast(context);
++  if (value <= 1499) return _delaySlow(context);
++  return _delayBad(context);
++}
++
++String sortLabelFor(BuildContext context, PortalSort sort) {
++  final l10n = context.appLocalizations;
++  return switch (sort) {
++    PortalSort.subscription => l10n.sortAsSubscription,
++    PortalSort.ping => l10n.sortByPing,
++    PortalSort.alphabet => l10n.sortByName,
++  };
++}
++
++String _delayText(int? value) {
++  if (value == null) return '—';
++  if (value <= 0) return '—';
++  return '$value ms';
++}
++
++class _ServerRow extends ConsumerStatefulWidget {
++  const _ServerRow({
++    required this.group,
++    required this.proxy,
++    required this.selected,
++    this.tcpHost = '',
++    this.tcpPort = 0,
++  });
++
++  final Group group;
++  final Proxy proxy;
++  final bool selected;
++
++  /// Where this server listens, when it is known: the row then times a TCP handshake
++  /// instead of asking a core that either does not hold the server or cannot report it.
++  final String tcpHost;
++  final int tcpPort;
++
++  @override
++  ConsumerState<_ServerRow> createState() => _ServerRowState();
++}
++
++class _ServerRowState extends ConsumerState<_ServerRow>
++    with SingleTickerProviderStateMixin {
++  late final AnimationController _controller = AnimationController(
++    vsync: this,
++    duration: const Duration(milliseconds: 420),
++    value: widget.selected ? 1 : 0,
++  );
++
++  @override
++  void didUpdateWidget(_ServerRow oldWidget) {
++    super.didUpdateWidget(oldWidget);
++    if (widget.selected != oldWidget.selected) {
++      if (widget.selected) {
++        _controller.forward(from: 0);
++      } else {
++        _controller.reverse();
++      }
++    }
++  }
++
++  @override
++  void dispose() {
++    _controller.dispose();
++    super.dispose();
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final theme = Theme.of(context);
++    final scheme = theme.colorScheme;
++    final allGroups = ref.watch(groupsProvider);
++    final byName = {for (final item in allGroups) item.name: item};
++    String? resolve(String? name, [int depth = 0]) {
++      if (name == null || depth > 6) return null;
++      final next = byName[name];
++      if (next == null) return name;
++      return resolve(next.now, depth + 1);
++    }
++
++    final node = byName.containsKey(widget.proxy.name)
++        ? resolve(widget.proxy.name)
++        : null;
++    final measurable = widget.tcpHost.isNotEmpty && widget.tcpPort > 0;
++    final delay = measurable
++        ? ref.watch(tcpDelayProvider)[widget.proxy.name]
++        : ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
++    final color = widget.selected
++        ? scheme.onPrimaryContainer
++        : scheme.onSurfaceVariant;
++    return AnimatedBuilder(
++      animation: _controller,
++      builder: (context, child) {
++        final t = Curves.easeOutCubic.transform(_controller.value);
++        // The highlight arrives as a wave: a bright edge sweeps in from the left and
++        // settles into the row's tint, so the eye can follow the switch.
++        final sweep = widget.selected ? (1 - t) : 0.0;
++        return Container(
++          margin: const EdgeInsets.symmetric(vertical: 1),
++          decoration: BoxDecoration(
++            borderRadius: BorderRadius.circular(10),
++            color: scheme.primaryContainer.withValues(alpha: 0.16 + 0.84 * t),
++            gradient: sweep <= 0
++                ? null
++                : LinearGradient(
++                    begin: Alignment(-1 + 2 * t, 0),
++                    end: Alignment(0.4 + 2 * t, 0),
++                    colors: [
++                      scheme.primary.withValues(alpha: 0),
++                      scheme.primary.withValues(alpha: 0.45 * sweep),
++                      scheme.primary.withValues(alpha: 0),
++                    ],
++                  ),
++          ),
++          child: child,
++        );
++      },
++      child: ListTile(
++        dense: true,
++        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
++        leading: GlyphIcon(
++          widget.selected ? AppGlyphs.check : AppGlyphs.proxies,
++          size: 20,
++          color: color,
++        ),
++        title: Text(
++          node == null || node == widget.proxy.name
++              ? widget.proxy.name
++              : '${widget.proxy.name} · $node',
++          maxLines: 1,
++          overflow: TextOverflow.ellipsis,
++          style: theme.textTheme.bodyLarge?.copyWith(
++            color: widget.selected ? scheme.onPrimaryContainer : null,
++            fontWeight: widget.selected ? FontWeight.w600 : null,
++          ),
++        ),
++        trailing: Row(
++          mainAxisSize: MainAxisSize.min,
++          children: [
++            // The protocol is part of the row, always: it is what distinguishes two
++            // servers of the same country, and hiding it behind a gesture made the list
++            // read as if every server spoke the same thing.
++            Text(
++              widget.proxy.type.toUpperCase(),
++              style: theme.textTheme.labelSmall?.copyWith(
++                color: scheme.onSurfaceVariant,
++                letterSpacing: 0.4,
++              ),
++            ),
++            const SizedBox(width: 6),
++            Text(
++              _delayText(delay),
++              style: theme.textTheme.labelMedium?.copyWith(
++                color: _delayColor(context, delay),
++                fontWeight: FontWeight.w600,
++              ),
++            ),
++          ],
++        ),
++        onTap: () {
++          HapticFeedback.selectionClick();
++          // Picking a portal by hand is also the way out of a bypass: the filter stops
++          // being grey, because it is no longer routed around the portal.
++          ref.read(portalBypassProvider.notifier).forget(widget.group.name);
++          ref
++              .read(portalPendingProvider.notifier)
++              .pick(widget.group.name, widget.proxy.name);
++          ref.read(proxiesActionProvider.notifier).changeProxy(
++                groupName: widget.group.name,
++                proxyName: widget.proxy.name,
++              );
++        },
++        // A long press answers the question a person actually has about one server: does
++        // this one respond, and how fast — not what protocol it speaks, which is on the row
++        // already.
++        onLongPress: () {
++          HapticFeedback.mediumImpact();
++          if (measurable) {
++            unawaited(
++              ref.read(tcpDelayProvider.notifier).measureOne(
++                    widget.proxy.name,
++                    widget.tcpHost,
++                    widget.tcpPort,
++                  ),
++            );
++            return;
++          }
++          unawaited(
++            _testDelayWithEngine(
++              ref,
++              [widget.proxy],
++              wasRunning: ref.read(runTimeProvider) != null,
++            ),
++          );
++        },
++      ),
++    );
++  }
++}
++
++/// Plan status and the provider's announcement in one card.
++class PortalPlanCard extends ConsumerWidget {
++  const PortalPlanCard({super.key});
++
++  @override
++  Widget build(BuildContext context, WidgetRef ref) {
++    final theme = Theme.of(context);
++    final profile = ref.watch(currentProfileProvider);
++    final announcement = ref.watch(announcementProvider);
++    // The panel's title is a sentence, not a name; the card shows the name.
++    final name = profile == null
++        ? ''
++        : (profile.headers.displayName ??
++            profile.headers.serviceName ??
++            profile.realLabel);
++
++    return Card(
++      margin: EdgeInsets.zero,
++      elevation: 0,
++      color: theme.colorScheme.surfaceContainerHigh,
++      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
++      child: Padding(
++        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
++        child: Column(
++          crossAxisAlignment: CrossAxisAlignment.start,
++          children: [
++            // One line, as approved: name and mark first, then the two facts separated by
++            // middle dots. Dashes stand in when the panel sends nothing, so the shape never
++            // changes between accounts.
++            if (profile != null)
++              Builder(
++                builder: (context) {
++                  final facts = SubscriptionFacts.of(profile);
++                  final meta = theme.textTheme.labelMedium
++                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
++                  final expiry = facts.expiry == '—'
++                      ? '—'
++                      : context.appLocalizations.expiresUntil(facts.expiry);
++                  return Text.rich(
++                    TextSpan(
++                      children: [
++                        TextSpan(
++                          text: '$name ${facts.mark}',
++                          style: theme.textTheme.labelMedium?.copyWith(
++                            color: theme.colorScheme.onSurface,
++                            fontWeight: FontWeight.w600,
++                          ),
++                        ),
++                        TextSpan(text: '  ·  ', style: meta),
++                        TextSpan(text: facts.traffic, style: meta),
++                        TextSpan(text: '  ·  ', style: meta),
++                        TextSpan(text: expiry, style: meta),
++                      ],
++                    ),
++                    maxLines: 2,
++                    overflow: TextOverflow.ellipsis,
++                  );
++                },
++              )
++            else
++              Text(
++                name,
++                style: theme.textTheme.labelMedium
++                    ?.copyWith(color: theme.colorScheme.onSurface),
++              ),
++            if (announcement != null && announcement.isNotEmpty) ...[
++              const SizedBox(height: 8),
++              Divider(height: 1, color: theme.colorScheme.outlineVariant),
++              const SizedBox(height: 8),
++              Text(
++                announcement,
++                maxLines: 3,
++                overflow: TextOverflow.ellipsis,
++                style: theme.textTheme.bodySmall
++                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
++              ),
++            ],
++          ],
++        ),
++      ),
++    );
++  }
++}
++
++/// Reorder and hide the group filters. A sheet, not a page: it edits a row of chips.
++Future<void> showPortalFilterEditor(BuildContext context) {
++  return showModalBottomSheet<void>(
++    context: context,
++    showDragHandle: true,
++    isScrollControlled: true,
++    builder: (_) => const _FilterEditorSheet(),
++  );
++}
++
++class _FilterEditorSheet extends ConsumerWidget {
++  const _FilterEditorSheet();
++
++  @override
++  Widget build(BuildContext context, WidgetRef ref) {
++    final theme = Theme.of(context);
++    final filters = ref.watch(portalFiltersProvider);
++    final groups = portalGroups(ref.watch(groupsProvider));
++    final order = filters.order.isEmpty
++        ? [for (final group in groups) group.name]
++        : [
++            ...filters.order.where((name) => groups.any((g) => g.name == name)),
++            ...groups
++                .map((g) => g.name)
++                .where((name) => !filters.order.contains(name)),
++          ];
++    return SafeArea(
++      child: Padding(
++        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
++        child: Column(
++          mainAxisSize: MainAxisSize.min,
++          crossAxisAlignment: CrossAxisAlignment.start,
++          children: [
++            Text(context.appLocalizations.filtersTitle,
++                style: theme.textTheme.titleMedium),
++            const SizedBox(height: 4),
++            Text(
++              context.appLocalizations.filtersHint,
++              style: theme.textTheme.bodySmall
++                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
++            ),
++            const SizedBox(height: 8),
++            Flexible(
++              child: ReorderableListView(
++                shrinkWrap: true,
++                onReorder: (from, to) {
++                  final next = [...order];
++                  if (to > from) to -= 1;
++                  next.insert(to, next.removeAt(from));
++                  ref.read(portalFiltersProvider.notifier).reorder(next);
++                },
++                children: [
++                  for (final (index, name) in order.indexed)
++                    ListTile(
++                      key: ValueKey(name),
++                      leading: Row(
++                        mainAxisSize: MainAxisSize.min,
++                        children: [
++                          // The handle people already know how to drag.
++                          ReorderableDragStartListener(
++                            index: index,
++                            child: const Padding(
++                              padding: EdgeInsets.only(right: 8),
++                              child: GlyphIcon(AppGlyphs.dragHandle, size: 20),
++                            ),
++                          ),
++                          SizedBox.square(
++                            dimension: 20,
++                            child: CommonTargetIcon(
++                              src: groups
++                                      .where((g) => g.name == name)
++                                      .firstOrNull
++                                      ?.icon ??
++                                  '',
++                              fallback: GroupMonogram(name),
++                            ),
++                          ),
++                        ],
++                      ),
++                      title: Text(name),
++                      trailing: Switch(
++                        value: !filters.hidden.contains(name),
++                        onChanged: (_) => ref
++                            .read(portalFiltersProvider.notifier)
++                            .toggle(name),
++                      ),
++                    ),
++                ],
++              ),
++            ),
++          ],
++        ),
++      ),
++    );
++  }
++}
++
++/// Both corner badges stay hidden until a double tap asks for them: a permanent
++/// counter is noise on a screen that is about the portal, not about the numbers.
++class PortalBadgeNotifier extends Notifier<bool> {
++  @override
++  bool build() => false;
++
++  void toggle() => state = !state;
++}
++
++final portalProfilesBadgeProvider =
++    NotifierProvider<PortalBadgeNotifier, bool>(PortalBadgeNotifier.new);
++final portalConnectionsBadgeProvider =
++    NotifierProvider<PortalBadgeNotifier, bool>(PortalBadgeNotifier.new);
++
+diff --git a/lib/views/dashboard/portal_gateway.dart b/lib/views/dashboard/portal_gateway.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..b6df1592a65d2d16321dfc30ef593c64cde5f28c
+--- /dev/null
++++ b/lib/views/dashboard/portal_gateway.dart
+@@ -0,0 +1,631 @@
++import 'dart:math' as math;
++
++import 'package:flutter/scheduler.dart';
++import 'package:flutter/services.dart';
++
++import 'package:fl_clash/common/common.dart';
++import 'package:fl_clash/ui/icons/icons.dart';
++import 'package:fl_clash/ui/ui.dart';
++import 'package:material_ui/material_ui.dart';
++
++/// The portal itself, drawn the way the legacy PortalVPN gateway drew it: a
++/// breathing core with two rings turning in opposite directions.
++///
++/// It is only the visual layer and keeps no state of its own: the caller owns
++/// the toggle, the run time and the suspended flag, so the button behaves the
++/// same as the plain one it replaces.
++class PortalGatewayCore extends StatefulWidget {
++  const PortalGatewayCore({
++    super.key,
++    required this.isStart,
++    required this.suspended,
++    required this.runTime,
++    this.size = 168,
++    this.center,
++    this.intensity = 0,
++    this.connections = 0,
++    this.rateText,
++    this.closedAtMs,
++    this.openedAtMs,
++  });
++
++  final bool isStart;
++  final bool suspended;
++  final int? runTime;
++  final double size;
++
++  /// The connected server's mark, shown inside a lit portal.
++  final Widget? center;
++
++  /// Live traffic pressure 0..1: it decides how many packets cross the portal and how
++  /// fast they move, so the picture follows the wire instead of a fixed loop.
++  final double intensity;
++
++  /// Open connections in the engine right now, and their measured rate.
++  final int connections;
++  final String? rateText;
++
++  /// Wall-clock moment the portal was switched off. The closing animation is computed
++  /// from it, so it survives the widget being rebuilt (or recreated) mid-animation.
++  final int? closedAtMs;
++
++  /// Wall-clock moment of the press that opens the portal. The sky starts moving on the
++  /// press; the engine catches up afterwards.
++  final int? openedAtMs;
++
++  @override
++  State<PortalGatewayCore> createState() => _PortalGatewayCoreState();
++}
++
++class _PortalGatewayCoreState extends State<PortalGatewayCore>
++    with SingleTickerProviderStateMixin {
++  // An endless clock, not a cycle: nothing rewinds, so the sky never cuts back to a
++  // beginning. Depth is a function of elapsed seconds.
++  final ValueNotifier<double> _clock = ValueNotifier<double>(0);
++  Ticker? _ticker;
++
++  @override
++  void initState() {
++    super.initState();
++    // A late field would only be created on first read — that is, in dispose.
++    _ticker = createTicker((elapsed) {
++      _clock.value = elapsed.inMicroseconds / Duration.microsecondsPerSecond;
++    })..start();
++  }
++
++  final _SpaceField _space = _SpaceField.generate(math.Random());
++
++
++
++  @override
++  void didUpdateWidget(PortalGatewayCore oldWidget) {
++    super.didUpdateWidget(oldWidget);
++    if (widget.isStart && !oldWidget.isStart) {
++      // The successful opening has its own tactile confirmation.  It is kept
++      // here (at the actual state transition), rather than only on the tap,
++      // so a delayed engine start still feels alive.
++      HapticFeedback.heavyImpact();
++    }
++  }
++
++  @override
++  void dispose() {
++    _ticker?.dispose();
++    _clock.dispose();
++    super.dispose();
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final colorScheme = context.colorScheme;
++    final portal = colorScheme.primary;
++    final reduced = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
++    final Widget core;
++    if (!widget.isStart) {
++      // The portal is off: nothing is drawn inside the hole.
++      core = const SizedBox.shrink();
++    } else if (widget.center != null) {
++      core = Column(
++        mainAxisSize: MainAxisSize.min,
++        children: [
++          widget.center!,
++          if (widget.rateText != null) ...[
++            const SizedBox(height: 4),
++            Text(
++              '${widget.connections} · ${widget.rateText}',
++              style: AppTextStyle.caption1
++                  .of(context)
++                  .copyWith(color: Colors.white.withValues(alpha: 0.7)),
++            ),
++          ],
++        ],
++      );
++    } else if (widget.suspended) {
++      core = const GlyphIcon(AppGlyphs.wifiOff, size: 34, fill: 1);
++    } else {
++      core = Text(
++        getTimeText(widget.runTime),
++        // The timer sits on the dark sky, not on the page: on a light theme the
++        // theme's own text colour would be black on black.
++        style: AppTextStyle.title3
++            .of(context)
++            .copyWith(color: Colors.white.withValues(alpha: 0.92)),
++      );
++    }
++    return SizedBox.square(
++      dimension: widget.size,
++      child: AnimatedBuilder(
++        animation: _clock,
++        builder: (context, child) {
++          final t = reduced ? 0.0 : _clock.value;
++          final pulse = reduced ? 1.0 : 0.97 + 0.05 * _pulseWave(t);
++          return Transform.scale(
++            scale: pulse,
++            child: CustomPaint(
++              painter: _GatewayPainter(
++                portal: portal,
++                turn: t,
++                active: widget.isStart || _igniting(),
++                intensity: widget.intensity,
++                space: _space,
++                ignite: _ignite(),
++                collapse: _collapse(),
++              ),
++              child: Center(
++                child: IconTheme.merge(
++                  // Same reason as the timer: the core sits on the dark sky.
++                  data: IconThemeData(color: Colors.white.withValues(alpha: 0.9)),
++                  child: DefaultTextStyle.merge(
++                    style: TextStyle(color: portal),
++                    child: child!,
++                  ),
++                ),
++              ),
++            ),
++          );
++        },
++        child: core,
++      ),
++    );
++  }
++
++
++
++  double _sinceOpenedMs() {
++    final openedAt = widget.openedAtMs;
++    if (openedAt == null) return double.infinity;
++    return (DateTime.now().millisecondsSinceEpoch - openedAt).toDouble();
++  }
++
++  bool _igniting() => _sinceOpenedMs() < 900;
++
++  double _ignite() => (_sinceOpenedMs() / 900).clamp(0.0, 1.0);
++
++  /// 0 → 1 over 1.3 s after the switch-off moment. Wall clock, not widget state: the
++  /// button subtree can be rebuilt while this runs and the animation must not jump.
++  double _collapse() {
++    final closedAt = widget.closedAtMs;
++    if (closedAt == null) return 1;
++    final elapsed = DateTime.now().millisecondsSinceEpoch - closedAt;
++    return (elapsed / 1300).clamp(0.0, 1.0);
++  }
++
++  /// Breathing on the endless clock: one breath per 2.5 seconds.
++  double _pulseWave(double seconds) => math.sin(seconds * 0.8).abs();
++}
++
++class _GatewayPainter extends CustomPainter {
++  const _GatewayPainter({
++    required this.portal,
++    required this.turn,
++    required this.active,
++    required this.intensity,
++    required this.space,
++    required this.ignite,
++    required this.collapse,
++  });
++
++  final Color portal;
++  final double turn;
++  final bool active;
++  final double intensity;
++  final _SpaceField space;
++
++  /// 0 → 1 over the first 0.9 s of an open portal; 1 means "fully open".
++  final double ignite;
++
++  /// 0 → 1 over the 0.7 s after the portal closes; 1 means fully closed.
++  final double collapse;
++
++  @override
++  void paint(Canvas canvas, Size size) {
++    final center = size.center(Offset.zero);
++    final radius = size.shortestSide / 2;
++
++    if (!active) {
++      // The idle hole is drawn first and always, so the last frame of the closing iris
++      // lands on exactly this picture. Earlier the hole was only painted after the
++      // animation ended, and the two looked different: a visible pop.
++      _paintHole(canvas, center, radius);
++      if (collapse >= 1) return;
++    }
++
++    // A porthole into space: flat Material shapes, never the same sky twice.
++    // While closing, the same sky is drawn inside an iris that shrinks to nothing, so
++    // stopping is an animation rather than a picture swap.
++    final closing = !active && collapse < 1;
++    final skyR = closing ? math.max(1.0, (radius - 1) * (1 - collapse)) : radius - 1;
++    final skyRect = Rect.fromCircle(center: center, radius: skyR);
++    canvas.save();
++    canvas.clipPath(Path()..addOval(skyRect));
++
++    final sky = Paint()
++      ..shader = const LinearGradient(
++        begin: Alignment.topLeft,
++        end: Alignment.bottomRight,
++        colors: [Color(0xFF080B18), Color(0xFF0D0A1E), Color(0xFF02030A)],
++      ).createShader(skyRect);
++    canvas.drawRect(skyRect, sky);
++
++    for (final nebula in space.nebulae) {
++      final spot = Offset(
++        center.dx + nebula.x * skyR * 0.8,
++        center.dy + nebula.y * skyR * 0.8,
++      );
++      final paint = Paint()
++        ..shader =
++            RadialGradient(
++              colors: [
++                nebula.color.withValues(alpha: 0.22),
++                nebula.color.withValues(alpha: 0.0),
++              ],
++            ).createShader(
++              Rect.fromCircle(center: spot, radius: nebula.radius * skyR),
++            );
++      canvas.drawCircle(spot, nebula.radius * skyR, paint);
++    }
++
++    // Everything drifts outward from the centre: depth maps to radius, so the sky
++    // flies at the viewer instead of cutting to another frame.  `epoch` gives a
++    // traveller a fresh heading on every pass through the porthole.  That makes
++    // this an endlessly generated field, not a short movie played in a loop.
++    final flow = turn * 0.5;
++
++
++    // Depth layering: some of the sky passes in front of a planet, some behind it.
++    void paintStars(bool front) {
++      for (final star in space.stars.where((s) => s.front == front)) {
++      final phase = star.z + flow * star.speed;
++      final epoch = phase.floorToDouble();
++      final z = phase - epoch;
++      final angle =
++          star.angle + (_noise(star.seed + epoch * 17.31) - 0.5) * 0.9;
++      final distance = skyR * 0.98 * z * z;
++      final offset = Offset(
++        center.dx + math.cos(angle) * distance,
++        center.dy + math.sin(angle) * distance,
++      );
++      final edge = math.min(1.0, (1.0 - z) / 0.08);
++      final twinkle = 0.55 + 0.45 * math.sin(turn * 4.5 + angle * 9);
++      final alpha = ((0.15 + 0.85 * z) * edge * twinkle).clamp(0.0, 1.0);
++
++      // Motion blur: the trail is the distance the star covered in the last instant,
++      // so fast near stars streak and slow far ones stay points.
++      final beforePhase = star.z + (flow - 0.075) * star.speed;
++      final zBefore = beforePhase - beforePhase.floorToDouble();
++      if (beforePhase.floorToDouble() == epoch) {
++        final trail = skyR * 0.98 * (z * z - zBefore * zBefore);
++        if (trail > 0.6) {
++          final tail = Offset(
++            center.dx + math.cos(angle) * (distance - trail),
++            center.dy + math.sin(angle) * (distance - trail),
++          );
++          // Two feathered strokes make the near, fast stars read as motion
++          // blur on a phone display instead of as a single hard line.
++          canvas.drawLine(
++            tail,
++            offset,
++            Paint()
++              ..strokeWidth = star.size * (1.4 + z * 2.4)
++              ..strokeCap = StrokeCap.round
++              ..color = Colors.white.withValues(alpha: alpha * 0.11),
++          );
++          canvas.drawLine(
++            tail,
++            offset,
++            Paint()
++              ..strokeWidth = star.size * (0.3 + z * 1.3)
++              ..strokeCap = StrokeCap.round
++              ..shader = LinearGradient(
++                colors: [
++                  Colors.white.withValues(alpha: 0),
++                  Colors.white.withValues(alpha: alpha * 0.75),
++                ],
++              ).createShader(Rect.fromPoints(tail, offset)),
++          );
++        }
++      }
++
++      canvas.drawCircle(
++        offset,
++        star.size * (0.35 + z * 1.7),
++        Paint()..color = Colors.white.withValues(alpha: alpha),
++      );
++
++      }
++    }
++
++    void paintComets(bool front) {
++      for (final comet in space.comets.where((c) => c.front == front)) {
++      final cometPhase = turn * 0.14 + comet.offset;
++      final cometEpoch = cometPhase.floorToDouble();
++      final progress = cometPhase - cometEpoch;
++      final heading = (_noise(comet.seed + cometEpoch * 11.17) - 0.5) * 0.55;
++      final dx = comet.dx * math.cos(heading) - comet.dy * math.sin(heading);
++      final dy = comet.dx * math.sin(heading) + comet.dy * math.cos(heading);
++      final head = Offset(
++        center.dx + comet.x * radius + dx * radius * progress,
++        center.dy + comet.y * radius + dy * radius * progress,
++      );
++      final tail = Offset(
++        head.dx - dx * radius * 0.22,
++        head.dy - dy * radius * 0.22,
++      );
++      final fade = math.sin(progress * math.pi);
++      canvas.drawPath(
++        Path()
++          ..moveTo(tail.dx, tail.dy)
++          ..lineTo(head.dx, head.dy),
++        Paint()
++          ..strokeWidth = 2.4
++          ..strokeCap = StrokeCap.round
++          ..shader = LinearGradient(
++            colors: [
++              comet.color.withValues(alpha: 0.0),
++              comet.color.withValues(alpha: 0.85 * fade),
++            ],
++          ).createShader(Rect.fromPoints(tail, head)),
++      );
++      canvas.drawCircle(
++        head,
++        2.4,
++        Paint()..color = Colors.white.withValues(alpha: fade),
++      );
++
++      }
++    }
++
++    paintStars(false);
++    paintComets(false);
++
++    for (final planet in space.planets) {
++      final phase = planet.z + flow * 0.27 * planet.speed;
++      final epoch = phase.floorToDouble();
++      final z = phase - epoch;
++      final angle =
++          planet.angle + (_noise(planet.seed + epoch * 5.73) - 0.5) * 1.25;
++      final distance = skyR * 0.9 * z * z;
++      final planetCenter = Offset(
++        center.dx + math.cos(angle) * distance,
++        center.dy + math.sin(angle) * distance,
++      );
++      final planetRadius = skyR * planet.radius * (0.35 + z * 2.1);
++      // Grow in and out of the frame instead of appearing at full size.
++      final fadeIn = (z / 0.12).clamp(0.0, 1.0);
++      final fadeOut = ((1.0 - z) / 0.12).clamp(0.0, 1.0);
++      final alpha = fadeIn * fadeOut;
++      if (alpha <= 0.01) continue;
++
++      if (planet.ring) {
++        canvas.save();
++        canvas.translate(planetCenter.dx, planetCenter.dy);
++        canvas.rotate(-0.42 + angle + turn * planet.speed * 0.23);
++        canvas.drawOval(
++          Rect.fromCenter(
++            center: Offset.zero,
++            width: planetRadius * 3.4,
++            height: planetRadius * 1.1,
++          ),
++          Paint()
++            ..style = PaintingStyle.stroke
++            ..strokeWidth = 1.6
++            ..color = planet.color.withValues(alpha: 0.5 * alpha),
++        );
++        canvas.restore();
++      }
++      // Flat Material disc: colour only, no shading.
++      canvas.drawCircle(
++        planetCenter,
++        planetRadius,
++        Paint()..color = planet.color.withValues(alpha: alpha),
++      );
++    }
++
++
++    if (ignite < 1) {
++      // Opening: a shock ring runs out from the core and the sky brightens, so the
++      // moment of connection is visible instead of merely being "on".
++      final e = ignite;
++      canvas.drawCircle(
++        center,
++        radius * (0.15 + 0.85 * e),
++        Paint()
++          ..style = PaintingStyle.stroke
++          ..strokeWidth = 2.4 * (1 - e) + 0.6
++          ..color = portal.withValues(alpha: 0.75 * (1 - e)),
++      );
++      canvas.drawCircle(
++        center,
++        radius,
++        Paint()..color = portal.withValues(alpha: 0.22 * (1 - e)),
++      );
++    }
++
++    canvas.restore();
++
++    if (closing) {
++      // The iris edge: a bright contracting ring where the sky is being cut off.
++      canvas.drawCircle(
++        center,
++        skyR,
++        Paint()
++          ..style = PaintingStyle.stroke
++          ..strokeWidth = 2.4 * (1 - collapse) + 0.8
++          ..color = portal.withValues(alpha: 0.55 + 0.35 * (1 - collapse)),
++      );
++      canvas.drawCircle(
++        center,
++        skyR + 6 * collapse,
++        Paint()
++          ..style = PaintingStyle.stroke
++          ..strokeWidth = 1
++          ..color = portal.withValues(alpha: 0.25 * (1 - collapse)),
++      );
++    }
++
++    // The porthole frame stays, so the sky still reads as the portal.
++    canvas.drawCircle(
++      center,
++      radius - 1,
++      Paint()
++        ..style = PaintingStyle.stroke
++        ..strokeWidth = 1.4
++        ..color = portal.withValues(alpha: 0.55),
++    );
++  }
++
++
++  void _paintHole(Canvas canvas, Offset center, double radius) {
++    final hole = Paint()
++      ..shader = RadialGradient(
++        colors: [
++          const Color(0xFF000000),
++          const Color(0xFF06070B),
++          portal.withValues(alpha: 0.10),
++        ],
++        stops: const [0.0, 0.72, 1.0],
++      ).createShader(Rect.fromCircle(center: center, radius: radius));
++    canvas.drawCircle(center, radius, hole);
++    canvas.drawCircle(
++      center,
++      radius - 2,
++      Paint()
++        ..style = PaintingStyle.stroke
++        ..strokeWidth = 1.2
++        ..color = portal.withValues(alpha: 0.22),
++    );
++  }
++
++  @override
++  bool shouldRepaint(_GatewayPainter oldDelegate) =>
++      oldDelegate.turn != turn ||
++      oldDelegate.active != active ||
++      oldDelegate.portal != portal ||
++      oldDelegate.space != space ||
++      oldDelegate.ignite != ignite ||
++      oldDelegate.collapse != collapse;
++}
++
++typedef _Planet = ({
++  double angle,
++  double z,
++  double speed,
++  double radius,
++  Color color,
++  bool ring,
++  double seed,
++});
++typedef _Star = ({
++  double angle,
++  double z,
++  double speed,
++  double size,
++  double seed,
++  bool front,
++});
++typedef _Comet = ({
++  double x,
++  double y,
++  double dx,
++  double dy,
++  double offset,
++  Color color,
++  double seed,
++  bool front,
++});
++typedef _Nebula = ({double x, double y, double radius, Color color});
++
++/// A randomly generated sky for the portal. Stars and planets carry their own depth and
++/// speed and travel toward the viewer, so the picture flows instead of cutting to a new
++/// frame. Coordinates are in units of the portal radius.
++class _SpaceField {
++  const _SpaceField({
++    required this.stars,
++    required this.planets,
++    required this.comets,
++    required this.nebulae,
++  });
++
++  final List<_Star> stars;
++  final List<_Planet> planets;
++  final List<_Comet> comets;
++  final List<_Nebula> nebulae;
++
++  static const _palette = [
++    Color(0xFF7C6CF6),
++    Color(0xFF54C7E8),
++    Color(0xFFE8A25C),
++    Color(0xFF9BE8C4),
++    Color(0xFFE86C9B),
++  ];
++
++  static _SpaceField generate(math.Random random) {
++    double unit() => random.nextDouble() * 2 - 1;
++    double angle() => random.nextDouble() * math.pi * 2;
++
++    final stars = <_Star>[
++      for (var i = 0; i < 112; i++)
++        (
++          angle: angle(),
++          z: random.nextDouble(),
++          speed: 0.22 + random.nextDouble() * 1.25,
++          size: 0.4 + random.nextDouble() * 1.2,
++          seed: random.nextDouble() * 10000,
++          front: random.nextDouble() < 0.28,
++        ),
++    ];
++
++    // One planet, sometimes two — half a cycle apart. Never a parade.
++    final planetCount = 1 + (random.nextDouble() < 0.5 ? 1 : 0);
++    final planets = <_Planet>[
++      for (var i = 0; i < planetCount; i++)
++        (
++          angle: angle(),
++          // Staggered so one is always on its way in while another passes by.
++          z: i / planetCount + random.nextDouble() * 0.08,
++          speed: 0.5 + random.nextDouble() * 0.5,
++          radius: 0.05 + random.nextDouble() * 0.06,
++          color: _palette[random.nextInt(_palette.length)],
++          ring: random.nextDouble() < 0.5,
++          seed: random.nextDouble() * 10000,
++        ),
++    ];
++
++    final comets = <_Comet>[
++      for (var i = 0; i < 2; i++)
++        (
++          x: unit() * 0.9,
++          y: unit() * 0.9,
++          dx: (random.nextDouble() * 1.2 + 0.5) * (random.nextBool() ? 1 : -1),
++          dy: (random.nextDouble() * 1.2 + 0.5) * (random.nextBool() ? 1 : -1),
++          offset: random.nextDouble(),
++          color: _palette[random.nextInt(_palette.length)],
++          seed: random.nextDouble() * 10000,
++          front: random.nextBool(),
++        ),
++    ];
++
++    final nebulae = <_Nebula>[
++      for (var i = 0; i < 2; i++)
++        (
++          x: unit() * 0.7,
++          y: unit() * 0.7,
++          radius: 0.35 + random.nextDouble() * 0.35,
++          color: _palette[random.nextInt(_palette.length)],
++        ),
++    ];
++
++    return _SpaceField(
++      stars: stars,
++      planets: planets,
++      comets: comets,
++      nebulae: nebulae,
++    );
++  }
++}
++
++/// Stable, allocation-free noise for the next generated fly-by.
++double _noise(double value) {
++  final n = math.sin(value * 127.1 + 311.7) * 43758.5453123;
++  return n - n.floorToDouble();
++}
+diff --git a/lib/views/dashboard/widgets/card.dart b/lib/views/dashboard/widgets/card.dart
+index 965e345610f544f19bb42baf6f047b9c6ddda8fd..15c8f4c341da044eba91e191ab16edfc3805079d 100644
+--- a/lib/views/dashboard/widgets/card.dart
++++ b/lib/views/dashboard/widgets/card.dart
+@@ -8,7 +8,8 @@ import 'package:fl_clash/views/dashboard/style.dart';
+ import 'package:fl_clash/widgets/widgets.dart';
+ import 'package:flutter/rendering.dart';
+ import 'package:material_new_shapes/material_new_shapes.dart';
+-import 'package:material_ui/material_ui.dart';
++// MaterialShapes is exported by both packages; take it from material_new_shapes.
++import 'package:material_ui/material_ui.dart' hide MaterialShapes, RoundedPolygon;
+ 
+ EdgeInsets dashboardCardPadding(DashboardDensity density) => switch (density) {
+   DashboardDensity.standard => const EdgeInsets.symmetric(
+diff --git a/lib/views/dashboard/widgets/current_outbound.dart b/lib/views/dashboard/widgets/current_outbound.dart
+index b788b55a5f7483ac5ccd893ec89d6a745a90bdb5..fdd7909469dd15bb58c414494583f120ebe11cfc 100644
+--- a/lib/views/dashboard/widgets/current_outbound.dart
++++ b/lib/views/dashboard/widgets/current_outbound.dart
+@@ -15,14 +15,16 @@ import 'package:fl_clash/views/dashboard/style.dart';
+ import 'package:fl_clash/widgets/widgets.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:material_new_shapes/material_new_shapes.dart';
+-import 'package:material_ui/material_ui.dart';
++// MaterialShapes is exported by both packages; take it from material_new_shapes.
++import 'package:material_ui/material_ui.dart' hide MaterialShapes, RoundedPolygon;
+ 
+ import 'card.dart';
+ import 'proxy_groups.dart';
++import 'package:fl_clash/common/outbound.dart';
+ 
+-const _builtinOutbounds = {'DIRECT', 'REJECT', 'REJECT-DROP', 'PASS'};
+ 
+-bool isBuiltinOutbound(String name) => _builtinOutbounds.contains(name);
++
++bool isBuiltinOutbound(String name) => isBuiltinOutboundName(name);
+ 
+ const _decorationGrowth = 0.12;
+ 
+diff --git a/lib/views/dashboard/widgets/network_takeover.dart b/lib/views/dashboard/widgets/network_takeover.dart
+index 060a6aee6d69c164e56038beada839fcbc620fa4..5213dded448807425fa21eb34f9a377b86b7148b 100644
+--- a/lib/views/dashboard/widgets/network_takeover.dart
++++ b/lib/views/dashboard/widgets/network_takeover.dart
+@@ -7,7 +7,8 @@ import 'package:fl_clash/views/dashboard/style.dart';
+ import 'package:fl_clash/widgets/managed_setting.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:material_new_shapes/material_new_shapes.dart';
+-import 'package:material_ui/material_ui.dart';
++// MaterialShapes is exported by both packages; take it from material_new_shapes.
++import 'package:material_ui/material_ui.dart' hide MaterialShapes, RoundedPolygon;
+ 
+ import 'card.dart';
+ 
+diff --git a/lib/views/dashboard/widgets/proxy_groups.dart b/lib/views/dashboard/widgets/proxy_groups.dart
+index 53d839dbb1ff94354a283531cf4f6eeb8a1617dc..58f83906094ce9105962f1da71de48001d3f12e2 100644
+--- a/lib/views/dashboard/widgets/proxy_groups.dart
++++ b/lib/views/dashboard/widgets/proxy_groups.dart
+@@ -9,7 +9,8 @@ import 'package:fl_clash/views/proxies/proxies.dart';
+ import 'package:fl_clash/widgets/widgets.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:material_new_shapes/material_new_shapes.dart';
+-import 'package:material_ui/material_ui.dart';
++// MaterialShapes is exported by both packages; take it from material_new_shapes.
++import 'package:material_ui/material_ui.dart' hide MaterialShapes, RoundedPolygon;
+ 
+ import 'card.dart';
+ import 'connections_table.dart';
