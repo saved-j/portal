@@ -114,8 +114,15 @@ the device, not a redesign.
   instead of pushing at an engine that has nothing to update. The same patch writes the
   hand-over into the log, so the transition is evidence and not an assumption:
   `tun generation=N owner=Xray previous=Mihomo stopped=true`, `tun generation=N owner=… released,
-  owner=Off`, `engine listener owner=Xray stop before the hand-over=ok`. Rollback: reverse 19b
+  owner=Off`,  `engine listener owner=Xray stop before the hand-over=ok`. Rollback: reverse 19b
   — the return switch times out again, 19 itself keeps the single reader.
+- `19c-config-push-without-a-config` — with the engine not running between a stop and the
+  next start (and never in the simple portal), a settings push raced the apply that gives the
+  engine its config and the answer `config is not applied` was shown as an error
+  (`[APP] message: config is not applied`) in the middle of a switch. That answer now means
+  "nothing to update yet": the push that follows carries the settings, so the update is
+  skipped instead of thrown. Rollback: reverse 19c; the line comes back, the switch itself
+  still completes.
 
 Apply (to a tree that does not already carry the 01..02 commit):
 ```

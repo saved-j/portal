@@ -1,0 +1,23 @@
+diff --git a/lib/providers/actions/setup.dart b/lib/providers/actions/setup.dart
+index 171533cf..43319a24 100644
+--- a/lib/providers/actions/setup.dart
++++ b/lib/providers/actions/setup.dart
+@@ -656,7 +656,17 @@ class SetupAction extends _$SetupAction {
+           ),
+         );
+       });
+-      if (message.isNotEmpty) throw MessageException(message);
++      if (message.isNotEmpty) {
++        // The engine has no config to update: the apply that gives it one is still in flight,
++        // or none was pushed in this process yet. Nothing failed here — the push that follows
++        // (or the one under way) carries the settings — so this is neither an error to show
++        // nor a reason to fail a waiter that asked for a settings change.
++        if (message == 'config is not applied') {
++          commonPrint.log('config update skipped: the engine has no config yet');
++          return;
++        }
++        throw MessageException(message);
++      }
+       _reconcileTun();
+     });
+   }
