@@ -1,0 +1,32 @@
+# 13 - a start's proof is `<name> up`, not the line before the descriptor is validated
+#
+# `read Android Tun Fd` was taken as the acknowledgement, and it is written by
+# tun_android.go before the descriptor is checked, flagged or duplicated: a core that logs it
+# can still fail one line later, and the two `app/proxyman/inbound` failures on the device came
+# after it. proxy/tun/handler.go prints `<name> up` at the end of Start, once the stack, the
+# inbound and the reader are all running, which is the state the plugin is actually claiming
+# when it reports a start. So the marker is the tun's own `up` line and nothing weaker. The
+# failure path is unchanged: an `[Error]` or a bare `failed to start` still ends the wait at
+# once with the core's words, so a refused document does not sit out the deadline.
+
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+index a73966ae..d683e6c0 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -586,10 +586,12 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         private const val UNAVAILABLE = "xray is not available in this build"
+         private const val NO_ENTRY_POINTS = "libxray.so is missing its JNI entry points"
+ 
+-        /// The lines the tun stack prints once its reader is up: the stack's own start line,
+-        /// and the one the Android reader logs when it has taken the descriptor. Either is
+-        /// proof; a core that never prints one is a core that never read the tun.
+-        private val ACK_MARKERS = listOf("TUN reader - started", "read Android Tun Fd")
++        /// The line the core prints when its tunnel is actually up: `<name> up`, written by
++        /// proxy/tun/handler.go only after the stack and the inbound started. The Android
++        /// reader's `read Android Tun Fd` line looks like proof and is not — it is written
++        /// before the descriptor is validated — so a start waits for this one, and a core that
++        /// never prints it never had a working tunnel.
++        private val ACK_MARKERS = listOf("$TUN_NAME up")
+ 
+         /// Info, not the panel's level: without it the acknowledgement line is filtered out.
+         private const val ACK_LOG_LEVEL = "info"

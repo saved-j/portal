@@ -586,10 +586,12 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         private const val UNAVAILABLE = "xray is not available in this build"
         private const val NO_ENTRY_POINTS = "libxray.so is missing its JNI entry points"
 
-        /// The lines the tun stack prints once its reader is up: the stack's own start line,
-        /// and the one the Android reader logs when it has taken the descriptor. Either is
-        /// proof; a core that never prints one is a core that never read the tun.
-        private val ACK_MARKERS = listOf("TUN reader - started", "read Android Tun Fd")
+        /// The line the core prints when its tunnel is actually up: `<name> up`, written by
+        /// proxy/tun/handler.go only after the stack and the inbound started. The Android
+        /// reader's `read Android Tun Fd` line looks like proof and is not — it is written
+        /// before the descriptor is validated — so a start waits for this one, and a core that
+        /// never prints it never had a working tunnel.
+        private val ACK_MARKERS = listOf("$TUN_NAME up")
 
         /// Info, not the panel's level: without it the acknowledgement line is filtered out.
         private const val ACK_LOG_LEVEL = "info"
