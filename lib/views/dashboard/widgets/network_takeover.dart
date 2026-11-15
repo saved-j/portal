@@ -7,7 +7,8 @@ import 'package:fl_clash/views/dashboard/style.dart';
 import 'package:fl_clash/widgets/managed_setting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_new_shapes/material_new_shapes.dart';
-import 'package:material_ui/material_ui.dart';
+// MaterialShapes is exported by both packages; take it from material_new_shapes.
+import 'package:material_ui/material_ui.dart' hide MaterialShapes, RoundedPolygon;
 
 import 'card.dart';
 
