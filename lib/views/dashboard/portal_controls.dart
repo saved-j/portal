@@ -607,20 +607,24 @@ PortalShown _portalShown(
             ),
           ]
         : [
-            (
-              'cache',
-              portalFallbackGroup(
-                simple: false,
-                servers: const [],
-                engineRows: cachedRows,
-              ),
-            ),
+            // The subscription is the answer until the engine itself speaks: a closed
+            // portal has no groups, and the cached rows may belong to the other core or to
+            // an older profile. Only when the document has nothing to show does the last
+            // engine answer stand in — never before it.
             (
               'profile',
               portalFallbackGroup(
                 simple: false,
                 servers: const [],
                 engineRows: profileRows,
+              ),
+            ),
+            (
+              'cache',
+              portalFallbackGroup(
+                simple: false,
+                servers: const [],
+                engineRows: cachedRows,
               ),
             ),
           ],

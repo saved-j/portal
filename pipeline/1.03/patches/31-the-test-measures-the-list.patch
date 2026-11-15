@@ -1,0 +1,893 @@
+# portal 1.03 patch 31 — the test button measures the list, one row is the long press
+#
+# The owner's correction: the ping test must measure every server of the current mode. A single
+# server is what the long press on a row is for, and a plain tap is selection only.
+#
+#   * TEST sweeps the list, not the row. In the simple portal every server of the subscription is
+#     measured through the tunnel patch 29 built — the child is rotated onto each node in turn,
+#     one request per node, timed to its first response byte — and in the network mode every
+#     member of every visible group is measured by the engine's own delay API, in one queue
+#     through the core's delay pool, so the sweep is bounded by the core rather than by the
+#     screen. Nothing is awaited from a build pass: a sweep runs off the press and the list keeps
+#     scrolling.
+#   * Every row is a dash when a sweep starts, so a number left by the last one cannot stand in
+#     for this one's; a row that did not answer stays a dash.
+#   * The long press measures that one row, through that node and no other. The tap only
+#     chooses: it moves the pick (or asks the engine for a proxy) and asks for no number.
+#   * Patch 30's raise-and-put-back is kept whole: the mode's core exists for the sweep and is
+#     put back afterwards — stopped if the portal was closed, returned to the node it was
+#     carrying if it was open. No banners, no caption.
+#   * One line per sweep in `portal-transitions.log`:
+#
+#     kind=test mode=<rule|global> rows=<n> raised=<child|engine|none> measured=<n> dashes=<n> duration_ms=<n> stopped_after=<true|false>
+#
+#     `rows=measured+dashes` is the whole list, which is what makes "every row was asked about"
+#     checkable off the phone. Per-row numbers stay in the app log (`portal delay <name>: …`).
+#
+# The arrival probe stays, and is now only what it can honestly be: one request through the
+# tunnel that is already up, for the row it is carrying. It raises nothing and clears nothing.
+#
+# Version: 0.5.3-portal-duo-2e (unchanged — the version fields belong to another worker).
+diff --git a/BUILD.md b/BUILD.md
+index 092d2c93..5971c220 100644
+--- a/BUILD.md
++++ b/BUILD.md
+@@ -249,23 +249,32 @@ belongs to the node the tunnel is on. A handshake to a node's own address is gon
+ this process's sockets are routed into it, the core accepts locally and answers in 3–4 ms to
+ Estonia.
+ 
+-Pressing TEST is a request for a measurement, not for a connection: if the portal is closed the
+-core is raised on the normal transactional path, the sweep runs through the tunnel, and the core
+-is put down again — the portal ends where it started. One line per test says how it went:
++Pressing TEST measures the whole list of the mode, not one row: every server of the subscription
++through the child, every member of every visible group through the engine's own delay API. It is a
++request for a measurement, not for a connection: if the portal is closed the core is raised on the
++normal transactional path, the sweep runs, and the core is put down again — the portal ends where
++it started. Rows are cleared to dashes before the first request, so a number from the last sweep
++can never read as this one's. One line per sweep says how it went:
+ 
+ ```
+-time=... kind=test mode=global raised=child duration_ms=2410 stopped_after=true node=🇫🇮 Финляндия generate_204 214 ms
+-time=... kind=test mode=rule raised=engine duration_ms=1180 stopped_after=true result=tests
++time=... kind=test mode=global rows=14 raised=child measured=12 dashes=2 duration_ms=41230 stopped_after=true
++time=... kind=test mode=rule rows=23 raised=engine measured=21 dashes=2 duration_ms=1180 stopped_after=false
+ ```
+ 
++`rows=measured+dashes` is the whole list; a dash is a node that did not answer. A tunnel carries
++one node, so the child's sweep is a rotation — the child is started on each server in turn, one
++request goes through it, and the child is left on the node it was carrying. One row is the long
++press's business; a tap is a choice and never asks for a number.
++
+ A delay is measured by the core that holds the server, and by nothing else. The engine's rows
+ carry the engine's own delay, taken through the tunnel it built; the simple portal's rows carry
+ the first response byte of a request the child carried, or a dash with the reason:
+ 
+ ```
+-portal delay 🇪🇪 Эстония: the tunnel is on 🇫🇮 Финляндия, no number
+ portal delay 🇫🇮 Финляндия: generate_204 214 ms
+-portal delay: no child is carrying the tunnel, so there is nothing to measure through — every row is a dash
++portal delay 🇸🇪 Швеция: the child refused it — the core did not acknowledge the tunnel
++portal delay 🇪🇪 Эстония: generate_204 timed out, no number
++portal delay 🇩🇪 Германия: no number
+ ```
+ 
+ `adb logcat -s flutter` carries those lines; the dash on the row and the line are the same fact.
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
+index 10dc39a0..431acc2e 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
+@@ -101,7 +101,10 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+             "testNote" -> {
+                 PortalTelemetry.noteTest(
+                     mode = call.argument<String>("mode") ?: "",
++                    rows = (call.argument<Number>("rows") ?: 0).toInt(),
+                     raised = call.argument<String>("raised") ?: "",
++                    measured = (call.argument<Number>("measured") ?: 0).toInt(),
++                    dashes = (call.argument<Number>("dashes") ?: 0).toInt(),
+                     durationMs = (call.argument<Number>("durationMs") ?: 0).toLong(),
+                     stoppedAfter = call.argument<Boolean>("stoppedAfter") ?: false,
+                     detail = call.argument<String>("detail") ?: "",
+diff --git a/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt b/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt
+index 2ba81187..cb8e90c0 100644
+--- a/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt
++++ b/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt
+@@ -202,23 +202,29 @@ object PortalTelemetry {
+         lastEgress = value
+     }
+ 
+-    /// A delay test that had to raise a tunnel, and how long that took.
++    /// One delay sweep: the whole list of the mode, how it answered, and what it cost.
+     ///
+-    /// The test is a measurement, and a measurement needs a tunnel to be carried through: the
++    /// A sweep is a measurement, and a measurement needs a core to be carried through: the
+     /// owner pressing TEST on a closed portal is asking for the portal to be opened long enough
+-    /// to answer. The line says which core was raised and how long the raise took, so a slow
+-    /// test can be told apart from a slow node.
++    /// to answer. `rows` is the list the press asked about, `measured`/`dashes` how it answered,
++    /// and `raised`/`stopped_after` say which core existed only for the sweep. A slow sweep can
++    /// then be told apart from a slow node, and `rows=measured+dashes` is the check that every
++    /// row was asked about — not just the ones that happened to answer.
+     fun noteTest(
+         mode: String,
++        rows: Int,
+         raised: String,
++        measured: Int,
++        dashes: Int,
+         durationMs: Long,
+         stoppedAfter: Boolean,
+         detail: String,
+     ) {
+         append(
+             transitionsFile,
+-            "time=${stamp.format(Date())} kind=test mode=$mode raised=$raised " +
+-                "duration_ms=$durationMs stopped_after=$stoppedAfter" +
++            "time=${stamp.format(Date())} kind=test mode=$mode rows=$rows raised=$raised " +
++                "measured=$measured dashes=$dashes duration_ms=$durationMs " +
++                "stopped_after=$stoppedAfter" +
+                 (if (detail.isEmpty()) "" else " $detail"),
+         )
+     }
+diff --git a/lib/plugins/portal_runtime.dart b/lib/plugins/portal_runtime.dart
+index 0884f117..7aceac81 100644
+--- a/lib/plugins/portal_runtime.dart
++++ b/lib/plugins/portal_runtime.dart
+@@ -266,15 +266,19 @@ class PortalRuntime {
+     }
+   }
+ 
+-  /// A delay test that had to raise a core, for the transitions file.
++  /// A delay sweep, for the transitions file.
+   ///
+-  /// The test is a measurement, not a connection: [raised] names the core it raised (`child`,
+-  /// `engine` or `none`), [durationMs] is the whole test from the tap to the restored state,
+-  /// and [stoppedAfter] says whether that core was put back down — the audit line for "the
+-  /// portal ended where it started".
++  /// The sweep is a measurement, not a connection: [rows] is the size of the list the press
++  /// asked about, [measured] and [dashes] how it answered, [raised] names the core it had to
++  /// raise (`child`, `engine` or `none`), [durationMs] is the whole sweep from the press to the
++  /// restored state, and [stoppedAfter] says whether that core was put back down — the audit
++  /// line for "the portal ended where it started".
+   Future<void> noteTest({
+     required String mode,
++    required int rows,
+     required String raised,
++    required int measured,
++    required int dashes,
+     required int durationMs,
+     required bool stoppedAfter,
+     String detail = '',
+@@ -282,7 +286,10 @@ class PortalRuntime {
+     try {
+       await _channel.invokeMethod<void>('testNote', {
+         'mode': mode,
++        'rows': rows,
+         'raised': raised,
++        'measured': measured,
++        'dashes': dashes,
+         'durationMs': durationMs,
+         'stoppedAfter': stoppedAfter,
+         'detail': detail,
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index da8d79b0..24ec3b4a 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -170,20 +170,32 @@ final portalPendingProvider =
+ 
+ /// Delays measured by this process, for the servers of the simple portal.
+ ///
+-/// The engine only reports delays for the servers it holds; the child's servers are not among
+-/// them, so a TCP handshake from here is the only measurement those rows can have. An engine
+-/// row is never put in this map: its number is the engine's own, taken through the tunnel it
+-/// built. A missing key means "not asked yet"; a null entry means "asked, no answer" — and a
+-/// null is also the honest answer for a name that only resolves to the tunnel's own address.
++/// The engine reports delays only for the servers it holds, and the child's are not among them:
++/// a request carried through the child is the only number those rows can have. An engine row is
++/// never put in this map — its number is the engine's own. A missing key means "not asked yet";
++/// a null entry means "asked, and nothing came back", which is the dash on the row.
+ final tcpDelayProvider =
+     NotifierProvider<TcpDelayNotifier, Map<String, int?>>(TcpDelayNotifier.new);
+ 
++/// How long one request through the tunnel may take before its row is a dash.
++///
++/// A sweep walks the whole subscription and every dead node costs its own deadline, so it is
++/// shorter than a single probe's: a node that cannot answer a `204` in five seconds is a dash
++/// either way, and the owner is watching a button.
++const _sweepProbeTimeout = Duration(seconds: 5);
++
+ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+   /// Bumped by every sweep, and by a profile change. An answer arriving under an older
+   /// number belongs to servers the list no longer shows — usually names that repeat in the
+   /// new subscription — so it is dropped instead of written under the current key.
+   int _generation = 0;
+ 
++  var _sweeping = false;
++
++  /// One sweep at a time: a tunnel carries exactly one node, so a second sweep would be
++  /// fighting the first one for the child.
++  bool get sweeping => _sweeping;
++
+   @override
+   Map<String, int?> build() {
+     // The measurements belong to the profile: a different one is a different set of
+@@ -193,119 +205,175 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+     return const {};
+   }
+ 
++  /// Whether a child is reading the tunnel right now, whoever it is on.
++  bool get _childReading {
++    final status = portalRuntime.status.value;
++    return status.active && status.owner == PortalOwner.xray;
++  }
++
+   /// The node the child is carrying traffic on, or null when no child holds the tunnel.
+   ///
+   /// The pick is a commit — written only for a node the child acknowledged — so it names the
+-  /// node the tunnel is actually running, which is the only node a request through the tunnel
+-  /// can measure.
++  /// node the tunnel is running. It is read only when the core has not been moved: a sweep
++  /// rotates the child and knows which node it started, so it never asks this.
+   String? get _runningNode {
+-    final status = portalRuntime.status.value;
+-    if (!status.active || status.owner != PortalOwner.xray) return null;
++    if (!_childReading) return null;
+     return portalXrayPickFor(
+       ref.read(appSettingProvider),
+       ref.read(currentProfileIdProvider),
+     );
+   }
+ 
+-  /// Times the nodes by carrying a real request through the portal, and puts the portal back.
++  /// Times every server through the portal, and puts the portal back.
++  ///
++  /// A tunnel carries one node, so the list is measured by rotation: the child is started on
++  /// each server in turn, one request goes through it (`probeThroughPortal` — the app's own
++  /// test URL, timed to its first response byte), and the number lands on that row alone. One
++  /// in flight is the bound the tunnel itself sets: a second request would be measuring a node
++  /// the tunnel is not on and lighting up the wrong row.
+   ///
+-  /// A test is a measurement, not a connection: if the portal is closed, the child is raised on
+-  /// the same transactional path a switch uses, the sweep runs through the tunnel, and the child
+-  /// is put down again — the owner asked for a number, and the portal ends exactly where it
+-  /// started. If it was already open, it stays open and nothing is rebuilt. One line per test in
+-  /// `portal-transitions.log` says which core was raised and whether it was stopped again.
+-  Future<void> measureAll(List<(String, String, int)> targets) async {
+-    if (targets.isEmpty) return;
+-    // A newer sweep owns the state from here on; the older one stops at its next answer.
++  /// Every row is a dash before the first request, so a number left by the last sweep cannot
++  /// read as this one's answer. A closed portal is raised for the sweep and closed again; an
++  /// open one is put back on the node it was carrying. One line per sweep goes to
++  /// `portal-transitions.log`: the rows, what came back, which core was raised, and whether
++  /// the portal ended where it started.
++  Future<void> measureEveryServer(List<XrayServerConfig> servers) async {
++    if (servers.isEmpty || _sweeping) return;
++    _sweeping = true;
+     final generation = ++_generation;
+-    state = {...state, for (final t in targets) t.$1: null};
+-    final subject = ref.read(portalGroupProvider) ?? '';
+-    final spinner = ref.read(delayTestingGroupsProvider.notifier);
++    state = {...state, for (final server in servers) server.name: null};
+     final setup = ref.read(setupActionProvider.notifier);
+-    final mode = ref.read(patchClashConfigProvider.select((s) => s.mode));
+-    final modeName = mode == Mode.global ? 'global' : 'rule';
+-    final wasRunning = _runningNode != null;
++    final testUrl = ref.read(appSettingProvider).testUrl;
++    // The child's rows always live in one group, and that name is what the button's spinner
++    // watches. The stored group pick may still name an engine group from the other mode.
++    const subject = portalRowsGroupName;
++    final spinner = ref.read(delayTestingGroupsProvider.notifier);
++    final wasReading = _childReading;
++    final previous = portalXrayPickFor(
++      ref.read(appSettingProvider),
++      ref.read(currentProfileIdProvider),
++    );
+     final watch = Stopwatch()..start();
+-    if (!wasRunning) {
+-      if (subject.isNotEmpty) spinner.start(subject);
+-      final started = await setup.setRunning(true);
+-      if (!started) {
+-        watch.stop();
+-        if (subject.isNotEmpty) spinner.stop(subject);
+-        final reason = setup.lastPortalFailure;
+-        commonPrint.log(
+-          'portal test: the child did not start'
+-          '${reason.isEmpty ? '' : ': $reason'}',
+-          logLevel: LogLevel.warning,
+-        );
+-        unawaited(
+-          portalRuntime.noteTest(
+-            mode: modeName,
+-            raised: 'child',
+-            durationMs: watch.elapsedMilliseconds,
+-            stoppedAfter: false,
+-            detail: 'result=failed${reason.isEmpty ? '' : ' reason=$reason'}',
+-          ),
+-        );
+-        return;
+-      }
+-    }
+-    final running = _runningNode;
+-    PortalDelay? probe;
+-    if (running != null) {
+-      probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
+-    }
++    final raised = wasReading ? 'none' : 'child';
++    var raisedOk = wasReading;
+     var stopped = false;
+-    if (!wasRunning) {
+-      // Back to the state he was in: a closed portal is closed again, and the tunnel that
+-      // existed only for this measurement is gone with it.
+-      stopped = await setup.setRunning(false);
++    var measured = 0;
++    var on = previous;
++    if (!wasReading) spinner.start(subject);
++    try {
++      if (!wasReading) {
++        final started = await setup.setRunning(true);
++        if (!started) {
++          final reason = setup.lastPortalFailure;
++          commonPrint.log(
++            'portal test: the child did not start'
++            '${reason.isEmpty ? '' : ': $reason'}',
++            logLevel: LogLevel.warning,
++          );
++          return;
++        }
++        raisedOk = true;
++      }
++      for (final server in servers) {
++        // A newer sweep, or a list that is gone, owns the child from here on.
++        if (generation != _generation) break;
++        final answer = await portalRuntime.startChild(jsonEncode(server.config));
++        if (!answer.ok) {
++          commonPrint.log(
++            'portal delay ${server.name}: the child refused it — ${answer.reason}',
++            logLevel: LogLevel.warning,
++          );
++          continue;
++        }
++        on = server.name;
++        var probe = await probeThroughPortal(testUrl, timeout: _sweepProbeTimeout);
++        if (!probe.answered && probe.note == PortalDelayNote.failed) {
++          // A core that has just acknowledged may not be routing yet; a refusal is worth one
++          // second look. A timeout is already an answer about the node.
++          await Future<void>.delayed(const Duration(milliseconds: 300));
++          probe = await probeThroughPortal(testUrl, timeout: _sweepProbeTimeout);
++        }
++        final ms = probe.answered ? probe.ms : null;
++        if (ms != null && ms > 0) measured++;
++        commonPrint.log('portal delay ${server.name}: ${probe.describe()}');
++        if (generation == _generation) {
++          state = {...state, server.name: ms};
++        }
++      }
++    } finally {
++      if (!raisedOk) {
++        // Nothing was raised, so there is nothing to put back and nothing to claim.
++      } else if (!wasReading) {
++        // Back to the state he was in: a closed portal is closed again, and the tunnel that
++        // existed only for this measurement goes with it.
++        stopped = await setup.setRunning(false);
++      } else if (on.isNotEmpty && on != previous) {
++        // The portal was open, and the sweep rotated off the node it was carrying: put it back.
++        final back = xrayServerFor(servers, previous);
++        final answer = back == null
++            ? null
++            : await portalRuntime.startChild(jsonEncode(back.config));
++        if (answer == null || !answer.ok) {
++          commonPrint.log(
++            'portal test: the tunnel did not go back to $previous'
++            '${answer == null ? '' : ' — ${answer.reason}'}',
++            logLevel: LogLevel.warning,
++          );
++        }
++      }
++      watch.stop();
++      if (!wasReading) spinner.stop(subject);
++      _sweeping = false;
++      final mode = ref.read(patchClashConfigProvider.select((s) => s.mode));
++      unawaited(
++        portalRuntime.noteTest(
++          mode: mode == Mode.global ? 'global' : 'rule',
++          rows: servers.length,
++          raised: raised,
++          measured: measured,
++          dashes: servers.length - measured,
++          durationMs: watch.elapsedMilliseconds,
++          stoppedAfter: stopped,
++        ),
++      );
++      commonPrint.log(
++        'portal test: ${wasReading ? 'the portal was already open' : 'raised the child and '
++            'closed it again'} in ${watch.elapsedMilliseconds} ms, '
++        '$measured of ${servers.length} answered',
++      );
+     }
+-    watch.stop();
+-    if (subject.isNotEmpty) spinner.stop(subject);
+-    commonPrint.log(
+-      'portal test: ${wasRunning ? 'the portal was already open' : 'raised the child and '
+-          'closed it again'} in ${watch.elapsedMilliseconds} ms'
+-      '${running == null ? '' : ' on $running: ${probe?.describe() ?? ''}'}',
+-    );
+-    unawaited(
+-      portalRuntime.noteTest(
+-        mode: modeName,
+-        raised: wasRunning ? 'none' : 'child',
+-        durationMs: watch.elapsedMilliseconds,
+-        stoppedAfter: stopped,
+-        detail: running == null ? '' : 'node=$running ${probe?.describe() ?? ''}',
+-      ),
+-    );
+-    if (generation != _generation) return;
+-    // One tunnel runs one node: the number belongs to the row the child was on, and with the
+-    // portal back to closed there is no other row that could honestly carry one.
+-    if (running != null) state = {...state, running: probe?.ms};
+   }
+ 
+-  Future<void> measureOne(String name, String host, int port) async {
++  /// One request through the tunnel that is already up, for the row it is carrying.
++  ///
++  /// Used when the list arrives: a portal whose rows all read "—" until something is pressed
++  /// looks broken, and the node the child is on can be timed without moving it. Nothing is
++  /// raised here and no row is cleared — the other rows' numbers are the last sweep's own
++  /// answers, and dropping them on a redraw would be the app forgetting a measurement.
++  Future<void> probeRunningNode() async {
++    if (_sweeping) return;
+     final running = _runningNode;
+-    final picked = portalXrayPickFor(
+-      ref.read(appSettingProvider),
+-      ref.read(currentProfileIdProvider),
+-    );
+-    if (running != null && running != name) {
+-      commonPrint.log('portal delay $name: the tunnel is on $running, no number');
+-      return;
+-    }
+-    if (running == null && picked != name) {
+-      // Raising the portal would come up on another node, so this row has no measurement.
+-      commonPrint.log('portal delay $name: the portal would come up on $picked, no number');
+-      return;
+-    }
+-    await measureAll([(name, host, port)]);
++    if (running == null) return;
++    final generation = _generation;
++    final probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
++    if (generation != _generation || !probe.answered) return;
++    commonPrint.log('portal delay $running: ${probe.describe()}');
++    state = {...state, running: probe.ms};
+   }
+ 
++  /// One row: what the long press asks for, and the same rotation a sweep does for its rows.
++  ///
++  /// A single row is still a measurement through that node, so the child is started on it and
++  /// put back afterwards — a number for a node the tunnel is not on would be a guess.
++  Future<void> measureOne(XrayServerConfig server) =>
++      measureEveryServer([server]);
++
+   /// Revokes every sweep in flight, for a list that is gone or has been replaced.
+   ///
+-  /// Whoever started the work can stop it being written: the workers compare the generation
+-  /// they started under with the current one, so an answer that arrives after the list was
+-  /// disposed is dropped instead of lighting up a row nobody is looking at.
++  /// The loop compares the generation it started under with the current one before each row,
++  /// so an answer that arrives after the list was disposed is dropped instead of lighting up a
++  /// row nobody is looking at. The portal is still put back — the loop's `finally` runs whether
++  /// the sweep was cut short or not.
+   void cancel() => _generation++;
+ }
+ 
+@@ -782,7 +850,6 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
+     final theme = Theme.of(context);
+     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
+     final modes = ref.watch(availableModesProvider);
+-    final running = ref.watch(runTimeProvider) != null;
+     final filters = ref.watch(portalFiltersProvider);
+     final groups = portalVisibleGroups(
+       ref.watch(groupsProvider),
+@@ -926,41 +993,14 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
+             ),
+             IconButton(
+               tooltip: context.appLocalizations.delayTest,
+-              // A delay test says which servers answer, so it must not depend on the portal
+-              // being open: the test wakes the engine for its duration and closes it again.
++              // The list is the unit: this press asks which of the mode's servers answer, and
++              // how fast. It must not depend on the portal being open — the sweep raises the
++              // mode's core for its own duration and puts it back. One row is the long press.
+               onPressed: testing
+                   ? null
+                   : () {
+                       HapticFeedback.mediumImpact();
+-                      // In the simple portal the list is the second core's, so the engine test
+-                      // has nothing to measure — its own servers are timed directly instead, and
+-                      // a fake address is a dash there. In the network mode the engine holds
+-                      // every server of the list and answers with its own proxied delay, which is
+-                      // the only number that is a fact about the node rather than about a
+-                      // handshake the phone performed to a local listener.
+-                      final servers = ref.read(xrayServersProvider).value ?? const [];
+-                      final targets = <(String, String, int)>[
+-                        for (final server in servers)
+-                          if (server.port > 0) (server.name, server.address, server.port),
+-                      ];
+-                      if (targets.isNotEmpty) {
+-                        unawaited(
+-                          ref.read(tcpDelayProvider.notifier).measureAll(targets),
+-                        );
+-                        return;
+-                      }
+-                      if (group == null) return;
+-                      unawaited(
+-                        _testDelayWithEngine(
+-                          ref,
+-                          [
+-                            for (final proxy in group.all)
+-                              if (!_isBuiltinOutbound(proxy.name)) proxy,
+-                          ],
+-                          testUrl: group.testUrl,
+-                          wasRunning: running,
+-                        ),
+-                      );
++                      unawaited(_sweepModeRows(ref));
+                     },
+               // A test in flight spins instead of pretending nothing is happening.
+               icon: testing
+@@ -1118,16 +1158,6 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
+             : heldXrayPick
+                 ? xrayPick
+                 : (pending ?? chosenName ?? rulesPick);
+-    // Measure once when the list arrives: a portal whose servers all read "—" until you
+-    // press something looks broken, and a closed portal is no reason not to know. Only the
+-    // simple portal is measured here: those are the servers no engine holds. In the network
+-    // mode the delay is the engine's own, taken through the tunnel it built — a TCP handshake
+-    // from this process to an engine node's name resolves through the running engine to its
+-    // fake-IP, and timing that measures the phone's own listener, not the node.
+-    final targets = <(String, String, int)>[
+-      for (final server in xrayServers)
+-        if (server.port > 0) (server.name, server.address, server.port),
+-    ];
+     final xrayServerByName = {
+       for (final server in xrayServers) server.name: server,
+     };
+@@ -1176,9 +1206,9 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
+     return Column(
+       crossAxisAlignment: CrossAxisAlignment.stretch,
+       children: [
+-        // Measures the servers of this list once, from a lifecycle method: a build pass is
+-        // not the place to start work, and a rebuild is not a reason to start it again.
+-        _TcpDelaySweep(targets),
++        // Times the row the child is carrying, once, from a lifecycle method: a build pass is
++        // not the place to start work, and a rebuild is not a reason to ask again.
++        _TcpDelaySweep(xrayServers),
+         // The filter strip belongs to the engine's rules. In the simple portal the list is
+         // the second core's own servers, so there are no filters to show.
+         if (!simple && xrayServers.isEmpty && groups.length > 1) const _GroupStrip(),
+@@ -1290,56 +1320,52 @@ void _reportPortalFailure(String reason) {
+   );
+ }
+ 
+-/// Same list, same question: records compare by value, so a rebuild that recomputes the
+-/// targets does not throw away half-finished answers by looking like a new list.
+-bool _sameTargets(
+-  List<(String, String, int)> a,
+-  List<(String, String, int)> b,
+-) {
++/// Same list, same question: a rebuild that recomputes the names must not look like a new
++/// subscription, or the answers in flight would be dropped by a generation bump.
++bool _sameServers(List<XrayServerConfig> a, List<XrayServerConfig> b) {
+   if (a.length != b.length) return false;
+   for (var index = 0; index < a.length; index++) {
+-    if (a[index] != b[index]) return false;
++    if (a[index].name != b[index].name) return false;
+   }
+   return true;
+ }
+ 
+-/// Starts one delay sweep for the servers the list is showing.
++/// Times the row the child is carrying, once, when the list arrives.
+ ///
+ /// From a lifecycle method, not the build pass: a widget can be rebuilt many times a frame
+-/// for reasons that have nothing to do with the servers, and starting the measurement there
+-/// restarted it on every rebuild while the map was still empty. The sweep itself owns its
+-/// cancellation — a newer list bumps the generation inside the notifier, which drops the
+-/// answers of the older one.
++/// for reasons that have nothing to do with the servers. This is the arrival probe, not a
++/// sweep: it never raises a core and never clears a row — the numbers the last sweep produced
++/// stay until the owner presses TEST again.
+ class _TcpDelaySweep extends ConsumerStatefulWidget {
+-  const _TcpDelaySweep(this.targets);
++  const _TcpDelaySweep(this.servers);
+ 
+-  final List<(String, String, int)> targets;
++  final List<XrayServerConfig> servers;
+ 
+   @override
+   ConsumerState<_TcpDelaySweep> createState() => _TcpDelaySweepState();
+ }
+ 
+ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
+-  List<(String, String, int)>? _asked;
++  List<XrayServerConfig>? _asked;
+ 
+   @override
+   void initState() {
+     super.initState();
+-    _start(widget.targets);
++    _start(widget.servers);
+   }
+ 
+   @override
+   void didUpdateWidget(covariant _TcpDelaySweep oldWidget) {
+     super.didUpdateWidget(oldWidget);
+-    _start(widget.targets);
++    _start(widget.servers);
+   }
+ 
+-  void _start(List<(String, String, int)> targets) {
+-    if (targets.isEmpty) return;
++  void _start(List<XrayServerConfig> servers) {
++    if (servers.isEmpty) return;
+     final asked = _asked;
+-    if (asked != null && _sameTargets(asked, targets)) return;
+-    _asked = targets;
+-    unawaited(ref.read(tcpDelayProvider.notifier).measureAll(targets));
++    if (asked != null && _sameServers(asked, servers)) return;
++    _asked = servers;
++    unawaited(ref.read(tcpDelayProvider.notifier).probeRunningNode());
+   }
+ 
+   @override
+@@ -1364,71 +1390,161 @@ Future<void> _waitForEngine(WidgetRef ref) async {
+   }
+ }
+ 
+-/// Runs a delay test, opening the engine for it when the portal is closed.
++/// One sweep over the engine's rows: every member of every group in [groups].
+ ///
+ /// The engine answers a delay test for any proxy in its applied config, but it needs to be
+-/// running to have that config and to reach the nodes. So a closed portal is opened for the
+-/// duration of the test, without any of the portal's own animation or state, and closed
+-/// again afterwards. If the portal was already open, nothing is toggled.
+-Future<void> _testDelayWithEngine(
+-  WidgetRef ref,
+-  List<Proxy> proxies, {
+-  String? testUrl,
+-  required bool wasRunning,
+-}) async {
+-  if (proxies.isEmpty) return;
+-  if (wasRunning) {
+-    await ref.read(proxiesActionProvider.notifier).delayTest(proxies, testUrl);
+-    return;
++/// running to have that config and to reach the nodes. A closed portal is opened for the
++/// duration of the sweep and closed again; a portal that was open stays open and nothing is
++/// rebuilt. Every row is cleared to a dash before the first request, so an old number cannot
++/// stand in for this sweep's.
++///
++/// The bound on concurrency is the core's own: [ProxiesAction.delayTestGroups] runs the whole
++/// list through the delay pool, so the sweep is one queue over every row instead of one
++/// request per row in series.
++Future<void> _sweepEngineRows(WidgetRef ref, List<Group> groups) async {
++  // The built-ins are not rows: a delay for DIRECT would be a number about the phone.
++  final swept = [
++    for (final group in groups)
++      if (group.all.any((proxy) => !_isBuiltinOutbound(proxy.name)))
++        group.copyWith(
++          all: [
++            for (final proxy in group.all)
++              if (!_isBuiltinOutbound(proxy.name)) proxy,
++          ],
++        ),
++  ];
++  if (swept.isEmpty) return;
++  final all = ref.read(groupsProvider);
++  final selectedMap = ref.read(selectedMapProvider);
++  // A node in two groups is one row on screen and one target in the queue: the pair is the
++  // identity, which is also the key the core's answer is stored under.
++  final rows = <(String, String)>{};
++  for (final group in swept) {
++    final url = ref.read(realTestUrlProvider(group.testUrl));
++    for (final proxy in group.all) {
++      final node = computeRealSelectedProxyState(
++        proxy.name,
++        groups: all,
++        selectedMap: selectedMap,
++      ).proxyName;
++      if (node.isEmpty) continue;
++      rows.add((url, node));
++    }
+   }
+-  final testing = ref.read(delayTestingGroupsProvider.notifier);
++  if (rows.isEmpty) return;
++  // Dashes first: the rows the owner pressed TEST on answer for themselves from here.
++  ref.read(delayDataSourceProvider.notifier).setDelays([
++    for (final row in rows) Delay(name: row.$2, url: row.$1, value: null),
++  ]);
++  final setup = ref.read(setupActionProvider.notifier);
++  final spinner = ref.read(delayTestingGroupsProvider.notifier);
+   final subject = ref.read(portalGroupProvider) ?? '';
+-  if (subject.isNotEmpty) testing.start(subject);
++  final wasRunning = ref.read(runTimeProvider) != null;
++  final mode = ref.read(patchClashConfigProvider.select((s) => s.mode));
+   final watch = Stopwatch()..start();
+-  // Raised for the test and put down again: the engine's delay API answers whenever it runs,
+-  // and the owner asked for a measurement, not for a portal that stays open behind his back.
+-  final started = await ref.read(setupActionProvider.notifier).setRunning(true);
++  var raisedOk = wasRunning;
+   var stopped = false;
++  var measured = 0;
++  if (!wasRunning) {
++    for (final group in swept) {
++      spinner.start(group.name);
++    }
++    if (subject.isNotEmpty) spinner.start(subject);
++  }
+   try {
+-    if (!started) {
+-      final reason = ref.read(setupActionProvider.notifier).lastPortalFailure;
+-      commonPrint.log(
+-        'portal test: could not raise the engine${reason.isEmpty ? '' : ': $reason'}',
+-        logLevel: LogLevel.warning,
+-      );
+-      unawaited(
+-        portalRuntime.noteTest(
+-          mode: 'rule',
+-          raised: 'engine',
+-          durationMs: watch.elapsedMilliseconds,
+-          stoppedAfter: false,
+-          detail: 'result=failed${reason.isEmpty ? '' : ' reason=$reason'}',
+-        ),
+-      );
+-      return;
++    if (!wasRunning) {
++      // Raised for the test and put down again: the engine's delay API answers whenever it
++      // runs, and the owner asked for a measurement, not for a portal left open behind him.
++      raisedOk = await setup.setRunning(true);
++      if (!raisedOk) {
++        final reason = setup.lastPortalFailure;
++        commonPrint.log(
++          'portal test: could not raise the engine'
++          '${reason.isEmpty ? '' : ': $reason'}',
++          logLevel: LogLevel.warning,
++        );
++      }
++    }
++    if (raisedOk) {
++      await _waitForEngine(ref);
++      await ref.read(proxiesActionProvider.notifier).delayTestGroups(swept);
++      measured = _countAnswered(ref, rows);
+     }
+-    await _waitForEngine(ref);
+-    await ref.read(proxiesActionProvider.notifier).delayTest(proxies, testUrl);
+   } finally {
+-    if (started) {
+-      stopped = await ref.read(setupActionProvider.notifier).setRunning(false);
++    if (!wasRunning && raisedOk) {
++      stopped = await setup.setRunning(false);
+     }
+     watch.stop();
+-    if (subject.isNotEmpty) testing.stop(subject);
+-    if (started) {
+-      unawaited(
+-        portalRuntime.noteTest(
+-          mode: 'rule',
+-          raised: 'engine',
+-          durationMs: watch.elapsedMilliseconds,
+-          stoppedAfter: stopped,
+-          detail: 'result=tests',
+-        ),
+-      );
++    if (!wasRunning) {
++      for (final group in swept) {
++        spinner.stop(group.name);
++      }
++      if (subject.isNotEmpty) spinner.stop(subject);
+     }
++    unawaited(
++      portalRuntime.noteTest(
++        mode: mode == Mode.global ? 'global' : 'rule',
++        rows: rows.length,
++        raised: wasRunning ? 'none' : 'engine',
++        measured: measured,
++        dashes: rows.length - measured,
++        durationMs: watch.elapsedMilliseconds,
++        stoppedAfter: stopped,
++      ),
++    );
++    commonPrint.log(
++      'portal test: ${wasRunning ? 'the engine was already open' : 'raised the engine and '
++          'closed it again'} in ${watch.elapsedMilliseconds} ms, '
++      '$measured of ${rows.length} answered',
++    );
+   }
+ }
+ 
++/// How many of [rows] the engine has a number for, and one line per row for the app log.
++///
++/// A timeout is `-1` in the engine's own table, and a cleared row is null: neither is a
++/// number, which is why the test is `> 0` and not `!= null`.
++int _countAnswered(WidgetRef ref, Set<(String, String)> rows) {
++  final delays = ref.read(delayDataSourceProvider);
++  var answered = 0;
++  for (final row in rows) {
++    final value = delays[row.$1]?[row.$2];
++    final ok = value != null && value > 0;
++    if (ok) answered++;
++    commonPrint.log(
++      'portal delay ${row.$2}: ${ok ? '$value ms' : 'no number'}',
++    );
++  }
++  return answered;
++}
++
++/// The test button: one sweep over every row the current mode can offer.
++///
++/// The list is the unit, not the row: a press asks which of my servers answer, and how fast.
++/// One row is the long press's business. The simple portal's rows are the child's, so every
++/// server of the subscription is measured through the tunnel; the network mode's rows are the
++/// engine's, so every member of every visible group is measured by the engine's own delay API.
++/// A simple portal with no servers of its own draws the engine's rows, so it sweeps those.
++Future<void> _sweepModeRows(WidgetRef ref) async {
++  final mode = ref.read(patchClashConfigProvider.select((s) => s.mode));
++  if (mode == Mode.global) {
++    // The subscription may still be being read: the list is not final yet, so the sweep waits
++    // for it rather than measuring the engine's rows and calling them the portal's.
++    final servers = ref.read(xrayServersProvider).value ??
++        await ref.read(xrayServersProvider.future) ??
++        const <XrayServerConfig>[];
++    if (servers.isNotEmpty) {
++      await ref.read(tcpDelayProvider.notifier).measureEveryServer(servers);
++      return;
++    }
++  }
++  final filters = ref.read(portalFiltersProvider);
++  await _sweepEngineRows(
++    ref,
++    portalVisibleGroups(ref.read(groupsProvider), filters.hidden, filters.order),
++  );
++}
++
+ /// Horizontal group filter. The chevrons are hints, not buttons: they say the strip
+ /// can be dragged and hide themselves once that direction is exhausted. A double tap
+ /// reveals an icon on every filter — a hidden trick, not a visible control.
+@@ -1853,6 +1969,9 @@ class _ServerRowState extends ConsumerState<_ServerRow>
+             ),
+           ],
+         ),
++        // A tap is a choice and nothing else: it moves the pick (or asks the engine for a
++        // proxy) and never asks for a number. A measurement the owner did not ask for would
++        // take the tunnel away for a moment under a finger that only wanted to choose.
+         onTap: () {
+           HapticFeedback.selectionClick();
+           final server = widget.xrayServer;
+@@ -1879,26 +1998,20 @@ class _ServerRowState extends ConsumerState<_ServerRow>
+                 proxyName: widget.proxy.name,
+               );
+         },
+-        // A long press answers the question a person actually has about one server: does
+-        // this one respond, and how fast — not what protocol it speaks, which is on the row
+-        // already.
++        // A long press is the one-row test: does this server answer, and how fast — not what
++        // protocol it speaks, which the row already says. The child's row is measured through
++        // that node alone; the engine's row through the engine's own delay API.
+         onLongPress: () {
+           HapticFeedback.mediumImpact();
+-          if (measurable) {
+-            unawaited(
+-              ref.read(tcpDelayProvider.notifier).measureOne(
+-                    widget.proxy.name,
+-                    widget.tcpHost,
+-                    widget.tcpPort,
+-                  ),
+-            );
++          final server = widget.xrayServer;
++          if (server != null && measurable) {
++            unawaited(ref.read(tcpDelayProvider.notifier).measureOne(server));
+             return;
+           }
+           unawaited(
+-            _testDelayWithEngine(
++            _sweepEngineRows(
+               ref,
+-              [widget.proxy],
+-              wasRunning: ref.read(runTimeProvider) != null,
++              [widget.group.copyWith(all: [widget.proxy])],
+             ),
+           );
+         },

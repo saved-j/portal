@@ -18,7 +18,8 @@ index 8ebf6f3f..70ea2b3e 100644
  name: fl_clash
  description: FlClashX, a fork of FlClash - a multi-platform proxy client based on ClashMeta for Remnawave users.
  publish_to: 'none'
--version: 0.5.3-portal-duo+202****1401
-+version: 0.5.3-portal-duo-2b+202****1402
+-version: 0.5.3-portal-duo+2026111401
++version: 0.5.3-portal-duo-2b+2026111402
  environment:
    sdk: '>=3.10.0 <4.0.0'
+ 

@@ -53,7 +53,10 @@ android {
         // Releases up to 0.5.0-pre.8 gave split APKs Flutter's ABI offset of up to +4000, so the
         // code every variant now shares sits above it and any earlier APK upgrades to any variant.
         versionCode = flutter.versionCode + 5000
-        versionName = flutter.versionName
+        // Flutter rewrites local.properties from pubspec.yaml on every build, and pubspec only
+        // accepts a semver core, so the shop-facing name is set here where nothing overwrites
+        // it. PORTAL_VERSION_NAME lets a build override it without touching this file.
+        versionName = System.getenv("PORTAL_VERSION_NAME") ?: "0.5.6_1a-portal-duo"
     }
 
     signingConfigs {

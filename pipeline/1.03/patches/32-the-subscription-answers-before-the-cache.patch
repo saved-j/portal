@@ -1,0 +1,33 @@
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index da8d79b0..4b55f3d9 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -607,20 +607,24 @@ PortalShown _portalShown(
+             ),
+           ]
+         : [
++            // The subscription is the answer until the engine itself speaks: a closed
++            // portal has no groups, and the cached rows may belong to the other core or to
++            // an older profile. Only when the document has nothing to show does the last
++            // engine answer stand in — never before it.
+             (
+-              'cache',
++              'profile',
+               portalFallbackGroup(
+                 simple: false,
+                 servers: const [],
+-                engineRows: cachedRows,
++                engineRows: profileRows,
+               ),
+             ),
+             (
+-              'profile',
++              'cache',
+               portalFallbackGroup(
+                 simple: false,
+                 servers: const [],
+-                engineRows: profileRows,
++                engineRows: cachedRows,
+               ),
+             ),
+           ],
