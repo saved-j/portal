@@ -1,0 +1,13 @@
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+index 6e0094fb..c47d673f 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -356,7 +356,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+             }
+         }
+         stopCoreHere()
+-        failure("xray did not take the tunnel within ${READY_TIMEOUT_MS}ms: $lastLine")
++        return failure("xray did not take the tunnel within ${READY_TIMEOUT_MS}ms: $lastLine")
+     }
+ 
+     /// Reads the log the document names, one appended line at a time.

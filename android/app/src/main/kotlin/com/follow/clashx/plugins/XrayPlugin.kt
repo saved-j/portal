@@ -356,7 +356,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             }
         }
         stopCoreHere()
-        failure("xray did not take the tunnel within ${READY_TIMEOUT_MS}ms: $lastLine")
+        return failure("xray did not take the tunnel within ${READY_TIMEOUT_MS}ms: $lastLine")
     }
 
     /// Reads the log the document names, one appended line at a time.
