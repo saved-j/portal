@@ -1,0 +1,64 @@
+{
+  "state": "live",
+  "series": "1.01a",
+  "base": {
+    "sha": "5b4d0669cd0105a7eb41078b17c36944bde7f044",
+    "name": "FlClashX upstream"
+  },
+  "head": "873e0ede12f4cf9aa5cbccf18627498b0c992516",
+  "tree": "68b9b4eeca70fc5168513145068275ee0f8b6109",
+  "apply": "git-apply",
+  "groups": [
+    {
+      "file": "patches/01-android-shell.patch",
+      "sha256": "b11938edfc3c63071be6e89cba35d17cdd5307270f459851de5597b1c3ade632",
+      "bytes": 13143
+    },
+    {
+      "file": "patches/02-core-xray.patch",
+      "sha256": "21650f73c228623e4f3a4d18d1cbead08044c30df1820485aee3df81b78c7bf2",
+      "bytes": 8897350
+    },
+    {
+      "file": "patches/03-ui-dashboard.patch",
+      "sha256": "1896360fb20fb58394f6faa3e76bc5caad3d596c4732f1d44f724a3707c85d47",
+      "bytes": 117618
+    },
+    {
+      "file": "patches/04-ui-profiles.patch",
+      "sha256": "dbea3e253d50910016742b9232a2e471febc31c2c770b3d7de3b143188b7deb3",
+      "bytes": 115261
+    },
+    {
+      "file": "patches/05-l10n.patch",
+      "sha256": "42e2d7b7f475a4124702e32a86b459d91c28061b113317f95de490d5f8b3fb83",
+      "bytes": 345655
+    },
+    {
+      "file": "patches/06-branding-icons.patch",
+      "sha256": "f876e24efbc23abaa9bf989e66f260c10b841eaabea69b24b86c8df939b8e7f1",
+      "bytes": 8153706
+    },
+    {
+      "file": "patches/07-desktop-product-name.patch",
+      "sha256": "b237dd72f643430fc16ed09dc482c257f56a6f9c19283e8e4da3a2fc613177b9",
+      "bytes": 7474
+    },
+    {
+      "file": "patches/08-docs-pipeline.patch",
+      "sha256": "36d0502ea4dac5250b17cf9296e087091cd516d81e4dddd28a086f0e93d81a01",
+      "bytes": 65071
+    },
+    {
+      "file": "patches/09-pipeline-archive.patch",
+      "sha256": "50f23ebbdf9f00e5a1898610ca27e5fdaf8b473f179d6ce188e9fcdd589517cc",
+      "bytes": 56313348
+    },
+    {
+      "file": "patches/10-misc.patch",
+      "sha256": "692427fc8a08b0b482596a4ac00d0ab871a69d3f731a1eb43651ead26f35b426",
+      "bytes": 21783
+    }
+  ],
+  "compare": "full"
+}

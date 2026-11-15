@@ -1,3 +1,66 @@
+diff --git a/lib/pages/home.dart b/lib/pages/home.dart
+index d4e913ba19d5b510a0572008208c85fe895a7bd1..9c6af8c41e7111ed33b98a22d804bf2e31a93851 100644
+--- a/lib/pages/home.dart
++++ b/lib/pages/home.dart
+@@ -55,6 +55,10 @@ class HomePage extends ConsumerWidget {
+ class _HomeShell extends ConsumerWidget {
+   const _HomeShell({required this.child});
+ 
++  /// Portal Connect ships without the bottom dock; `--dart-define=PORTAL_SHOW_DOCK=true`
++  /// brings it back for debugging the old navigation.
++  static final bool _showDock = bool.fromEnvironment('PORTAL_SHOW_DOCK');
++
+   final Widget child;
+ 
+   void _handleToPage(PageLabel pageLabel, WidgetRef ref) {
+@@ -69,7 +73,17 @@ class _HomeShell extends ConsumerWidget {
+     final floating = ref.watch(
+       appSettingProvider.select((state) => state.floatingNavigationBar),
+     );
+-    return Material(
++    // Back is a way to the working screen, not out of the app: on any other root page the
++    // gesture returns here instead of closing Portal.
++    final onDashboard =
++        ref.watch(currentPageLabelProvider) == PageLabel.dashboard;
++    return PopScope(
++      canPop: onDashboard,
++      onPopInvokedWithResult: (didPop, _) {
++        if (didPop) return;
++        _handleToPage(PageLabel.dashboard, ref);
++      },
++      child: Material(
+       color: SurfaceLevel.page.colorOf(context.colorScheme),
+       child: Column(
+         children: [
+@@ -92,7 +106,10 @@ class _HomeShell extends ConsumerWidget {
+                   end: 0,
+                   bottom: 0,
+                   child: AnimatedVisibility.bottomNavigation(
+-                    visible: isMobile && floating,
++                    // Portal Connect is one surface: the dock is retired, the corners
++                    // of the page carry settings and subscriptions instead. The
++                    // environment flag keeps the old dock reachable for debugging.
++                    visible: _showDock && isMobile && floating,
+                     child: _NavigationPadding(
+                       child: NavigationDock(
+                         destinations: [
+@@ -114,7 +131,7 @@ class _HomeShell extends ConsumerWidget {
+             ),
+           ),
+           AnimatedVisibility.bottomNavigation(
+-            visible: isMobile && !floating,
++            visible: _showDock && isMobile && !floating,
+             child: _NavigationPadding(
+               child: NavigationBar(
+                 destinations: [
+@@ -136,6 +153,7 @@ class _HomeShell extends ConsumerWidget {
+           ),
+         ],
+       ),
++      ),
+     );
+   }
+ }
 diff --git a/lib/views/dashboard/dashboard.dart b/lib/views/dashboard/dashboard.dart
 index 66821acb77b0a0fa59ff034c8ae2e96d8a6fb22e..4dcce94acb0ff77038fb2e39d4d99835069288a7 100644
 --- a/lib/views/dashboard/dashboard.dart
@@ -50,11 +113,14 @@ index 66821acb77b0a0fa59ff034c8ae2e96d8a6fb22e..4dcce94acb0ff77038fb2e39d4d99835
                  .read(setupActionProvider.notifier)
                  .pickMode(mode == Mode.global ? Mode.rule : Mode.global),
 diff --git a/lib/views/dashboard/hero.dart b/lib/views/dashboard/hero.dart
-index bff7fb331bc423a6fef223bf1854ccfc2188700f..5e7d3d266999a4606c34c0fb4db3fa53624b5eda 100644
+index bff7fb331bc423a6fef223bf1854ccfc2188700f..7389ebce346c1f518ac0cb4d67bb5f80e52a4804 100644
 --- a/lib/views/dashboard/hero.dart
 +++ b/lib/views/dashboard/hero.dart
-@@ -1,28 +1,29 @@
+@@ -1,29 +1,30 @@
 -import 'dart:io';
++import 'dart:async';
++
++import 'package:url_launcher/url_launcher.dart';
  
  import 'package:collection/collection.dart';
  import 'package:fl_clash/common/common.dart';
@@ -71,7 +137,6 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..5e7d3d266999a4606c34c0fb4db3fa53
 +import 'package:fl_clash/views/connection/connection_feeds.dart';
  import 'package:fl_clash/widgets/widgets.dart';
 +import 'portal_controls.dart';
-+import '../profiles/subscription_facts.dart';
 +import 'portal_gateway.dart';
  import 'package:flutter_riverpod/flutter_riverpod.dart';
 -import 'package:flutter_svg/flutter_svg.dart';
@@ -85,12 +150,13 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..5e7d3d266999a4606c34c0fb4db3fa53
  
  const heroMaxWidth = 520.0;
  
- const _logoSize = 96.0;
+-const _logoSize = 96.0;
 -const _inlineLogoSize = 56.0;
 -const _flagSize = 52.0;
- const _connectHeight = 56.0;
+-const _connectHeight = 56.0;
  const _gap = 12.0;
  
+ /// The hero home page: the service's logo and name over the plan, the
 @@ -84,42 +85,138 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                    crossAxisAlignment: CrossAxisAlignment.stretch,
                    children: [
@@ -115,7 +181,15 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..5e7d3d266999a4606c34c0fb4db3fa53
 +                            AppGlyphs.settings,
 +                            size: 22,
 +                          ),
-+                        ),
+                         ),
+-                        Flexible(
+-                          child: EmojiText(
+-                            headers.serviceName ?? appName,
+-                            maxLines: 1,
+-                            overflow: TextOverflow.ellipsis,
+-                            style: AppTextStyle.title2.of(
+-                              context,
+-                              emphasized: true,
 +                        IconButton(
 +                          // Shortcut to the per-app bypass list: the one setting a
 +                          // user reaches for while looking at the server list.
@@ -129,15 +203,7 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..5e7d3d266999a4606c34c0fb4db3fa53
 +                            AppGlyphs.appsList,
 +                            size: 22,
 +                          ),
-                         ),
--                        Flexible(
--                          child: EmojiText(
--                            headers.serviceName ?? appName,
--                            maxLines: 1,
--                            overflow: TextOverflow.ellipsis,
--                            style: AppTextStyle.title2.of(
--                              context,
--                              emphasized: true,
++                        ),
 +                        // No app icon and no app name here: the screen shows the
 +                        // service the subscription belongs to, not the product that
 +                        // opened the door.
@@ -254,7 +320,56 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..5e7d3d266999a4606c34c0fb4db3fa53
            ],
          ),
        ),
-@@ -160,471 +257,145 @@ class _EmptyHero extends StatelessWidget {
+@@ -132,499 +229,198 @@ class _EmptyHero extends StatelessWidget {
+ 
+   @override
+   Widget build(BuildContext context) {
+-    final appLocalizations = context.appLocalizations;
+     return Column(
+       mainAxisSize: MainAxisSize.min,
+       crossAxisAlignment: CrossAxisAlignment.stretch,
+       children: [
+-        const _ServiceLogo(),
+-        const SizedBox(height: 14),
++        // The same portal the working screen draws, in its closed state: the start screen
++        // is the product's face, not a stretched logo strip.
++        LayoutBuilder(
++          builder: (context, constraints) {
++            final side = (constraints.maxWidth * 0.62).clamp(150.0, 300.0);
++            return Center(
++              child: PortalGatewayCore(
++                isStart: false,
++                suspended: false,
++                runTime: null,
++                size: side,
++              ),
++            );
++          },
++        ),
++        const SizedBox(height: 18),
+         Text(
+           appName,
+           textAlign: TextAlign.center,
+           style: AppTextStyle.title2.of(context, emphasized: true),
+         ),
+         const SizedBox(height: 24),
+-        SizedBox(
+-          height: _connectHeight,
+-          child: AddProfileMenu(
+-            builder: (open) => FilledButton.icon(
+-              onPressed: open,
+-              icon: const GlyphIcon(AppGlyphs.add, fill: 1),
+-              label: Text(appLocalizations.addProfile),
+-            ),
+-          ),
+-        ),
++        // No "Add profile" gate: the field, the paste key, the file picker, the scanner and
++        // its Add button are on the screen from the first launch.
++        const AddProfileForm(),
++        const SizedBox(height: 40),
++        const _GetSubscriptionLink(),
+       ],
+     );
    }
  }
  
@@ -265,14 +380,17 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..5e7d3d266999a4606c34c0fb4db3fa53
 -    this.size = _logoSize,
 -    this.radius = AppRadius.xxl,
 -  });
--
++/// The quiet way to get a subscription, under the form.
++///
++/// It is deliberately small and low-contrast: the screen's job is to take the link a person
++/// already has, and only to mention where one comes from.
++class _GetSubscriptionLink extends StatelessWidget {
++  const _GetSubscriptionLink();
+ 
 -  final String? url;
 -  final double size;
 -  final BorderRadius radius;
-+/// The app's own icon. The panel-logo branch that used to live here was unreachable —
-+/// no call site ever passed a url — so the widget is what it always did in practice.
-+class _ServiceLogo extends StatelessWidget {
-+  const _ServiceLogo();
++  static const _botUrl = 'https://t.me/portalconnect_bot';
  
    @override
 -  Widget build(BuildContext context, WidgetRef ref) {
@@ -303,18 +421,30 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..5e7d3d266999a4606c34c0fb4db3fa53
 -            fit: BoxFit.cover,
 -            errorBuilder: (_, _, _) => fallback,
 -          );
--    return Center(
++  Widget build(BuildContext context) {
++    final theme = Theme.of(context);
+     return Center(
 -      child: ClipRSuperellipse(
 -        borderRadius: radius,
 -        child: SizedBox.square(dimension: size, child: logo),
-+  Widget build(BuildContext context) {
-+    return ClipRRect(
-+      borderRadius: BorderRadius.circular(_logoSize / 4),
-+      child: Image.asset(
-+        'assets/images/icon.png',
-+        width: _logoSize,
-+        height: _logoSize,
-+        fit: BoxFit.cover,
++      child: TextButton(
++        onPressed: () => unawaited(
++          launchUrl(Uri.parse(_botUrl), mode: LaunchMode.externalApplication),
++        ),
++        style: TextButton.styleFrom(
++          foregroundColor: theme.colorScheme.onSurfaceVariant,
++          minimumSize: Size.zero,
++          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
++          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
++        ),
++        child: Text(
++          context.appLocalizations.getSubscriptionHere,
++          style: theme.textTheme.bodySmall?.copyWith(
++            color: theme.colorScheme.onSurfaceVariant,
++            decoration: TextDecoration.underline,
++            decorationColor: theme.colorScheme.onSurfaceVariant,
++          ),
++        ),
        ),
      );
    }

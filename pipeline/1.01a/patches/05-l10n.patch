@@ -1,5 +1,5 @@
 diff --git a/arb/intl_en.arb b/arb/intl_en.arb
-index af3549a93245959420e9a18c1db193f74b0b74aa..c2ca97c025a980f68a82d2b973cc46bc8e2cbca6 100644
+index af3549a93245959420e9a18c1db193f74b0b74aa..b67eda951233463c1c65aaf74f497b1bac70cdef 100644
 --- a/arb/intl_en.arb
 +++ b/arb/intl_en.arb
 @@ -1,13 +1,13 @@
@@ -98,7 +98,7 @@ index af3549a93245959420e9a18c1db193f74b0b74aa..c2ca97c025a980f68a82d2b973cc46bc
    "core": "Core",
    "tabAnimation": "Tab animation",
 -  "desc": "A multi-platform proxy client based on Mihomo, simple and easy to use, open-source and ad-free.",
-+  "desc": "A multi-platform client built on the Prizrak and Xray cores. Open source, no ads, no telemetry.",
++  "desc": "A free open-source client built on FLClashX.",
    "startVpn": "Starting VPN…",
    "stopVpn": "Stopping VPN…",
    "localNetworkDeniedTip": "Local network permission denied: using the gvisor stack, LAN is unreachable.",
@@ -201,7 +201,7 @@ index af3549a93245959420e9a18c1db193f74b0b74aa..c2ca97c025a980f68a82d2b973cc46bc
    "stableImportRetry": "Retry",
    "stableImportSkip": "Continue without them",
    "updateViewOnGitHub": "View on GitHub",
-@@ -1037,5 +1037,24 @@
+@@ -1037,5 +1037,26 @@
    "updateErrorBusy": "Wait until the connection finishes starting or stopping.",
    "updateErrorSafeMode": "Safe mode doesn't install updates.",
    "updateErrorPermission": "Allow installing apps from this source, then tap Install again.",
@@ -225,10 +225,12 @@ index af3549a93245959420e9a18c1db193f74b0b74aa..c2ca97c025a980f68a82d2b973cc46bc
 +  "aboutCores": "Cores",
 +  "aboutPortalNetworkCore": "portal network core",
 +  "aboutContributors": "Contributors",
-+  "aboutBuiltOn": "Built on"
++  "aboutBuiltOn": "Built on",
++  "insertSubscriptionLink": "Paste your subscription link",
++  "getSubscriptionHere": "Get a subscription here"
  }
 diff --git a/arb/intl_ru.arb b/arb/intl_ru.arb
-index 3d421bbbe25ece6b3ee3dc17f80a853404186ea9..a290b73ea0882751eb02529450b1e39baff7dadf 100644
+index 3d421bbbe25ece6b3ee3dc17f80a853404186ea9..ceaaa13e860e4a99f04d76e7e77d30487b64042d 100644
 --- a/arb/intl_ru.arb
 +++ b/arb/intl_ru.arb
 @@ -1,13 +1,13 @@
@@ -332,7 +334,7 @@ index 3d421bbbe25ece6b3ee3dc17f80a853404186ea9..a290b73ea0882751eb02529450b1e39b
    "core": "Ядро",
    "tabAnimation": "Анимация вкладок",
 -  "desc": "Многоплатформенный прокси-клиент на основе Mihomo: простой и удобный, с открытым исходным кодом и без рекламы.",
-+  "desc": "Мультиплатформенный клиент на ядрах Prizrak и Xray. Открытый исходный код, без рекламы и телеметрии.",
++  "desc": "Бесплатный клиент с открытым исходным кодом, построенный на FLClashX.",
    "startVpn": "Запуск VPN…",
    "stopVpn": "Остановка VPN…",
    "localNetworkDeniedTip": "Доступ к локальной сети запрещён: используется стек gvisor, локальная сеть недоступна.",
@@ -388,7 +390,7 @@ index 3d421bbbe25ece6b3ee3dc17f80a853404186ea9..a290b73ea0882751eb02529450b1e39b
    "currentOutboundDesc": "Здесь кнопка запуска, эту карточку нельзя убрать",
    "trafficPeak": "Пик {value}",
    "trafficTotal": "Всего {value}",
-@@ -1037,5 +1037,52 @@
+@@ -1037,5 +1037,54 @@
    "updateErrorBusy": "Дождитесь, пока подключение запустится или остановится.",
    "updateErrorSafeMode": "В безопасном режиме обновления не устанавливаются.",
    "updateErrorPermission": "Разрешите установку приложений из этого источника и снова нажмите «Установить».",
@@ -440,10 +442,12 @@ index 3d421bbbe25ece6b3ee3dc17f80a853404186ea9..a290b73ea0882751eb02529450b1e39b
 +        "type": "String"
 +      }
 +    }
-+  }
++  },
++  "insertSubscriptionLink": "Вставьте свою ссылку подписки",
++  "getSubscriptionHere": "Оформить подписку можно здесь"
  }
 diff --git a/arb/intl_zh_CN.arb b/arb/intl_zh_CN.arb
-index b85bcb90e474565ca39e618c1cd77f140317e35d..b2db11e03e60bbe956afdf37f995ac8ed15f2035 100644
+index b85bcb90e474565ca39e618c1cd77f140317e35d..f986c2c4d9c4e72e84e3f4155e1f0174b6bcb686 100644
 --- a/arb/intl_zh_CN.arb
 +++ b/arb/intl_zh_CN.arb
 @@ -1,13 +1,13 @@
@@ -514,7 +518,7 @@ index b85bcb90e474565ca39e618c1cd77f140317e35d..b2db11e03e60bbe956afdf37f995ac8e
    "core": "内核",
    "tabAnimation": "选项卡动画",
 -  "desc": "基于Mihomo的多平台代理客户端，简单易用，开源无广告。",
-+  "desc": "基于 Prizrak 与 Xray 双核心的多平台客户端。开源、无广告、无遥测。",
++  "desc": "基于 FLClashX 的免费开源客户端。",
    "startVpn": "正在启动VPN…",
    "stopVpn": "正在停止VPN…",
    "localNetworkDeniedTip": "本地网络权限被拒绝：已改用 gvisor 栈，局域网无法访问。",
@@ -583,7 +587,7 @@ index b85bcb90e474565ca39e618c1cd77f140317e35d..b2db11e03e60bbe956afdf37f995ac8e
    "stableImportRetry": "重试",
    "stableImportSkip": "不迁移，继续",
    "updateViewOnGitHub": "在 GitHub 上查看",
-@@ -1037,5 +1037,20 @@
+@@ -1037,5 +1037,22 @@
    "updateErrorBusy": "请等待连接完成启动或停止。",
    "updateErrorSafeMode": "安全模式不会安装更新。",
    "updateErrorPermission": "请允许安装来自此来源的应用，然后再次点按安装。",
@@ -603,10 +607,12 @@ index b85bcb90e474565ca39e618c1cd77f140317e35d..b2db11e03e60bbe956afdf37f995ac8e
 +  "aboutCores": "核心",
 +  "aboutPortalNetworkCore": "门户网络核心",
 +  "aboutContributors": "贡献者",
-+  "aboutBuiltOn": "基于"
++  "aboutBuiltOn": "基于",
++  "insertSubscriptionLink": "粘贴您的订阅链接",
++  "getSubscriptionHere": "在此获取订阅"
  }
 diff --git a/lib/l10n/intl/messages_en.dart b/lib/l10n/intl/messages_en.dart
-index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e123ef7a3 100644
+index 7490d2f97b33714eee9d105eb332e269ea1e3e15..25ef52a77e14deec7c38574d0ae2f931c427013c 100644
 --- a/lib/l10n/intl/messages_en.dart
 +++ b/lib/l10n/intl/messages_en.dart
 @@ -33,7 +33,7 @@ class MessageLookup extends MessageLookupByLibrary {
@@ -940,7 +946,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "deleteTip": m22,
      "desc": MessageLookupByLibrary.simpleMessage(
 -      "A multi-platform proxy client based on Mihomo, simple and easy to use, open-source and ad-free.",
-+      "A multi-platform client built on the Prizrak and Xray cores. Open source, no ads, no telemetry.",
++      "A free open-source client built on FLClashX.",
      ),
      "destination": MessageLookupByLibrary.simpleMessage("Destination"),
      "destinationGeoIP": MessageLookupByLibrary.simpleMessage(
@@ -996,7 +1002,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "findProcessAlways": MessageLookupByLibrary.simpleMessage("Always"),
      "findProcessMode": MessageLookupByLibrary.simpleMessage("Find process"),
      "findProcessStrict": MessageLookupByLibrary.simpleMessage(
-@@ -849,12 +871,12 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -849,12 +871,15 @@ class MessageLookup extends MessageLookupByLibrary {
      "fr": MessageLookupByLibrary.simpleMessage("French"),
      "general": MessageLookupByLibrary.simpleMessage("General"),
      "geoResources": MessageLookupByLibrary.simpleMessage("Geo"),
@@ -1008,11 +1014,14 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
        "Geo low-memory mode",
      ),
 -    "global": MessageLookupByLibrary.simpleMessage("Global"),
++    "getSubscriptionHere": MessageLookupByLibrary.simpleMessage(
++      "Get a subscription here",
++    ),
 +    "global": MessageLookupByLibrary.simpleMessage("Simple portal"),
      "go": MessageLookupByLibrary.simpleMessage("Go"),
      "goDownload": MessageLookupByLibrary.simpleMessage("Download"),
      "goToConfigureAddedRules": MessageLookupByLibrary.simpleMessage(
-@@ -864,9 +886,9 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -864,9 +889,9 @@ class MessageLookup extends MessageLookupByLibrary {
        "Go to script configuration",
      ),
      "grid": MessageLookupByLibrary.simpleMessage("Grid"),
@@ -1024,7 +1033,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "hasCacheChange": MessageLookupByLibrary.simpleMessage(
        "Cache the changes?",
      ),
-@@ -875,7 +897,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -875,7 +900,7 @@ class MessageLookup extends MessageLookupByLibrary {
      ),
      "healthCheck": MessageLookupByLibrary.simpleMessage("Health check"),
      "helperCorruptTip": MessageLookupByLibrary.simpleMessage(
@@ -1033,7 +1042,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      ),
      "hex": MessageLookupByLibrary.simpleMessage("Hex"),
      "hideFromList": MessageLookupByLibrary.simpleMessage("Hide from list"),
-@@ -893,21 +915,21 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -893,21 +918,21 @@ class MessageLookup extends MessageLookupByLibrary {
      "hopInterval": MessageLookupByLibrary.simpleMessage("Hop interval"),
      "host": MessageLookupByLibrary.simpleMessage("Host"),
      "hostname": MessageLookupByLibrary.simpleMessage("Hostname"),
@@ -1059,7 +1068,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "hue": MessageLookupByLibrary.simpleMessage("Hue"),
      "icon": MessageLookupByLibrary.simpleMessage("Icon"),
      "iconSets": MessageLookupByLibrary.simpleMessage("Icon sets"),
-@@ -932,6 +954,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -932,6 +957,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "importFile": MessageLookupByLibrary.simpleMessage("Import from file"),
      "importFromLink": MessageLookupByLibrary.simpleMessage("Import from link"),
      "importUrl": MessageLookupByLibrary.simpleMessage("Import from URL"),
@@ -1067,7 +1076,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "inbound": MessageLookupByLibrary.simpleMessage("Inbound"),
      "includeInterface": MessageLookupByLibrary.simpleMessage(
        "Included interfaces",
-@@ -947,7 +970,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -947,7 +973,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "init": MessageLookupByLibrary.simpleMessage("Init"),
      "initFailed": MessageLookupByLibrary.simpleMessage("Startup failed"),
      "initFailedTip": MessageLookupByLibrary.simpleMessage(
@@ -1076,13 +1085,15 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      ),
      "initiator": MessageLookupByLibrary.simpleMessage("Initiator"),
      "initiatorShort": MessageLookupByLibrary.simpleMessage("From"),
-@@ -957,9 +980,10 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -957,9 +983,13 @@ class MessageLookup extends MessageLookupByLibrary {
      "inputRuleContent": MessageLookupByLibrary.simpleMessage(
        "Enter the rule content",
      ),
 -    "installedAppsPermissionDeniedMessage": MessageLookupByLibrary.simpleMessage(
 -      "The app list permission was denied, so installed apps cannot be listed. Please grant it manually in system settings.",
--    ),
++    "insertSubscriptionLink": MessageLookupByLibrary.simpleMessage(
++      "Paste your subscription link",
+     ),
 +    "installedAppsPermissionDeniedMessage":
 +        MessageLookupByLibrary.simpleMessage(
 +          "The app list permission was denied, so installed apps cannot be listed. Please grant it manually in system settings.",
@@ -1090,7 +1101,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "installedAppsPermissionDesc": MessageLookupByLibrary.simpleMessage(
        "This system hides the installed app list until the permission is granted. Authorize it to configure the per-app proxy.",
      ),
-@@ -1007,20 +1031,20 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1007,20 +1037,20 @@ class MessageLookup extends MessageLookupByLibrary {
      "invalidNetworkContent": MessageLookupByLibrary.simpleMessage(
        "Only tcp or udp is supported",
      ),
@@ -1116,7 +1127,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "ipAddress": MessageLookupByLibrary.simpleMessage("IP address"),
      "ipAsn": MessageLookupByLibrary.simpleMessage("ASN"),
      "ipFlagAbuser": MessageLookupByLibrary.simpleMessage("Abuse history"),
-@@ -1056,7 +1080,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1056,7 +1086,7 @@ class MessageLookup extends MessageLookupByLibrary {
        "With IPv6 on, the VPN allows IPv6 inbound.",
      ),
      "ipv6Timeout": MessageLookupByLibrary.simpleMessage("IPv6 timeout (ms)"),
@@ -1125,7 +1136,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "ja": MessageLookupByLibrary.simpleMessage("Japanese"),
      "justNow": MessageLookupByLibrary.simpleMessage("Just now"),
      "keepAliveIdle": MessageLookupByLibrary.simpleMessage(
-@@ -1079,7 +1103,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1079,7 +1109,7 @@ class MessageLookup extends MessageLookupByLibrary {
      ),
      "layout": MessageLookupByLibrary.simpleMessage("Layout"),
      "light": MessageLookupByLibrary.simpleMessage("Light"),
@@ -1134,7 +1145,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "lineWrap": MessageLookupByLibrary.simpleMessage("Word wrap"),
      "link": MessageLookupByLibrary.simpleMessage("Link"),
      "liquidGlass": MessageLookupByLibrary.simpleMessage("Liquid Glass"),
-@@ -1111,7 +1135,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1111,7 +1141,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "locationPermissionDesc": MessageLookupByLibrary.simpleMessage(
        "The system requires location permission to read the Wi-Fi name. On Android choose \"Allow all the time\", otherwise the Wi-Fi name cannot be read while the app is in the background.",
      ),
@@ -1143,7 +1154,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "locationPermissionRequired": MessageLookupByLibrary.simpleMessage(
        "Location permission required",
      ),
-@@ -1144,7 +1168,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1144,7 +1174,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "matchSourceIp": MessageLookupByLibrary.simpleMessage("Match source IP"),
      "matchTarget": MessageLookupByLibrary.simpleMessage("MATCH-TARGET"),
      "maxFailedTimes": MessageLookupByLibrary.simpleMessage("Max failures"),
@@ -1152,7 +1163,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "maximize": MessageLookupByLibrary.simpleMessage("Maximize"),
      "memoryAppResident": MessageLookupByLibrary.simpleMessage(
        "Resident memory",
-@@ -1170,7 +1194,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1170,7 +1200,7 @@ class MessageLookup extends MessageLookupByLibrary {
        "Memory the app and the core use",
      ),
      "memoryReleased": MessageLookupByLibrary.simpleMessage("Memory released"),
@@ -1161,7 +1172,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "menuBarMode": MessageLookupByLibrary.simpleMessage("Pin to menu bar"),
      "menuBarModeDesc": MessageLookupByLibrary.simpleMessage(
        "The app lives in the menu bar: the window opens as a popover from its icon and there is no Dock icon. The zoom button pins it too.",
-@@ -1182,20 +1206,20 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1182,20 +1212,20 @@ class MessageLookup extends MessageLookupByLibrary {
      "minimize": MessageLookupByLibrary.simpleMessage("Minimize"),
      "minimizeOnExit": MessageLookupByLibrary.simpleMessage("Minimize on exit"),
      "minutes": MessageLookupByLibrary.simpleMessage("minutes"),
@@ -1188,7 +1199,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "networkCancelledError": MessageLookupByLibrary.simpleMessage(
        "The request was cancelled",
      ),
-@@ -1206,13 +1230,13 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1206,13 +1236,13 @@ class MessageLookup extends MessageLookupByLibrary {
        "Couldn\'t resolve the server address. Check that the URL is correct and DNS is working",
      ),
      "networkName": MessageLookupByLibrary.simpleMessage("Network name"),
@@ -1205,7 +1216,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "networkSpeed": MessageLookupByLibrary.simpleMessage("Network speed"),
      "networkTakeover": MessageLookupByLibrary.simpleMessage("Traffic takeover"),
      "networkTimeoutError": MessageLookupByLibrary.simpleMessage(
-@@ -1244,7 +1268,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1244,7 +1274,7 @@ class MessageLookup extends MessageLookupByLibrary {
      ),
      "none": MessageLookupByLibrary.simpleMessage("None"),
      "notSelectedTip": MessageLookupByLibrary.simpleMessage(
@@ -1214,7 +1225,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      ),
      "ntpInterval": MessageLookupByLibrary.simpleMessage(
        "Sync interval (minutes)",
-@@ -1253,11 +1277,11 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1253,11 +1283,11 @@ class MessageLookup extends MessageLookupByLibrary {
        "NTP takes the time from an NTP server instead of the system clock.",
      ),
      "nullProfileDesc": MessageLookupByLibrary.simpleMessage(
@@ -1230,7 +1241,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "obfs": MessageLookupByLibrary.simpleMessage("Obfuscation"),
      "obfsHost": MessageLookupByLibrary.simpleMessage("Obfuscation host"),
      "obfsMode": MessageLookupByLibrary.simpleMessage("Obfuscation mode"),
-@@ -1274,6 +1298,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1274,6 +1304,7 @@ class MessageLookup extends MessageLookupByLibrary {
        "Only count proxy traffic",
      ),
      "openLogsFolder": MessageLookupByLibrary.simpleMessage("Open logs folder"),
@@ -1238,7 +1249,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "openVpnSettings": MessageLookupByLibrary.simpleMessage(
        "Open VPN settings",
      ),
-@@ -1324,13 +1349,14 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1324,13 +1355,14 @@ class MessageLookup extends MessageLookupByLibrary {
        "Please enter a different port",
      ),
      "portHopping": MessageLookupByLibrary.simpleMessage("Port hopping"),
@@ -1257,7 +1268,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "preSharedKey": MessageLookupByLibrary.simpleMessage("Pre-shared key"),
      "preferred": MessageLookupByLibrary.simpleMessage("Preferred"),
      "prerequisites": MessageLookupByLibrary.simpleMessage("Prerequisites"),
-@@ -1344,25 +1370,25 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1344,25 +1376,25 @@ class MessageLookup extends MessageLookupByLibrary {
        "Private key passphrase",
      ),
      "process": MessageLookupByLibrary.simpleMessage("Process"),
@@ -1291,7 +1302,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      ),
      "profileNoExpiry": MessageLookupByLibrary.simpleMessage("No expiry"),
      "profileSettingsDesc": MessageLookupByLibrary.simpleMessage(
-@@ -1379,20 +1405,20 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1379,20 +1411,20 @@ class MessageLookup extends MessageLookupByLibrary {
      "profileTypeSubscription": MessageLookupByLibrary.simpleMessage(
        "Subscription",
      ),
@@ -1317,7 +1328,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "providerReplacedTip": MessageLookupByLibrary.simpleMessage(
        "This provider was replaced while you edited it. Reopen it to edit the current one.",
      ),
-@@ -1400,11 +1426,11 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1400,11 +1432,11 @@ class MessageLookup extends MessageLookupByLibrary {
        "Only remote providers are supported",
      ),
      "providers": MessageLookupByLibrary.simpleMessage("External resources"),
@@ -1334,7 +1345,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "proxyChain": MessageLookupByLibrary.simpleMessage("Chain"),
      "proxyChainDevice": MessageLookupByLibrary.simpleMessage("Device"),
      "proxyChainEntry": MessageLookupByLibrary.simpleMessage("Entry"),
-@@ -1416,17 +1442,17 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1416,17 +1448,17 @@ class MessageLookup extends MessageLookupByLibrary {
        "Give the chain a name and pick every hop",
      ),
      "proxyChainInternet": MessageLookupByLibrary.simpleMessage("Internet"),
@@ -1359,7 +1370,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "proxyChains": MessageLookupByLibrary.simpleMessage("Proxy chain"),
      "proxyChainsDesc": MessageLookupByLibrary.simpleMessage(
        "Traffic passes the hops in order, and sites see only the exit. Chains are kept on this device and are not in backups yet.",
-@@ -1436,11 +1462,11 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1436,11 +1468,11 @@ class MessageLookup extends MessageLookupByLibrary {
      "proxyGroupEmpty": MessageLookupByLibrary.simpleMessage(
        "Proxy group is empty",
      ),
@@ -1373,7 +1384,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "proxyProviders": MessageLookupByLibrary.simpleMessage("Proxy providers"),
      "proxyType": MessageLookupByLibrary.simpleMessage("Proxy type"),
      "pruneCache": MessageLookupByLibrary.simpleMessage("Prune cache"),
-@@ -1686,10 +1712,10 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1686,10 +1718,10 @@ class MessageLookup extends MessageLookupByLibrary {
      "ruleTextInvalid": MessageLookupByLibrary.simpleMessage(
        "The rule must start with a supported type, such as DOMAIN,example.com,DIRECT",
      ),
@@ -1387,7 +1398,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "saturation": MessageLookupByLibrary.simpleMessage("Saturation"),
      "save": MessageLookupByLibrary.simpleMessage("Save"),
      "saveChanges": MessageLookupByLibrary.simpleMessage("Save the changes?"),
-@@ -1702,9 +1728,9 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1702,9 +1734,9 @@ class MessageLookup extends MessageLookupByLibrary {
      ),
      "search": MessageLookupByLibrary.simpleMessage("Search"),
      "seconds": MessageLookupByLibrary.simpleMessage("seconds"),
@@ -1399,7 +1410,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "select": MessageLookupByLibrary.simpleMessage("Select"),
      "selectAll": MessageLookupByLibrary.simpleMessage("Select all"),
      "selectRuleSet": MessageLookupByLibrary.simpleMessage(
-@@ -1723,22 +1749,22 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1723,22 +1755,22 @@ class MessageLookup extends MessageLookupByLibrary {
        "This device is not connected to a local network",
      ),
      "sendFromPhonePageHint": MessageLookupByLibrary.simpleMessage(
@@ -1427,7 +1438,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "serviceAllAvailable": MessageLookupByLibrary.simpleMessage(
        "All available",
      ),
-@@ -1768,14 +1794,14 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1768,14 +1800,14 @@ class MessageLookup extends MessageLookupByLibrary {
      ),
      "settingEntries": MessageLookupByLibrary.simpleMessage("settings"),
      "settings": MessageLookupByLibrary.simpleMessage("Settings"),
@@ -1445,7 +1456,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      ),
      "show": MessageLookupByLibrary.simpleMessage("Show"),
      "showLess": MessageLookupByLibrary.simpleMessage("Collapse"),
-@@ -1796,7 +1822,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1796,7 +1828,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "singleShareLinkOnly": MessageLookupByLibrary.simpleMessage(
        "Enter one link here; edit several from the quick edit of the list",
      ),
@@ -1454,7 +1465,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "size": MessageLookupByLibrary.simpleMessage("Size"),
      "skipCertVerify": MessageLookupByLibrary.simpleMessage(
        "Skip certificate verification",
-@@ -1821,6 +1847,12 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1821,6 +1853,12 @@ class MessageLookup extends MessageLookupByLibrary {
      "socksPort": MessageLookupByLibrary.simpleMessage("SOCKS port"),
      "softStyle": MessageLookupByLibrary.simpleMessage("Soft"),
      "sort": MessageLookupByLibrary.simpleMessage("Sort"),
@@ -1467,7 +1478,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "source": MessageLookupByLibrary.simpleMessage("Source"),
      "specialProxy": MessageLookupByLibrary.simpleMessage("Special proxy"),
      "specialRules": MessageLookupByLibrary.simpleMessage("Special rules"),
-@@ -1836,10 +1868,10 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1836,10 +1874,10 @@ class MessageLookup extends MessageLookupByLibrary {
        "Continue without them",
      ),
      "stableImportTip": MessageLookupByLibrary.simpleMessage(
@@ -1480,7 +1491,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      ),
      "stackMode": MessageLookupByLibrary.simpleMessage("Stack mode"),
      "stackTrace": MessageLookupByLibrary.simpleMessage("Stack trace"),
-@@ -1871,7 +1903,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1871,7 +1909,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "subscriptionExpired": MessageLookupByLibrary.simpleMessage(
        "Your subscription has expired",
      ),
@@ -1489,7 +1500,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "subscriptionExpiresSoon": MessageLookupByLibrary.simpleMessage(
        "Subscription expires soon",
      ),
-@@ -1912,13 +1944,14 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1912,13 +1950,14 @@ class MessageLookup extends MessageLookupByLibrary {
      "themeMode": MessageLookupByLibrary.simpleMessage("Appearance"),
      "themeStyle": MessageLookupByLibrary.simpleMessage("Theme mode"),
      "themeStyleDesc": MessageLookupByLibrary.simpleMessage(
@@ -1505,7 +1516,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "tintedStyle": MessageLookupByLibrary.simpleMessage("Tinted"),
      "tip": MessageLookupByLibrary.simpleMessage("Tip"),
      "toggle": MessageLookupByLibrary.simpleMessage("Toggle"),
-@@ -1931,11 +1964,12 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1931,11 +1970,12 @@ class MessageLookup extends MessageLookupByLibrary {
      "totalUpload": MessageLookupByLibrary.simpleMessage("Uploaded"),
      "tproxyPort": MessageLookupByLibrary.simpleMessage("TProxy port"),
      "traffic": MessageLookupByLibrary.simpleMessage("Traffic"),
@@ -1521,7 +1532,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "tun": MessageLookupByLibrary.simpleMessage("TUN"),
      "tunAuthorizationFailed": MessageLookupByLibrary.simpleMessage(
        "TUN could not be authorized, so it was turned off.",
-@@ -2041,7 +2075,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -2041,7 +2081,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "upload": MessageLookupByLibrary.simpleMessage("Upload"),
      "uploadBandwidth": MessageLookupByLibrary.simpleMessage("Upload bandwidth"),
      "url": MessageLookupByLibrary.simpleMessage("URL"),
@@ -1530,7 +1541,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "useHosts": MessageLookupByLibrary.simpleMessage("Use hosts"),
      "useSystemHosts": MessageLookupByLibrary.simpleMessage("Use system hosts"),
      "usedTraffic": MessageLookupByLibrary.simpleMessage("Used traffic"),
-@@ -2066,7 +2100,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -2066,7 +2106,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
        "VPN routes all system traffic through VpnService automatically.",
      ),
@@ -1539,7 +1550,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..13e01969f31caf5c2f8d5dcb2f444c4e
      "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
        "VPN is restricted on this device by its administrator",
      ),
-@@ -2079,8 +2113,8 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -2079,8 +2119,8 @@ class MessageLookup extends MessageLookupByLibrary {
      "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
        "Write to system also sets the system clock; Android ignores it.",
      ),
@@ -4222,7 +4233,7 @@ index 1f0333cf5c081a9aa898ef934e57103081161dda..71bb07ba97737958699aa92136a30fdb
      "zhCN": MessageLookupByLibrary.simpleMessage("중국어 간체"),
    };
 diff --git a/lib/l10n/intl/messages_ru.dart b/lib/l10n/intl/messages_ru.dart
-index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc22159e314826 100644
+index ed61e54f6da5ec7d05151e7259b72435e67c8692..7b7e5d7fa5567c4e243201c5d2794b796a8644fc 100644
 --- a/lib/l10n/intl/messages_ru.dart
 +++ b/lib/l10n/intl/messages_ru.dart
 @@ -88,194 +88,209 @@ class MessageLookup extends MessageLookupByLibrary {
@@ -4550,7 +4561,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "deleteTip": m22,
      "desc": MessageLookupByLibrary.simpleMessage(
 -      "Многоплатформенный прокси-клиент на основе Mihomo: простой и удобный, с открытым исходным кодом и без рекламы.",
-+      "Мультиплатформенный клиент на ядрах Prizrak и Xray. Открытый исходный код, без рекламы и телеметрии.",
++      "Бесплатный клиент с открытым исходным кодом, построенный на FLClashX.",
      ),
      "destination": MessageLookupByLibrary.simpleMessage("Назначение"),
      "destinationGeoIP": MessageLookupByLibrary.simpleMessage(
@@ -4602,7 +4613,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "findProcessAlways": MessageLookupByLibrary.simpleMessage("Всегда"),
      "findProcessMode": MessageLookupByLibrary.simpleMessage("Поиск процесса"),
      "findProcessStrict": MessageLookupByLibrary.simpleMessage(
-@@ -884,12 +906,12 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -884,12 +906,15 @@ class MessageLookup extends MessageLookupByLibrary {
      "fr": MessageLookupByLibrary.simpleMessage("Французский"),
      "general": MessageLookupByLibrary.simpleMessage("Общие"),
      "geoResources": MessageLookupByLibrary.simpleMessage("Geo"),
@@ -4614,11 +4625,14 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
        "Geo: экономия памяти",
      ),
 -    "global": MessageLookupByLibrary.simpleMessage("Глобальный"),
++    "getSubscriptionHere": MessageLookupByLibrary.simpleMessage(
++      "Оформить подписку можно здесь",
++    ),
 +    "global": MessageLookupByLibrary.simpleMessage("Простой портал"),
      "go": MessageLookupByLibrary.simpleMessage("Перейти"),
      "goDownload": MessageLookupByLibrary.simpleMessage("Скачать"),
      "goToConfigureAddedRules": MessageLookupByLibrary.simpleMessage(
-@@ -899,9 +921,9 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -899,9 +924,9 @@ class MessageLookup extends MessageLookupByLibrary {
        "Перейти к настройке скрипта",
      ),
      "grid": MessageLookupByLibrary.simpleMessage("Сетка"),
@@ -4630,7 +4644,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "hasCacheChange": MessageLookupByLibrary.simpleMessage(
        "Сохранить изменения как черновик?",
      ),
-@@ -928,19 +950,19 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -928,19 +953,19 @@ class MessageLookup extends MessageLookupByLibrary {
      "hopInterval": MessageLookupByLibrary.simpleMessage("Интервал перескока"),
      "host": MessageLookupByLibrary.simpleMessage("Хост"),
      "hostname": MessageLookupByLibrary.simpleMessage("Имя хоста"),
@@ -4654,7 +4668,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "hue": MessageLookupByLibrary.simpleMessage("Оттенок"),
      "icon": MessageLookupByLibrary.simpleMessage("Значок"),
      "iconSets": MessageLookupByLibrary.simpleMessage("Наборы значков"),
-@@ -965,6 +987,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -965,6 +990,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "importFile": MessageLookupByLibrary.simpleMessage("Импорт из файла"),
      "importFromLink": MessageLookupByLibrary.simpleMessage("Импорт по ссылке"),
      "importUrl": MessageLookupByLibrary.simpleMessage("Импорт по URL"),
@@ -4662,13 +4676,15 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "inbound": MessageLookupByLibrary.simpleMessage("Входящие"),
      "includeInterface": MessageLookupByLibrary.simpleMessage(
        "Включённые интерфейсы",
-@@ -992,9 +1015,10 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -992,9 +1018,13 @@ class MessageLookup extends MessageLookupByLibrary {
      "inputRuleContent": MessageLookupByLibrary.simpleMessage(
        "Введите содержимое правила",
      ),
 -    "installedAppsPermissionDeniedMessage": MessageLookupByLibrary.simpleMessage(
 -      "Разрешение на список приложений отклонено, поэтому установленные приложения недоступны. Предоставьте его вручную в системных настройках.",
--    ),
++    "insertSubscriptionLink": MessageLookupByLibrary.simpleMessage(
++      "Вставьте свою ссылку подписки",
+     ),
 +    "installedAppsPermissionDeniedMessage":
 +        MessageLookupByLibrary.simpleMessage(
 +          "Разрешение на список приложений отклонено, поэтому установленные приложения недоступны. Предоставьте его вручную в системных настройках.",
@@ -4676,7 +4692,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "installedAppsPermissionDesc": MessageLookupByLibrary.simpleMessage(
        "Эта система не выдаёт список установленных приложений без разрешения. Предоставьте его, чтобы настроить прокси для отдельных приложений.",
      ),
-@@ -1044,20 +1068,20 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1044,20 +1074,20 @@ class MessageLookup extends MessageLookupByLibrary {
      "invalidNetworkContent": MessageLookupByLibrary.simpleMessage(
        "Поддерживаются только tcp и udp",
      ),
@@ -4702,7 +4718,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "ipAddress": MessageLookupByLibrary.simpleMessage("IP-адрес"),
      "ipAsn": MessageLookupByLibrary.simpleMessage("ASN"),
      "ipFlagAbuser": MessageLookupByLibrary.simpleMessage("Злоупотребления"),
-@@ -1095,7 +1119,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1095,7 +1125,7 @@ class MessageLookup extends MessageLookupByLibrary {
        "При включённом IPv6 VPN принимает входящий IPv6.",
      ),
      "ipv6Timeout": MessageLookupByLibrary.simpleMessage("Тайм-аут IPv6 (мс)"),
@@ -4711,7 +4727,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "ja": MessageLookupByLibrary.simpleMessage("Японский"),
      "justNow": MessageLookupByLibrary.simpleMessage("Только что"),
      "keepAliveIdle": MessageLookupByLibrary.simpleMessage(
-@@ -1118,7 +1142,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1118,7 +1148,7 @@ class MessageLookup extends MessageLookupByLibrary {
      ),
      "layout": MessageLookupByLibrary.simpleMessage("Макет"),
      "light": MessageLookupByLibrary.simpleMessage("Светлая"),
@@ -4720,7 +4736,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "lineWrap": MessageLookupByLibrary.simpleMessage("Перенос строк"),
      "link": MessageLookupByLibrary.simpleMessage("Ссылка"),
      "liquidGlass": MessageLookupByLibrary.simpleMessage("Жидкое стекло"),
-@@ -1152,7 +1176,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1152,7 +1182,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "locationPermissionDesc": MessageLookupByLibrary.simpleMessage(
        "По требованию системы для получения имени сети Wi-Fi необходимо разрешение на геолокацию. На Android выберите «Разрешить всегда», иначе имя сети Wi-Fi нельзя получить, пока приложение в фоне.",
      ),
@@ -4729,7 +4745,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "locationPermissionRequired": MessageLookupByLibrary.simpleMessage(
        "Требуется разрешение на геолокацию",
      ),
-@@ -1191,7 +1215,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1191,7 +1221,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "maxFailedTimes": MessageLookupByLibrary.simpleMessage(
        "Макс. число ошибок",
      ),
@@ -4738,7 +4754,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "maximize": MessageLookupByLibrary.simpleMessage("Развернуть"),
      "memoryAppResident": MessageLookupByLibrary.simpleMessage(
        "Резидентная память",
-@@ -1225,7 +1249,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1225,7 +1255,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "memoryReleased": MessageLookupByLibrary.simpleMessage(
        "Память освобождена",
      ),
@@ -4747,7 +4763,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "menuBarMode": MessageLookupByLibrary.simpleMessage(
        "Прикрепить к строке меню",
      ),
-@@ -1239,22 +1263,22 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1239,22 +1269,22 @@ class MessageLookup extends MessageLookupByLibrary {
        "Сворачивать при выходе",
      ),
      "minutes": MessageLookupByLibrary.simpleMessage("мин"),
@@ -4776,7 +4792,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "networkCancelledError": MessageLookupByLibrary.simpleMessage(
        "Запрос отменён",
      ),
-@@ -1265,13 +1289,13 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1265,13 +1295,13 @@ class MessageLookup extends MessageLookupByLibrary {
        "Не удалось определить адрес сервера. Проверьте правильность URL и работу DNS",
      ),
      "networkName": MessageLookupByLibrary.simpleMessage("Имя сети"),
@@ -4793,7 +4809,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "networkSpeed": MessageLookupByLibrary.simpleMessage("Скорость сети"),
      "networkTakeover": MessageLookupByLibrary.simpleMessage("Перехват трафика"),
      "networkTimeoutError": MessageLookupByLibrary.simpleMessage(
-@@ -1301,7 +1325,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1301,7 +1331,7 @@ class MessageLookup extends MessageLookupByLibrary {
      ),
      "none": MessageLookupByLibrary.simpleMessage("Нет"),
      "notSelectedTip": MessageLookupByLibrary.simpleMessage(
@@ -4802,7 +4818,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      ),
      "ntpInterval": MessageLookupByLibrary.simpleMessage(
        "Интервал синхронизации (минуты)",
-@@ -1310,11 +1334,11 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1310,11 +1340,11 @@ class MessageLookup extends MessageLookupByLibrary {
        "NTP берёт время с NTP-сервера, а не из системных часов.",
      ),
      "nullProfileDesc": MessageLookupByLibrary.simpleMessage(
@@ -4818,7 +4834,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "obfs": MessageLookupByLibrary.simpleMessage("Обфускация"),
      "obfsHost": MessageLookupByLibrary.simpleMessage("Хост обфускации"),
      "obfsMode": MessageLookupByLibrary.simpleMessage("Режим обфускации"),
-@@ -1331,6 +1355,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1331,6 +1361,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "openLogsFolder": MessageLookupByLibrary.simpleMessage(
        "Открыть папку с логами",
      ),
@@ -4826,7 +4842,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "openVpnSettings": MessageLookupByLibrary.simpleMessage(
        "Открыть настройки VPN",
      ),
-@@ -1391,8 +1416,9 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1391,8 +1422,9 @@ class MessageLookup extends MessageLookupByLibrary {
        "Введите другой порт",
      ),
      "portHopping": MessageLookupByLibrary.simpleMessage("Перескок портов"),
@@ -4838,7 +4854,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "ports": MessageLookupByLibrary.simpleMessage("Порты"),
      "preChannelTip": MessageLookupByLibrary.simpleMessage(
        "Это предварительная версия, она стоит отдельным приложением и не видит профили FlClashX. Чтобы перенести их, сделайте резервную копию в FlClashX в разделе «Резервное копирование и восстановление» и восстановите её здесь, или добавьте подписки заново по ссылке.",
-@@ -1415,23 +1441,23 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1415,23 +1447,23 @@ class MessageLookup extends MessageLookupByLibrary {
        "Пароль закрытого ключа",
      ),
      "process": MessageLookupByLibrary.simpleMessage("Процесс"),
@@ -4870,7 +4886,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      ),
      "profileNoExpiry": MessageLookupByLibrary.simpleMessage("Бессрочно"),
      "profileSettingsDesc": MessageLookupByLibrary.simpleMessage(
-@@ -1444,20 +1470,20 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1444,20 +1476,20 @@ class MessageLookup extends MessageLookupByLibrary {
      "profileTypeCustom": MessageLookupByLibrary.simpleMessage("Свой"),
      "profileTypeFile": MessageLookupByLibrary.simpleMessage("Файл"),
      "profileTypeSubscription": MessageLookupByLibrary.simpleMessage("Подписка"),
@@ -4896,7 +4912,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "providerReplacedTip": MessageLookupByLibrary.simpleMessage(
        "Этот провайдер был заменён, пока вы его редактировали. Откройте его снова, чтобы изменить текущий.",
      ),
-@@ -1465,11 +1491,11 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1465,11 +1497,11 @@ class MessageLookup extends MessageLookupByLibrary {
        "Поддерживаются только удалённые ресурсы",
      ),
      "providers": MessageLookupByLibrary.simpleMessage("Внешние ресурсы"),
@@ -4913,7 +4929,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "proxyChain": MessageLookupByLibrary.simpleMessage("Цепочка"),
      "proxyChainDevice": MessageLookupByLibrary.simpleMessage("Устройство"),
      "proxyChainEntry": MessageLookupByLibrary.simpleMessage("Вход"),
-@@ -1481,17 +1507,17 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1481,17 +1513,17 @@ class MessageLookup extends MessageLookupByLibrary {
        "Укажите имя и выберите все звенья",
      ),
      "proxyChainInternet": MessageLookupByLibrary.simpleMessage("Интернет"),
@@ -4938,7 +4954,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "proxyChains": MessageLookupByLibrary.simpleMessage("Цепочка прокси"),
      "proxyChainsDesc": MessageLookupByLibrary.simpleMessage(
        "Трафик проходит звенья по порядку, сайты видят только выход. Цепочки хранятся на этом устройстве и пока не попадают в резервную копию.",
-@@ -1501,11 +1527,11 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1501,11 +1533,11 @@ class MessageLookup extends MessageLookupByLibrary {
      "proxyGroupEmpty": MessageLookupByLibrary.simpleMessage(
        "Группа прокси пуста",
      ),
@@ -4952,7 +4968,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "proxyProviders": MessageLookupByLibrary.simpleMessage("Провайдеры прокси"),
      "proxyType": MessageLookupByLibrary.simpleMessage("Тип прокси"),
      "pruneCache": MessageLookupByLibrary.simpleMessage("Очистить кэш"),
-@@ -1514,7 +1540,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1514,7 +1546,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "pureBlackMode": MessageLookupByLibrary.simpleMessage("Чисто чёрный режим"),
      "qrcode": MessageLookupByLibrary.simpleMessage("QR-код"),
      "qrcodeDesc": MessageLookupByLibrary.simpleMessage(
@@ -4961,7 +4977,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      ),
      "qrcodeTooLongTip": MessageLookupByLibrary.simpleMessage(
        "Ссылка слишком длинная для QR-кода. Используйте «Копировать ссылку».",
-@@ -1553,7 +1579,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1553,7 +1585,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "reset": MessageLookupByLibrary.simpleMessage("Сброс"),
      "resetApp": MessageLookupByLibrary.simpleMessage("Сброс приложения"),
      "resetAppTip": MessageLookupByLibrary.simpleMessage(
@@ -4970,7 +4986,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      ),
      "resetPageChangesTip": MessageLookupByLibrary.simpleMessage(
        "На этой странице есть изменения. Сбросить их?",
-@@ -1763,12 +1789,12 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1763,12 +1795,12 @@ class MessageLookup extends MessageLookupByLibrary {
      "ruleTextInvalid": MessageLookupByLibrary.simpleMessage(
        "Правило должно начинаться с поддерживаемого типа, например DOMAIN,example.com,DIRECT",
      ),
@@ -4986,7 +5002,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "saturation": MessageLookupByLibrary.simpleMessage("Насыщенность"),
      "save": MessageLookupByLibrary.simpleMessage("Сохранить"),
      "saveChanges": MessageLookupByLibrary.simpleMessage("Сохранить изменения?"),
-@@ -1781,9 +1807,9 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1781,9 +1813,9 @@ class MessageLookup extends MessageLookupByLibrary {
      ),
      "search": MessageLookupByLibrary.simpleMessage("Поиск"),
      "seconds": MessageLookupByLibrary.simpleMessage("с"),
@@ -4998,7 +5014,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "select": MessageLookupByLibrary.simpleMessage("Выбрать"),
      "selectAll": MessageLookupByLibrary.simpleMessage("Выбрать всё"),
      "selectRuleSet": MessageLookupByLibrary.simpleMessage(
-@@ -1806,7 +1832,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1806,7 +1838,7 @@ class MessageLookup extends MessageLookupByLibrary {
        "Это устройство не подключено к локальной сети",
      ),
      "sendFromPhonePageHint": MessageLookupByLibrary.simpleMessage(
@@ -5007,7 +5023,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      ),
      "sendFromPhonePageSent": MessageLookupByLibrary.simpleMessage(
        "Отправлено. Подтвердите импорт на другом устройстве.",
-@@ -1820,8 +1846,8 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1820,8 +1852,8 @@ class MessageLookup extends MessageLookupByLibrary {
      "sendFromPhoneTip": MessageLookupByLibrary.simpleMessage(
        "Отсканируйте код камерой телефона и вставьте ссылку на открывшейся странице. Оба устройства должны быть в одной сети. Если страница не открывается на Android 17 и новее, дайте браузеру на телефоне разрешение «Устройства поблизости».",
      ),
@@ -5018,7 +5034,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "serviceAllAvailable": MessageLookupByLibrary.simpleMessage("Все доступны"),
      "serviceAvailable": MessageLookupByLibrary.simpleMessage("Доступен"),
      "serviceBlocked": MessageLookupByLibrary.simpleMessage("Заблокировано"),
-@@ -1851,8 +1877,8 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1851,8 +1883,8 @@ class MessageLookup extends MessageLookupByLibrary {
      ),
      "settingEntries": MessageLookupByLibrary.simpleMessage("параметры"),
      "settings": MessageLookupByLibrary.simpleMessage("Настройки"),
@@ -5029,7 +5045,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "shareLinksInvalid": MessageLookupByLibrary.simpleMessage(
        "Не удалось прочитать прокси из ссылок",
      ),
-@@ -1879,7 +1905,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1879,7 +1911,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "singleShareLinkOnly": MessageLookupByLibrary.simpleMessage(
        "Здесь укажите одну ссылку, несколько можно задать в быстром редактировании списка",
      ),
@@ -5038,7 +5054,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "size": MessageLookupByLibrary.simpleMessage("Размер"),
      "skipCertVerify": MessageLookupByLibrary.simpleMessage(
        "Пропускать проверку сертификата",
-@@ -1904,6 +1930,12 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1904,6 +1936,12 @@ class MessageLookup extends MessageLookupByLibrary {
      "socksPort": MessageLookupByLibrary.simpleMessage("Порт SOCKS"),
      "softStyle": MessageLookupByLibrary.simpleMessage("Мягкий"),
      "sort": MessageLookupByLibrary.simpleMessage("Сортировка"),
@@ -5051,7 +5067,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "source": MessageLookupByLibrary.simpleMessage("Источник"),
      "specialProxy": MessageLookupByLibrary.simpleMessage("Специальный прокси"),
      "specialRules": MessageLookupByLibrary.simpleMessage("Специальные правила"),
-@@ -1958,7 +1990,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -1958,7 +1996,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "subscriptionExpired": MessageLookupByLibrary.simpleMessage(
        "Ваша подписка истекла",
      ),
@@ -5060,7 +5076,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "subscriptionExpiresSoon": MessageLookupByLibrary.simpleMessage(
        "Подписка скоро истекает",
      ),
-@@ -2007,13 +2039,14 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -2007,13 +2045,14 @@ class MessageLookup extends MessageLookupByLibrary {
      "themeMode": MessageLookupByLibrary.simpleMessage("Оформление"),
      "themeStyle": MessageLookupByLibrary.simpleMessage("Режим темы"),
      "themeStyleDesc": MessageLookupByLibrary.simpleMessage(
@@ -5076,7 +5092,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "tintedStyle": MessageLookupByLibrary.simpleMessage("Тонированный"),
      "tip": MessageLookupByLibrary.simpleMessage("Подсказка"),
      "toggle": MessageLookupByLibrary.simpleMessage("Переключить"),
-@@ -2026,11 +2059,12 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -2026,11 +2065,12 @@ class MessageLookup extends MessageLookupByLibrary {
      "totalUpload": MessageLookupByLibrary.simpleMessage("Отдано"),
      "tproxyPort": MessageLookupByLibrary.simpleMessage("Порт TProxy"),
      "traffic": MessageLookupByLibrary.simpleMessage("Трафик"),
@@ -5092,7 +5108,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "tun": MessageLookupByLibrary.simpleMessage("TUN"),
      "tunAuthorizationFailed": MessageLookupByLibrary.simpleMessage(
        "Не удалось получить права для TUN, поэтому он выключен.",
-@@ -2138,7 +2172,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -2138,7 +2178,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "upload": MessageLookupByLibrary.simpleMessage("Отдача"),
      "uploadBandwidth": MessageLookupByLibrary.simpleMessage("Скорость отдачи"),
      "url": MessageLookupByLibrary.simpleMessage("URL"),
@@ -5101,7 +5117,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "useHosts": MessageLookupByLibrary.simpleMessage("Использовать hosts"),
      "useSystemHosts": MessageLookupByLibrary.simpleMessage(
        "Использовать системный hosts",
-@@ -2167,7 +2201,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -2167,7 +2207,7 @@ class MessageLookup extends MessageLookupByLibrary {
      "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
        "VPN автоматически направляет весь системный трафик через VpnService.",
      ),
@@ -5110,7 +5126,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
        "VPN на этом устройстве ограничен администратором",
      ),
-@@ -2184,8 +2218,8 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -2184,8 +2224,8 @@ class MessageLookup extends MessageLookupByLibrary {
      "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
        "«Записывать в систему» также устанавливает системные часы; Android это игнорирует.",
      ),
@@ -5122,7 +5138,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..baf096b018c482f2aa970421ffbc2215
      "zhCN": MessageLookupByLibrary.simpleMessage("Упрощённый китайский"),
    };
 diff --git a/lib/l10n/intl/messages_zh_CN.dart b/lib/l10n/intl/messages_zh_CN.dart
-index 9831a321885a3651bdf33a43ba75e86c664f96a1..1d45588e02c07246d4b96fec1d55bf25c56e8382 100644
+index 9831a321885a3651bdf33a43ba75e86c664f96a1..06c7c23695b181c104b3f327d586ba61f853b435 100644
 --- a/lib/l10n/intl/messages_zh_CN.dart
 +++ b/lib/l10n/intl/messages_zh_CN.dart
 @@ -31,7 +31,7 @@ class MessageLookup extends MessageLookupByLibrary {
@@ -5387,16 +5403,18 @@ index 9831a321885a3651bdf33a43ba75e86c664f96a1..1d45588e02c07246d4b96fec1d55bf25
      ),
      "coreStatus": MessageLookupByLibrary.simpleMessage("核心状态"),
      "crashDetected": MessageLookupByLibrary.simpleMessage("检测到崩溃"),
-@@ -492,7 +505,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -491,9 +504,7 @@ class MessageLookup extends MessageLookupByLibrary {
+     "delete": MessageLookupByLibrary.simpleMessage("删除"),
      "deleteMultipTip": m21,
      "deleteTip": m22,
-     "desc": MessageLookupByLibrary.simpleMessage(
+-    "desc": MessageLookupByLibrary.simpleMessage(
 -      "基于Mihomo的多平台代理客户端，简单易用，开源无广告。",
-+      "基于 Prizrak 与 Xray 双核心的多平台客户端。开源、无广告、无遥测。",
-     ),
+-    ),
++    "desc": MessageLookupByLibrary.simpleMessage("基于 FLClashX 的免费开源客户端。"),
      "destination": MessageLookupByLibrary.simpleMessage("目标地址"),
      "destinationGeoIP": MessageLookupByLibrary.simpleMessage("目标地理定位"),
-@@ -527,10 +540,10 @@ class MessageLookup extends MessageLookupByLibrary {
+     "destinationIPASN": MessageLookupByLibrary.simpleMessage("目标IP ASN"),
+@@ -527,10 +538,10 @@ class MessageLookup extends MessageLookupByLibrary {
      "discardChanges": MessageLookupByLibrary.simpleMessage("是否放弃更改？"),
      "disclaimer": MessageLookupByLibrary.simpleMessage("免责声明"),
      "disclaimerDesc": MessageLookupByLibrary.simpleMessage(
@@ -5409,7 +5427,7 @@ index 9831a321885a3651bdf33a43ba75e86c664f96a1..1d45588e02c07246d4b96fec1d55bf25
      ),
      "disclaimerLicenseTitle": MessageLookupByLibrary.simpleMessage("许可证"),
      "disclaimerPrivacyContent": MessageLookupByLibrary.simpleMessage(
-@@ -610,6 +623,8 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -610,6 +621,8 @@ class MessageLookup extends MessageLookupByLibrary {
      "exitNodes": MessageLookupByLibrary.simpleMessage("出口节点"),
      "expectedStatus": MessageLookupByLibrary.simpleMessage("预期状态"),
      "expireTime": MessageLookupByLibrary.simpleMessage("到期时间"),
@@ -5418,7 +5436,7 @@ index 9831a321885a3651bdf33a43ba75e86c664f96a1..1d45588e02c07246d4b96fec1d55bf25
      "exportFile": MessageLookupByLibrary.simpleMessage("导出文件"),
      "exportLogs": MessageLookupByLibrary.simpleMessage("导出日志"),
      "exportSuccess": MessageLookupByLibrary.simpleMessage("导出成功"),
-@@ -617,13 +632,13 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -617,13 +630,13 @@ class MessageLookup extends MessageLookupByLibrary {
      "extendMode": MessageLookupByLibrary.simpleMessage("扩展模式"),
      "extendScript": MessageLookupByLibrary.simpleMessage("扩展脚本"),
      "externalController": MessageLookupByLibrary.simpleMessage("外部控制器"),
@@ -5435,7 +5453,7 @@ index 9831a321885a3651bdf33a43ba75e86c664f96a1..1d45588e02c07246d4b96fec1d55bf25
      "fakeipFilter": MessageLookupByLibrary.simpleMessage("Fake-IP过滤"),
      "fakeipFilterMode": MessageLookupByLibrary.simpleMessage("Fake-IP过滤模式"),
      "fakeipFilterModeDesc": MessageLookupByLibrary.simpleMessage(
-@@ -637,6 +652,8 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -637,6 +650,8 @@ class MessageLookup extends MessageLookupByLibrary {
      "fileIsUpdate": MessageLookupByLibrary.simpleMessage("文件有修改，是否保存修改"),
      "filter": MessageLookupByLibrary.simpleMessage("筛选"),
      "filters": MessageLookupByLibrary.simpleMessage("筛选"),
@@ -5444,7 +5462,7 @@ index 9831a321885a3651bdf33a43ba75e86c664f96a1..1d45588e02c07246d4b96fec1d55bf25
      "findProcessAlways": MessageLookupByLibrary.simpleMessage("始终"),
      "findProcessMode": MessageLookupByLibrary.simpleMessage("查找进程"),
      "findProcessStrict": MessageLookupByLibrary.simpleMessage("规则需要时"),
-@@ -659,23 +676,23 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -659,23 +674,24 @@ class MessageLookup extends MessageLookupByLibrary {
      "fr": MessageLookupByLibrary.simpleMessage("法语"),
      "general": MessageLookupByLibrary.simpleMessage("常规"),
      "geoResources": MessageLookupByLibrary.simpleMessage("Geo"),
@@ -5454,6 +5472,7 @@ index 9831a321885a3651bdf33a43ba75e86c664f96a1..1d45588e02c07246d4b96fec1d55bf25
 +    "geoUpdated": m33,
      "geodataLoader": MessageLookupByLibrary.simpleMessage("Geo低内存模式"),
 -    "global": MessageLookupByLibrary.simpleMessage("全局"),
++    "getSubscriptionHere": MessageLookupByLibrary.simpleMessage("在此获取订阅"),
 +    "global": MessageLookupByLibrary.simpleMessage("简单门户"),
      "go": MessageLookupByLibrary.simpleMessage("前往"),
      "goDownload": MessageLookupByLibrary.simpleMessage("前往下载"),
@@ -5474,7 +5493,7 @@ index 9831a321885a3651bdf33a43ba75e86c664f96a1..1d45588e02c07246d4b96fec1d55bf25
      ),
      "hex": MessageLookupByLibrary.simpleMessage("十六进制"),
      "hideFromList": MessageLookupByLibrary.simpleMessage("从列表中隐藏"),
-@@ -689,19 +706,19 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -689,19 +705,19 @@ class MessageLookup extends MessageLookupByLibrary {
      "hopInterval": MessageLookupByLibrary.simpleMessage("跳跃间隔"),
      "host": MessageLookupByLibrary.simpleMessage("主机"),
      "hostname": MessageLookupByLibrary.simpleMessage("主机名"),
@@ -5498,7 +5517,7 @@ index 9831a321885a3651bdf33a43ba75e86c664f96a1..1d45588e02c07246d4b96fec1d55bf25
      "hue": MessageLookupByLibrary.simpleMessage("色相"),
      "icon": MessageLookupByLibrary.simpleMessage("图标"),
      "iconSets": MessageLookupByLibrary.simpleMessage("图标集"),
-@@ -735,7 +752,7 @@ class MessageLookup extends MessageLookupByLibrary {
+@@ -735,12 +751,13 @@ class MessageLookup extends MessageLookupByLibrary {
      "init": MessageLookupByLibrary.simpleMessage("初始化"),
      "initFailed": MessageLookupByLibrary.simpleMessage("启动失败"),
      "initFailedTip": MessageLookupByLibrary.simpleMessage(
@@ -5507,6 +5526,12 @@ index 9831a321885a3651bdf33a43ba75e86c664f96a1..1d45588e02c07246d4b96fec1d55bf25
      ),
      "initiator": MessageLookupByLibrary.simpleMessage("发起方"),
      "initiatorShort": MessageLookupByLibrary.simpleMessage("发起"),
+     "inputProxyGroupName": MessageLookupByLibrary.simpleMessage("输入策略组名称"),
+     "inputRuleContent": MessageLookupByLibrary.simpleMessage("输入规则内容"),
++    "insertSubscriptionLink": MessageLookupByLibrary.simpleMessage("粘贴您的订阅链接"),
+     "installedAppsPermissionDeniedMessage":
+         MessageLookupByLibrary.simpleMessage(
+           "读取应用列表权限已被拒绝，无法获取已安装的应用。请前往系统设置手动开启。",
 @@ -778,20 +795,20 @@ class MessageLookup extends MessageLookupByLibrary {
      "invalidNetworkContent": MessageLookupByLibrary.simpleMessage(
        "仅支持 tcp 或 udp",
@@ -5931,7 +5956,7 @@ index 9831a321885a3651bdf33a43ba75e86c664f96a1..1d45588e02c07246d4b96fec1d55bf25
      "zhCN": MessageLookupByLibrary.simpleMessage("中文简体"),
    };
 diff --git a/lib/l10n/l10n.dart b/lib/l10n/l10n.dart
-index 40d2f7adeb76491c6b6dd8c4435bf1e0b17c04d1..a8c41ef827686ee4309282ac38698c8be42655cc 100644
+index 40d2f7adeb76491c6b6dd8c4435bf1e0b17c04d1..582f0cec6b997b0e0cee109be35b02f9d1d0d04f 100644
 --- a/lib/l10n/l10n.dart
 +++ b/lib/l10n/l10n.dart
 @@ -60,14 +60,14 @@ class AppLocalizations {
@@ -6142,11 +6167,11 @@ index 40d2f7adeb76491c6b6dd8c4435bf1e0b17c04d1..a8c41ef827686ee4309282ac38698c8b
    }
  
 -  /// `A multi-platform proxy client based on Mihomo, simple and easy to use, open-source and ad-free.`
-+  /// `A multi-platform client built on the Prizrak and Xray cores. Open source, no ads, no telemetry.`
++  /// `A free open-source client built on FLClashX.`
    String get desc {
      return Intl.message(
 -      'A multi-platform proxy client based on Mihomo, simple and easy to use, open-source and ad-free.',
-+      'A multi-platform client built on the Prizrak and Xray cores. Open source, no ads, no telemetry.',
++      'A free open-source client built on FLClashX.',
        name: 'desc',
        desc: '',
        args: [],
@@ -6350,7 +6375,7 @@ index 40d2f7adeb76491c6b6dd8c4435bf1e0b17c04d1..a8c41ef827686ee4309282ac38698c8b
        name: 'stableImportTip',
        desc: '',
        args: [],
-@@ -8751,6 +8750,146 @@ class AppLocalizations {
+@@ -8751,6 +8750,166 @@ class AppLocalizations {
        args: [],
      );
    }
@@ -6493,6 +6518,26 @@ index 40d2f7adeb76491c6b6dd8c4435bf1e0b17c04d1..a8c41ef827686ee4309282ac38698c8b
 +  /// `Built on`
 +  String get aboutBuiltOn {
 +    return Intl.message('Built on', name: 'aboutBuiltOn', desc: '', args: []);
++  }
++
++  /// `Paste your subscription link`
++  String get insertSubscriptionLink {
++    return Intl.message(
++      'Paste your subscription link',
++      name: 'insertSubscriptionLink',
++      desc: '',
++      args: [],
++    );
++  }
++
++  /// `Get a subscription here`
++  String get getSubscriptionHere {
++    return Intl.message(
++      'Get a subscription here',
++      name: 'getSubscriptionHere',
++      desc: '',
++      args: [],
++    );
 +  }
  }
  

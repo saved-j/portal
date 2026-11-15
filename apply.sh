@@ -59,7 +59,12 @@ for it in items:
     if want and got != want:
         raise SystemExit(f"sha256 mismatch for {p}\n  registry {want}\n  on disk  {got}")
     head = open(p, 'rb').read(4)
-    if not head.startswith(b'From'):
+    mode = r.get('apply', 'git-am')
+    # A series is either an mbox series (git am) or a plain diff series (git apply).
+    if mode == 'git-apply':
+        if not head.startswith(b'diff'):
+            raise SystemExit(f"not a git diff: {p}")
+    elif not head.startswith(b'From'):
         raise SystemExit(f"not an mbox: {p}")
 print(f"gate ok: {len(items)} item(s), checksums match")
 PY
@@ -78,7 +83,9 @@ PY
 
 verify() {
   local v=$1 dir; dir=$(series_dir "$v")
-  [[ "$v" == "0.02" ]] || die "$v is an archive; only 0.02 is replayable"
+  local mode; mode=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('apply','git-am'))")
+  [[ "$mode" == "git-apply" || "$v" == "0.02" ]] || die "$v is an archive; it is not replayable"
+
   gate "$dir"
   local sha base
   sha=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json'))['base']['sha'])")
@@ -92,6 +99,14 @@ verify() {
   git -C "$tmp/w" checkout -q -B verify-0.02 "$base"
   local applied=0
   while IFS= read -r patch; do
+    if [[ "$mode" == "git-apply" ]]; then
+      if git -C "$tmp/w" apply --whitespace=nowarn "$patch"; then
+        echo "  apply ok: $(basename "$patch")"
+        applied=$((applied + 1))
+        continue
+      fi
+      die "does not apply to pristine FlClashX: $patch"
+    fi
     if git -C "$tmp/w" am --quiet "$patch"; then
       echo "  am ok: $(basename "$patch")"
       applied=$((applied + 1))
@@ -101,15 +116,29 @@ verify() {
     fi
   done < <(group_patches "$dir")
   [[ $applied -gt 0 ]] || die "no groups applied"
+  # A diff series leaves a dirty worktree; committing it is what makes the tree hash real.
+  if [[ "$mode" == "git-apply" ]]; then
+    git -C "$tmp/w" add -A >/dev/null
+    git -C "$tmp/w" -c user.name=verify -c user.email=verify@local \
+      commit -q -m "series $v" >/dev/null
+  fi
+
   # Exact equality, not a file walk: hash the committed product tree of this repo with the
   # pipeline directory removed, and compare it with the tree the groups produced. Build
   # artefacts (build/, dist/, gradlew, local.properties, .DS_Store) never enter a commit,
   # so they cannot make this comparison lie.
   local wt idx
-  idx="$tmp/index"
-  GIT_INDEX_FILE="$idx" git -C "$REPO" read-tree HEAD
-  GIT_INDEX_FILE="$idx" git -C "$REPO" rm -r --cached --ignore-unmatch pipeline apply.sh >/dev/null
-  wt=$(GIT_INDEX_FILE="$idx" git -C "$REPO" write-tree)
+  local compare; compare=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('compare','product'))")
+  if [[ "$compare" == "full" ]]; then
+    # A series that carries the pipeline itself is reproduced whole: nothing is stripped.
+    wt=$(git -C "$REPO" rev-parse 'HEAD^{tree}')
+  else
+    idx="$tmp/index"
+    GIT_INDEX_FILE="$idx" git -C "$REPO" read-tree HEAD
+    GIT_INDEX_FILE="$idx" git -C "$REPO" rm -r --cached --ignore-unmatch pipeline apply.sh >/dev/null
+    wt=$(GIT_INDEX_FILE="$idx" git -C "$REPO" write-tree)
+  fi
+
   local got; got=$(git -C "$tmp/w" rev-parse 'HEAD^{tree}')
   if [[ "$wt" == "$got" ]]; then
     echo "OK: $applied group(s) reproduce the committed product tree ($wt)"
@@ -122,7 +151,8 @@ verify() {
 
 apply_series() {
   local v=$1 dest=${2:-} dir; dir=$(series_dir "$v")
-  [[ "$v" == "0.02" ]] || die "$v is an archive and cannot be applied"
+  local mode; mode=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('apply','git-am'))")
+  [[ "$mode" == "git-apply" || "$v" == "0.02" ]] || die "$v is an archive and cannot be applied"
   gate "$dir"
   dest=${dest:-$HOME/.work/portal-$v}
   local sha; sha=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json'))['base']['sha'])")
@@ -130,10 +160,15 @@ apply_series() {
   git clone -q --no-hardlinks "$REPO" "$dest"
   git -C "$dest" checkout -q -B "portal-$v" "$sha"
   while IFS= read -r patch; do
-    git -C "$dest" am --quiet "$patch" || die "does not apply: $patch"
+    if [[ "$mode" == "git-apply" ]]; then
+      git -C "$dest" apply --whitespace=nowarn "$patch" || die "does not apply: $patch"
+    else
+      git -C "$dest" am --quiet "$patch" || die "does not apply: $patch"
+    fi
   done < <(group_patches "$dir")
   echo "ready: $dest (branch portal-$v, base ${sha:0:8})"
 }
+
 
 case "${1:-}" in
   list|'') list_series ;;
