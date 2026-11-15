@@ -1,4 +1,4 @@
-display_name: FlClashX
+display_name: Portal
 
 packager: pluralplay
 packagerEmail: pluralplay@icloud.com
@@ -26,7 +26,8 @@ postinstall_scripts:
   - 'update-desktop-database %{_datadir}/applications &> /dev/null || :'
 
 # The Helper unit is written on demand by the app, not at install time, so only
-# its teardown belongs here; the binary is already gone when %postun runs.
+# its teardown belongs here; the binary is already gone when %postun runs. The unit is named
+# after the package identity (DesktopIdentity.helperUnit), not after the display name.
 postuninstall_scripts:
   - '[ "$1" = 0 ] || exit 0'
   - 'systemctl disable --now flclashx-helper.service >/dev/null 2>&1 || true'
@@ -46,7 +47,7 @@ keywords:
   - Mihomo
   - Proxy
 
-generic_name: FlClashX
+generic_name: Portal
 
 group: Applications/Internet
 

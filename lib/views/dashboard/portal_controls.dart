@@ -9,14 +9,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
-import 'package:fl_clash/core/xray_config.dart';
 import 'package:fl_clash/core/proxy_endpoints.dart';
 import 'package:fl_clash/core/xray_ping.dart';
-import 'package:fl_clash/core/subscription_availability.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
 import '../profiles/subscription_facts.dart';
-import 'package:fl_clash/core/xray_switch.dart';
 import 'package:fl_clash/plugins/xray.dart';
+import 'package:yaml/yaml.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -76,6 +74,67 @@ class PortalSortNotifier extends Notifier<PortalSort> {
 final portalSortProvider =
     NotifierProvider<PortalSortNotifier, PortalSort>(PortalSortNotifier.new);
 
+/// The server picked in each mode, kept apart and keyed by profile.
+///
+/// The two lists are different builds of one subscription: the rules list names the
+/// engine's servers, the simple portal names the child's, and a name picked in one means
+/// nothing in the other. One stored pick for both would move the highlight onto a server
+/// that is not in the list — and one stored pick for every profile moved it onto a server
+/// that is not in *this* subscription at all.
+///
+/// The pick of the child's node is a commit, not a hope: it is written only after the child
+/// acknowledged the tunnel, so what this list highlights is always what the child runs.
+class PortalSelectionNotifier
+    extends Notifier<({Map<String, String> rules, String xray})> {
+  @override
+  ({Map<String, String> rules, String xray}) build() {
+    final settings = ref.watch(appSettingProvider);
+    final profileId = ref.watch(currentProfileIdProvider);
+    return (
+      rules: portalRulePicksFor(settings, profileId),
+      xray: portalXrayPickFor(settings, profileId),
+    );
+  }
+
+  /// A filter's pick in the rules list, written beside the engine's own selection: the
+  /// engine answers for itself, and this is what the list falls back to when it does not.
+  void pickRule(String group, String proxy) {
+    final profileId = ref.read(currentProfileIdProvider);
+    final settings = withPortalRulePick(
+      ref.read(appSettingProvider),
+      profileId,
+      group,
+      proxy,
+    );
+    state = (
+      rules: portalRulePicksFor(settings, profileId),
+      xray: portalXrayPickFor(settings, profileId),
+    );
+    ref.read(appSettingProvider.notifier).update((_) => settings);
+  }
+
+  /// The Xray node the child runs, written only once the child has taken the tunnel.
+  void pickXray(String proxy, {int? profileId}) {
+    final profile = profileId ?? ref.read(currentProfileIdProvider);
+    if (portalXrayPickFor(ref.read(appSettingProvider), profile) == proxy) {
+      return;
+    }
+    final settings = withPortalXrayPick(
+      ref.read(appSettingProvider),
+      profile,
+      proxy,
+    );
+    state = (
+      rules: portalRulePicksFor(settings, profile),
+      xray: portalXrayPickFor(settings, profile),
+    );
+    ref.read(appSettingProvider.notifier).update((_) => settings);
+  }
+}
+
+final portalSelectionProvider = NotifierProvider<PortalSelectionNotifier,
+    ({Map<String, String> rules, String xray})>(PortalSelectionNotifier.new);
+
 /// Which group the strip shows. Null means "the first one the panel offers",
 /// which survives subscription updates that reorder groups.
 class PortalGroupNotifier extends Notifier<String?> {
@@ -124,23 +183,63 @@ final proxyEndpointsProvider =
 });
 
 class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+  /// Handshakes open at once. A panel list is often a hundred nodes and one unreachable
+  /// node costs the full timeout, so a serial sweep holds the screen for minutes.
+  static const _parallel = 8;
+
+  /// Bumped by every sweep, and by a profile change. An answer arriving under an older
+  /// number belongs to servers the list no longer shows — usually names that repeat in the
+  /// new subscription — so it is dropped instead of written under the current key.
+  int _generation = 0;
+
   @override
-  Map<String, int?> build() => const {};
+  Map<String, int?> build() {
+    // The measurements belong to the profile: a different one is a different set of
+    // servers, so the map goes with it instead of lighting up names that only look alike.
+    ref.watch(currentProfileIdProvider);
+    ref.onDispose(() => _generation++);
+    return const {};
+  }
 
   Future<void> measureAll(List<(String, String, int)> targets) async {
     if (targets.isEmpty) return;
+    // A newer sweep owns the state from here on; the older one stops at its next answer.
+    final generation = ++_generation;
     state = {...state, for (final t in targets) t.$1: null};
-    for (final (name, host, port) in targets) {
-      final value = await tcpPing(host, port);
-      state = {...state, name: value};
+    var next = 0;
+    Future<void> worker() async {
+      while (true) {
+        // Checked before taking work as well as after answering: a cancelled sweep must not
+        // keep opening handshakes for a list that is no longer on screen.
+        if (generation != _generation) return;
+        final index = next++;
+        if (index >= targets.length) return;
+        final (name, host, port) = targets[index];
+        final value = await tcpPing(host, port);
+        if (generation != _generation) return;
+        state = {...state, name: value};
+      }
     }
+
+    await Future.wait([
+      for (var i = 0; i < _parallel && i < targets.length; i++) worker(),
+    ]);
   }
 
   Future<void> measureOne(String name, String host, int port) async {
+    final generation = _generation;
     state = {...state, name: null};
     final value = await tcpPing(host, port);
+    if (generation != _generation) return;
     state = {...state, name: value};
   }
+
+  /// Revokes every sweep in flight, for a list that is gone or has been replaced.
+  ///
+  /// Whoever started the work can stop it being written: the workers compare the generation
+  /// they started under with the current one, so an answer that arrives after the list was
+  /// disposed is dropped instead of lighting up a row nobody is looking at.
+  void cancel() => _generation++;
 }
 
 /// Groups the user turned into a bypass: their outbound is DIRECT, so the chip can
@@ -197,29 +296,32 @@ final portalDisplayProvider =
     NotifierProvider<PortalDisplayNotifier, int>(PortalDisplayNotifier.new);
 
 
-/// What is actually crossing the wire right now, taken from the engine's own connection
-/// list: how many connections are open, how fast they move, and how much belongs to each
-/// filter. Nothing here is inferred or animated for show.
+/// What is actually crossing the wire right now: how many connections are open, and how
+/// fast the wire moves, taken from the engine's own answers. Nothing here is inferred or
+/// animated for show.
 typedef PortalLive = ({
   int connections,
   int down,
   int up,
 });
 
+/// The rate comes from the traffic sample, not from the connection list.
+///
+/// The engine's connection snapshot carries cumulative totals per connection and no rate at
+/// all — `downloadSpeed`/`uploadSpeed` on a tracked connection are read here and written
+/// nowhere in the app, so summing them answered a hard zero however fast the wire moved.
+/// The engine does report a rate, once a second, in the traffic sample the speed widgets
+/// already draw from; that is the same number the tray title shows, so the portal and the
+/// cards now agree instead of one of them standing still.
 final portalLiveProvider = Provider<PortalLive>((ref) {
-  final list = ref.watch(requestsProvider).list;
-  var down = 0;
-  var up = 0;
-  for (final request in list) {
-    final requestDown = request.downloadSpeed ?? 0;
-    final requestUp = request.uploadSpeed ?? 0;
-    down += requestDown;
-    up += requestUp;
-  }
+  final connections = ref.watch(requestsProvider.select((state) => state.length));
+  final sample = ref.watch(
+    trafficsProvider.select((state) => state.list.safeLast(const Traffic())),
+  );
   return (
-    connections: list.length,
-    down: down,
-    up: up,
+    connections: connections,
+    down: sample.down.round(),
+    up: sample.up.round(),
   );
 });
 
@@ -258,9 +360,15 @@ List<Group> portalVisibleGroups(List<Group> all, Set<String> hidden, List<String
       if (!hidden.contains(group.name)) group,
   ];
   if (order.isEmpty) return visible;
+  // One index per name, built once: the comparator used to scan the whole order list twice
+  // per comparison, and this function runs inside the builders of the panel — a hundred
+  // filters made the sort the most expensive thing in a frame.
+  final rank = <String, int>{
+    for (final (index, name) in order.indexed) name: index,
+  };
   visible.sort((a, b) {
-    final ia = order.indexOf(a.name);
-    final ib = order.indexOf(b.name);
+    final ia = rank[a.name] ?? -1;
+    final ib = rank[b.name] ?? -1;
     if (ia == -1 && ib == -1) return 0;
     if (ia == -1) return 1;
     if (ib == -1) return -1;
@@ -268,6 +376,30 @@ List<Group> portalVisibleGroups(List<Group> all, Set<String> hidden, List<String
   });
   return visible;
 }
+
+/// The name of the one group the simple portal draws when no engine serves one.
+const portalSimpleGroupName = 'PORTAL';
+
+/// A group for the child's own server list.
+///
+/// The list, the row and the mode control are all shaped around a [Group], and in the simple
+/// portal no engine holds one: this is the group the child's servers make — a selector whose
+/// members are the nodes the panel offered and whose `now` is the node the child runs. It is
+/// never written to the engine; it exists so the same widgets can draw a list with no engine
+/// behind it.
+Group simplePortalGroup(List<XrayServerConfig> servers, {String? now}) => Group(
+      type: GroupType.Selector,
+      name: portalSimpleGroupName,
+      now: now,
+      all: [
+        for (final server in servers)
+          Proxy(
+            name: server.name,
+            type: server.protocol,
+            serverDescription: server.label,
+          ),
+      ],
+    );
 
 /// The servers the second core offers.
 ///
@@ -280,85 +412,123 @@ final xrayServersProvider =
   if (profile == null) return const [];
   final body = await profile.readXrayFormat();
   if (body == null) return const [];
-  final servers = parseXraySubscription(body);
-  if (servers.isNotEmpty) {
+  final parsed = parseXraySubscriptionResult(body);
+  final servers = parsed.servers;
+  // `ok` is the parse's own verdict, not a second guess at `servers.isNotEmpty`: the two
+  // agree today, and this is the one place that decides which of the two lines below runs.
+  if (parsed.ok) {
     commonPrint.log(
       'xray subscription: ${servers.length} servers, '
       'first=${servers.take(3).map((s) => s.label).join(' | ')}',
+    );
+  } else if (parsed.problem != null) {
+    // An empty list is three different answers — an unreadable body, another schema, or a
+    // subscription with no nodes — so the reason is reported with the profile it was read
+    // for instead of dying in a bare `[]`.
+    commonPrint.log(
+      'xray subscription unreadable: profile=${profile.id} ${parsed.message}',
+      logLevel: LogLevel.warning,
     );
   }
   return servers;
 });
 
-/// Whether the current subscription carries the engine's own format.
+/// What the subscription's engine-format file actually answered.
 ///
-/// The "Сеть порталов" switch is meaningless without it: rules live in that YAML, and a
+/// Three states, because a corrupt file and an absent one are different problems: the first
+/// is a download the owner can fix by updating the profile, the second is a panel that does
+/// not serve this format at all. Collapsing both into `false` — which a blanket `catch (_)`
+/// did — hid the first behind the second.
+enum EngineFormatStatus {
+  /// The file reads and carries a config.
+  ok,
+
+  /// The file is there but could not be read: a corrupt or half-written download.
+  parseFailed,
+
+  /// No such file, or nothing in it: this panel does not serve the engine's format.
+  empty,
+}
+
+/// What the check found, and why it is not usable when it is not.
+typedef EngineFormatCheck = ({EngineFormatStatus status, String reason});
+
+/// The first thing that makes [document] unusable as the rules list, or null.
+///
+/// The size of the file says nothing about its shape: a 200-byte error page downloaded in
+/// place of the config is larger than 32 bytes and reads as "ok" to a length check, and the
+/// switch then opens a portal with no rules in it. The minimum shape is a proxy source
+/// (`proxies` or `proxy-providers`) and a rules key; anything else is a file this mode
+/// cannot use, and the reason names which half is missing.
+String? engineFormatProblem(Object? document) {
+  if (document is! Map) return 'the file is not a mapping';
+  final proxies = document['proxies'];
+  final providers = document['proxy-providers'];
+  final hasProxies = proxies is List && proxies.isNotEmpty;
+  final hasProviders = providers is Map && providers.isNotEmpty;
+  if (!hasProxies && !hasProviders) {
+    return 'no proxies or proxy-providers';
+  }
+  final rules = document['rules'];
+  final subRules = document['sub-rules'];
+  if (rules is! List && subRules is! List) return 'no rules';
+  return null;
+}
+
+/// Whether the current subscription carries a config the rules mode can use.
+///
+/// The "Сеть порталов" switch is meaningless without one: rules live in that YAML, and a
 /// subscription the panel only serves for Xray has nothing to route. Unknown counts as
 /// available so the switch does not flicker off while the file is being checked.
-final engineFormatAvailableProvider = FutureProvider.autoDispose<bool>((ref) async {
+final engineFormatStatusProvider =
+    FutureProvider.autoDispose<EngineFormatCheck>((ref) async {
   final profile = ref.watch(currentProfileProvider);
-  if (profile == null) return false;
+  if (profile == null) {
+    return (status: EngineFormatStatus.empty, reason: 'no profile is selected');
+  }
   try {
     final file = await profile.file;
-    return await file.exists() && await file.length() > 32;
-  } catch (_) {
-    return false;
+    if (!await file.exists()) {
+      return (status: EngineFormatStatus.empty, reason: 'the file is missing');
+    }
+    final text = await file.readAsString();
+    if (text.trim().isEmpty) {
+      return (status: EngineFormatStatus.empty, reason: 'the file is empty');
+    }
+    // Parsed, not measured: a downloaded error page has a size and no config.
+    final problem = engineFormatProblem(loadYaml(text));
+    if (problem != null) {
+      commonPrint.log(
+        'engine format is not a config: $problem',
+        logLevel: LogLevel.warning,
+      );
+      return (status: EngineFormatStatus.parseFailed, reason: problem);
+    }
+    return (status: EngineFormatStatus.ok, reason: '');
+  } catch (error) {
+    // The reason goes to the log that already carries the core's own faults: a corrupt
+    // subscription is a fact about the download, and it must not read as "no rules here".
+    final reason = compactError(error);
+    commonPrint.log(
+      'engine format read failed: $reason',
+      logLevel: LogLevel.warning,
+    );
+    return (status: EngineFormatStatus.parseFailed, reason: reason);
   }
 });
 
-/// Hands the traffic to Xray for the simple portal.
+/// Puts the portal into the simple mode.
 ///
-/// Order matters: the child must answer before the engine is told to send everything to it,
-/// otherwise the switch would show a portal that cannot carry a packet. If the pick cannot
-/// be resolved — a builtin, or a name the applied config no longer has — the mode is left
-/// alone rather than pointing at a dead port.
-Future<void> _enterSimplePortal(WidgetRef ref) async {
-  // The strip keeps a null group name until the owner picks one; the first group is what
-  // the list is showing in that case, so the pick lives there.
-  final groupName = ref.read(portalGroupProvider) ??
-      ref.read(groupsProvider).firstOrNull?.name;
-  final chosen =
-      groupName == null ? null : ref.read(selectedProxyNameProvider(groupName));
-  // The second core prefers its own node list: the panel served it for exactly this
-  // purpose, and its names need not exist in the engine's config at all. The engine's
-  // config is the fallback, so a subscription with only YAML still works.
-  Map<String, dynamic>? node;
-  final profile = ref.read(currentProfileProvider);
-  if (profile != null) {
-    final body = await profile.readXrayFormat();
-    if (body != null) {
-      final servers = parseXraySubscription(body);
-      final server = xrayServerFor(servers, chosen);
-      if (server != null) {
-        // Each server is its own full configuration; the chosen one is what the core runs.
-        // Only the socks entry point is ours to set.
-        final started = await XrayCore.instance.start(
-          withSocksInbound(jsonEncode(server.config)),
-        );
-        if (started['ok'] != true) return;
-        await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
-        await ref
-            .read(proxiesActionProvider.notifier)
-            .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
-        return;
-      }
-      node = xrayNodeFor(parseShareLinks(body), chosen);
-    }
-  }
-  if (node == null && chosen != null) {
-    final path = await appPath.configFilePath;
-    node = await nodeDefinitionFor(path, chosen);
-  }
-  if (node == null) {
-    // No node for the child means the portal would be a dead port, so the mode stays put.
-    return;
-  }
-  final started = await XrayCore.instance.start(xrayConfigJson(node));
-  if (started['ok'] != true) return;
-  await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
-  await ref
-      .read(proxiesActionProvider.notifier)
-      .changeProxy(groupName: 'GLOBAL', proxyName: 'XRAY-SOCKS');
+/// Only the mode moves here: in this mode the tunnel is the Xray child's, made by the
+/// service when the portal starts, and there is no engine config to build and no proxy of
+/// the engine's to point anywhere. The child itself is started by the run that follows, on
+/// the node this list shows, and only reports success once it has acknowledged the tunnel.
+///
+/// The answer is the mode's own: a mode that is not offered, or a take-over the owner
+/// declined, comes back as a cancellation the transaction can report instead of a step it
+/// assumes happened.
+Future<PortalCoreResult> _enterSimplePortal(WidgetRef ref) async {
+  return ref.read(setupActionProvider.notifier).pickMode(Mode.global);
 }
 
 /// Mode control with the two list controls beside it: sorting and the delay test.
@@ -378,11 +548,18 @@ class PortalModeSwitch extends ConsumerWidget {
       filters.order,
     );
     final groupName = ref.watch(portalGroupProvider);
+    final simple = mode == Mode.global;
+    final xrayServers = simple
+        ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
+        : const <XrayServerConfig>[];
     final group = groups.where((g) => g.name == groupName).firstOrNull ??
-        groups.firstOrNull;
+        groups.firstOrNull ??
+        (xrayServers.isEmpty ? null : simplePortalGroup(xrayServers));
     final sort = ref.watch(portalSortProvider);
-    final engineAvailable =
-        ref.watch(engineFormatAvailableProvider).value ?? true;
+    final engineCheck = ref.watch(engineFormatStatusProvider).value;
+    final engineFormat = engineCheck?.status ?? EngineFormatStatus.ok;
+    final engineAvailable = engineFormat == EngineFormatStatus.ok;
+    final engineReason = engineCheck?.reason ?? '';
     final testing = group != null &&
         ref.watch(
           delayTestingGroupsProvider.select((s) => s.contains(group.name)),
@@ -404,27 +581,31 @@ class PortalModeSwitch extends ConsumerWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Switch(
-                value: mode == Mode.rule && engineAvailable,
-                activeThumbColor: _liveGreen(context),
-                activeTrackColor: _liveGreen(context).withValues(alpha: 0.4),
-                // No engine format, no rules: the control stays visible but dead, so the
-                // owner sees why instead of a switch that does nothing.
-                onChanged: !engineAvailable
-                    ? null
-                    : (value) {
-                  HapticFeedback.selectionClick();
-                  if (value) {
-                    // Back to the portal network: leave the child before the engine starts
-                    // routing again, so nothing is left holding the port.
-                    ref.read(setupActionProvider.notifier).pickMode(Mode.rule);
-                    XrayCore.instance.stop();
-                    return;
-                  }
-                  // The animation has already begun from this tap; the child, the hand-over
-                  // and the mode change settle behind it.
-                        unawaited(_enterSimplePortal(ref));
-                      },
+              // A dead switch says why it is dead: the reason is the file's own, carried
+              // from the check that refused it instead of a generic "unavailable".
+              Tooltip(
+                message: engineAvailable
+                    ? ''
+                    : context.appLocalizations.engineFormatUnusable(
+                        engineReason,
+                      ),
+                child: Switch(
+                  value: mode == Mode.rule && engineAvailable,
+                  activeThumbColor: _liveGreen(context),
+                  activeTrackColor: _liveGreen(context).withValues(alpha: 0.4),
+                  // No engine format, no rules: the control stays visible but dead, so the
+                  // owner sees why instead of a switch that does nothing.
+                  onChanged: !engineAvailable
+                      ? null
+                      : (value) {
+                          HapticFeedback.selectionClick();
+                          // The thumb has already moved; the portal underneath either
+                          // comes up on the other core or comes back exactly as it was.
+                          unawaited(
+                            _switchPortal(ref, toSimple: !value),
+                          );
+                        },
+                ),
               ),
               const SizedBox(width: 8),
               Text(
@@ -534,8 +715,16 @@ class PortalServerList extends ConsumerWidget {
       filters.order,
     );
     final groupName = ref.watch(portalGroupProvider);
+    // The simple portal is driven by the child, whose build of the same subscription names
+    // its own servers. With no engine running there is no group to take them from either,
+    // so the list is given a group of its own: the rows need one, and inventing none would
+    // show an empty portal over a list that is not empty.
+    final xrayServers = simple
+        ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
+        : const <XrayServerConfig>[];
     final group = groups.where((g) => g.name == groupName).firstOrNull ??
-        groups.firstOrNull;
+        groups.firstOrNull ??
+        (xrayServers.isEmpty ? null : simplePortalGroup(xrayServers));
     if (group == null) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -554,22 +743,21 @@ class PortalServerList extends ConsumerWidget {
         ref.read(portalPendingProvider.notifier).clear(group.name);
       });
     }
-    // The simple portal is driven by the second core, whose build of the same subscription
-    // names its own servers. Showing the engine's list here would offer nodes the running
-    // core does not have — and hide the extras it does.
-    final xrayServers = simple
-        ? (ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
-        : const <XrayServerConfig>[];
-    // One source for "what is chosen": the profile's own selection, which changeProxy
-    // writes optimistically. No per-filter special cases — if a server was picked, it is
-    // picked, whether the group is RF services, Chinese services or YouTube. When the
-    // group routes to a built-in, its name is not in the member list, so nothing lights
-    // up without needing a second rule.
+    // Two picks, one list each: the engine's own selection lights the rules list, and the
+    // child's stored node lights the simple portal. The engine's answer belongs to another
+    // build of the subscription, so it must not move the highlight on this one.
     final bypassedGroup = ref.watch(portalBypassProvider).containsKey(group.name);
     final chosenName = ref.watch(selectedProxyNameProvider(group.name));
+    final selection = ref.watch(portalSelectionProvider);
+    final xrayPick = selection.xray;
+    final rulesPick = selection.rules[group.name];
+    final xrayPicked =
+        xrayServers.any((server) => server.name == xrayPick) ? xrayPick : null;
     final selectedName = bypassedGroup
         ? null
-        : (pending ?? (xrayServers.isNotEmpty ? null : chosenName));
+        : xrayServers.isNotEmpty
+            ? xrayPicked
+            : (pending ?? chosenName ?? rulesPick);
     // Measure once when the list arrives: a portal whose servers all read "—" until you
     // press something looks broken, and a closed portal is no reason not to know.
     final endpoints = ref.watch(proxyEndpointsProvider).value ?? const {};
@@ -581,13 +769,6 @@ class PortalServerList extends ConsumerWidget {
           if (endpoints[proxy.name] case final endpoint? when endpoint.isUsable)
             (proxy.name, endpoint.host, endpoint.port),
     ];
-    if (targets.isNotEmpty &&
-        !ref.watch(tcpDelayProvider.select((m) => m.isNotEmpty))) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!context.mounted) return;
-        unawaited(ref.read(tcpDelayProvider.notifier).measureAll(targets));
-      });
-    }
     final xrayServerByName = {
       for (final server in xrayServers) server.name: server,
     };
@@ -615,19 +796,30 @@ class PortalServerList extends ConsumerWidget {
           (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
         );
       case PortalSort.ping:
+        // Ranked once per server, before the comparison. A comparator runs O(n log n)
+        // times and each call used to subscribe to another provider, so the order depended
+        // on which family member happened to be created first — and the subscriptions
+        // outlived the sort.
         final xrayDelays = ref.watch(tcpDelayProvider);
-        int rank(Proxy p) {
-          final value = xrayServerByName.containsKey(p.name)
-              ? xrayDelays[p.name]
-              : ref.watch(delayProvider(proxyName: p.name));
+        final ranks = <String, int>{};
+        for (final proxy in members) {
+          final value = xrayServerByName.containsKey(proxy.name)
+              ? xrayDelays[proxy.name]
+              : ref.read(delayProvider(proxyName: proxy.name));
           // -1 is mihomo's timeout marker, not a fast server.
-          return value == null || value <= 0 ? 1 << 30 : value;
+          ranks[proxy.name] = value == null || value <= 0 ? 1 << 30 : value;
         }
-        members.sort((a, b) => rank(a).compareTo(rank(b)));
+        members.sort(
+          (a, b) =>
+              (ranks[a.name] ?? 1 << 30).compareTo(ranks[b.name] ?? 1 << 30),
+        );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Measures the servers of this list once, from a lifecycle method: a build pass is
+        // not the place to start work, and a rebuild is not a reason to start it again.
+        _TcpDelaySweep(targets),
         // The filter strip belongs to the engine's rules. In the simple portal the list is
         // the second core's own servers, so there are no filters to show.
         if (!simple && xrayServers.isEmpty && groups.length > 1) const _GroupStrip(),
@@ -645,6 +837,9 @@ class PortalServerList extends ConsumerWidget {
             group: group,
             proxy: proxy,
             selected: selectedName == proxy.name,
+            // Present only on the child's list: the row then knows a tap starts that node
+            // instead of asking the engine for a proxy it does not have.
+            xrayServer: xrayServerByName[proxy.name],
             tcpHost: xrayServerByName[proxy.name]?.address ??
                 endpoints[proxy.name]?.host ??
                 '',
@@ -657,6 +852,137 @@ class PortalServerList extends ConsumerWidget {
   }
 }
 
+/// Starts the child on one server of the simple portal's list.
+///
+/// The tap is a restart of the child alone: its configuration names the node, the tunnel it
+/// reads stays exactly where the service put it, and no proxy in any engine changes. The
+/// plugin stops the previous process before starting the next, so this is also the correct
+/// call while the child is already running.
+///
+/// The answer is the child's: `ok` only when it acknowledged the tunnel, and its own last
+/// line otherwise. A refused node leaves nothing of the previous one alive, so the caller
+/// must put the previous pick back — this function only reports what happened.
+Future<PortalCoreResult> _restartChildOn(XrayServerConfig server) async {
+  final started = await XrayCore.instance.start(jsonEncode(server.config));
+  if (started.ok) {
+    commonPrint.log('xray is reading the tunnel on ${server.name}');
+    return started;
+  }
+  commonPrint.log(
+    'xray restart on ${server.name} failed: ${started.reason}',
+    logLevel: LogLevel.warning,
+  );
+  return started;
+}
+
+
+/// Starts the child for a row the owner tapped, and says what happened when it refuses.
+///
+/// The pick is written only after the child answered — a name stored before the start is a
+/// pick the child never ran, which is what made a refused selection look applied. A refused
+/// node is not left standing alone either: the node that was confirmed before it is started
+/// again, and the reason is reported either way.
+Future<void> _startFromList(WidgetRef ref, XrayServerConfig server) async {
+  final profileId = ref.read(currentProfileIdProvider);
+  final previous = ref.read(portalSelectionProvider).xray;
+  final started = await _restartChildOn(server);
+  if (started.ok) {
+    ref
+        .read(portalSelectionProvider.notifier)
+        .pickXray(server.name, profileId: profileId);
+    return;
+  }
+  final restored = await _restoreXrayNode(ref, previous);
+  _reportPortalFailure(
+    restored
+        ? started.reason
+        : '${started.reason}; the previous node did not come back either',
+  );
+}
+
+/// Starts the node that was confirmed before a refused one, so the portal keeps carrying.
+Future<bool> _restoreXrayNode(WidgetRef ref, String name) async {
+  if (name.isEmpty) return false;
+  final servers = ref.read(xrayServersProvider).value ?? const <XrayServerConfig>[];
+  final server = xrayServerFor(servers, name);
+  if (server == null) return false;
+  final restored = await _restartChildOn(server);
+  return restored.ok;
+}
+
+/// The failure as a sentence, in the app's own log and on the screen.
+void _reportPortalFailure(String reason) {
+  commonPrint.log('portal did not start: $reason', logLevel: LogLevel.error);
+  dialogs.showNotifier(
+    currentAppLocalizations.portalStartFailed(reason),
+    level: MessageLevel.error,
+  );
+}
+
+/// Same list, same question: records compare by value, so a rebuild that recomputes the
+/// targets does not throw away half-finished answers by looking like a new list.
+bool _sameTargets(
+  List<(String, String, int)> a,
+  List<(String, String, int)> b,
+) {
+  if (a.length != b.length) return false;
+  for (var index = 0; index < a.length; index++) {
+    if (a[index] != b[index]) return false;
+  }
+  return true;
+}
+
+/// Starts one delay sweep for the servers the list is showing.
+///
+/// From a lifecycle method, not the build pass: a widget can be rebuilt many times a frame
+/// for reasons that have nothing to do with the servers, and starting the measurement there
+/// restarted it on every rebuild while the map was still empty. The sweep itself owns its
+/// cancellation — a newer list bumps the generation inside the notifier, which drops the
+/// answers of the older one.
+class _TcpDelaySweep extends ConsumerStatefulWidget {
+  const _TcpDelaySweep(this.targets);
+
+  final List<(String, String, int)> targets;
+
+  @override
+  ConsumerState<_TcpDelaySweep> createState() => _TcpDelaySweepState();
+}
+
+class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
+  List<(String, String, int)>? _asked;
+
+  @override
+  void initState() {
+    super.initState();
+    _start(widget.targets);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TcpDelaySweep oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _start(widget.targets);
+  }
+
+  void _start(List<(String, String, int)> targets) {
+    if (targets.isEmpty) return;
+    final asked = _asked;
+    if (asked != null && _sameTargets(asked, targets)) return;
+    _asked = targets;
+    unawaited(ref.read(tcpDelayProvider.notifier).measureAll(targets));
+  }
+
+  @override
+  void dispose() {
+    // The sweep belongs to this list. Leaving it revokes the answers still in flight: a
+    // handshake that lands after the list is gone must not write a delay for a row the next
+    // list never asked about.
+    ref.read(tcpDelayProvider.notifier).cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
 
 /// Waits until the engine reports a running proxy, so the first test is not queued into a
 /// core that has not applied its config yet.
@@ -957,6 +1283,7 @@ class _ServerRow extends ConsumerStatefulWidget {
     required this.group,
     required this.proxy,
     required this.selected,
+    this.xrayServer,
     this.tcpHost = '',
     this.tcpPort = 0,
   });
@@ -964,6 +1291,10 @@ class _ServerRow extends ConsumerStatefulWidget {
   final Group group;
   final Proxy proxy;
   final bool selected;
+
+  /// The child's own configuration for this row, when the list is the child's: a tap then
+  /// restarts the child on this node instead of asking the engine to change a proxy.
+  final XrayServerConfig? xrayServer;
 
   /// Where this server listens, when it is known: the row then times a TCP handshake
   /// instead of asking a core that either does not hold the server or cannot report it.
@@ -1094,12 +1425,25 @@ class _ServerRowState extends ConsumerState<_ServerRow>
         ),
         onTap: () {
           HapticFeedback.selectionClick();
+          final server = widget.xrayServer;
+          if (server != null) {
+            // The simple portal's list is the child's, and a tap there is the child's
+            // business: keep the pick and restart the child on it. The engine is not asked
+            // to change a proxy it does not have — it has none in this mode.
+            unawaited(_startFromList(ref, server));
+            return;
+          }
           // Picking a portal by hand is also the way out of a bypass: the filter stops
           // being grey, because it is no longer routed around the portal.
           ref.read(portalBypassProvider.notifier).forget(widget.group.name);
           ref
               .read(portalPendingProvider.notifier)
               .pick(widget.group.name, widget.proxy.name);
+          // The engine answers for itself, and this is what the list shows when it has
+          // nothing to say — a fresh start, or a return from the simple portal.
+          ref
+              .read(portalSelectionProvider.notifier)
+              .pickRule(widget.group.name, widget.proxy.name);
           ref.read(proxiesActionProvider.notifier).changeProxy(
                 groupName: widget.group.name,
                 proxyName: widget.proxy.name,
@@ -1328,3 +1672,180 @@ final portalProfilesBadgeProvider =
 final portalConnectionsBadgeProvider =
     NotifierProvider<PortalBadgeNotifier, bool>(PortalBadgeNotifier.new);
 
+
+
+/// A reason the portal could not move, carried as a sentence the owner can read.
+class _PortalSwitchFailure implements Exception {
+  const _PortalSwitchFailure(this.reason);
+
+  final String reason;
+
+  @override
+  String toString() => reason;
+}
+
+/// How long the engine gets to take a new mode before the switch calls it a failure.
+const _modeApplyTimeout = Duration(seconds: 12);
+
+/// A switch already in flight. A second tap is dropped rather than queued: two transactions
+/// over one portal can only end with the second undoing the first.
+var _portalSwitching = false;
+
+/// Moves the portal between the two modes as one transaction.
+///
+/// The steps are ordered, not parallel: close the portal, stop the previous core, start the
+/// next one, wait for the engine to have taken the new mode, move the route, ignite the
+/// portal again. Each step is something that answered, so a failure can be caught where it
+/// happened; when one does, the previous mode and core come back and the reason is shown.
+/// A switch that half happened would leave a portal carrying nothing with nothing on screen
+/// to say why.
+Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
+  if (_portalSwitching) return;
+  _portalSwitching = true;
+  final setup = ref.read(setupActionProvider.notifier);
+  final previousMode = ref.read(patchClashConfigProvider.select((s) => s.mode));
+  final wasRunning = ref.read(runTimeProvider) != null;
+  try {
+    // 1. The portal goes down first: the tun must not outlive the core that reads it.
+    if (wasRunning && !await setup.setRunning(false)) {
+      throw const _PortalSwitchFailure('the portal did not stop');
+    }
+    // 2. The child is stopped before the next core wants the tunnel, and the answer is the
+    // plugin's: a stop that did not happen cannot be treated as one that did.
+    final stopped = await XrayCore.instance.stop();
+    if (!stopped.ok && !stopped.cancelled) {
+      throw _PortalSwitchFailure('the portal core did not stop: ${stopped.reason}');
+    }
+    // 3-5. The next core, then the mode, then the route — in that order, and only as far
+    // as each step answers.
+    if (toSimple) {
+      final entered = await _enterSimplePortal(ref);
+      if (!entered.ok) {
+        throw _PortalSwitchFailure(
+          entered.cancelled
+              ? 'the switch to the portal was cancelled'
+              : entered.reason,
+        );
+      }
+    } else {
+      final mode = await setup.pickMode(Mode.rule);
+      if (!mode.ok) {
+        throw _PortalSwitchFailure(
+          mode.cancelled ? 'the switch to the network was cancelled' : mode.reason,
+        );
+      }
+    }
+    if (wasRunning) {
+      // In the simple portal there is no engine config to wait for: the mode is a setting
+      // and the tunnel is the child's, so the start that follows is the whole answer. In
+      // the network mode the engine still has to take the new config first.
+      if (!toSimple) {
+        final applied = await _awaitMode(ref, Mode.rule);
+        if (!applied.ok) {
+          throw _PortalSwitchFailure(applied.reason);
+        }
+      }
+      // 6. Ignite: the same portal, on the other core. The start's own answer is the one
+      // that matters, and its reason is what the owner is shown when it is not `ok`.
+      if (!await setup.setRunning(true)) {
+        final reason = setup.lastPortalFailure;
+        throw _PortalSwitchFailure(
+          reason.isEmpty ? 'the portal did not start again' : reason,
+        );
+      }
+    }
+  } catch (error) {
+    await _rollBackPortal(
+      ref,
+      previousMode: previousMode,
+      wasRunning: wasRunning,
+    );
+    _reportSwitchFailure(error);
+  } finally {
+    _portalSwitching = false;
+  }
+}
+
+/// Waits until the engine runs what the settings now say.
+///
+/// A mode change is a config push; until the Core answers it the route is still the old
+/// one, and traffic moved into it would go nowhere. The applied inputs are the only honest
+/// answer the app has to "the engine has taken it".
+///
+/// A push that failed does not become true by waiting: the reason the Core gave is known
+/// the moment it answered, and waiting the deadline out only replaces it with a timeout
+/// that names nothing. The deadline stays as the last resort for a Core that is merely slow,
+/// and even then the message says that, not "12 s" alone.
+Future<PortalCoreResult> _awaitMode(WidgetRef ref, Mode mode) async {
+  final setup = ref.read(setupActionProvider.notifier);
+  final deadline = DateTime.now().add(_modeApplyTimeout);
+  // An error left over from an earlier push is not this push's; only a new one is.
+  final before = setup.lastConfigError;
+  while (DateTime.now().isBefore(deadline)) {
+    if (ref.read(patchClashConfigProvider).mode == mode &&
+        await setup.inputsApplied()) {
+      return const PortalCoreResult.ok();
+    }
+    final failure = setup.lastConfigError;
+    if (failure.isNotEmpty && failure != before) {
+      return PortalCoreResult.nativeError(failure);
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+  }
+  return PortalCoreResult.nativeError(
+    'the engine did not take ${mode.name} within ${_modeApplyTimeout.inSeconds} s',
+  );
+}
+
+/// Puts the previous mode and the previous core back, best effort.
+///
+/// The rollback reads the same typed answers as the switch: a stop, a mode and a start are
+/// only done when the core said so. Its own failure is logged rather than thrown — it must
+/// not replace the reason the switch failed, which is what the owner needs to see.
+Future<void> _rollBackPortal(
+  WidgetRef ref, {
+  required Mode previousMode,
+  required bool wasRunning,
+}) async {
+  final setup = ref.read(setupActionProvider.notifier);
+  try {
+    final stopped = await XrayCore.instance.stop();
+    if (!stopped.ok && !stopped.cancelled) {
+      throw _PortalSwitchFailure('the portal core did not stop: ${stopped.reason}');
+    }
+    if (previousMode == Mode.global) {
+      // The tunnel again, with the child on the node the profile still names.
+      final entered = await _enterSimplePortal(ref);
+      if (!entered.ok) {
+        throw _PortalSwitchFailure('the portal mode did not come back: ${entered.reason}');
+      }
+    } else {
+      final mode = await setup.pickMode(previousMode);
+      if (!mode.ok) {
+        throw _PortalSwitchFailure(
+          'the network mode did not come back: ${mode.reason}',
+        );
+      }
+    }
+    if (wasRunning && !await setup.setRunning(true)) {
+      throw const _PortalSwitchFailure('the portal did not start again');
+    }
+  } catch (error) {
+    commonPrint.log(
+      'portal switch rollback failed: ${compactError(error)}',
+      logLevel: LogLevel.error,
+    );
+  }
+}
+
+/// The failure as a sentence, in the app's own log and on the screen.
+void _reportSwitchFailure(Object error) {
+  final reason = error is _PortalSwitchFailure
+      ? error.reason
+      : compactError(error);
+  commonPrint.log('portal switch failed: $reason', logLevel: LogLevel.error);
+  dialogs.showNotifier(
+    currentAppLocalizations.portalSwitchFailed(reason),
+    level: MessageLevel.error,
+  );
+}

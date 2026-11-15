@@ -514,7 +514,7 @@ final class VpnOptionsProvider
   }
 }
 
-String _$vpnOptionsHash() => r'cd24ac77805f282960c2df9059cba254d3140df2';
+String _$vpnOptionsHash() => r'27782fb0454ae76e141142e3cc1eea9361cd677a';
 
 @ProviderFor(AccessControlState)
 final accessControlStateProvider = AccessControlStateProvider._();

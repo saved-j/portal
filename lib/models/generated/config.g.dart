@@ -40,6 +40,22 @@ _AppSettingProps _$AppSettingPropsFromJson(
       (json['delayTestTimeout'] as num?)?.toInt() ?? defaultDelayTestTimeout,
   portalSortRules: json['portalSortRules'] as String? ?? '',
   portalSortXray: json['portalSortXray'] as String? ?? '',
+  portalXrayPicks:
+      (json['portalXrayPicks'] as Map<String, dynamic>?)?.map(
+        (k, e) => MapEntry(k, e as String),
+      ) ??
+      const {},
+  portalRulesPicks:
+      (json['portalRulesPicks'] as Map<String, dynamic>?)?.map(
+        (k, e) => MapEntry(k, Map<String, String>.from(e as Map)),
+      ) ??
+      const {},
+  portalSelectionRules:
+      (json['portalSelectionRules'] as Map<String, dynamic>?)?.map(
+        (k, e) => MapEntry(k, e as String),
+      ) ??
+      const {},
+  portalSelectionXray: json['portalSelectionXray'] as String? ?? '',
   tabAnimation:
       $enumDecodeNullable(
         _$TabAnimationEnumMap,
@@ -130,6 +146,10 @@ Map<String, dynamic> _$AppSettingPropsToJson(_AppSettingProps instance) =>
       'delayTestTimeout': instance.delayTestTimeout,
       'portalSortRules': instance.portalSortRules,
       'portalSortXray': instance.portalSortXray,
+      'portalXrayPicks': instance.portalXrayPicks,
+      'portalRulesPicks': instance.portalRulesPicks,
+      'portalSelectionRules': instance.portalSelectionRules,
+      'portalSelectionXray': instance.portalSelectionXray,
       'tabAnimation': _$TabAnimationEnumMap[instance.tabAnimation]!,
       'floatingNavigationBar': instance.floatingNavigationBar,
       'autoCheckUpdate': instance.autoCheckUpdate,

@@ -309,15 +309,17 @@ extension ProfileExtension on Profile {
     final providerHeaders = providerHeadersOf(response.headers.map);
     // The row can only show traffic and an expiry if the panel sends them; this line says
     // which of the two shapes arrived, since a missing header and a mis-parsed one look the
-    // same from the screen.
+    // same from the screen. The values themselves are the account's credentials — the line
+    // keeps their shape and their length, never their content.
     commonPrint.log(
-      'sub headers: userinfo=[$userinfo] provider=${providerHeaders.entries.map((e) => '${e.key}=${e.value.length > 40 ? '${e.value.substring(0, 40)}…' : e.value}').join(', ')}',
+      'sub headers: userinfo=${userinfo == null ? 'absent' : 'present(${userinfo.length})'} '
+      'provider=${providerHeaders.entries.map((e) => '${e.key}:${e.value.length}').join(', ')}',
     );
     for (final entry in providerHeaders.entries) {
       if (!entry.value.startsWith('base64:')) continue;
       final decoded = _decodeProviderBase64(entry.value);
       if (decoded != null) {
-        commonPrint.log('sub header ${entry.key} decoded=[$decoded]');
+        commonPrint.log('sub header ${entry.key} decoded: ${decoded.length} chars');
       }
     }
     // The panel names its servers behind its own API, so the same link is asked once for the

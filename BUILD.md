@@ -1,0 +1,149 @@
+# Building Portal from a clean clone
+
+The goal: `git clone`, run one command, get the same application that is installed on the
+author's machines. Several build steps are pinned, and a floating version changes the
+output, so the exact toolchain is listed first.
+
+## Pinned toolchain
+
+| tool | version | pinned in |
+|---|---|---|
+| Flutter | **3.47.9** (stable, framework revision `c197ca5199`) | `.github/workflows/build.yaml` (`FLUTTER_VERSION`) |
+| Dart | bundled with Flutter 3.47.9 | `pubspec.lock` is committed |
+| JDK | **17** | `android/app/build.gradle.kts` (`VERSION_17`), CI uses Temurin 17 |
+| Gradle | **9.8.0** | `android/gradle/wrapper/gradle-wrapper.properties` |
+| Android Gradle plugin | **9.4.1** | `android/settings.gradle.kts` |
+| Kotlin | **2.4.20** | `android/settings.gradle.kts` |
+| Android SDK | **compileSdk 37 / targetSdk 37 / minSdk 24** | `android/gradle/libs.versions.toml` |
+| Android NDK | **28.2.13676358** (r28c) | `android/gradle/libs.versions.toml` |
+| Go | **1.27.0** | `core/go.mod`; CI builds with 1.27.1 |
+| Rust | **1.99.0** | `plugins/rust_api/rust/rust-toolchain.toml` |
+| Xcode | **26.3** (26.2 also works) | CI picks `Xcode_26.3` |
+
+`services/helper` has no toolchain file of its own and builds with the same stable Rust as
+`plugins/rust_api`. `minSdk` is read from the version catalog by every Android module,
+including `plugins/wifi_ssid`, so raising it is a one-line change in one file.
+
+China mirrors (`FLUTTER_STORAGE_BASE_URL`, `RUSTUP_DIST_SERVER`, USTC crates) are optional:
+they change download speed, not the output.
+
+## Environment
+
+```bash
+export JAVA_HOME=/path/to/jdk-17
+export ANDROID_HOME=/path/to/android-sdk     # platform 37, build-tools, NDK 28.2.13676358
+export PATH="/path/to/flutter/bin:$HOME/.cargo/bin:/path/to/go/bin:$PATH"
+
+./build.sh get     # flutter pub get
+```
+
+`build.sh` falls back to the author's macOS paths only when these variables are unset; on any
+other machine set them explicitly. The Go core, the Rust helper and the Rust plugin library
+compile through the pub build hook — there is nothing to build by hand and no submodule.
+
+## Android APK
+
+```bash
+./build.sh apk
+# -> build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+# -> dist/Portal-android-arm64-v8a.apk, -armeabi-v7a, -x86_64, -universal
+```
+
+One ABI only: `dart setup.dart android --env stable --arch arm64`.
+
+The Xray child process is not stored in the repository. `build.sh` downloads the pinned
+release once into `android/app/src/main/jniLibs/arm64-v8a/libxray.so` and refuses an archive
+whose SHA-256 is not the one pinned next to `XRAY_VERSION` in `build.sh`; a version bump has
+to move both values in the same commit. The digest is read with `sha256sum`, or `shasum -a 256`
+where coreutils is not installed — either is enough, and a binary already present needs
+neither. Gradle needs no network beyond the pinned wrapper:
+`android/gradlew`, `gradlew.bat` and `gradle-wrapper.jar` are committed, and the wrapper
+verifies the distribution against the checksum in `gradle-wrapper.properties`.
+
+```bash
+cd android && ./gradlew :app:assembleRelease   # the wrapper path, from a fresh clone
+```
+
+## Linux: deb, rpm, AppImage
+
+Linux bundles are built on Linux only — Flutter has no cross-compile for desktop, and
+`build.sh` refuses the other way around. Build dependencies:
+
+```bash
+sudo apt-get install -y ninja-build libgtk-3-dev libayatana-appindicator3-dev libsecret-1-dev
+# plus the packaging tools of the formats you ask for: dpkg-deb, rpmbuild, appimagetool
+```
+
+They are not installed by the build. A missing one is reported by name with the command that
+installs it, and the build stops there; `PORTAL_INSTALL_DEPS=1` opts in to the script running
+those commands (sudo apt-get, and a download of `appimagetool` into `/usr/local/bin`).
+
+```bash
+dart setup.dart linux --env stable                      # all three
+dart setup.dart linux --env stable --targets deb        # dist/Portal-linux-amd64.deb
+dart setup.dart linux --env stable --targets rpm        # dist/Portal-linux-amd64.rpm
+dart setup.dart linux --env stable --targets appimage   # dist/Portal-linux-amd64.AppImage
+```
+
+The rpm `Version` field cannot contain a hyphen, so a version such as `0.5.3-portal-duo`
+becomes `Version: 0.5.3` with `Release: portal-duo.1`. The deb and rpm postuninstall hooks
+remove `/etc/systemd/system/flclashx-helper.service`, the unit the app writes on demand; the
+unit name is fixed by the package identity and is not a display name.
+
+## Windows
+
+Builds on Windows only (`build.sh windows` guards the host):
+
+```bash
+dart setup.dart windows --env stable
+# -> dist/Portal-windows-amd64.zip and dist/Portal-windows-amd64-setup.exe (Inno Setup 6)
+```
+
+## macOS
+
+Builds on macOS only:
+
+```bash
+APPLE_DEVELOPER_ID="Developer ID Application: Name (TEAMID)" ./build.sh macos
+# -> dist/Portal-macos-arm64.dmg, signed
+```
+
+The image is signed with `APPLE_DEVELOPER_ID`. Without it the build refuses to cut a
+distributable DMG: an unsigned one is blocked by Gatekeeper on any other machine, and handing
+someone a file they have to be told how to bypass is not a build. A local build says so
+explicitly and gets an unsigned image that is meant for this machine only:
+
+```bash
+PORTAL_ALLOW_UNSIGNED=1 ./build.sh macos
+```
+
+`create-dmg` is a build dependency and is not installed automatically either: the script names
+it and the command that installs it, and `PORTAL_INSTALL_DEPS=1` lets the build run that
+command. Notarization is not part of any build here.
+
+## What the repository does not contain
+
+- **The signing keystore.** `android/app/build.gradle.kts` reads `storePassword`, `keyAlias`
+  and `keyPassword` from `android/local.properties` and signs with `android/app/keystore.jks`.
+  Neither the keystore nor the passwords are published: a keystore is the app's identity.
+  Without them Gradle falls back to the debug key and adds the `.dev` application id suffix,
+  so the APK installs side by side with a release build instead of replacing it. Same code,
+  same resources, different signature.
+- **The Xray binary.** Fetched and verified as described above.
+- **The Gradle and pub caches.** Anything in `~/.work` on the author's machine is a cache,
+  not input.
+
+## Checks
+
+```bash
+bash -n build.sh
+flutter analyze lib/
+dart run tool/test.dart
+```
+
+## The patch pipeline
+
+`pipeline/1.01a` is a single frozen series against upstream FlClashX (`5b4d0669`);
+`./apply.sh 1.01a verify` clones the upstream base, applies the series and proves by tree hash
+that the result equals the product tree the series declares. `pipeline/1.02a` continues the
+same way, one topic per patch, each patch applying to the frozen tree on its own.

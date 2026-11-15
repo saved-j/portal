@@ -265,6 +265,22 @@ abstract class AppSettingProps with _$AppSettingProps {
     /// portal show different builds of one subscription and are ordered for different reasons.
     @Default('') String portalSortRules,
     @Default('') String portalSortXray,
+
+    /// The server picked in each mode, kept apart for the same reason the order is: the
+    /// rules list names the engine's servers, the simple portal names the child's, and a
+    /// name picked in one means nothing in the other.
+    ///
+    /// Both are keyed by profile: a name belongs to the subscription it was delivered in, so
+    /// a pick made on one profile must never move the highlight on another. See
+    /// `models/portal_selection.dart` for the reads and writes.
+    @Default({}) Map<String, String> portalXrayPicks,
+    @Default({}) Map<String, Map<String, String>> portalRulesPicks,
+
+    /// The shape these picks had before they were per profile: one Xray name and one filter
+    /// map for every subscription. Read once while nothing has been picked in the new shape,
+    /// then cleared by the first successful pick — a migration, not a second source of truth.
+    @Default({}) Map<String, String> portalSelectionRules,
+    @Default('') String portalSelectionXray,
     @Default(TabAnimation.fade)
     @JsonKey(readValue: _readTabAnimation)
     TabAnimation tabAnimation,

@@ -21,6 +21,23 @@ allprojects {
 
 apply plugin: 'com.android.library'
 
+// The app decides the SDK floor and writes it in android/gradle/libs.versions.toml; a plugin
+// that hardcodes a number pins the app to an old minimum the day the app raises it. Read the
+// catalog instead, and keep a fallback for a build of this package on its own.
+def sdkFloorFromCatalog = {
+    def dir = rootProject.projectDir
+    for (int depth = 0; depth < 5 && dir != null; depth++, dir = dir.parentFile) {
+        for (name in ['gradle/libs.versions.toml', 'android/gradle/libs.versions.toml']) {
+            def catalog = new File(dir, name)
+            if (catalog.exists()) {
+                def match = (catalog.text =~ /(?m)^\s*minSdk\s*=\s*"(\d+)"/)
+                if (match.find()) return match.group(1).toInteger()
+            }
+        }
+    }
+    return 24
+}()
+
 android {
     namespace 'com.follow.clash.wifi_ssid'
     compileSdk 37
@@ -31,7 +48,7 @@ android {
     }
 
     defaultConfig {
-        minSdk 24
+        minSdk sdkFloorFromCatalog
     }
 }
 

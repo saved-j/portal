@@ -3,13 +3,15 @@
 /// The app speaks Clash YAML: a subscription is a list of proxies with a `type` and a few
 /// protocol fields. Xray speaks its own JSON. This file is the only place that knows both,
 /// so the whole X-Ray path can be tested without a phone, a tunnel or a panel.
+///
+/// The document this builds states an inbound, because a full Xray configuration has one.
+/// It is not the one the child is started with: the plugin replaces every inbound with the
+/// tun it was handed, so what matters here is the outbound, the transport and the log level.
 library;
 
 import 'dart:convert';
 
-import 'subscription_formats.dart';
-
-/// A single outbound in Xray's JSON shape, plus the socks inbound the app uses.
+/// A single outbound in Xray's JSON shape, plus an entry point a document needs.
 Map<String, dynamic> xrayConfigFor(
   Map<String, dynamic> proxy, {
   int socksPort = 10808,
@@ -179,34 +181,3 @@ String xrayConfigJson(Map<String, dynamic> proxy, {int socksPort = 10808}) =>
     const JsonEncoder.withIndent('  ').convert(
       xrayConfigFor(proxy, socksPort: socksPort),
     );
-
-/// A config the panel already wrote, made to listen on our socks port.
-///
-/// Happ and Incy are served a ready Xray document, so there is nothing to convert — but its
-/// inbound may be on a port the app does not know. The engine forwards to 127.0.0.1:10808,
-/// so that inbound is guaranteed to exist and the document is passed through untouched
-/// otherwise.
-String withSocksInbound(String body, {int port = 10808}) {
-  // The panel may wrap the document in a list; Xray wants a bare object.
-  final config = decodeClientConfig(body);
-  if (config == null) throw const FormatException('xray config not found in body');
-  final inbounds = <dynamic>[...?(config['inbounds'] as List?)];
-  final socksIndex = inbounds.indexWhere(
-    (item) => item is Map && '${item['protocol']}' == 'socks',
-  );
-  final socks = <String, dynamic>{
-    'tag': 'socks-in',
-    'listen': '127.0.0.1',
-    'port': port,
-    'protocol': 'socks',
-    'settings': {'udp': true},
-  };
-  if (socksIndex >= 0) {
-    inbounds[socksIndex] = socks;
-  } else {
-    inbounds.insert(0, socks);
-  }
-  config['inbounds'] = inbounds;
-  config['log'] ??= {'loglevel': 'warning'};
-  return const JsonEncoder.withIndent('  ').convert(config);
-}

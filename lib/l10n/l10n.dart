@@ -1576,6 +1576,16 @@ class AppLocalizations {
     return Intl.message('Connections', name: 'connections', desc: '', args: []);
   }
 
+  /// `The switch applied, the existing connections were not reset`
+  String get connectionsNotReset {
+    return Intl.message(
+      'The switch applied, the existing connections were not reset',
+      name: 'connectionsNotReset',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Live connections`
   String get liveConnections {
     return Intl.message(
@@ -2869,6 +2879,106 @@ class AppLocalizations {
   /// `Filter`
   String get filter {
     return Intl.message('Filter', name: 'filter', desc: '', args: []);
+  }
+
+  /// `Hong Kong`
+  String get filterHongKong {
+    return Intl.message(
+      'Hong Kong',
+      name: 'filterHongKong',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Taiwan`
+  String get filterTaiwan {
+    return Intl.message('Taiwan', name: 'filterTaiwan', desc: '', args: []);
+  }
+
+  /// `Japan`
+  String get filterJapan {
+    return Intl.message('Japan', name: 'filterJapan', desc: '', args: []);
+  }
+
+  /// `Singapore`
+  String get filterSingapore {
+    return Intl.message(
+      'Singapore',
+      name: 'filterSingapore',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `United States`
+  String get filterUnitedStates {
+    return Intl.message(
+      'United States',
+      name: 'filterUnitedStates',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `South Korea`
+  String get filterSouthKorea {
+    return Intl.message(
+      'South Korea',
+      name: 'filterSouthKorea',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `United Kingdom`
+  String get filterUnitedKingdom {
+    return Intl.message(
+      'United Kingdom',
+      name: 'filterUnitedKingdom',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Remaining Traffic`
+  String get filterRemainingTraffic {
+    return Intl.message(
+      'Remaining Traffic',
+      name: 'filterRemainingTraffic',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Expiry Date`
+  String get filterExpiryDate {
+    return Intl.message(
+      'Expiry Date',
+      name: 'filterExpiryDate',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Traffic Reset`
+  String get filterTrafficReset {
+    return Intl.message(
+      'Traffic Reset',
+      name: 'filterTrafficReset',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Website & Notices`
+  String get filterWebsiteNotices {
+    return Intl.message(
+      'Website & Notices',
+      name: 'filterWebsiteNotices',
+      desc: '',
+      args: [],
+    );
   }
 
   /// `Hide timed-out proxies`
@@ -8856,6 +8966,46 @@ class AppLocalizations {
     );
   }
 
+  /// `🌐 Website`
+  String get aboutSite {
+    return Intl.message('🌐 Website', name: 'aboutSite', desc: '', args: []);
+  }
+
+  /// `💬 Chat`
+  String get aboutChat {
+    return Intl.message('💬 Chat', name: 'aboutChat', desc: '', args: []);
+  }
+
+  /// `💳 Subscribe`
+  String get aboutSubscribe {
+    return Intl.message(
+      '💳 Subscribe',
+      name: 'aboutSubscribe',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `📱 Telegram support`
+  String get aboutTelegramSupport {
+    return Intl.message(
+      '📱 Telegram support',
+      name: 'aboutTelegramSupport',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `📱 VK support`
+  String get aboutVkSupport {
+    return Intl.message(
+      '📱 VK support',
+      name: 'aboutVkSupport',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Portal`
   String get aboutPortal {
     return Intl.message('Portal', name: 'aboutPortal', desc: '', args: []);
@@ -8908,6 +9058,36 @@ class AppLocalizations {
       name: 'getSubscriptionHere',
       desc: '',
       args: [],
+    );
+  }
+
+  /// `Could not switch the portal: {reason}`
+  String portalSwitchFailed(Object reason) {
+    return Intl.message(
+      'Could not switch the portal: $reason',
+      name: 'portalSwitchFailed',
+      desc: '',
+      args: [reason],
+    );
+  }
+
+  /// `Could not open the portal: {reason}`
+  String portalStartFailed(Object reason) {
+    return Intl.message(
+      'Could not open the portal: $reason',
+      name: 'portalStartFailed',
+      desc: '',
+      args: [reason],
+    );
+  }
+
+  /// `The subscription's rules file cannot be used: {reason}`
+  String engineFormatUnusable(Object reason) {
+    return Intl.message(
+      'The subscription\'s rules file cannot be used: $reason',
+      name: 'engineFormatUnusable',
+      desc: '',
+      args: [reason],
     );
   }
 }

@@ -1,5 +1,7 @@
-display_name: FlClashX
-package_name: FlClashX
+display_name: Portal
+# The control field is Package, generated from DesktopIdentity.packageName; this key spells
+# the same value. The package name is the app's identity and is not the display name.
+package_name: flclashx
 maintainer:
   name: pluralplay
   email: pluralplay@icloud.com
@@ -15,7 +17,8 @@ dependencies:
   - libsecret-1-0
 
 # The Helper unit is written on demand by the app, not at install time, so only
-# its teardown belongs here; the binary is already gone when postrm runs.
+# its teardown belongs here; the binary is already gone when postrm runs. The unit is named
+# after the package identity (DesktopIdentity.helperUnit), not after the display name.
 postuninstall_scripts:
   - 'case "${1:-}" in remove|purge) ;; *) exit 0 ;; esac'
   - 'systemctl disable --now flclashx-helper.service >/dev/null 2>&1 || true'
@@ -35,7 +38,7 @@ keywords:
   - Mihomo
   - Proxy
 
-generic_name: FlClashX
+generic_name: Portal
 
 categories:
   - Network

@@ -194,6 +194,7 @@
   "init": "Инициализация",
   "infiniteTime": "Бессрочно",
   "connections": "Соединения",
+  "connectionsNotReset": "Выбор применён, существующие подключения не сброшены",
   "liveConnections": "Активные соединения",
   "inbound": "Входящие",
   "intranetIP": "Внутренний IP",
@@ -357,6 +358,17 @@
   "iconStylePlain": "Без подложки",
   "iconStyleHidden": "Скрыто",
   "filter": "Фильтр",
+  "filterHongKong": "Гонконг",
+  "filterTaiwan": "Тайвань",
+  "filterJapan": "Япония",
+  "filterSingapore": "Сингапур",
+  "filterUnitedStates": "США",
+  "filterSouthKorea": "Южная Корея",
+  "filterUnitedKingdom": "Великобритания",
+  "filterRemainingTraffic": "Остаток трафика",
+  "filterExpiryDate": "Дата окончания",
+  "filterTrafficReset": "Сброс трафика",
+  "filterWebsiteNotices": "Сайты и уведомления",
   "hideTimeoutProxies": "Скрывать прокси с таймаутом",
   "hideTimeoutProxiesDesc": "Не показывать прокси, у которых последний тест задержки завершился таймаутом",
   "stackMode": "Стек TUN",
@@ -1073,6 +1085,11 @@
   "timeoutLabel": "таймаут",
   "filtersTitle": "Фильтры",
   "filtersHint": "Перетащите, чтобы изменить порядок. Выключите, чтобы скрыть.",
+  "aboutSite": "🌐 Сайт",
+  "aboutChat": "💬 Чат",
+  "aboutSubscribe": "💳 Оформить подписку",
+  "aboutTelegramSupport": "📱 Поддержка в Telegram",
+  "aboutVkSupport": "📱 Поддержка в VK",
   "aboutPortal": "Портал",
   "aboutCores": "Ядра",
   "aboutPortalNetworkCore": "ядро сети порталов",
@@ -1086,5 +1103,9 @@
     }
   },
   "insertSubscriptionLink": "Вставьте свою ссылку подписки",
-  "getSubscriptionHere": "Оформить подписку можно здесь"
+  "getSubscriptionHere": "Оформить подписку можно здесь",
+  "portalSwitchFailed": "Не удалось переключить портал: {reason}"
+,
+  "portalStartFailed": "Не удалось открыть портал: {reason}",
+  "engineFormatUnusable": "Файл правил подписки непригоден: {reason}"
 }

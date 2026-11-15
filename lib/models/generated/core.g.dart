@@ -153,6 +153,7 @@ _VpnOptions _$VpnOptionsFromJson(Map<String, dynamic> json) => _VpnOptions(
   excludesAllRoutes: json['excludesAllRoutes'] as bool? ?? false,
   mtu: (json['mtu'] as num?)?.toInt() ?? 0,
   congestionController: json['congestionController'] as String? ?? '',
+  xrayTun: json['xrayTun'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$VpnOptionsToJson(_VpnOptions instance) =>
@@ -170,6 +171,7 @@ Map<String, dynamic> _$VpnOptionsToJson(_VpnOptions instance) =>
       'excludesAllRoutes': instance.excludesAllRoutes,
       'mtu': instance.mtu,
       'congestionController': instance.congestionController,
+      'xrayTun': instance.xrayTun,
     };
 
 _InitParams _$InitParamsFromJson(Map<String, dynamic> json) => _InitParams(

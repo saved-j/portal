@@ -27,6 +27,13 @@ data class VpnOptions(
     val excludesAllRoutes: Boolean = false,
     val mtu: Int = 0,
     val congestionController: String? = null,
+    /**
+     * The simple portal: the tunnel belongs to the Xray child, not to the engine.
+     *
+     * The service still establishes it — only a VpnService can — but hands the descriptor to
+     * the child instead of to the Core, and no engine is started or configured.
+     */
+    val xrayTun: Boolean = false,
 )
 
 private const val DEFAULT_TUN_MTU = 9000

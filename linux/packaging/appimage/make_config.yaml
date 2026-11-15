@@ -1,4 +1,6 @@
-display_name: FlClashX
+# The AppImage's Name= and the file name the user sees. The scheme handlers, keywords and
+# StartupWMClass below stay as they are: those are contracts with the OS, not display strings.
+display_name: Portal
 
 icon: ./assets/images/icon.png
 
@@ -15,7 +17,7 @@ keywords:
   - Mihomo
   - Proxy
 
-generic_name: FlClashX
+generic_name: Portal
 
 categories:
   - Network

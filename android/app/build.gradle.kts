@@ -46,7 +46,9 @@ android {
 
     defaultConfig {
         applicationId = "io.portal.xfc"
-        minSdk = flutter.minSdkVersion
+        // The floor is written once, in the catalog: core, service and common already read it
+        // from there, and flutter.minSdkVersion trails whatever Flutter happens to ship.
+        minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         // Releases up to 0.5.0-pre.8 gave split APKs Flutter's ABI offset of up to +4000, so the
         // code every variant now shares sits above it and any earlier APK upgrades to any variant.

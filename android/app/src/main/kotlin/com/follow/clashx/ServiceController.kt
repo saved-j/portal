@@ -36,6 +36,10 @@ object ServiceController {
     internal var runtime: ServiceRuntime? = null
         private set
 
+    /// The tunnel is read by the Xray child, so the Core is neither started nor stopped here.
+    @Volatile
+    private var xrayTunActive = false
+
     private fun clearBinding() {
         binding?.unbind()
         binding = null
@@ -45,7 +49,12 @@ object ServiceController {
     private fun release() {
         clearBinding()
         runtime = null
-        Core.stopListener()
+        // In the simple portal the Core never ran: a stop would reach a listener that was
+        // never started, and the tunnel is torn down by the service that made it.
+        if (!xrayTunActive) {
+            Core.stopListener()
+        }
+        xrayTunActive = false
     }
 
     fun invokeMethod(data: String, callback: (ByteArray) -> Unit): Result<Unit> = runCatching {
@@ -106,7 +115,12 @@ object ServiceController {
             return@withLock false
         }
 
-        Core.startListener()
+        // The simple portal's tunnel is read by the Xray child: the engine is neither started
+        // nor configured here, and its listener state is left exactly as it was.
+        xrayTunActive = options.xrayTun
+        if (!options.xrayTun) {
+            Core.startListener()
+        }
         runtime = ServiceRuntime(
             vpn = options.enable,
             startedAtMillis = runtime?.startedAtMillis ?: System.currentTimeMillis(),

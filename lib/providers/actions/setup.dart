@@ -49,8 +49,29 @@ class SetupAction extends _$SetupAction {
   var _pushes = 0;
   var _tunMissed = false;
   var _configRequests = 0;
+
+  /// The last config push's own failure, empty when the last one was taken.
+  ///
+  /// A switch used to report "not applied in 12 s" because the reason the Core gave was
+  /// never kept anywhere: the push's exception went into a log line and the waiter only
+  /// knew that its condition had not become true.
+  String _lastConfigError = '';
+
+  /// What the engine last said about the config it was handed.
+  String get lastConfigError => _lastConfigError;
+
+  /// Why the simple portal last failed to start, empty when it did not fail.
+  ///
+  /// The start already showed its reason; a transaction that asked for the start and got
+  /// `false` must not replace that reason with a generic sentence of its own.
+  String _lastPortalFailure = '';
+
+  String get lastPortalFailure => _lastPortalFailure;
   var _setupAfterInit = false;
   Completer<void>? _initialized;
+  /// True while the simple portal's child is being started, so two paths cannot both
+  /// start it — the cold start and a user who opened the portal at the same moment.
+  var _startingChild = false;
 
   /// Moves as each config push starts and again once the Core answers it.
   int get pushes => _pushes;
@@ -234,7 +255,19 @@ class SetupAction extends _$SetupAction {
     return running ? _start(request) : _stop(request);
   }
 
+  /// Whether the saved mode is the simple portal, where the tunnel is the child's.
+  ///
+  /// Android only: in this fork `Mode.global` names the portal on the phone, while on the
+  /// desktop it is the engine's own global mode and keeps the engine exactly as it was.
+  bool get _isSimplePortal =>
+      system.isAndroid &&
+      ref.read(patchClashConfigProvider.select((state) => state.mode)) ==
+          Mode.global;
+
   Future<bool> _start(_RunRequest request) async {
+    if (_isSimplePortal) {
+      return _startSimplePortal(request);
+    }
     if (request.initialize) {
       var applied = false;
       try {
@@ -265,6 +298,117 @@ class SetupAction extends _$SetupAction {
       applyProfileDebounce(force: true, silence: true);
     }
     return true;
+  }
+
+  /// One cold start of the simple portal: the tunnel first, then the child that reads it.
+  ///
+  /// Nothing of the engine takes part — no config is built for it, none is pushed, and
+  /// GLOBAL keeps whatever the engine last held. If the child does not take the tunnel it is
+  /// taken back down and the reason is shown: a tunnel nothing reads sends every packet into
+  /// a black hole, and a portal reported as running over it is worse than one reported as
+  /// broken.
+  Future<bool> _startSimplePortal(_RunRequest request) async {
+    if (_startingChild) {
+      return true;
+    }
+    _startingChild = true;
+    try {
+      _lastPortalFailure = '';
+      await _syncPortalOptions();
+      try {
+        await _startCoreRunning(request);
+      } catch (_) {
+        _rollbackRunning(request);
+        rethrow;
+      }
+      final started = await _startPortalChild();
+      if (started.ok) {
+        return true;
+      }
+      await _tearDownSimplePortal();
+      _rollbackRunning(request);
+      _reportPortalStartFailure(started);
+      return false;
+    } finally {
+      _startingChild = false;
+    }
+  }
+
+  /// The child's own answer, on screen and in the log: what it said, not what was inferred.
+  void _reportPortalStartFailure(PortalCoreResult result) {
+    final reason = result.reason;
+    _lastPortalFailure = reason;
+    commonPrint.log('portal did not start: $reason', logLevel: LogLevel.error);
+    dialogs.showNotifier(
+      currentAppLocalizations.portalStartFailed(reason),
+      level: MessageLevel.error,
+    );
+  }
+
+  /// The service reads its options from the shared state, which the settings feed; a mode
+  /// that just changed has to reach it before the service is asked to make the tunnel.
+  Future<void> _syncPortalOptions() async {
+    if (!system.isAndroid) return;
+    await ref.read(vpnOptionsProvider.future);
+    await service?.syncState(ref.read(sharedStateProvider).needSyncSharedState);
+  }
+
+  Future<void> _tearDownSimplePortal() async {
+    final stopped = await XrayCore.instance.stop();
+    try {
+      await setCoreRunning(false);
+    } catch (error) {
+      commonPrint.log(
+        'simple portal teardown failed: ${compactError(error)}',
+        logLevel: LogLevel.warning,
+      );
+    }
+    if (!stopped.ok && !stopped.cancelled) {
+      commonPrint.log(
+        'portal child did not stop: ${stopped.reason}',
+        logLevel: LogLevel.warning,
+      );
+    }
+    _clearTraffic();
+  }
+
+  /// Starts the child on the pick the simple portal shows, and waits for its own answer.
+  ///
+  /// The answer is the child's, not a state the app infers: `ok` only after the plugin saw
+  /// the tunnel's reader come up, and the reason is the child's own last line otherwise.
+  /// The pick is written only when the child answered, so a stale name never outlives the
+  /// node that actually ran.
+  Future<PortalCoreResult> _startPortalChild() async {
+    final profile = ref.read(currentProfileProvider);
+    if (profile == null) {
+      return const PortalCoreResult.unavailable('no profile is selected');
+    }
+    final body = await profile.readXrayFormat();
+    if (body == null) {
+      return const PortalCoreResult.unavailable(
+        'this subscription has no engine format',
+      );
+    }
+    // The stored pick is the node the child ran last *for this profile*, which is the one
+    // the owner chose; an empty or stale name falls back to the panel's first server.
+    final settings = ref.read(appSettingProvider);
+    final server = xrayServerFor(
+      parseXraySubscription(body),
+      portalXrayPickFor(settings, profile.id),
+    );
+    if (server == null) {
+      return const PortalCoreResult.unavailable(
+        'this subscription has no node the portal core can run',
+      );
+    }
+    final started = await XrayCore.instance.start(jsonEncode(server.config));
+    if (started.ok) {
+      ref
+          .read(appSettingProvider.notifier)
+          .update((state) => withPortalXrayPick(state, profile.id, server.name));
+      commonPrint.log('portal child is reading the tunnel on ${server.name}');
+    }
+    return started;
   }
 
   Future<void> _startCoreRunning(_RunRequest request) async {
@@ -485,15 +629,21 @@ class SetupAction extends _$SetupAction {
 
   /// A mode the user picks in the app, asked first while the subscription
   /// sets it; the tray and hotkeys have nowhere to ask and take it over.
-  Future<void> pickMode(Mode mode, {bool ask = true}) async {
-    if (!ref.read(availableModesProvider).contains(mode)) return;
+  ///
+  /// The answer is typed: a mode that is not offered, or a take-over the user declined, is
+  /// a cancellation, not a silent `void` the caller has to guess about.
+  Future<PortalCoreResult> pickMode(Mode mode, {bool ask = true}) async {
+    if (!ref.read(availableModesProvider).contains(mode)) {
+      return PortalCoreResult.unavailable('the mode ${mode.name} is not offered here');
+    }
     final managed = ref.read(managedSettingsActionProvider.notifier);
     if (!ask) {
       managed.takeOverIfLocked('clash.mode');
     } else if (!await managed.confirmTakeOver('clash.mode')) {
-      return;
+      return const PortalCoreResult.cancelled('the panel setting was left in place');
     }
     changeMode(mode);
+    return const PortalCoreResult.ok();
   }
 
   void changeMode(Mode mode) {
@@ -573,17 +723,32 @@ class SetupAction extends _$SetupAction {
     Future<void> Function()? preloadInvoke,
   }) async {
     _configRequests++;
-    final result = await _setupScheduler.run(() {
-      return _setupConfig(
-        force: force,
-        silence: silence,
-        preloadInvoke: preloadInvoke,
-        onUpdated: () async {
-          await ref.read(proxiesActionProvider.notifier).updateGroups();
-          await ref.read(providersProvider.notifier).syncProviders();
-        },
-      );
-    });
+    final _SetupTaskResult result;
+    try {
+      result = await _setupScheduler.run(() {
+        return _setupConfig(
+          force: force,
+          silence: silence,
+          preloadInvoke: preloadInvoke,
+          onUpdated: () async {
+            await ref.read(proxiesActionProvider.notifier).updateGroups();
+            await ref.read(providersProvider.notifier).syncProviders();
+          },
+        );
+      });
+    } catch (error) {
+      // The engine's own complaint, kept for whoever is waiting on this push: a switch that
+      // times out should say what the Core said, not how long it waited.
+      _lastConfigError = compactError(error);
+      rethrow;
+    }
+    if (result == _SetupTaskResult.failed) {
+      if (_lastConfigError.isEmpty) {
+        _lastConfigError = 'the profile could not be applied';
+      }
+    } else {
+      _lastConfigError = '';
+    }
     if (result != _SetupTaskResult.handoffToCoreRestart) {
       if (result == _SetupTaskResult.completed) _reconcileTun();
       return result;
@@ -945,6 +1110,12 @@ class SetupAction extends _$SetupAction {
       profile = current;
     }
     commonPrint.log('setup ===> ${profile?.realLabel}');
+    if (_isSimplePortal) {
+      // The simple portal runs no engine: nothing is built for it, nothing is pushed and the
+      // config it last applied stays untouched. The subscription is still read where the
+      // child's node list comes from — that file, not the Core, is the source of the list.
+      return _SetupTaskResult.completed;
+    }
     final patchConfig = ref.read(patchClashConfigProvider);
     final shouldContinueSetup = await requestAdmin(patchConfig.tun.enable);
     if (!shouldContinueSetup) {
@@ -1019,6 +1190,7 @@ class SetupAction extends _$SetupAction {
           }
         } catch (e, s) {
           setupFailed = true;
+          _lastConfigError = compactError(e);
           if (preloadInvoke != null) {
             handoffFailure = (e, s);
           }

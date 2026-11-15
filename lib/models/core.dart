@@ -90,6 +90,12 @@ abstract class VpnOptions with _$VpnOptions {
     @Default(false) bool excludesAllRoutes,
     @Default(0) int mtu,
     @Default('') String congestionController,
+
+    /// The simple portal: the tunnel the service makes belongs to the Xray child.
+    ///
+    /// The service still establishes it — only a VpnService can — but hands the descriptor to
+    /// the child instead of the engine, and no engine is started or configured behind it.
+    @Default(false) bool xrayTun,
   }) = _VpnOptions;
 
   factory VpnOptions.fromJson(Map<String, Object?> json) =>

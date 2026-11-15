@@ -487,6 +487,20 @@ Future<void> _packageAndroid(_Build build, {String? androidArch}) async {
 }
 
 Future<void> _packageMacos(_Build build, {required String env}) async {
+  final identity = Platform.environment['APPLE_DEVELOPER_ID'] ?? '';
+  // Gatekeeper blocks an unsigned image, so a release build refuses to write one instead of
+  // producing a DMG that the user then has to be told how to bypass. A local build says so
+  // explicitly — PORTAL_ALLOW_UNSIGNED=1 — never a silent default.
+  final allowUnsigned = Platform.environment['PORTAL_ALLOW_UNSIGNED'] == '1';
+  if (identity.isEmpty && !allowUnsigned) {
+    throw const ProcessException(
+      'codesign',
+      [],
+      'APPLE_DEVELOPER_ID is not set: refusing to cut a distributable DMG. '
+          'Set PORTAL_ALLOW_UNSIGNED=1 for a local build that will not install elsewhere.',
+      1,
+    );
+  }
   final channel = File(
     p.join(build.rootDir, 'macos', 'Runner', 'Configs', 'Channel.xcconfig'),
   );
@@ -513,7 +527,6 @@ Future<void> _packageMacos(_Build build, {required String env}) async {
     if (Directory(app).existsSync()) Directory(app).deleteSync(recursive: true);
     Directory(built).renameSync(app);
   }
-  final identity = Platform.environment['APPLE_DEVELOPER_ID'] ?? '';
   if (identity.isNotEmpty) {
     await _signMacosApp(build, app, identity);
   }
@@ -974,11 +987,17 @@ String rpmSpecOf(
     _scripts(config, 'postuninstall_scripts'),
     identity,
   );
+  // rpmbuild refuses a '-' in Version:, and this tree's version carries one
+  // (0.5.3-portal-duo). The tail of the version is exactly what Release: is for, so it
+  // moves there and the leading numbers stay parseable as an rpm version.
+  final dash = version.indexOf('-');
+  final rpmVersion = dash < 0 ? version : version.substring(0, dash);
+  final rpmRelease = dash < 0 ? '1' : '${version.substring(dash + 1)}.1';
   return [
     ..._scripts(config, 'spec_macros'),
     'Name: ${identity.packageName}',
-    'Version: $version',
-    'Release: 1',
+    'Version: $rpmVersion',
+    'Release: $rpmRelease',
     'Summary: $name',
     'License: ${config['license'] ?? 'Other'}',
     'Group: ${config['group'] ?? 'Applications/Internet'}',
@@ -1149,10 +1168,28 @@ Future<int> _ensureDependencies(String platform) async {
   }
 }
 
+/// Whether the build may install the tooling it needs: global npm packages, distro
+/// packages through sudo.
+///
+/// Off unless asked. A build that changes the machine it runs on cannot be reproduced
+/// elsewhere, and the change arrives through a privileged prompt nobody asked for; the
+/// missing piece is reported by name instead, with the command that installs it.
+bool get installDependencies =>
+    Platform.environment['PORTAL_INSTALL_DEPS'] == '1' ||
+    Platform.environment['PORTAL_INSTALL_DEPS'] == 'true';
+
 Future<int> _ensureMacosDependencies() async {
   if (await _hasCommand('create-dmg')) {
     stdout.writeln('create-dmg already installed, skipping.');
     return 0;
+  }
+  if (!installDependencies) {
+    stderr.writeln(
+      'create-dmg is missing. Install it with:\n'
+      '  npm install -g --allow-scripts=fs-xattr,macos-alias create-dmg\n'
+      'or re-run with PORTAL_INSTALL_DEPS=1 to let this script do it.',
+    );
+    return 1;
   }
   stdout.writeln('Installing create-dmg...');
   // create-dmg's native helpers build on install, which npm blocks by default.
@@ -1193,6 +1230,16 @@ Future<int> _ensureLinuxDependencies() async {
 
   if (missingGroups.isEmpty) {
     stdout.writeln('All Linux build dependencies already installed, skipping.');
+  } else if (!installDependencies) {
+    final missing = [
+      for (final group in missingGroups) ...group,
+    ];
+    stderr.writeln(
+      'Missing Linux build dependencies: ${missing.join(' ')}\n'
+      'Install them with: sudo apt-get install -y ${missing.join(' ')}\n'
+      'or re-run with PORTAL_INSTALL_DEPS=1 to let this script do it.',
+    );
+    return 1;
   } else {
     stdout.writeln('Updating apt package lists...');
     final updateExit = await _runLinuxDependencyCommand([
@@ -1220,6 +1267,19 @@ Future<int> _ensureLinuxDependencies() async {
   if (File(appimagetool).existsSync()) {
     stdout.writeln('appimagetool already installed, skipping.');
     return 0;
+  }
+  if (!installDependencies) {
+    // Fetched over sudo into /usr/local: a privileged download is exactly what a build must
+    // not do on its own, and it is unpinned besides.
+    stderr.writeln(
+      'appimagetool is missing from /usr/local/bin. Fetch it yourself:\n'
+      '  sudo wget -O /usr/local/bin/appimagetool '
+      'https://github.com/AppImage/AppImageKit/releases/download/continuous/'
+      'appimagetool-${appImageToolArch(_detectArch())}.AppImage\n'
+      '  sudo chmod +x /usr/local/bin/appimagetool\n'
+      'or re-run with PORTAL_INSTALL_DEPS=1 to let this script do it.',
+    );
+    return 1;
   }
   stdout.writeln('Downloading appimagetool...');
   final downloadName =

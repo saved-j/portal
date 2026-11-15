@@ -7,9 +7,13 @@ import android.net.ProxyInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.ParcelFileDescriptor
 import androidx.core.content.getSystemService
 import com.follow.clashx.common.AccessControlMode
 import com.follow.clashx.common.GlobalState
+import com.follow.clashx.common.XrayChildControl
+import com.follow.clashx.common.XrayTun
+import com.follow.clashx.common.XrayTunHolder
 import com.follow.clashx.common.R as CommonR
 import com.follow.clashx.core.Core
 import com.follow.clashx.service.models.CIDR
@@ -29,6 +33,12 @@ class VpnService : SystemVpnService(), ManagedService {
     private val binder = LocalBinder()
     private val tunLock = Any()
     private var tunRunning = false
+
+    /// Who reads the established descriptor: the engine, or the simple portal's child.
+    private var tunOwnedByChild = false
+
+    /// The simple portal's descriptor. The child borrows its number; the service keeps it.
+    private var xrayDescriptor: ParcelFileDescriptor? = null
 
     override fun onDestroy() {
         try {
@@ -123,7 +133,7 @@ class VpnService : SystemVpnService(), ManagedService {
     }
 
     private fun handleStart(options: VpnOptions) {
-        val fd = with(Builder()) {
+        val descriptor = with(Builder()) {
             addAddressAndRoutes(options)
             addDnsServers(options)
             setMtu(options.tunMtu)
@@ -136,7 +146,12 @@ class VpnService : SystemVpnService(), ManagedService {
             if (options.allowBypass) {
                 allowBypass()
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && options.systemProxy) {
+            // The system proxy names the engine's mixed port, and in the simple portal no
+            // engine runs: declaring it would send every app to a port nothing listens on.
+            if (!options.xrayTun &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                options.systemProxy
+            ) {
                 GlobalState.log("Enable VPN HTTP proxy")
                 setHttpProxy(
                     ProxyInfo.buildDirectProxy(
@@ -146,9 +161,13 @@ class VpnService : SystemVpnService(), ManagedService {
                     ),
                 )
             }
-            establish()?.detachFd()
-                ?: error("VPN establishment was rejected by the system")
+            establish() ?: error("VPN establishment was rejected by the system")
         }
+        if (options.xrayTun) {
+            handOverToChild(descriptor, options)
+            return
+        }
+        val fd = descriptor.detachFd()
         synchronized(tunLock) {
             tunRunning = true
             try {
@@ -175,6 +194,45 @@ class VpnService : SystemVpnService(), ManagedService {
             }
         }
     }
+
+    /**
+     * The simple portal's tunnel: no engine is started, and the descriptor goes to the child.
+     *
+     * The child cannot call protect() on the sockets it opens after exec, so the one thing
+     * that keeps its own transport out of the tunnel is binding those outbounds to the
+     * interface the tunnel rides on — which needs that interface's name, resolved here while
+     * the active network is known. Without it the child would dial its own node through the
+     * tun it is reading, so no interface means no start rather than a tunnel that eats itself.
+     */
+    private fun handOverToChild(descriptor: ParcelFileDescriptor, options: VpnOptions) {
+        val interfaceName = outboundInterface()
+        if (interfaceName == null) {
+            descriptor.close()
+            error("no active network interface: the child's own traffic would re-enter the tunnel")
+        }
+        synchronized(tunLock) {
+            tunOwnedByChild = true
+            tunRunning = true
+            xrayDescriptor = descriptor
+            XrayTunHolder.publish(
+                XrayTun(
+                    descriptor = descriptor,
+                    interfaceName = interfaceName,
+                    mtu = options.tunMtu,
+                    gateway = listOf(IPV4_ADDRESS),
+                    dns = listOf(DNS),
+                ),
+            )
+        }
+    }
+
+    /// The interface the tunnel's own traffic leaves through, which is the active network's.
+    private fun outboundInterface(): String? = runCatching {
+        val manager = connectivity ?: return null
+        val network = manager.activeNetwork ?: return null
+        val properties = manager.getLinkProperties(network) ?: return null
+        properties.interfaceName?.takeIf { it.isNotBlank() }
+    }.getOrNull()
 
     private fun Builder.addAddressAndRoutes(options: VpnOptions) {
         val ipv4Address = IPV4_ADDRESS.toCIDR()
@@ -273,10 +331,22 @@ class VpnService : SystemVpnService(), ManagedService {
     }
 
     private fun stopTunLocked() {
-        if (tunRunning) {
+        if (!tunRunning) return
+        if (tunOwnedByChild) {
+            // The child goes first: it holds its own copy of the descriptor, and a process
+            // left reading a revoked tunnel keeps the interface alive for as long as it runs.
+            XrayChildControl.stop?.invoke()
+            XrayTunHolder.clear()
+            xrayDescriptor?.let { descriptor ->
+                runCatching { descriptor.close() }
+                    .onFailure { GlobalState.log("Unable to close the Xray tunnel: $it") }
+            }
+            xrayDescriptor = null
+            tunOwnedByChild = false
+        } else {
             Core.stopTun()
-            tunRunning = false
         }
+        tunRunning = false
     }
 
     companion object {

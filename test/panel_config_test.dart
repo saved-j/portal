@@ -1,11 +1,10 @@
 import 'dart:convert';
 
 import 'package:fl_clash/core/subscription_formats.dart';
-import 'package:fl_clash/core/xray_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Happ and Incy are served a ready Xray document instead of a link list, so the app must
-/// recognise it and put its socks inbound where the engine expects it.
+/// recognise it and hand the document itself to the child, whose entry point is the tunnel.
 void main() {
   const panelConfig = '''
 {
@@ -22,34 +21,23 @@ void main() {
   test('a config wrapped in a one-element array is still a config', () {
     final wrapped = '[$panelConfig]';
     expect(detectFormat(wrapped), SubscriptionFormat.xray);
-    final config = jsonDecode(withSocksInbound(wrapped)) as Map<String, dynamic>;
-    expect((config['inbounds'] as List).first['port'], 10808);
-    expect(config['inbounds'], isA<List>());
-    expect(jsonDecode(withSocksInbound(wrapped)), isA<Map>(),
-        reason: 'the wrapper is unwrapped for the core');
+    final document = decodeClientConfig(wrapped);
+    expect(document, isA<Map>(), reason: 'the wrapper is unwrapped for the child');
+    expect(document!['outbounds'], isA<List>());
   });
 
   test('a json document without inbounds or outbounds is not', () {
     expect(detectFormat('{"hasMihomo": true}'), isNull);
   });
 
-  test('the socks inbound is moved to the port the engine forwards to', () {
-    final result = withSocksInbound(panelConfig, port: 10808);
-    final config = jsonDecode(result) as Map<String, dynamic>;
-    final inbounds = config['inbounds'] as List;
-    expect(inbounds, hasLength(1), reason: 'the old socks inbound is replaced');
-    expect((inbounds.first as Map)['port'], 10808);
-    expect((inbounds.first as Map)['listen'], '127.0.0.1');
-    // everything else survives, which is the point of passing the document through
-    expect((config['outbounds'] as List), hasLength(1));
-  });
-
-  test('a config with no socks inbound gets one, in front of the others', () {
-    const noSocks = '{"inbounds": [{"port": 9000, "protocol": "http"}], "outbounds": []}';
-    final config = jsonDecode(withSocksInbound(noSocks)) as Map<String, dynamic>;
-    final inbounds = config['inbounds'] as List;
-    expect(inbounds, hasLength(2));
-    expect((inbounds.first as Map)['protocol'], 'socks');
-    expect((inbounds.last as Map)['protocol'], 'http');
+  test('the document reaches the child as the panel wrote it', () {
+    final document = decodeClientConfig(panelConfig);
+    expect(document, isNotNull);
+    // Nothing rewrites the inbounds any more: the plugin replaces them with the tunnel.
+    final inbounds = document!['inbounds'] as List;
+    expect(inbounds, hasLength(1));
+    expect((inbounds.first as Map)['port'], 2080);
+    expect((document['outbounds'] as List), hasLength(1));
+    expect(jsonDecode(panelConfig)['log'], document['log']);
   });
 }

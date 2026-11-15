@@ -127,31 +127,31 @@ class AboutView extends ConsumerWidget {
             items: [
               _buildLinkItem(
                 glyph: AppGlyphs.link,
-                title: '🌐 Сайт',
+                title: context.appLocalizations.aboutSite,
                 url: _portalSite,
                 label: 'web.portal-connect.io',
               ),
               _buildLinkItem(
                 glyph: AppGlyphs.send,
-                title: '💬 Чат',
+                title: context.appLocalizations.aboutChat,
                 url: _portalChat,
                 label: 't.me/portalconnect',
               ),
               _buildLinkItem(
                 glyph: AppGlyphs.send,
-                title: '💳 Оформить подписку',
+                title: context.appLocalizations.aboutSubscribe,
                 url: _portalBot,
                 label: 't.me/portalconnect_bot',
               ),
               _buildLinkItem(
                 glyph: AppGlyphs.send,
-                title: '📱 Поддержка в Telegram',
+                title: context.appLocalizations.aboutTelegramSupport,
                 url: _portalSupport,
                 label: 't.me/portalconnect_support',
               ),
               _buildLinkItem(
                 glyph: AppGlyphs.link,
-                title: '📱 Поддержка в VK',
+                title: context.appLocalizations.aboutVkSupport,
                 url: _portalVk,
                 label: 'vk.com/markvictorson',
               ),

@@ -93,7 +93,14 @@ class _FiltersViewState extends ConsumerState<FiltersView> {
       onReorder: _handleReorder,
       onAdd: _handleAddOrUpdate,
       onDelete: _handleDelete,
-      searchFieldsOf: (filter) => [filter.label, filter.regex],
+      // The stored label is the persistence key, and on a migrated install it can be a name
+      // the list no longer shows: the row draws the localized label, so search has to match
+      // what is on screen as well as what is saved.
+      searchFieldsOf: (filter) => [
+        filter.label,
+        localizedFilterLabel(context, filter.label),
+        filter.regex,
+      ],
       emptyLabel: appLocalizations.nullTip(appLocalizations.filters),
     );
   }
@@ -121,7 +128,11 @@ class _FilterItem extends StatelessWidget {
       onPressed: isEditing ? onSelected : onPressed,
       contentPadding: const EdgeInsets.only(left: 16),
       title: TooltipText(
-        text: Text(filter.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        text: Text(
+          localizedFilterLabel(context, filter.label),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
       subtitle: FilterRegexText(filter.regex),
       trailing: CommonCheckBox(

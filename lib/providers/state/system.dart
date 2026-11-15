@@ -246,7 +246,7 @@ Future<VpnOptions> vpnOptions(Ref ref) async {
   );
   final clashConfig = ref.watch(
     patchClashConfigProvider.select(
-      (state) => (tun: state.tun, mixedPort: state.mixedPort),
+      (state) => (tun: state.tun, mixedPort: state.mixedPort, mode: state.mode),
     ),
   );
   final vpnSetting = ref.watch(vpnSettingProvider);
@@ -280,6 +280,9 @@ Future<VpnOptions> vpnOptions(Ref ref) async {
     ),
     mtu: tun.mtu,
     congestionController: tun.congestionController,
+    // The simple portal has no engine to forward into: the service makes the tunnel and the
+    // Xray child reads it. In the network mode the engine keeps it, exactly as before.
+    xrayTun: clashConfig.mode == Mode.global,
   );
 }
 

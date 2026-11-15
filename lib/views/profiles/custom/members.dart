@@ -680,7 +680,7 @@ class _MemberPickerState<M> extends ConsumerState<_MemberPicker<M>> {
             (
               kind: kind,
               name: filter.regex,
-              title: filter.label,
+              title: localizedFilterLabel(context, filter.label),
               subtitle: filter.regex,
             ),
       ];

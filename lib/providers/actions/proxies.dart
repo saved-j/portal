@@ -416,16 +416,48 @@ class ProxiesAction extends _$ProxiesAction {
       return;
     }
     try {
-      if (ref.read(appSettingProvider).closeConnections) {
-        await _core.closeConnections();
-      } else {
-        await _core.resetConnections();
-      }
+      await _dropConnections();
     } catch (error) {
       commonPrint.log(
         'changeProxy($groupName -> $proxyName) connection reset failed: $error',
         logLevel: coreFailureLogLevel(error),
       );
+      // The switch itself did apply; what is stale is the sockets opened on the old node.
+      // Left in the log alone the user is told nothing and believes the new server already
+      // carries the connections, so say it — and leave the drop one tap away.
+      dialogs.showNotifier(
+        currentAppLocalizations.connectionsNotReset,
+        level: MessageLevel.warning,
+        actionState: MessageActionState(
+          actionText: currentAppLocalizations.retry,
+          action: () => unawaited(_retryDropConnections()),
+        ),
+      );
+    }
+  }
+
+  /// Drops the live connections again after a failed reset: the choice is applied, the old
+  /// sockets have not followed it.
+  Future<void> _retryDropConnections() async {
+    try {
+      await _dropConnections();
+    } catch (error) {
+      commonPrint.log(
+        'connection reset retry failed: $error',
+        logLevel: coreFailureLogLevel(error),
+      );
+      dialogs.showNotifier(
+        currentAppLocalizations.connectionsNotReset,
+        level: MessageLevel.warning,
+      );
+    }
+  }
+
+  Future<void> _dropConnections() async {
+    if (ref.read(appSettingProvider).closeConnections) {
+      await _core.closeConnections();
+    } else {
+      await _core.resetConnections();
     }
   }
 

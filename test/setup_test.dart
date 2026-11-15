@@ -448,6 +448,18 @@ hooks:
         );
       });
 
+      test('gives a hyphenated version a parseable rpm Version and a Release', () {
+        final spec = setup.rpmSpecOf(
+          {'display_name': 'Portal'},
+          setup.stableDesktop,
+          version: '0.5.3-portal-duo',
+        );
+
+        expect(spec, contains('Version: 0.5.3\n'));
+        expect(spec, contains('Release: portal-duo.1\n'));
+        expect(spec, isNot(contains('-portal-duo')));
+      });
+
       test('renames the app and Helper in the staged bundle only for pre', () {
         final dir = Directory.systemTemp.createTempSync('channel_bundle');
         addTearDown(() => dir.deleteSync(recursive: true));

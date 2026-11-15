@@ -1,10 +1,11 @@
-gradle-wrapper.jar
 /.gradle
 /captures/
-/gradlew
-/gradlew.bat
 local.properties
 GeneratedPluginRegistrant.java
+
+# The wrapper is source, not a build artifact: gradlew, gradlew.bat and gradle-wrapper.jar are
+# committed on purpose. Without them a fresh clone has no build, and the properties file pins
+# both the distribution and its SHA-256, so the same Gradle runs everywhere.
 
 # Remember to never publicly share your keystore.
 # See https://flutter.dev/docs/deployment/android#reference-the-keystore-from-the-app
