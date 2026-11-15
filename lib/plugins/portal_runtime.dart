@@ -234,6 +234,38 @@ class PortalRuntime {
     }
   }
 
+  /// One attempt at a mode's own feed, for the file adb can read.
+  ///
+  /// The count is Dart's — it describes this run's attempts, not the files on disk — so it is
+  /// handed to the record rather than derived there. A build without the channel (desktop)
+  /// has no `portal-transitions.log` and drops the line.
+  Future<void> noteAvailability({
+    required String feed,
+    required String mode,
+    required int attempts,
+    required int limit,
+    required String state,
+    String reason = '',
+  }) async {
+    try {
+      await _channel.invokeMethod<void>('availabilityNote', {
+        'feed': feed,
+        'mode': mode,
+        'attempts': attempts,
+        'limit': limit,
+        'state': state,
+        'reason': reason,
+      });
+    } on MissingPluginException {
+      // No portal runtime here: nothing to write.
+    } on PlatformException catch (error) {
+      commonPrint.log(
+        'portal availability note failed: ${error.message}',
+        logLevel: LogLevel.warning,
+      );
+    }
+  }
+
   Future<PortalRuntimeStatus> refresh() async {
     try {
       final result = await _channel.invokeMethod<Map<Object?, Object?>>('status');

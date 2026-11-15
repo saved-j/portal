@@ -281,6 +281,12 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m104(count) => "${Intl.plural(count, other: '${count}y ago')}";
 
+
+  static String m105(reason) => "This mode is unavailable: ${reason}";
+
+  static String m106(reason) => "Both modes are unavailable: ${reason}";
+
+  static String m107(attempts) => "failed attempts in a row: ${attempts}";
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
     "about": MessageLookupByLibrary.simpleMessage("About"),
@@ -1393,7 +1399,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "portTip": m63,
     "portValue": m64,
     "portalOff": MessageLookupByLibrary.simpleMessage("Portal is off"),
+    "portalModeUnavailable": m105,
+    "portalModesUnavailable": m106,
     "portalStartFailed": m65,
+    "portalStrikes": m107,
     "portalSwitchFailed": m66,
     "ports": MessageLookupByLibrary.simpleMessage("Ports"),
     "preChannelTip": MessageLookupByLibrary.simpleMessage(

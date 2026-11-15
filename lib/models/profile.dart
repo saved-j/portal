@@ -8,7 +8,9 @@ import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/core/subscription_availability.dart';
 import 'package:fl_clash/core/panel_api.dart';
 import 'package:fl_clash/core/proxy_endpoints.dart';
+import 'package:fl_clash/core/portal_feed.dart';
 import 'package:fl_clash/core/subscription_formats.dart';
+import 'package:fl_clash/core/xray_subscription.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -299,7 +301,19 @@ extension ProfileExtension on Profile {
     Duration timeout,
     bool Function()? isCurrent,
   ) async {
-    final response = await fetch(url, timeout: timeout, headers: headers);
+    final Response<Uint8List> response;
+    try {
+      response = await fetch(url, timeout: timeout, headers: headers);
+    } catch (error) {
+      // One attempt, one count: the engine's own document did not arrive at all. Counted here
+      // rather than at the caller because this is the request the mode depends on.
+      portalFeeds.note(
+        PortalFeed.engine,
+        ok: false,
+        reason: _attemptReason(error),
+      );
+      rethrow;
+    }
     // The same link answers differently per client, so the second format is asked for
     // separately. A failure here must not fail the profile: the panel may simply not
     // serve one, and that is a red light, not an error.
@@ -325,22 +339,50 @@ extension ProfileExtension on Profile {
     // The panel names its servers behind its own API, so the same link is asked once for the
     // names. A failure here is normal (a panel without that endpoint) and changes nothing.
     unawaited(_probePanelNames(url));
-    return copyWith(
-      label: label.takeFirstValid([
-        ProviderHeaders(providerHeaders).title,
-        getFileNameForDisposition(disposition),
-        defaultLabel,
-      ]),
-      subscriptionInfo: SubscriptionInfo.formHString(userinfo),
-      providerHeaders: providerHeaders,
-      autoUpdateDuration:
-          ProviderHeaders(providerHeaders).updateInterval ?? autoUpdateDuration,
-    ).saveFile(
-      await decompressDownload(response.data ?? Uint8List(0)),
-      validate: _guardEmptyBody(validate),
-      isCurrent: isCurrent,
-      xrayBody: xray,
-    );
+    final statusOk = (response.statusCode ?? 0) >= 200 && (response.statusCode ?? 0) < 300;
+    try {
+      final saved = await copyWith(
+        label: label.takeFirstValid([
+          ProviderHeaders(providerHeaders).title,
+          getFileNameForDisposition(disposition),
+          defaultLabel,
+        ]),
+        subscriptionInfo: SubscriptionInfo.formHString(userinfo),
+        providerHeaders: providerHeaders,
+        autoUpdateDuration:
+            ProviderHeaders(providerHeaders).updateInterval ?? autoUpdateDuration,
+      ).saveFile(
+        await decompressDownload(response.data ?? Uint8List(0)),
+        validate: _guardEmptyBody(validate),
+        isCurrent: isCurrent,
+        xrayBody: xray,
+      );
+      // The save is the engine feed's own verdict: the body parsed, the core accepted it and
+      // the file was published. A refusal below is the other half of the same judgement.
+      portalFeeds.note(
+        PortalFeed.engine,
+        ok: statusOk,
+        reason: statusOk ? '' : 'http ${response.statusCode}',
+      );
+      return saved;
+    } on ProfileUpdateSupersededException {
+      // A newer update owns this profile now. That is not a failed fetch, and counting it
+      // would turn a fast double-tap into a strike against the mode.
+      rethrow;
+    } catch (error) {
+      portalFeeds.note(
+        PortalFeed.engine,
+        ok: false,
+        reason: 'http ${response.statusCode} · ${_attemptReason(error)}',
+      );
+      rethrow;
+    }
+  }
+
+  /// A failure in the words the count keeps: short, one line, no credentials.
+  static String _attemptReason(Object error) {
+    final text = compactError(error).split('\n').first.trim();
+    return text.length <= 120 ? text : '${text.substring(0, 120)}…';
   }
 
   /// The publishing rename is sync, so nothing runs between [isCurrent] and it.
@@ -471,6 +513,7 @@ extension ProfileExtension on Profile {
     SubscriptionFetch fetch,
     Duration timeout,
   ) async {
+    var note = 'no client name was answered';
     for (final agent in xrayUserAgentCandidates) {
       try {
         final response = await fetch(
@@ -481,18 +524,40 @@ extension ProfileExtension on Profile {
         final body = response.data;
         final text = body == null ? '' : utf8.decode(body, allowMalformed: true);
         final format = detectFormat(text);
+        final servers = format == SubscriptionFormat.xray ? _serverCountOf(text) : 0;
+        note = 'http ${response.statusCode} '
+            '${format?.name ?? 'no format'} '
+            '${servers == 0 ? 'no servers' : '$servers servers'}';
         commonPrint.log(
           'xray probe [$agent]: http=${response.statusCode} '
           'bytes=${body?.length ?? 0} format=${format?.name ?? 'none'} '
+          'servers=$servers '
           'head=${text.length > 120 ? text.substring(0, 120).replaceAll('\n', ' ') : text}',
         );
-        if (body != null && format == SubscriptionFormat.xray) return body;
+        // The right shape is not yet an answer: a config with nothing to run is the "zero
+        // servers" case, and the simple portal has nothing to start with it.
+        if (body != null && format == SubscriptionFormat.xray && servers > 0) {
+          portalFeeds.note(PortalFeed.xray, ok: true);
+          return body;
+        }
       } catch (error) {
+        note = _attemptReason(error);
         commonPrint.log('xray probe [$agent]: ${compactError(error)}');
       }
     }
+    // Every client name was asked and none answered with nodes: that is one failed attempt
+    // at this feed, and the second core's mode keeps its own count of them.
+    portalFeeds.note(PortalFeed.xray, ok: false, reason: note);
     return null;
   }
+
+  /// How many servers a body of the second core's format actually holds.
+  ///
+  /// Two shapes are accepted and they parse differently: a list of share links, and a panel's
+  /// ready client config (one, or an array of them). Counting both here is what makes "zero
+  /// servers" a fact rather than a guess.
+  static int _serverCountOf(String body) =>
+      parseShareLinks(body).length + parseXraySubscription(body).length;
 }
 
 typedef SubscriptionFetch =

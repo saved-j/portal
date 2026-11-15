@@ -234,6 +234,18 @@ the device, not a redesign.
   `--dart-define=APP_VERSION`, the About screen reads the installed package). `local.properties`
   is gitignored and was written on disk too. No behaviour change.
 
+- `27-three-failed-fetches-take-the-mode-off` — the two documents a panel serves are counted
+  apart (`lib/core/portal_feed.dart`): an attempt is counted where the fetch happens — `http
+  502`, an unparsable body, a client config with zero servers, a throw — three failures in a
+  row take the corresponding mode off, and that feed's own next success sets it back to 0 in
+  the same run, no restart. Engine format gone: the network mode's switch and the split-tunnel
+  filter strip are disabled with a localized reason. Node list gone: the switch refuses the
+  simple portal with its own reason and the portal does not open in that mode. Both gone: both
+  controls are disabled and the portal stays closed (`pickMode` and `_run` refuse, which is what
+  covers the tray, a hotkey, Quick Settings and Always-on). Every attempt is written beside the
+  transitions as `kind=availability feed=… attempts=n/3 state=…`. ru/en/zh_CN strings; version
+  0.5.3-portal-duo-2c+2026111403.
+
 Apply (to a tree that does not already carry the 01..02 commit):
 ```
 git -C <clone> checkout -B work <1.02a commit>   # tree f8044d71

@@ -242,6 +242,12 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m104(count) => "${count} 年前";
 
+
+  static String m105(reason) => "该模式不可用：${reason}";
+
+  static String m106(reason) => "两种模式均不可用：${reason}";
+
+  static String m107(attempts) => "连续失败次数：${attempts}";
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
     "about": MessageLookupByLibrary.simpleMessage("关于"),
@@ -1076,7 +1082,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "portHopping": MessageLookupByLibrary.simpleMessage("端口跳跃"),
     "portTip": m63,
     "portValue": m64,
+    "portalModeUnavailable": m105,
+    "portalModesUnavailable": m106,
     "portalStartFailed": m65,
+    "portalStrikes": m107,
     "portalSwitchFailed": m66,
     "ports": MessageLookupByLibrary.simpleMessage("端口"),
     "preChannelTip": MessageLookupByLibrary.simpleMessage(

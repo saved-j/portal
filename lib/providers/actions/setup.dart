@@ -260,6 +260,23 @@ class SetupAction extends _$SetupAction {
     bool resume = false,
     bool undoesFailedStart = false,
   }) {
+    if (running) {
+      // The last line of defence, for the entries that start the portal without asking which
+      // mode to enter: Quick Settings, Always-on, a restore. A mode whose document stopped
+      // answering three fetches ago must not open a tunnel nothing can carry.
+      final denial = _feedDenial(
+        ref.read(patchClashConfigProvider.select((state) => state.mode)),
+      );
+      if (denial != null) {
+        _lastPortalFailure = denial;
+        commonPrint.log(
+          'portal not opened: $denial',
+          logLevel: LogLevel.warning,
+        );
+        _setLocalRunning(false);
+        return Future.value(false);
+      }
+    }
     final request = _RunRequest(
       running: running,
       initialize: initialize,
@@ -776,6 +793,17 @@ class SetupAction extends _$SetupAction {
     if (!ref.read(availableModesProvider).contains(mode)) {
       return PortalCoreResult.unavailable('the mode ${mode.name} is not offered here');
     }
+    // The mode's own document has to still be answering. Three failed fetches in a row take
+    // the mode off every entry at once, because this is the one place they all come through —
+    // the switch, the tray, the hotkey and Quick Settings.
+    final denial = _feedDenial(mode);
+    if (denial != null) {
+      commonPrint.log(
+        'mode ${mode.name} refused: $denial',
+        logLevel: LogLevel.warning,
+      );
+      return PortalCoreResult.unavailable(denial);
+    }
     final managed = ref.read(managedSettingsActionProvider.notifier);
     if (!ask) {
       managed.takeOverIfLocked('clash.mode');
@@ -784,6 +812,19 @@ class SetupAction extends _$SetupAction {
     }
     changeMode(mode);
     return const PortalCoreResult.ok();
+  }
+
+  /// The feed a mode needs, or null for a mode that has none (desktop's own modes).
+  PortalFeed? _feedOf(Mode mode) => switch (mode) {
+        Mode.global => PortalFeed.xray,
+        Mode.rule => PortalFeed.engine,
+        _ => null,
+      };
+
+  /// Why this mode must not be entered, or null while its document still answers.
+  String? _feedDenial(Mode mode) {
+    final feed = _feedOf(mode);
+    return feed == null ? null : portalFeeds.denialOf(feed);
   }
 
   void changeMode(Mode mode) {

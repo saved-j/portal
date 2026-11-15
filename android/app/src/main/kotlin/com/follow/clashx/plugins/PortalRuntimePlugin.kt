@@ -97,6 +97,20 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 result.success(null)
             }
 
+            // One attempt at a mode's own feed. The app counts these; the record writes the
+            // line, so the count can be read off the phone instead of off a screenshot.
+            "availabilityNote" -> {
+                PortalTelemetry.noteAvailability(
+                    feed = call.argument<String>("feed") ?: "",
+                    mode = call.argument<String>("mode") ?: "",
+                    attempts = (call.argument<Number>("attempts") ?: 0).toInt(),
+                    limit = (call.argument<Number>("limit") ?: 0).toInt(),
+                    state = call.argument<String>("state") ?: "",
+                    reason = call.argument<String>("reason") ?: "",
+                )
+                result.success(null)
+            }
+
             else -> result.notImplemented()
         }
     }

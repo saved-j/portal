@@ -11,6 +11,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
 import 'package:fl_clash/core/xray_ping.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
+import 'package:fl_clash/core/portal_feed.dart';
+import 'package:fl_clash/l10n/l10n.dart';
 import '../profiles/subscription_facts.dart';
 import 'package:fl_clash/plugins/portal_runtime.dart';
 import 'package:fl_clash/plugins/portal_switch_timing.dart';
@@ -398,6 +400,79 @@ final portalStatusProvider =
     NotifierProvider<PortalStatusNotifier, PortalRuntimeStatus>(
         PortalStatusNotifier.new);
 
+/// Both feeds' counts, as a provider, so a control redraws the moment one moves.
+///
+/// The ledger itself is a plain [PortalFeeds] on purpose: the fetch path (a model, no widget,
+/// no container) has to be able to count an attempt, and a failed download must be counted
+/// whether or not the dashboard is open.
+class PortalFeedsNotifier extends Notifier<Map<PortalFeed, FeedStrikes>> {
+  @override
+  Map<PortalFeed, FeedStrikes> build() {
+    void onChange() => state = portalFeeds.snapshot;
+    portalFeeds.addListener(onChange);
+    ref.onDispose(() => portalFeeds.removeListener(onChange));
+    return portalFeeds.snapshot;
+  }
+}
+
+final portalFeedsProvider =
+    NotifierProvider<PortalFeedsNotifier, Map<PortalFeed, FeedStrikes>>(
+        PortalFeedsNotifier.new);
+
+/// One mode's answer, as the controls read it.
+typedef ModeAvailability = ({
+  bool available,
+  FeedStrikes strikes,
+  String reason,
+});
+
+/// Whether each mode can be entered, and why not.
+///
+/// Two facts per mode, and the stricter one wins: the app's own count of failed attempts at
+/// this subscription ([portalFeeds]), and the document already on disk, which is all a fresh
+/// start has before any fetch. The count is what makes a panel answering `502` visible at
+/// all: the file it left behind is still a working config, so the file alone would keep
+/// offering a mode whose every new fetch fails. Unknown — still loading — counts as
+/// available, so a control never flickers off while the answer is on its way.
+final portalAvailabilityProvider =
+    Provider<({ModeAvailability engine, ModeAvailability xray})>((ref) {
+  final strikes = ref.watch(portalFeedsProvider);
+  final engineFile = ref.watch(engineFormatStatusProvider).value;
+  final servers = ref.watch(xrayServersProvider).value;
+  final engineStrikes = strikes[PortalFeed.engine] ?? const FeedStrikes();
+  final xrayStrikes = strikes[PortalFeed.xray] ?? const FeedStrikes();
+  final fileProblem = engineFile == null || engineFile.status == EngineFormatStatus.ok
+      ? ''
+      : engineFile.reason;
+  // No nodes is not a slow answer: the simple portal has nothing to start with, and the
+  // switch has to say so rather than open a portal that carries no traffic.
+  final noServers = servers != null && servers.isEmpty;
+  return (
+    engine: (
+      available: !engineStrikes.blocked && fileProblem.isEmpty,
+      strikes: engineStrikes,
+      reason: engineStrikes.blocked ? engineStrikes.reason : fileProblem,
+    ),
+    xray: (
+      available: !xrayStrikes.blocked && !noServers,
+      strikes: xrayStrikes,
+      reason: xrayStrikes.blocked
+          ? xrayStrikes.reason
+          : (noServers ? 'this subscription carries no nodes for the portal' : ''),
+    ),
+  );
+});
+
+/// A refusal's reason, with the count in the reader's own language.
+///
+/// The count is the fact the owner can act on ("it failed three times"), and the detail is
+/// the last failure's own words (`http 502`), which is what a support question needs.
+String _availabilityReason(AppLocalizations l10n, ModeAvailability availability) {
+  final strikes = availability.strikes;
+  if (!strikes.blocked) return availability.reason;
+  return '${l10n.portalStrikes(strikes.failures)} (${strikes.reason})';
+}
+
 /// The rows this mode draws, from the owner that answers or from the mode's own source.
 ///
 /// The two modes read one subscription in two formats, and each mode reads only its own:
@@ -667,140 +742,191 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
     );
     final group = shown.group;
     final sort = ref.watch(portalSortProvider);
-    final engineCheck = ref.watch(engineFormatStatusProvider).value;
-    final engineFormat = engineCheck?.status ?? EngineFormatStatus.ok;
-    final engineAvailable = engineFormat == EngineFormatStatus.ok;
-    final engineReason = engineCheck?.reason ?? '';
+    // Both modes answer through one provider: what is on disk, and how many times in a row
+    // this run has failed to fetch it. Each control speaks only for its own mode, and the
+    // stricter answer wins.
+    final availability = ref.watch(portalAvailabilityProvider);
+    final engineAvailable = availability.engine.available;
+    final xrayAvailable = availability.xray.available;
+    final engineReason = engineAvailable
+        ? ''
+        : context.appLocalizations
+            .engineFormatUnusable(_availabilityReason(context.appLocalizations, availability.engine));
+    final xrayReason = xrayAvailable
+        ? ''
+        : context.appLocalizations
+            .portalModeUnavailable(_availabilityReason(context.appLocalizations, availability.xray));
+    // Both dark is its own sentence: it names both reasons once, instead of leaving the
+    // owner to work out why neither side of the switch moves.
+    final bothUnavailable = !engineAvailable && !xrayAvailable;
+    final shownReason = bothUnavailable
+        ? context.appLocalizations.portalModesUnavailable(
+            [availability.engine.reason, availability.xray.reason]
+                .where((reason) => reason.isNotEmpty)
+                .join(' · '),
+          )
+        : (simple ? engineReason : xrayReason);
     final testing = group != null &&
         ref.watch(
           delayTestingGroupsProvider.select((s) => s.contains(group.name)),
         );
     if (modes.length < 2) return const SizedBox.shrink();
-    return Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Switch at the left edge, its label to the right of it.
-        // Centred pair: a larger label in the legacy green while the network is on,
-        // and a switch that reads as a switch. The editor button only exists in the
-        // network mode, so 'Сеть порталов' has somewhere obvious to lead.
-        GestureDetector(
-          // A plain tap on 'Сеть порталов' opens the proxies dashboard: that is what
-          // the network mode is for. The double tap still edits the filter strip.
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ProxiesView()),
-          ),
+        Row(
+          children: [
+            // Switch at the left edge, its label to the right of it.
+            // Centred pair: a larger label in the legacy green while the network is on,
+            // and a switch that reads as a switch. The editor button only exists in the
+            // network mode, so 'Сеть порталов' has somewhere obvious to lead.
+            GestureDetector(
+              // A plain tap on 'Сеть порталов' opens the proxies dashboard: that is what
+              // the network mode is for. The double tap still edits the filter strip.
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProxiesView()),
+              ),
 
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // A dead switch says why it is dead: the reason is the file's own, carried
-              // from the check that refused it instead of a generic "unavailable".
-              Tooltip(
-                message: engineAvailable
-                    ? ''
-                    : context.appLocalizations.engineFormatUnusable(
-                        engineReason,
-                      ),
-                child: Switch(
-                  value: mode == Mode.rule && engineAvailable,
-                  activeThumbColor: _liveGreen(context),
-                  activeTrackColor: _liveGreen(context).withValues(alpha: 0.4),
-                  // No engine format, no rules: the control stays visible but dead, so the
-                  // owner sees why instead of a switch that does nothing.
-                  onChanged: !engineAvailable
-                      ? null
-                      : (value) {
-                          HapticFeedback.selectionClick();
-                          // The thumb has already moved; the portal underneath either
-                          // comes up on the other core or comes back exactly as it was.
-                          unawaited(
-                            _switchPortal(ref, toSimple: !value),
-                          );
-                        },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                context.appLocalizations.rules,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: mode == Mode.rule
-                      ? _liveGreen(context)
-                      : theme.colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Spacer(),
-        const SizedBox(width: 4),
-        IconButton(
-          tooltip: context.appLocalizations.sortTooltip(sortLabelFor(context, sort)),
-          onPressed: () {
-            HapticFeedback.selectionClick();
-            ref.read(portalSortProvider.notifier).cycle();
-          },
-          icon: GlyphIcon(
-            switch (sort) {
-              PortalSort.subscription => AppGlyphs.sliders,
-              PortalSort.ping => AppGlyphs.sort,
-              PortalSort.alphabet => AppGlyphs.textShort,
-            },
-            size: 18,
-          ),
-        ),
-        IconButton(
-          tooltip: context.appLocalizations.delayTest,
-          // A delay test says which servers answer, so it must not depend on the portal
-          // being open: the test wakes the engine for its duration and closes it again.
-          onPressed: testing
-              ? null
-              : () {
-                  HapticFeedback.mediumImpact();
-                  // In the simple portal the list is the second core's, so the engine test
-                  // has nothing to measure — its own servers are timed directly instead, and
-                  // a fake address is a dash there. In the network mode the engine holds
-                  // every server of the list and answers with its own proxied delay, which is
-                  // the only number that is a fact about the node rather than about a
-                  // handshake the phone performed to a local listener.
-                  final servers = ref.read(xrayServersProvider).value ?? const [];
-                  final targets = <(String, String, int)>[
-                    for (final server in servers)
-                      if (server.port > 0) (server.name, server.address, server.port),
-                  ];
-                  if (targets.isNotEmpty) {
-                    unawaited(
-                      ref.read(tcpDelayProvider.notifier).measureAll(targets),
-                    );
-                    return;
-                  }
-                  if (group == null) return;
-                  unawaited(
-                    _testDelayWithEngine(
-                      ref,
-                      [
-                        for (final proxy in group.all)
-                          if (!_isBuiltinOutbound(proxy.name)) proxy,
-                      ],
-                      testUrl: group.testUrl,
-                      wasRunning: running,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A dead switch says why it is dead: the reason is the file's own, carried
+                  // from the check that refused it instead of a generic "unavailable".
+                  Tooltip(
+                    message: bothUnavailable
+                        ? shownReason
+                        : (simple ? engineReason : xrayReason),
+                    child: Switch(
+                      // The thumb tells the truth about the mode the app is in, even when that
+                      // mode has just gone dark: a portal that keeps working on its last good
+                      // config must not look switched off.
+                      value: mode == Mode.rule,
+                      activeThumbColor: _liveGreen(context),
+                      activeTrackColor: _liveGreen(context).withValues(alpha: 0.4),
+                      // Dead only when neither side can be entered. With one side alive the
+                      // switch stays live and the direction that is not offered refuses with its
+                      // own reason, because a control that moves and snaps back teaches nothing.
+                      onChanged: bothUnavailable
+                          ? null
+                          : (value) {
+                              if (value ? !engineAvailable : !xrayAvailable) {
+                                HapticFeedback.vibrate();
+                                dialogs.showNotifier(
+                                  value ? engineReason : xrayReason,
+                                  level: MessageLevel.warning,
+                                );
+                                return;
+                              }
+                              HapticFeedback.selectionClick();
+                              // The thumb has already moved; the portal underneath either
+                              // comes up on the other core or comes back exactly as it was.
+                              unawaited(
+                                _switchPortal(ref, toSimple: !value),
+                              );
+                            },
                     ),
-                  );
-                },
-          // A test in flight spins instead of pretending nothing is happening.
-          icon: testing
-              ? SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: theme.colorScheme.primary,
                   ),
-                )
-              : GlyphIcon(
-                  AppGlyphs.bolt,
-                  size: 18,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                  const SizedBox(width: 8),
+                  Text(
+                    context.appLocalizations.rules,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: mode == Mode.rule
+                          ? _liveGreen(context)
+                          : theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Spacer(),
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: context.appLocalizations.sortTooltip(sortLabelFor(context, sort)),
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                ref.read(portalSortProvider.notifier).cycle();
+              },
+              icon: GlyphIcon(
+                switch (sort) {
+                  PortalSort.subscription => AppGlyphs.sliders,
+                  PortalSort.ping => AppGlyphs.sort,
+                  PortalSort.alphabet => AppGlyphs.textShort,
+                },
+                size: 18,
+              ),
+            ),
+            IconButton(
+              tooltip: context.appLocalizations.delayTest,
+              // A delay test says which servers answer, so it must not depend on the portal
+              // being open: the test wakes the engine for its duration and closes it again.
+              onPressed: testing
+                  ? null
+                  : () {
+                      HapticFeedback.mediumImpact();
+                      // In the simple portal the list is the second core's, so the engine test
+                      // has nothing to measure — its own servers are timed directly instead, and
+                      // a fake address is a dash there. In the network mode the engine holds
+                      // every server of the list and answers with its own proxied delay, which is
+                      // the only number that is a fact about the node rather than about a
+                      // handshake the phone performed to a local listener.
+                      final servers = ref.read(xrayServersProvider).value ?? const [];
+                      final targets = <(String, String, int)>[
+                        for (final server in servers)
+                          if (server.port > 0) (server.name, server.address, server.port),
+                      ];
+                      if (targets.isNotEmpty) {
+                        unawaited(
+                          ref.read(tcpDelayProvider.notifier).measureAll(targets),
+                        );
+                        return;
+                      }
+                      if (group == null) return;
+                      unawaited(
+                        _testDelayWithEngine(
+                          ref,
+                          [
+                            for (final proxy in group.all)
+                              if (!_isBuiltinOutbound(proxy.name)) proxy,
+                          ],
+                          testUrl: group.testUrl,
+                          wasRunning: running,
+                        ),
+                      );
+                    },
+              // A test in flight spins instead of pretending nothing is happening.
+              icon: testing
+                  ? SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: theme.colorScheme.primary,
+                      ),
+                    )
+                  : GlyphIcon(
+                      AppGlyphs.bolt,
+                      size: 18,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+            ),
+          ],
         ),
+        // One line, not a tooltip: a phone has to say why a control does not move without
+        // being long-pressed first. Two lines at most, so a long reason cannot push the list
+        // off the dashboard.
+        if (shownReason.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, top: 2),
+            child: Text(
+              shownReason,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -1246,6 +1372,25 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // The strip picks which split-tunnel filter the network mode's list is drawn under, and
+    // the filters come from the engine's own config. Without a usable engine format there are
+    // no filters to pick — the strip says that instead of offering chips that choose nothing.
+    final availability = ref.watch(portalAvailabilityProvider);
+    if (!availability.engine.available) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Text(
+          context.appLocalizations.engineFormatUnusable(
+            _availabilityReason(context.appLocalizations, availability.engine),
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.error,
+          ),
+        ),
+      );
+    }
     final allGroups = ref.watch(groupsProvider);
     final filters = ref.watch(portalFiltersProvider);
     final groups = portalVisibleGroups(allGroups, filters.hidden, filters.order);
@@ -1897,6 +2042,22 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
   // moving the portal; this one waits for it rather than racing it, and the tap is simply
   // dropped, which is what the owner asked for by tapping once.
   if (portalRuntime.status.value.busy) return;
+  // The mode that is not offered is refused before anything is torn down. Stopping the
+  // running portal only to discover that the other mode cannot start leaves the owner with
+  // nothing open and a rollback to read; the reason is the whole answer.
+  final target = toSimple
+      ? ref.read(portalAvailabilityProvider).xray
+      : ref.read(portalAvailabilityProvider).engine;
+  if (!target.available) {
+    final reason = _availabilityReason(currentAppLocalizations, target);
+    dialogs.showNotifier(
+      toSimple
+          ? currentAppLocalizations.portalModeUnavailable(reason)
+          : currentAppLocalizations.engineFormatUnusable(reason),
+      level: MessageLevel.warning,
+    );
+    return;
+  }
   _portalSwitching = true;
   // The tap is zero for both measurements: the record writes click → `phase=active` from its
   // own hook, the screen writes click → rows once it has them.

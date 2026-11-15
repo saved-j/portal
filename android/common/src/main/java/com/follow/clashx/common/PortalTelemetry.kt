@@ -202,6 +202,29 @@ object PortalTelemetry {
         lastEgress = value
     }
 
+    /// One attempt at a mode's own feed, and what the counter said afterwards.
+    ///
+    /// The app counts failures in a row for the two documents a panel serves, and a mode is
+    /// refused once its own count reaches the limit. The count lives in Dart — it is about
+    /// this run's attempts, not about the files — so the line is passed in and written here,
+    /// beside the transitions, where a device check can quote it instead of deducing it from
+    /// a disabled control.
+    fun noteAvailability(
+        feed: String,
+        mode: String,
+        attempts: Int,
+        limit: Int,
+        state: String,
+        reason: String,
+    ) {
+        append(
+            transitionsFile,
+            "time=${stamp.format(Date())} kind=availability feed=$feed mode=$mode " +
+                "attempts=$attempts/$limit state=$state" +
+                (if (reason.isEmpty()) "" else " reason=$reason"),
+        )
+    }
+
     /// The app's own listening sockets, from the kernel's own table.
     ///
     /// `/proc/net/tcp` is readable for the process's own sockets on Android; the uid column

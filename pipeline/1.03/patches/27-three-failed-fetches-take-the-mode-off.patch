@@ -1,0 +1,1230 @@
+# portal 1.03 patch 27 — three failed fetches take the mode off
+#
+# The two modes have two documents, and one panel decides per request which of them to serve.
+# That panel answers the engine's own format with `502` while the node list still arrives, so
+# "the switch is on, so the subscription must be fine" was never true: the last good file stays
+# on disk after a failed download on purpose (a working subscription is never replaced by an
+# error page), which means a file that exists proves nothing about whether the panel still
+# serves it. The owner saw a working list and a portal that could not be re-entered.
+#
+# Now both documents are counted, apart, and a mode is offered as long as its own count has not
+# reached three failures in a row:
+#
+#   * `lib/core/portal_feed.dart` is the ledger: one counter per feed, process-wide and in
+#     memory. `PortalFeed.engine` is the engine's format (`proxies:` + `rules:`, which the
+#     network mode needs), `PortalFeed.xray` is the node list the simple portal runs.
+#   * an attempt is counted where the fetch happens (`Profile._updateFrom`, and
+#     `Profile._fetchXrayBody`): a `502`, an unparsable body, a client config with zero servers,
+#     a share-link list that decodes to nothing and a request that throws all count the same.
+#     The engine's attempt is counted on the save — the body parsed, the core accepted it, the
+#     file was published — so a body that arrives and is not a config fails the count the way a
+#     refused download does.
+#   * each counter is reset by its own feed's next success and by nothing else. No restart is
+#     needed: a success publishes the new count and the controls redraw.
+#   * `portalAvailabilityProvider` merges the count with the document on disk (the stricter of
+#     the two wins) and is what the controls read: the network mode's switch and the
+#     split-tunnel filter strip go dead with a localized reason when the engine's format is
+#     gone, the switch refuses the simple portal with its own reason when the node list is gone,
+#     and both dead is one sentence naming both.
+#   * `SetupAction.pickMode` refuses the mode (typed `unavailable`, so the switch reports it and
+#     rolls back), and `_run` refuses to open a tunnel in a mode whose feed is gone — that is
+#     what covers Quick Settings, Always-on and a restore, which never ask which mode to enter.
+#   * every attempt is written beside the transitions, so a device check quotes the count:
+#
+#     kind=availability feed=engine mode=rule attempts=3/3 state=unavailable reason=http 502 · …
+#     kind=availability feed=xray mode=global attempts=0/3 state=ok
+#
+# Strings: ru/en/zh_CN (`portalModeUnavailable`, `portalModesUnavailable`, `portalStrikes`).
+# Version: 0.5.3-portal-duo-2c+2026111403, so this build is distinguishable from the 2b on the
+# phones.
+diff --git a/BUILD.md b/BUILD.md
+index ff413fd0..9592de91 100644
+--- a/BUILD.md
++++ b/BUILD.md
+@@ -225,6 +225,22 @@ engine's groups — or, with the portal closed, the engine's own last answer for
+ then the profile's engine-format `proxies:`. Neither mode can draw the other's names, and a
+ group held from the other mode is dropped when the mode changes.
+ 
++A mode whose document stops arriving is taken off, and the same file says why:
++
++```
++time=... kind=availability feed=engine mode=rule attempts=3/3 state=unavailable reason=http 502 · …
++time=... kind=availability feed=xray mode=global attempts=0/3 state=ok
++```
++
++One line per fetch attempt, one counter per document: the engine's own format (`feed=engine`,
++which the network mode needs) and the node list the second core runs (`feed=xray`, which the
++simple portal needs). A body that arrives but does not parse, carries no servers, or is not the
++format its mode needs counts as a failure like a `502` does; three failures in a row are what
++turn the mode off, and that document's next successful fetch — of *that* document — sets its
++counter back to `0` with `outcome=reset`. Neither counter resets the other, and none of it
++survives a restart on purpose: the counters describe this run's attempts, while the profile
++files keep the last good download.
++
+ A delay is measured by the core that holds the server, and by nothing else. The engine's rows
+ carry the engine's own delay, taken through the tunnel it built. The simple portal's rows carry
+ a TCP handshake timed by this process against the node's resolved address — and a node name
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
+index 3e35eb21..03b72a80 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
+@@ -97,6 +97,20 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+                 result.success(null)
+             }
+ 
++            // One attempt at a mode's own feed. The app counts these; the record writes the
++            // line, so the count can be read off the phone instead of off a screenshot.
++            "availabilityNote" -> {
++                PortalTelemetry.noteAvailability(
++                    feed = call.argument<String>("feed") ?: "",
++                    mode = call.argument<String>("mode") ?: "",
++                    attempts = (call.argument<Number>("attempts") ?: 0).toInt(),
++                    limit = (call.argument<Number>("limit") ?: 0).toInt(),
++                    state = call.argument<String>("state") ?: "",
++                    reason = call.argument<String>("reason") ?: "",
++                )
++                result.success(null)
++            }
++
+             else -> result.notImplemented()
+         }
+     }
+diff --git a/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt b/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt
+index e0a5c254..3895cd8a 100644
+--- a/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt
++++ b/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt
+@@ -202,6 +202,29 @@ object PortalTelemetry {
+         lastEgress = value
+     }
+ 
++    /// One attempt at a mode's own feed, and what the counter said afterwards.
++    ///
++    /// The app counts failures in a row for the two documents a panel serves, and a mode is
++    /// refused once its own count reaches the limit. The count lives in Dart — it is about
++    /// this run's attempts, not about the files — so the line is passed in and written here,
++    /// beside the transitions, where a device check can quote it instead of deducing it from
++    /// a disabled control.
++    fun noteAvailability(
++        feed: String,
++        mode: String,
++        attempts: Int,
++        limit: Int,
++        state: String,
++        reason: String,
++    ) {
++        append(
++            transitionsFile,
++            "time=${stamp.format(Date())} kind=availability feed=$feed mode=$mode " +
++                "attempts=$attempts/$limit state=$state" +
++                (if (reason.isEmpty()) "" else " reason=$reason"),
++        )
++    }
++
+     /// The app's own listening sockets, from the kernel's own table.
+     ///
+     /// `/proc/net/tcp` is readable for the process's own sockets on Android; the uid column
+diff --git a/lib/core/portal_feed.dart b/lib/core/portal_feed.dart
+new file mode 100644
+index 00000000..a9da481e
+--- /dev/null
++++ b/lib/core/portal_feed.dart
+@@ -0,0 +1,162 @@
++/// The two documents a subscription must serve, and the two modes that need them.
++///
++/// A panel answers one link with two different bodies, and it decides per request which of
++/// them to serve: the engine's own config (Clash YAML, proxies + rules) and the node list the
++/// second core runs. Either can fail on its own — a panel that answers the engine format with
++/// `502` may still serve the node list — so the two are counted apart, and one mode going
++/// dark never touches the other.
++///
++/// The count is the app's own observation, not the file's state: a failed fetch deliberately
++/// leaves the last good file on disk, because a working subscription must never be replaced
++/// by an error page. A file that exists therefore proves nothing about whether the panel
++/// still serves it. Three failures in a row are what turn a mode off, and the next success of
++/// that same feed turns it back on — no restart, no cache to clear.
++library;
++
++import 'dart:async';
++
++import 'package:flutter/foundation.dart';
++
++import '../enum/enum.dart';
++import '../common/print.dart';
++import '../plugins/portal_runtime.dart';
++
++/// One document the app has to fetch.
++enum PortalFeed {
++  /// The engine's own format: `proxies:`, `proxy-groups:` and `rules:`. Without it the
++  /// network mode has nothing to route.
++  engine,
++
++  /// The node list for the second core: share links or a ready client config. Without it the
++  /// simple portal has nothing to run.
++  xray;
++
++  /// The name the log and the transitions file carry.
++  String get label => switch (this) {
++        PortalFeed.engine => 'engine',
++        PortalFeed.xray => 'xray',
++      };
++
++  /// The mode this feed makes usable, as the app names its modes.
++  String get mode => switch (this) {
++        PortalFeed.engine => 'rule',
++        PortalFeed.xray => 'global',
++      };
++}
++
++/// A feed is refused after this many failures in a row.
++///
++/// Three, not one: a panel behind a flapping CDN answers `502` once and serves the next
++/// request, and a mode that dies on the first hiccup is worse than one that waits. Three is
++/// also the point where the owner has watched it fail repeatedly, so the control has to
++/// start telling the truth instead of offering a switch that cannot work.
++const portalFeedStrikeLimit = 3;
++
++/// What one feed's own counter says.
++@immutable
++class FeedStrikes {
++  const FeedStrikes({this.failures = 0, this.reason = '', this.at});
++
++  /// Failures in a row, since this feed's last success.
++  final int failures;
++
++  /// The last failure's own words, for the control that has to explain itself.
++  final String reason;
++
++  /// When the last attempt that moved the count happened.
++  final DateTime? at;
++
++  /// True once the mode this feed enables must not be offered.
++  bool get blocked => failures >= portalFeedStrikeLimit;
++
++  /// The counter of a feed that answered: no failures, nothing to explain.
++  static const FeedStrikes clear = FeedStrikes();
++
++  FeedStrikes fail(String why) => FeedStrikes(
++        failures: failures + 1,
++        reason: why,
++        at: DateTime.now(),
++      );
++}
++
++/// The app's own record of both feeds, one counter each.
++///
++/// Process-wide and in memory on purpose: these are attempts made by *this* run of the app,
++/// so a restart starts the count again and the portal may try once more. Nothing here is
++/// written to disk — the profile files are the last good download, and they are deliberately
++/// kept when a fetch fails.
++class PortalFeeds extends ChangeNotifier {
++  PortalFeeds._();
++
++  static final PortalFeeds instance = PortalFeeds._();
++
++  final Map<PortalFeed, FeedStrikes> _strikes = {};
++
++  FeedStrikes strikesOf(PortalFeed feed) => _strikes[feed] ?? const FeedStrikes();
++
++  /// Both counters, for a widget that has to draw them.
++  Map<PortalFeed, FeedStrikes> get snapshot => {
++        for (final feed in PortalFeed.values) feed: strikesOf(feed),
++      };
++
++  /// One attempt at one feed.
++  ///
++  /// [ok] is that attempt's whole answer: a body that arrived, parsed, carried what the mode
++  /// needs and matched its format. A success clears this feed's counter and leaves the other
++  /// feed exactly as it was — the two are independent, which is the point of counting them
++  /// here instead of deriving one from the other.
++  void note(PortalFeed feed, {required bool ok, String reason = ''}) {
++    final before = strikesOf(feed);
++    final next = ok
++        ? FeedStrikes.clear
++        : before.fail(
++            reason.isEmpty ? 'the fetch did not answer' : reason,
++          );
++    // The counter moves only when the answer did. A success that follows a success changes
++    // nothing on screen, but it is still written: the log is the record of every attempt, and
++    // a line per attempt is what lets a device check quote the count instead of guessing it.
++    final moved = next.failures != before.failures || next.reason != before.reason;
++    if (moved) {
++      _strikes[feed] = next;
++      notifyListeners();
++    }
++    _record(feed, next, reset: ok && before.failures > 0);
++  }
++
++  /// The mode's refusal as a sentence, or null while the feed still answers.
++  ///
++  /// Callers put this inside a localized sentence; the words here name the fact, not the
++  /// language.
++  String? denialOf(PortalFeed feed) {
++    final strikes = strikesOf(feed);
++    if (!strikes.blocked) return null;
++    return '${feed.label}: ${strikes.failures} failed attempts in a row'
++        '${strikes.reason.isEmpty ? '' : ' (${strikes.reason})'}';
++  }
++
++  void _record(PortalFeed feed, FeedStrikes strikes, {required bool reset}) {
++    final state = strikes.blocked ? 'unavailable' : 'ok';
++    commonPrint.log(
++      'availability: feed=${feed.label} mode=${feed.mode} '
++      'attempts=${strikes.failures}/$portalFeedStrikeLimit state=$state'
++      '${reset ? ' outcome=reset' : ''}'
++      '${strikes.reason.isEmpty ? '' : ' reason=${strikes.reason}'}',
++      logLevel: strikes.blocked ? LogLevel.warning : LogLevel.info,
++    );
++    // The same line in the file adb can read: a count that only exists on screen is a count
++    // nobody can quote from a device.
++    unawaited(
++      portalRuntime.noteAvailability(
++        feed: feed.label,
++        mode: feed.mode,
++        attempts: strikes.failures,
++        limit: portalFeedStrikeLimit,
++        state: state,
++        reason: strikes.reason,
++      ),
++    );
++  }
++}
++
++/// The one ledger both the fetch path and the controls read.
++final portalFeeds = PortalFeeds.instance;
+diff --git a/lib/l10n/intl/messages_en.dart b/lib/l10n/intl/messages_en.dart
+index 5d0e8c00..38cc6019 100644
+--- a/lib/l10n/intl/messages_en.dart
++++ b/lib/l10n/intl/messages_en.dart
+@@ -281,6 +281,12 @@ class MessageLookup extends MessageLookupByLibrary {
+ 
+   static String m104(count) => "${Intl.plural(count, other: '${count}y ago')}";
+ 
++
++  static String m105(reason) => "This mode is unavailable: ${reason}";
++
++  static String m106(reason) => "Both modes are unavailable: ${reason}";
++
++  static String m107(attempts) => "failed attempts in a row: ${attempts}";
+   final messages = _notInlinedMessages(_notInlinedMessages);
+   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
+     "about": MessageLookupByLibrary.simpleMessage("About"),
+@@ -1393,7 +1399,10 @@ class MessageLookup extends MessageLookupByLibrary {
+     "portTip": m63,
+     "portValue": m64,
+     "portalOff": MessageLookupByLibrary.simpleMessage("Portal is off"),
++    "portalModeUnavailable": m105,
++    "portalModesUnavailable": m106,
+     "portalStartFailed": m65,
++    "portalStrikes": m107,
+     "portalSwitchFailed": m66,
+     "ports": MessageLookupByLibrary.simpleMessage("Ports"),
+     "preChannelTip": MessageLookupByLibrary.simpleMessage(
+diff --git a/lib/l10n/intl/messages_ru.dart b/lib/l10n/intl/messages_ru.dart
+index d2b0e075..d8974d7e 100644
+--- a/lib/l10n/intl/messages_ru.dart
++++ b/lib/l10n/intl/messages_ru.dart
+@@ -281,6 +281,12 @@ class MessageLookup extends MessageLookupByLibrary {
+   static String m104(count) =>
+       "${Intl.plural(count, one: '${count} г. назад', few: '${count} г. назад', many: '${count} лет назад', other: '${count} г. назад')}";
+ 
++  static String m105(reason) => "Режим недоступен: ${reason}";
++
++  static String m106(reason) => "Оба режима недоступны: ${reason}";
++
++  static String m107(attempts) => "неудачных попыток подряд: ${attempts}";
++
+   final messages = _notInlinedMessages(_notInlinedMessages);
+   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
+     "about": MessageLookupByLibrary.simpleMessage("О программе"),
+@@ -1461,7 +1467,10 @@ class MessageLookup extends MessageLookupByLibrary {
+     "portTip": m63,
+     "portValue": m64,
+     "portalOff": MessageLookupByLibrary.simpleMessage("Портал погашен"),
++    "portalModeUnavailable": m105,
++    "portalModesUnavailable": m106,
+     "portalStartFailed": m65,
++    "portalStrikes": m107,
+     "portalSwitchFailed": m66,
+     "ports": MessageLookupByLibrary.simpleMessage("Порты"),
+     "preChannelTip": MessageLookupByLibrary.simpleMessage(
+diff --git a/lib/l10n/intl/messages_zh_CN.dart b/lib/l10n/intl/messages_zh_CN.dart
+index ea2c8877..dc583a1d 100644
+--- a/lib/l10n/intl/messages_zh_CN.dart
++++ b/lib/l10n/intl/messages_zh_CN.dart
+@@ -242,6 +242,12 @@ class MessageLookup extends MessageLookupByLibrary {
+ 
+   static String m104(count) => "${count} 年前";
+ 
++
++  static String m105(reason) => "该模式不可用：${reason}";
++
++  static String m106(reason) => "两种模式均不可用：${reason}";
++
++  static String m107(attempts) => "连续失败次数：${attempts}";
+   final messages = _notInlinedMessages(_notInlinedMessages);
+   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
+     "about": MessageLookupByLibrary.simpleMessage("关于"),
+@@ -1076,7 +1082,10 @@ class MessageLookup extends MessageLookupByLibrary {
+     "portHopping": MessageLookupByLibrary.simpleMessage("端口跳跃"),
+     "portTip": m63,
+     "portValue": m64,
++    "portalModeUnavailable": m105,
++    "portalModesUnavailable": m106,
+     "portalStartFailed": m65,
++    "portalStrikes": m107,
+     "portalSwitchFailed": m66,
+     "ports": MessageLookupByLibrary.simpleMessage("端口"),
+     "preChannelTip": MessageLookupByLibrary.simpleMessage(
+diff --git a/lib/l10n/l10n.dart b/lib/l10n/l10n.dart
+index 3ac4ea19..70162790 100644
+--- a/lib/l10n/l10n.dart
++++ b/lib/l10n/l10n.dart
+@@ -9090,6 +9090,36 @@ class AppLocalizations {
+       args: [reason],
+     );
+   }
++
++  /// `This mode is unavailable: {reason}`
++  String portalModeUnavailable(Object reason) {
++    return Intl.message(
++      'This mode is unavailable: $reason',
++      name: 'portalModeUnavailable',
++      desc: '',
++      args: [reason],
++    );
++  }
++
++  /// `Both modes are unavailable: {reason}`
++  String portalModesUnavailable(Object reason) {
++    return Intl.message(
++      'Both modes are unavailable: $reason',
++      name: 'portalModesUnavailable',
++      desc: '',
++      args: [reason],
++    );
++  }
++
++  /// `failed attempts in a row: {attempts}`
++  String portalStrikes(Object attempts) {
++    return Intl.message(
++      'failed attempts in a row: $attempts',
++      name: 'portalStrikes',
++      desc: '',
++      args: [attempts],
++    );
++  }
+ }
+ 
+ class AppLocalizationDelegate extends LocalizationsDelegate<AppLocalizations> {
+diff --git a/lib/models/profile.dart b/lib/models/profile.dart
+index b59db39f..4208863d 100644
+--- a/lib/models/profile.dart
++++ b/lib/models/profile.dart
+@@ -8,7 +8,9 @@ import 'package:fl_clash/common/common.dart';
+ import 'package:fl_clash/core/subscription_availability.dart';
+ import 'package:fl_clash/core/panel_api.dart';
+ import 'package:fl_clash/core/proxy_endpoints.dart';
++import 'package:fl_clash/core/portal_feed.dart';
+ import 'package:fl_clash/core/subscription_formats.dart';
++import 'package:fl_clash/core/xray_subscription.dart';
+ import 'package:fl_clash/enum/enum.dart';
+ import 'package:freezed_annotation/freezed_annotation.dart';
+ 
+@@ -299,7 +301,19 @@ extension ProfileExtension on Profile {
+     Duration timeout,
+     bool Function()? isCurrent,
+   ) async {
+-    final response = await fetch(url, timeout: timeout, headers: headers);
++    final Response<Uint8List> response;
++    try {
++      response = await fetch(url, timeout: timeout, headers: headers);
++    } catch (error) {
++      // One attempt, one count: the engine's own document did not arrive at all. Counted here
++      // rather than at the caller because this is the request the mode depends on.
++      portalFeeds.note(
++        PortalFeed.engine,
++        ok: false,
++        reason: _attemptReason(error),
++      );
++      rethrow;
++    }
+     // The same link answers differently per client, so the second format is asked for
+     // separately. A failure here must not fail the profile: the panel may simply not
+     // serve one, and that is a red light, not an error.
+@@ -325,22 +339,50 @@ extension ProfileExtension on Profile {
+     // The panel names its servers behind its own API, so the same link is asked once for the
+     // names. A failure here is normal (a panel without that endpoint) and changes nothing.
+     unawaited(_probePanelNames(url));
+-    return copyWith(
+-      label: label.takeFirstValid([
+-        ProviderHeaders(providerHeaders).title,
+-        getFileNameForDisposition(disposition),
+-        defaultLabel,
+-      ]),
+-      subscriptionInfo: SubscriptionInfo.formHString(userinfo),
+-      providerHeaders: providerHeaders,
+-      autoUpdateDuration:
+-          ProviderHeaders(providerHeaders).updateInterval ?? autoUpdateDuration,
+-    ).saveFile(
+-      await decompressDownload(response.data ?? Uint8List(0)),
+-      validate: _guardEmptyBody(validate),
+-      isCurrent: isCurrent,
+-      xrayBody: xray,
+-    );
++    final statusOk = (response.statusCode ?? 0) >= 200 && (response.statusCode ?? 0) < 300;
++    try {
++      final saved = await copyWith(
++        label: label.takeFirstValid([
++          ProviderHeaders(providerHeaders).title,
++          getFileNameForDisposition(disposition),
++          defaultLabel,
++        ]),
++        subscriptionInfo: SubscriptionInfo.formHString(userinfo),
++        providerHeaders: providerHeaders,
++        autoUpdateDuration:
++            ProviderHeaders(providerHeaders).updateInterval ?? autoUpdateDuration,
++      ).saveFile(
++        await decompressDownload(response.data ?? Uint8List(0)),
++        validate: _guardEmptyBody(validate),
++        isCurrent: isCurrent,
++        xrayBody: xray,
++      );
++      // The save is the engine feed's own verdict: the body parsed, the core accepted it and
++      // the file was published. A refusal below is the other half of the same judgement.
++      portalFeeds.note(
++        PortalFeed.engine,
++        ok: statusOk,
++        reason: statusOk ? '' : 'http ${response.statusCode}',
++      );
++      return saved;
++    } on ProfileUpdateSupersededException {
++      // A newer update owns this profile now. That is not a failed fetch, and counting it
++      // would turn a fast double-tap into a strike against the mode.
++      rethrow;
++    } catch (error) {
++      portalFeeds.note(
++        PortalFeed.engine,
++        ok: false,
++        reason: 'http ${response.statusCode} · ${_attemptReason(error)}',
++      );
++      rethrow;
++    }
++  }
++
++  /// A failure in the words the count keeps: short, one line, no credentials.
++  static String _attemptReason(Object error) {
++    final text = compactError(error).split('\n').first.trim();
++    return text.length <= 120 ? text : '${text.substring(0, 120)}…';
+   }
+ 
+   /// The publishing rename is sync, so nothing runs between [isCurrent] and it.
+@@ -471,6 +513,7 @@ extension ProfileExtension on Profile {
+     SubscriptionFetch fetch,
+     Duration timeout,
+   ) async {
++    var note = 'no client name was answered';
+     for (final agent in xrayUserAgentCandidates) {
+       try {
+         final response = await fetch(
+@@ -481,18 +524,40 @@ extension ProfileExtension on Profile {
+         final body = response.data;
+         final text = body == null ? '' : utf8.decode(body, allowMalformed: true);
+         final format = detectFormat(text);
++        final servers = format == SubscriptionFormat.xray ? _serverCountOf(text) : 0;
++        note = 'http ${response.statusCode} '
++            '${format?.name ?? 'no format'} '
++            '${servers == 0 ? 'no servers' : '$servers servers'}';
+         commonPrint.log(
+           'xray probe [$agent]: http=${response.statusCode} '
+           'bytes=${body?.length ?? 0} format=${format?.name ?? 'none'} '
++          'servers=$servers '
+           'head=${text.length > 120 ? text.substring(0, 120).replaceAll('\n', ' ') : text}',
+         );
+-        if (body != null && format == SubscriptionFormat.xray) return body;
++        // The right shape is not yet an answer: a config with nothing to run is the "zero
++        // servers" case, and the simple portal has nothing to start with it.
++        if (body != null && format == SubscriptionFormat.xray && servers > 0) {
++          portalFeeds.note(PortalFeed.xray, ok: true);
++          return body;
++        }
+       } catch (error) {
++        note = _attemptReason(error);
+         commonPrint.log('xray probe [$agent]: ${compactError(error)}');
+       }
+     }
++    // Every client name was asked and none answered with nodes: that is one failed attempt
++    // at this feed, and the second core's mode keeps its own count of them.
++    portalFeeds.note(PortalFeed.xray, ok: false, reason: note);
+     return null;
+   }
++
++  /// How many servers a body of the second core's format actually holds.
++  ///
++  /// Two shapes are accepted and they parse differently: a list of share links, and a panel's
++  /// ready client config (one, or an array of them). Counting both here is what makes "zero
++  /// servers" a fact rather than a guess.
++  static int _serverCountOf(String body) =>
++      parseShareLinks(body).length + parseXraySubscription(body).length;
+ }
+ 
+ typedef SubscriptionFetch =
+diff --git a/lib/plugins/portal_runtime.dart b/lib/plugins/portal_runtime.dart
+index 43813a63..bf321803 100644
+--- a/lib/plugins/portal_runtime.dart
++++ b/lib/plugins/portal_runtime.dart
+@@ -234,6 +234,38 @@ class PortalRuntime {
+     }
+   }
+ 
++  /// One attempt at a mode's own feed, for the file adb can read.
++  ///
++  /// The count is Dart's — it describes this run's attempts, not the files on disk — so it is
++  /// handed to the record rather than derived there. A build without the channel (desktop)
++  /// has no `portal-transitions.log` and drops the line.
++  Future<void> noteAvailability({
++    required String feed,
++    required String mode,
++    required int attempts,
++    required int limit,
++    required String state,
++    String reason = '',
++  }) async {
++    try {
++      await _channel.invokeMethod<void>('availabilityNote', {
++        'feed': feed,
++        'mode': mode,
++        'attempts': attempts,
++        'limit': limit,
++        'state': state,
++        'reason': reason,
++      });
++    } on MissingPluginException {
++      // No portal runtime here: nothing to write.
++    } on PlatformException catch (error) {
++      commonPrint.log(
++        'portal availability note failed: ${error.message}',
++        logLevel: LogLevel.warning,
++      );
++    }
++  }
++
+   Future<PortalRuntimeStatus> refresh() async {
+     try {
+       final result = await _channel.invokeMethod<Map<Object?, Object?>>('status');
+diff --git a/lib/providers/action.dart b/lib/providers/action.dart
+index 99d92b8e..62366b3b 100644
+--- a/lib/providers/action.dart
++++ b/lib/providers/action.dart
+@@ -7,6 +7,7 @@ import 'package:fl_clash/common/boot_guard.dart';
+ import 'package:fl_clash/common/common.dart';
+ import 'package:fl_clash/common/system_dns.dart';
+ import 'package:fl_clash/core/core.dart';
++import 'package:fl_clash/core/portal_feed.dart';
+ import 'package:fl_clash/core/xray_subscription.dart';
+ import 'package:fl_clash/database/database.dart';
+ import 'package:fl_clash/enum/enum.dart';
+diff --git a/lib/providers/actions/setup.dart b/lib/providers/actions/setup.dart
+index cef547fc..30af3053 100644
+--- a/lib/providers/actions/setup.dart
++++ b/lib/providers/actions/setup.dart
+@@ -260,6 +260,23 @@ class SetupAction extends _$SetupAction {
+     bool resume = false,
+     bool undoesFailedStart = false,
+   }) {
++    if (running) {
++      // The last line of defence, for the entries that start the portal without asking which
++      // mode to enter: Quick Settings, Always-on, a restore. A mode whose document stopped
++      // answering three fetches ago must not open a tunnel nothing can carry.
++      final denial = _feedDenial(
++        ref.read(patchClashConfigProvider.select((state) => state.mode)),
++      );
++      if (denial != null) {
++        _lastPortalFailure = denial;
++        commonPrint.log(
++          'portal not opened: $denial',
++          logLevel: LogLevel.warning,
++        );
++        _setLocalRunning(false);
++        return Future.value(false);
++      }
++    }
+     final request = _RunRequest(
+       running: running,
+       initialize: initialize,
+@@ -776,6 +793,17 @@ class SetupAction extends _$SetupAction {
+     if (!ref.read(availableModesProvider).contains(mode)) {
+       return PortalCoreResult.unavailable('the mode ${mode.name} is not offered here');
+     }
++    // The mode's own document has to still be answering. Three failed fetches in a row take
++    // the mode off every entry at once, because this is the one place they all come through —
++    // the switch, the tray, the hotkey and Quick Settings.
++    final denial = _feedDenial(mode);
++    if (denial != null) {
++      commonPrint.log(
++        'mode ${mode.name} refused: $denial',
++        logLevel: LogLevel.warning,
++      );
++      return PortalCoreResult.unavailable(denial);
++    }
+     final managed = ref.read(managedSettingsActionProvider.notifier);
+     if (!ask) {
+       managed.takeOverIfLocked('clash.mode');
+@@ -786,6 +814,19 @@ class SetupAction extends _$SetupAction {
+     return const PortalCoreResult.ok();
+   }
+ 
++  /// The feed a mode needs, or null for a mode that has none (desktop's own modes).
++  PortalFeed? _feedOf(Mode mode) => switch (mode) {
++        Mode.global => PortalFeed.xray,
++        Mode.rule => PortalFeed.engine,
++        _ => null,
++      };
++
++  /// Why this mode must not be entered, or null while its document still answers.
++  String? _feedDenial(Mode mode) {
++    final feed = _feedOf(mode);
++    return feed == null ? null : portalFeeds.denialOf(feed);
++  }
++
+   void changeMode(Mode mode) {
+     if (!ref.read(availableModesProvider).contains(mode)) return;
+     ref
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 084b3837..4c6fdaa4 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -11,6 +11,8 @@ import 'package:material_ui/material_ui.dart';
+ import 'package:fl_clash/common/outbound.dart';
+ import 'package:fl_clash/core/xray_ping.dart';
+ import 'package:fl_clash/core/xray_subscription.dart';
++import 'package:fl_clash/core/portal_feed.dart';
++import 'package:fl_clash/l10n/l10n.dart';
+ import '../profiles/subscription_facts.dart';
+ import 'package:fl_clash/plugins/portal_runtime.dart';
+ import 'package:fl_clash/plugins/portal_switch_timing.dart';
+@@ -398,6 +400,79 @@ final portalStatusProvider =
+     NotifierProvider<PortalStatusNotifier, PortalRuntimeStatus>(
+         PortalStatusNotifier.new);
+ 
++/// Both feeds' counts, as a provider, so a control redraws the moment one moves.
++///
++/// The ledger itself is a plain [PortalFeeds] on purpose: the fetch path (a model, no widget,
++/// no container) has to be able to count an attempt, and a failed download must be counted
++/// whether or not the dashboard is open.
++class PortalFeedsNotifier extends Notifier<Map<PortalFeed, FeedStrikes>> {
++  @override
++  Map<PortalFeed, FeedStrikes> build() {
++    void onChange() => state = portalFeeds.snapshot;
++    portalFeeds.addListener(onChange);
++    ref.onDispose(() => portalFeeds.removeListener(onChange));
++    return portalFeeds.snapshot;
++  }
++}
++
++final portalFeedsProvider =
++    NotifierProvider<PortalFeedsNotifier, Map<PortalFeed, FeedStrikes>>(
++        PortalFeedsNotifier.new);
++
++/// One mode's answer, as the controls read it.
++typedef ModeAvailability = ({
++  bool available,
++  FeedStrikes strikes,
++  String reason,
++});
++
++/// Whether each mode can be entered, and why not.
++///
++/// Two facts per mode, and the stricter one wins: the app's own count of failed attempts at
++/// this subscription ([portalFeeds]), and the document already on disk, which is all a fresh
++/// start has before any fetch. The count is what makes a panel answering `502` visible at
++/// all: the file it left behind is still a working config, so the file alone would keep
++/// offering a mode whose every new fetch fails. Unknown — still loading — counts as
++/// available, so a control never flickers off while the answer is on its way.
++final portalAvailabilityProvider =
++    Provider<({ModeAvailability engine, ModeAvailability xray})>((ref) {
++  final strikes = ref.watch(portalFeedsProvider);
++  final engineFile = ref.watch(engineFormatStatusProvider).value;
++  final servers = ref.watch(xrayServersProvider).value;
++  final engineStrikes = strikes[PortalFeed.engine] ?? const FeedStrikes();
++  final xrayStrikes = strikes[PortalFeed.xray] ?? const FeedStrikes();
++  final fileProblem = engineFile == null || engineFile.status == EngineFormatStatus.ok
++      ? ''
++      : engineFile.reason;
++  // No nodes is not a slow answer: the simple portal has nothing to start with, and the
++  // switch has to say so rather than open a portal that carries no traffic.
++  final noServers = servers != null && servers.isEmpty;
++  return (
++    engine: (
++      available: !engineStrikes.blocked && fileProblem.isEmpty,
++      strikes: engineStrikes,
++      reason: engineStrikes.blocked ? engineStrikes.reason : fileProblem,
++    ),
++    xray: (
++      available: !xrayStrikes.blocked && !noServers,
++      strikes: xrayStrikes,
++      reason: xrayStrikes.blocked
++          ? xrayStrikes.reason
++          : (noServers ? 'this subscription carries no nodes for the portal' : ''),
++    ),
++  );
++});
++
++/// A refusal's reason, with the count in the reader's own language.
++///
++/// The count is the fact the owner can act on ("it failed three times"), and the detail is
++/// the last failure's own words (`http 502`), which is what a support question needs.
++String _availabilityReason(AppLocalizations l10n, ModeAvailability availability) {
++  final strikes = availability.strikes;
++  if (!strikes.blocked) return availability.reason;
++  return '${l10n.portalStrikes(strikes.failures)} (${strikes.reason})';
++}
++
+ /// The rows this mode draws, from the owner that answers or from the mode's own source.
+ ///
+ /// The two modes read one subscription in two formats, and each mode reads only its own:
+@@ -667,140 +742,191 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
+     );
+     final group = shown.group;
+     final sort = ref.watch(portalSortProvider);
+-    final engineCheck = ref.watch(engineFormatStatusProvider).value;
+-    final engineFormat = engineCheck?.status ?? EngineFormatStatus.ok;
+-    final engineAvailable = engineFormat == EngineFormatStatus.ok;
+-    final engineReason = engineCheck?.reason ?? '';
++    // Both modes answer through one provider: what is on disk, and how many times in a row
++    // this run has failed to fetch it. Each control speaks only for its own mode, and the
++    // stricter answer wins.
++    final availability = ref.watch(portalAvailabilityProvider);
++    final engineAvailable = availability.engine.available;
++    final xrayAvailable = availability.xray.available;
++    final engineReason = engineAvailable
++        ? ''
++        : context.appLocalizations
++            .engineFormatUnusable(_availabilityReason(context.appLocalizations, availability.engine));
++    final xrayReason = xrayAvailable
++        ? ''
++        : context.appLocalizations
++            .portalModeUnavailable(_availabilityReason(context.appLocalizations, availability.xray));
++    // Both dark is its own sentence: it names both reasons once, instead of leaving the
++    // owner to work out why neither side of the switch moves.
++    final bothUnavailable = !engineAvailable && !xrayAvailable;
++    final shownReason = bothUnavailable
++        ? context.appLocalizations.portalModesUnavailable(
++            [availability.engine.reason, availability.xray.reason]
++                .where((reason) => reason.isNotEmpty)
++                .join(' · '),
++          )
++        : (simple ? engineReason : xrayReason);
+     final testing = group != null &&
+         ref.watch(
+           delayTestingGroupsProvider.select((s) => s.contains(group.name)),
+         );
+     if (modes.length < 2) return const SizedBox.shrink();
+-    return Row(
++    return Column(
++      mainAxisSize: MainAxisSize.min,
++      crossAxisAlignment: CrossAxisAlignment.start,
+       children: [
+-        // Switch at the left edge, its label to the right of it.
+-        // Centred pair: a larger label in the legacy green while the network is on,
+-        // and a switch that reads as a switch. The editor button only exists in the
+-        // network mode, so 'Сеть порталов' has somewhere obvious to lead.
+-        GestureDetector(
+-          // A plain tap on 'Сеть порталов' opens the proxies dashboard: that is what
+-          // the network mode is for. The double tap still edits the filter strip.
+-          onTap: () => Navigator.of(context).push(
+-            MaterialPageRoute(builder: (_) => const ProxiesView()),
+-          ),
++        Row(
++          children: [
++            // Switch at the left edge, its label to the right of it.
++            // Centred pair: a larger label in the legacy green while the network is on,
++            // and a switch that reads as a switch. The editor button only exists in the
++            // network mode, so 'Сеть порталов' has somewhere obvious to lead.
++            GestureDetector(
++              // A plain tap on 'Сеть порталов' opens the proxies dashboard: that is what
++              // the network mode is for. The double tap still edits the filter strip.
++              onTap: () => Navigator.of(context).push(
++                MaterialPageRoute(builder: (_) => const ProxiesView()),
++              ),
+ 
+-          child: Row(
+-            mainAxisSize: MainAxisSize.min,
+-            children: [
+-              // A dead switch says why it is dead: the reason is the file's own, carried
+-              // from the check that refused it instead of a generic "unavailable".
+-              Tooltip(
+-                message: engineAvailable
+-                    ? ''
+-                    : context.appLocalizations.engineFormatUnusable(
+-                        engineReason,
+-                      ),
+-                child: Switch(
+-                  value: mode == Mode.rule && engineAvailable,
+-                  activeThumbColor: _liveGreen(context),
+-                  activeTrackColor: _liveGreen(context).withValues(alpha: 0.4),
+-                  // No engine format, no rules: the control stays visible but dead, so the
+-                  // owner sees why instead of a switch that does nothing.
+-                  onChanged: !engineAvailable
+-                      ? null
+-                      : (value) {
+-                          HapticFeedback.selectionClick();
+-                          // The thumb has already moved; the portal underneath either
+-                          // comes up on the other core or comes back exactly as it was.
+-                          unawaited(
+-                            _switchPortal(ref, toSimple: !value),
+-                          );
+-                        },
+-                ),
++              child: Row(
++                mainAxisSize: MainAxisSize.min,
++                children: [
++                  // A dead switch says why it is dead: the reason is the file's own, carried
++                  // from the check that refused it instead of a generic "unavailable".
++                  Tooltip(
++                    message: bothUnavailable
++                        ? shownReason
++                        : (simple ? engineReason : xrayReason),
++                    child: Switch(
++                      // The thumb tells the truth about the mode the app is in, even when that
++                      // mode has just gone dark: a portal that keeps working on its last good
++                      // config must not look switched off.
++                      value: mode == Mode.rule,
++                      activeThumbColor: _liveGreen(context),
++                      activeTrackColor: _liveGreen(context).withValues(alpha: 0.4),
++                      // Dead only when neither side can be entered. With one side alive the
++                      // switch stays live and the direction that is not offered refuses with its
++                      // own reason, because a control that moves and snaps back teaches nothing.
++                      onChanged: bothUnavailable
++                          ? null
++                          : (value) {
++                              if (value ? !engineAvailable : !xrayAvailable) {
++                                HapticFeedback.vibrate();
++                                dialogs.showNotifier(
++                                  value ? engineReason : xrayReason,
++                                  level: MessageLevel.warning,
++                                );
++                                return;
++                              }
++                              HapticFeedback.selectionClick();
++                              // The thumb has already moved; the portal underneath either
++                              // comes up on the other core or comes back exactly as it was.
++                              unawaited(
++                                _switchPortal(ref, toSimple: !value),
++                              );
++                            },
++                    ),
++                  ),
++                  const SizedBox(width: 8),
++                  Text(
++                    context.appLocalizations.rules,
++                    style: theme.textTheme.titleMedium?.copyWith(
++                      color: mode == Mode.rule
++                          ? _liveGreen(context)
++                          : theme.colorScheme.onSurfaceVariant,
++                      fontWeight: FontWeight.w600,
++                    ),
++                  ),
++                ],
+               ),
+-              const SizedBox(width: 8),
+-              Text(
+-                context.appLocalizations.rules,
+-                style: theme.textTheme.titleMedium?.copyWith(
+-                  color: mode == Mode.rule
+-                      ? _liveGreen(context)
+-                      : theme.colorScheme.onSurfaceVariant,
+-                  fontWeight: FontWeight.w600,
+-                ),
++            ),
++            const Spacer(),
++            const SizedBox(width: 4),
++            IconButton(
++              tooltip: context.appLocalizations.sortTooltip(sortLabelFor(context, sort)),
++              onPressed: () {
++                HapticFeedback.selectionClick();
++                ref.read(portalSortProvider.notifier).cycle();
++              },
++              icon: GlyphIcon(
++                switch (sort) {
++                  PortalSort.subscription => AppGlyphs.sliders,
++                  PortalSort.ping => AppGlyphs.sort,
++                  PortalSort.alphabet => AppGlyphs.textShort,
++                },
++                size: 18,
+               ),
+-            ],
+-          ),
+-        ),
+-        const Spacer(),
+-        const SizedBox(width: 4),
+-        IconButton(
+-          tooltip: context.appLocalizations.sortTooltip(sortLabelFor(context, sort)),
+-          onPressed: () {
+-            HapticFeedback.selectionClick();
+-            ref.read(portalSortProvider.notifier).cycle();
+-          },
+-          icon: GlyphIcon(
+-            switch (sort) {
+-              PortalSort.subscription => AppGlyphs.sliders,
+-              PortalSort.ping => AppGlyphs.sort,
+-              PortalSort.alphabet => AppGlyphs.textShort,
+-            },
+-            size: 18,
+-          ),
+-        ),
+-        IconButton(
+-          tooltip: context.appLocalizations.delayTest,
+-          // A delay test says which servers answer, so it must not depend on the portal
+-          // being open: the test wakes the engine for its duration and closes it again.
+-          onPressed: testing
+-              ? null
+-              : () {
+-                  HapticFeedback.mediumImpact();
+-                  // In the simple portal the list is the second core's, so the engine test
+-                  // has nothing to measure — its own servers are timed directly instead, and
+-                  // a fake address is a dash there. In the network mode the engine holds
+-                  // every server of the list and answers with its own proxied delay, which is
+-                  // the only number that is a fact about the node rather than about a
+-                  // handshake the phone performed to a local listener.
+-                  final servers = ref.read(xrayServersProvider).value ?? const [];
+-                  final targets = <(String, String, int)>[
+-                    for (final server in servers)
+-                      if (server.port > 0) (server.name, server.address, server.port),
+-                  ];
+-                  if (targets.isNotEmpty) {
+-                    unawaited(
+-                      ref.read(tcpDelayProvider.notifier).measureAll(targets),
+-                    );
+-                    return;
+-                  }
+-                  if (group == null) return;
+-                  unawaited(
+-                    _testDelayWithEngine(
+-                      ref,
+-                      [
+-                        for (final proxy in group.all)
+-                          if (!_isBuiltinOutbound(proxy.name)) proxy,
+-                      ],
+-                      testUrl: group.testUrl,
+-                      wasRunning: running,
++            ),
++            IconButton(
++              tooltip: context.appLocalizations.delayTest,
++              // A delay test says which servers answer, so it must not depend on the portal
++              // being open: the test wakes the engine for its duration and closes it again.
++              onPressed: testing
++                  ? null
++                  : () {
++                      HapticFeedback.mediumImpact();
++                      // In the simple portal the list is the second core's, so the engine test
++                      // has nothing to measure — its own servers are timed directly instead, and
++                      // a fake address is a dash there. In the network mode the engine holds
++                      // every server of the list and answers with its own proxied delay, which is
++                      // the only number that is a fact about the node rather than about a
++                      // handshake the phone performed to a local listener.
++                      final servers = ref.read(xrayServersProvider).value ?? const [];
++                      final targets = <(String, String, int)>[
++                        for (final server in servers)
++                          if (server.port > 0) (server.name, server.address, server.port),
++                      ];
++                      if (targets.isNotEmpty) {
++                        unawaited(
++                          ref.read(tcpDelayProvider.notifier).measureAll(targets),
++                        );
++                        return;
++                      }
++                      if (group == null) return;
++                      unawaited(
++                        _testDelayWithEngine(
++                          ref,
++                          [
++                            for (final proxy in group.all)
++                              if (!_isBuiltinOutbound(proxy.name)) proxy,
++                          ],
++                          testUrl: group.testUrl,
++                          wasRunning: running,
++                        ),
++                      );
++                    },
++              // A test in flight spins instead of pretending nothing is happening.
++              icon: testing
++                  ? SizedBox.square(
++                      dimension: 16,
++                      child: CircularProgressIndicator(
++                        strokeWidth: 2,
++                        color: theme.colorScheme.primary,
++                      ),
++                    )
++                  : GlyphIcon(
++                      AppGlyphs.bolt,
++                      size: 18,
++                      color: theme.colorScheme.onSurfaceVariant,
+                     ),
+-                  );
+-                },
+-          // A test in flight spins instead of pretending nothing is happening.
+-          icon: testing
+-              ? SizedBox.square(
+-                  dimension: 16,
+-                  child: CircularProgressIndicator(
+-                    strokeWidth: 2,
+-                    color: theme.colorScheme.primary,
+-                  ),
+-                )
+-              : GlyphIcon(
+-                  AppGlyphs.bolt,
+-                  size: 18,
+-                  color: theme.colorScheme.onSurfaceVariant,
+-                ),
++            ),
++          ],
+         ),
++        // One line, not a tooltip: a phone has to say why a control does not move without
++        // being long-pressed first. Two lines at most, so a long reason cannot push the list
++        // off the dashboard.
++        if (shownReason.isNotEmpty)
++          Padding(
++            padding: const EdgeInsets.only(left: 4, top: 2),
++            child: Text(
++              shownReason,
++              maxLines: 2,
++              overflow: TextOverflow.ellipsis,
++              style: theme.textTheme.bodySmall?.copyWith(
++                color: theme.colorScheme.error,
++              ),
++            ),
++          ),
+       ],
+     );
+   }
+@@ -1246,6 +1372,25 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
+   @override
+   Widget build(BuildContext context) {
+     final theme = Theme.of(context);
++    // The strip picks which split-tunnel filter the network mode's list is drawn under, and
++    // the filters come from the engine's own config. Without a usable engine format there are
++    // no filters to pick — the strip says that instead of offering chips that choose nothing.
++    final availability = ref.watch(portalAvailabilityProvider);
++    if (!availability.engine.available) {
++      return Padding(
++        padding: const EdgeInsets.symmetric(vertical: 4),
++        child: Text(
++          context.appLocalizations.engineFormatUnusable(
++            _availabilityReason(context.appLocalizations, availability.engine),
++          ),
++          maxLines: 2,
++          overflow: TextOverflow.ellipsis,
++          style: theme.textTheme.bodySmall?.copyWith(
++            color: theme.colorScheme.error,
++          ),
++        ),
++      );
++    }
+     final allGroups = ref.watch(groupsProvider);
+     final filters = ref.watch(portalFiltersProvider);
+     final groups = portalVisibleGroups(allGroups, filters.hidden, filters.order);
+@@ -1897,6 +2042,22 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
+   // moving the portal; this one waits for it rather than racing it, and the tap is simply
+   // dropped, which is what the owner asked for by tapping once.
+   if (portalRuntime.status.value.busy) return;
++  // The mode that is not offered is refused before anything is torn down. Stopping the
++  // running portal only to discover that the other mode cannot start leaves the owner with
++  // nothing open and a rollback to read; the reason is the whole answer.
++  final target = toSimple
++      ? ref.read(portalAvailabilityProvider).xray
++      : ref.read(portalAvailabilityProvider).engine;
++  if (!target.available) {
++    final reason = _availabilityReason(currentAppLocalizations, target);
++    dialogs.showNotifier(
++      toSimple
++          ? currentAppLocalizations.portalModeUnavailable(reason)
++          : currentAppLocalizations.engineFormatUnusable(reason),
++      level: MessageLevel.warning,
++    );
++    return;
++  }
+   _portalSwitching = true;
+   // The tap is zero for both measurements: the record writes click → `phase=active` from its
+   // own hook, the screen writes click → rows once it has them.
+diff --git a/pubspec.yaml b/pubspec.yaml
+index 70ea2b3e..821401ba 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -1,7 +1,7 @@
+ name: fl_clash
+ description: FlClashX, a fork of FlClash - a multi-platform proxy client based on ClashMeta for Remnawave users.
+ publish_to: 'none'
+-version: 0.5.3-portal-duo-2b+2026111402
++version: 0.5.3-portal-duo-2c+2026111403
+ environment:
+   sdk: '>=3.10.0 <4.0.0'
+ 
+diff --git a/test/portal_feed_test.dart b/test/portal_feed_test.dart
+new file mode 100644
+index 00000000..aacdc79b
+--- /dev/null
++++ b/test/portal_feed_test.dart
+@@ -0,0 +1,63 @@
++import 'package:fl_clash/core/portal_feed.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++/// The rule the two modes live by: three failures in a row take a mode off, and only that
++/// mode's own success brings it back.
++void main() {
++  // The ledger writes its line through the portal channel; a unit test has no plugin behind
++  // it, so the binding has to exist for the call to come back as a missing handler (which the
++  // runtime catches) instead of "binding not initialized".
++  TestWidgetsFlutterBinding.ensureInitialized();
++  late PortalFeeds feeds;
++
++  setUp(() {
++    // The ledger is a process-wide singleton on purpose, so each case starts from the state
++    // it has before anything was fetched: no failures, nothing refused.
++    feeds = portalFeeds..note(PortalFeed.engine, ok: true)..note(PortalFeed.xray, ok: true);
++  });
++
++  test('a feed is offered until three failures in a row', () {
++    expect(feeds.denialOf(PortalFeed.engine), isNull);
++    feeds
++      ..note(PortalFeed.engine, ok: false, reason: 'http 502')
++      ..note(PortalFeed.engine, ok: false, reason: 'http 502');
++    expect(feeds.strikesOf(PortalFeed.engine).failures, 2);
++    expect(feeds.denialOf(PortalFeed.engine), isNull);
++
++    feeds.note(PortalFeed.engine, ok: false, reason: 'http 502');
++    expect(feeds.strikesOf(PortalFeed.engine).failures, portalFeedStrikeLimit);
++    expect(feeds.denialOf(PortalFeed.engine), contains('http 502'));
++  });
++
++  test('one feed failing leaves the other one alone', () {
++    for (var i = 0; i < portalFeedStrikeLimit; i++) {
++      feeds
++        ..note(PortalFeed.engine, ok: false, reason: 'http 502')
++        ..note(PortalFeed.xray, ok: true);
++    }
++    expect(feeds.strikesOf(PortalFeed.engine).blocked, isTrue);
++    expect(feeds.strikesOf(PortalFeed.xray).blocked, isFalse);
++    expect(feeds.denialOf(PortalFeed.xray), isNull);
++  });
++
++  test('a successful fetch of its own feed resets the count, without a restart', () {
++    for (var i = 0; i < portalFeedStrikeLimit; i++) {
++      feeds.note(PortalFeed.engine, ok: false, reason: 'http 502');
++    }
++    expect(feeds.denialOf(PortalFeed.engine), isNotNull);
++
++    feeds.note(PortalFeed.engine, ok: true);
++    expect(feeds.strikesOf(PortalFeed.engine).failures, 0);
++    expect(feeds.denialOf(PortalFeed.engine), isNull);
++  });
++
++  test('the two counters do not reset each other', () {
++    feeds
++      ..note(PortalFeed.engine, ok: false, reason: 'http 502')
++      ..note(PortalFeed.engine, ok: false, reason: 'http 502')
++      ..note(PortalFeed.xray, ok: true);
++    // The Xray success above is a fact about the node list only: the engine is still on its
++    // second strike, which is what makes the two counts independent.
++    expect(feeds.strikesOf(PortalFeed.engine).failures, 2);
++  });
++}

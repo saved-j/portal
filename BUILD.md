@@ -225,6 +225,22 @@ engine's groups — or, with the portal closed, the engine's own last answer for
 then the profile's engine-format `proxies:`. Neither mode can draw the other's names, and a
 group held from the other mode is dropped when the mode changes.
 
+A mode whose document stops arriving is taken off, and the same file says why:
+
+```
+time=... kind=availability feed=engine mode=rule attempts=3/3 state=unavailable reason=http 502 · …
+time=... kind=availability feed=xray mode=global attempts=0/3 state=ok
+```
+
+One line per fetch attempt, one counter per document: the engine's own format (`feed=engine`,
+which the network mode needs) and the node list the second core runs (`feed=xray`, which the
+simple portal needs). A body that arrives but does not parse, carries no servers, or is not the
+format its mode needs counts as a failure like a `502` does; three failures in a row are what
+turn the mode off, and that document's next successful fetch — of *that* document — sets its
+counter back to `0` with `outcome=reset`. Neither counter resets the other, and none of it
+survives a restart on purpose: the counters describe this run's attempts, while the profile
+files keep the last good download.
+
 A delay is measured by the core that holds the server, and by nothing else. The engine's rows
 carry the engine's own delay, taken through the tunnel it built. The simple portal's rows carry
 a TCP handshake timed by this process against the node's resolved address — and a node name
