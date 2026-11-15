@@ -15,8 +15,8 @@
     {
       "group": "10-core-network",
       "file": "patches/10-core-network.mbox",
-      "bytes": 36581,
-      "sha256": "6a8e9116800c766e5d2cc8e932877596db510538df73805a0ee1e4fab09ef0c5",
+      "bytes": 39110,
+      "sha256": "8b89c8c24530cbc4840f6f0f4792271c7036c11e894736fa110a20b1c38238b1",
       "paths": [
         "core",
         "docs/DPI.md",
@@ -26,8 +26,8 @@
     {
       "group": "20-brand-assets",
       "file": "patches/20-brand-assets.mbox",
-      "bytes": 8416675,
-      "sha256": "a16c76281732a9c2852762736f7933b847a5c245091f26823ef0d270801d049e",
+      "bytes": 8418669,
+      "sha256": "1718847cfeec35c419fc82ace89f7a7e37828e50495c591df903abb01caa358e",
       "paths": [
         "android/app/build.gradle.kts",
         "android/app/src/main/AndroidManifest.xml",
