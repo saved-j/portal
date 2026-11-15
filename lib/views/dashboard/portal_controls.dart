@@ -1738,6 +1738,16 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
         );
       }
     } else {
+      // The simple portal never pushed an engine config — that is exactly what "only Xray"
+      // means — so the engine comes back with nothing applied: its groups read as empty and
+      // the core answers "config is not applied". The profile has to be pushed before the
+      // mode is asked for, or the network mode has no servers to show.
+      final applied = await setup.applyProfile(force: true);
+      if (!applied) {
+        throw const _PortalSwitchFailure(
+          'the portal network could not be applied: the profile was rejected',
+        );
+      }
       final mode = await setup.pickMode(Mode.rule);
       if (!mode.ok) {
         throw _PortalSwitchFailure(

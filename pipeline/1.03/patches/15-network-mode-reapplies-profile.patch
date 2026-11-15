@@ -1,3 +1,12 @@
+# 15 - going back to the portal network pushes the profile before it asks for the mode
+#
+# The simple portal deliberately pushes no engine config, so on the way back the engine has
+# nothing applied: its groups read empty and the core answers "Config is not applied", which is
+# the empty server list the owner saw. The return path now pushes the profile — forced, because
+# nothing it could compare against was ever applied — and refuses the switch with its own
+# sentence if the profile is rejected, before the mode is asked for. A mode is not reported as
+# entered unless the engine it hands over to actually has the profile to serve.
+
 diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
 index edcdae5f..8ffbc69b 100644
 --- a/lib/views/dashboard/portal_controls.dart
