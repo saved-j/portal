@@ -2610,11 +2610,31 @@ index 0000000000000000000000000000000000000000..b6df1592a65d2d16321dfc30ef593c64
 +  final n = math.sin(value * 127.1 + 311.7) * 43758.5453123;
 +  return n - n.floorToDouble();
 +}
+diff --git a/lib/views/dashboard/widgets/card.dart b/lib/views/dashboard/widgets/card.dart
+index 965e345610f544f19bb42baf6f047b9c6ddda8fd..15c8f4c341da044eba91e191ab16edfc3805079d 100644
+--- a/lib/views/dashboard/widgets/card.dart
++++ b/lib/views/dashboard/widgets/card.dart
+@@ -8,7 +8,8 @@ import 'package:fl_clash/views/dashboard/style.dart';
+ import 'package:fl_clash/widgets/widgets.dart';
+ import 'package:flutter/rendering.dart';
+ import 'package:material_new_shapes/material_new_shapes.dart';
+-import 'package:material_ui/material_ui.dart';
++// MaterialShapes is exported by both packages; take it from material_new_shapes.
++import 'package:material_ui/material_ui.dart' hide MaterialShapes, RoundedPolygon;
+ 
+ EdgeInsets dashboardCardPadding(DashboardDensity density) => switch (density) {
+   DashboardDensity.standard => const EdgeInsets.symmetric(
 diff --git a/lib/views/dashboard/widgets/current_outbound.dart b/lib/views/dashboard/widgets/current_outbound.dart
-index b788b55a5f7483ac5ccd893ec89d6a745a90bdb5..da5063139c0d9964d2d1dfb36fa9e59fa85daff3 100644
+index b788b55a5f7483ac5ccd893ec89d6a745a90bdb5..fdd7909469dd15bb58c414494583f120ebe11cfc 100644
 --- a/lib/views/dashboard/widgets/current_outbound.dart
 +++ b/lib/views/dashboard/widgets/current_outbound.dart
-@@ -19,10 +19,11 @@ import 'package:material_ui/material_ui.dart';
+@@ -15,14 +15,16 @@ import 'package:fl_clash/views/dashboard/style.dart';
+ import 'package:fl_clash/widgets/widgets.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:material_new_shapes/material_new_shapes.dart';
+-import 'package:material_ui/material_ui.dart';
++// MaterialShapes is exported by both packages; take it from material_new_shapes.
++import 'package:material_ui/material_ui.dart' hide MaterialShapes, RoundedPolygon;
  
  import 'card.dart';
  import 'proxy_groups.dart';
@@ -2628,6 +2648,34 @@ index b788b55a5f7483ac5ccd893ec89d6a745a90bdb5..da5063139c0d9964d2d1dfb36fa9e59f
  
  const _decorationGrowth = 0.12;
  
+diff --git a/lib/views/dashboard/widgets/network_takeover.dart b/lib/views/dashboard/widgets/network_takeover.dart
+index 060a6aee6d69c164e56038beada839fcbc620fa4..5213dded448807425fa21eb34f9a377b86b7148b 100644
+--- a/lib/views/dashboard/widgets/network_takeover.dart
++++ b/lib/views/dashboard/widgets/network_takeover.dart
+@@ -7,7 +7,8 @@ import 'package:fl_clash/views/dashboard/style.dart';
+ import 'package:fl_clash/widgets/managed_setting.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:material_new_shapes/material_new_shapes.dart';
+-import 'package:material_ui/material_ui.dart';
++// MaterialShapes is exported by both packages; take it from material_new_shapes.
++import 'package:material_ui/material_ui.dart' hide MaterialShapes, RoundedPolygon;
+ 
+ import 'card.dart';
+ 
+diff --git a/lib/views/dashboard/widgets/proxy_groups.dart b/lib/views/dashboard/widgets/proxy_groups.dart
+index 53d839dbb1ff94354a283531cf4f6eeb8a1617dc..58f83906094ce9105962f1da71de48001d3f12e2 100644
+--- a/lib/views/dashboard/widgets/proxy_groups.dart
++++ b/lib/views/dashboard/widgets/proxy_groups.dart
+@@ -9,7 +9,8 @@ import 'package:fl_clash/views/proxies/proxies.dart';
+ import 'package:fl_clash/widgets/widgets.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:material_new_shapes/material_new_shapes.dart';
+-import 'package:material_ui/material_ui.dart';
++// MaterialShapes is exported by both packages; take it from material_new_shapes.
++import 'package:material_ui/material_ui.dart' hide MaterialShapes, RoundedPolygon;
+ 
+ import 'card.dart';
+ import 'connections_table.dart';
 diff --git a/lib/views/hotkey.dart b/lib/views/hotkey.dart
 index 460627c385f58e7354bdd2e6ff60a1a16475370e..d8e346e61b6a41dd59a4df52c34a745425f09ac8 100644
 --- a/lib/views/hotkey.dart
