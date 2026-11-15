@@ -1,0 +1,30 @@
+# 14 - a row tap chooses the node even while the portal is closed
+#
+# The tap only wrote the pick after a child start answered, and a closed portal has no child to
+# restart: the row did nothing, so the node the next open would run could not be chosen before
+# opening it. A tap while `runTimeProvider` is null now stores the pick and stops there — the
+# highlight reads the same stored pick, so the row lights up at once — and the next open starts
+# the node that was stored. When the portal is running the old path stands: the child is
+# restarted on the tapped node, and the pick is written only once it answered.
+
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index edcdae5f..f4eab82b 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -885,6 +885,16 @@ Future<PortalCoreResult> _restartChildOn(XrayServerConfig server) async {
+ Future<void> _startFromList(WidgetRef ref, XrayServerConfig server) async {
+   final profileId = ref.read(currentProfileIdProvider);
+   final previous = ref.read(portalSelectionProvider).xray;
++  // A closed portal has no child to restart, but the tap still chooses the node the next open
++  // runs: storing the pick is the whole action, and the list highlights it immediately because
++  // the highlight reads the same stored pick.
++  if (ref.read(runTimeProvider) == null) {
++    ref
++        .read(portalSelectionProvider.notifier)
++        .pickXray(server.name, profileId: profileId);
++    commonPrint.log('portal will open on ${server.name}');
++    return;
++  }
+   final started = await _restartChildOn(server);
+   if (started.ok) {
+     ref

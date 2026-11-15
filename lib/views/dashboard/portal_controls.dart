@@ -885,6 +885,16 @@ Future<PortalCoreResult> _restartChildOn(XrayServerConfig server) async {
 Future<void> _startFromList(WidgetRef ref, XrayServerConfig server) async {
   final profileId = ref.read(currentProfileIdProvider);
   final previous = ref.read(portalSelectionProvider).xray;
+  // A closed portal has no child to restart, but the tap still chooses the node the next open
+  // runs: storing the pick is the whole action, and the list highlights it immediately because
+  // the highlight reads the same stored pick.
+  if (ref.read(runTimeProvider) == null) {
+    ref
+        .read(portalSelectionProvider.notifier)
+        .pickXray(server.name, profileId: profileId);
+    commonPrint.log('portal will open on ${server.name}');
+    return;
+  }
   final started = await _restartChildOn(server);
   if (started.ok) {
     ref
