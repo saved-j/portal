@@ -1,10 +1,11 @@
-gradle-wrapper.jar
 /.gradle
 /captures/
-/gradlew
-/gradlew.bat
 local.properties
 GeneratedPluginRegistrant.java
+
+# The wrapper is part of the source: without these three files a fresh clone cannot build,
+# and a build that only works on the author's machine is not reproducible.
+# gradle-wrapper.jar, gradlew and gradlew.bat are committed on purpose.
 
 # Remember to never publicly share your keystore.
 # See https://flutter.dev/docs/deployment/android#reference-the-keystore-from-the-app
