@@ -234,10 +234,25 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The host contributes an outbound of its own (the local Xray) and a group that selects
+	// it. A profile carries its own proxies and groups, and the loop below replaces both, so
+	// they are captured here and appended afterwards instead of being lost.
+	addedProxies := mappingValue(root, "proxies")
+	addedGroups := mappingValue(root, "proxy-groups")
 	for _, key := range profileBaseSections {
 		if value := mappingValue(profile, key); value != nil {
 			setMappingValue(root, key, value)
 		}
+	}
+	if merged, err := appendByName(addedProxies, mappingValue(root, "proxies")); err != nil {
+		return nil, err
+	} else if merged != nil {
+		setMappingValue(root, "proxies", merged)
+	}
+	if merged, err := appendByName(addedGroups, mappingValue(root, "proxy-groups")); err != nil {
+		return nil, err
+	} else if merged != nil {
+		setMappingValue(root, "proxy-groups", merged)
 	}
 	rules, err := appendRules(mappingValue(root, "rules"), mappingValue(profile, "rules"))
 	if err != nil {
@@ -326,6 +341,50 @@ func appendRules(added, profile *yaml.Node) (*yaml.Node, error) {
 	content := make([]*yaml.Node, 0, len(added.Content)+len(profile.Content))
 	content = append(append(content, added.Content...), profile.Content...)
 	return &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: content}, nil
+}
+
+// The host's own entries go in front of the profile's and are matched by name, because
+// mihomo refuses a config where two proxies or two groups share a name.
+func appendByName(added, profile *yaml.Node) (*yaml.Node, error) {
+	added, profile = resolveAlias(added), resolveAlias(profile)
+	if added == nil || isNull(added) || (added.Kind == yaml.SequenceNode && len(added.Content) == 0) {
+		return nil, nil
+	}
+	if added.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("line %d: expected a list", added.Line)
+	}
+	if profile == nil || isNull(profile) {
+		return added, nil
+	}
+	if profile.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("line %d: expected a list", profile.Line)
+	}
+	taken := make(map[string]bool, len(added.Content))
+	for _, item := range added.Content {
+		if name := nameOf(item); name != "" {
+			taken[name] = true
+		}
+	}
+	content := append([]*yaml.Node{}, added.Content...)
+	for _, item := range profile.Content {
+		if name := nameOf(item); name != "" && taken[name] {
+			continue
+		}
+		content = append(content, item)
+	}
+	return &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: content}, nil
+}
+
+// nameOf reads the `name:` scalar of a list item, or "" when the item has none.
+func nameOf(node *yaml.Node) string {
+	item := resolveAlias(node)
+	if item == nil || item.Kind != yaml.MappingNode {
+		return ""
+	}
+	if value := mappingValue(item, "name"); value != nil && value.Kind == yaml.ScalarNode {
+		return value.Value
+	}
+	return ""
 }
 
 func resolveAlias(node *yaml.Node) *yaml.Node {
