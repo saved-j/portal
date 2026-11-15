@@ -1,0 +1,124 @@
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index 2da9819c..8edb45ad 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -283,6 +283,11 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+     if (running != null) state = {...state, running: probe?.ms};
+   }
+ 
++  /// One answer, written from a sweep that measured the row itself.
++  void record(String name, int? ms) {
++    state = {...state, name: ms};
++  }
++
+   Future<void> measureOne(String name, String host, int port) async {
+     final running = _runningNode;
+     final picked = portalXrayPickFor(
+@@ -974,18 +979,17 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
+                       // of them; a single node is measured by holding its row.
+                       final simple = ref.read(patchClashConfigProvider).mode == Mode.global;
+                       if (simple) {
+-                        final targets = <(String, String, int)>[
++                        final servers = <XrayServerConfig>[
+                           for (final server
+                               in ref.read(xrayServersProvider).value ??
+                                   const <XrayServerConfig>[])
+-                            if (server.port > 0)
+-                              (server.name, server.address, server.port),
++                            if (server.port > 0) server,
+                         ];
+-                        if (targets.isEmpty) return;
++                        if (servers.isEmpty) return;
+                         unawaited(
+                           _testDelayWithChild(
+                             ref,
+-                            targets,
++                            servers,
+                             wasRunning: running,
+                           ),
+                         );
+@@ -1479,20 +1483,25 @@ Future<void> _testDelayWithEngine(
+   }
+ }
+ 
+-/// Measures the child's whole list, raising it for the sweep and putting it back after.
++/// Measures the child's whole list, one node at a time, through the tunnel.
+ ///
+-/// The number is taken through the tunnel (a real request leaves by the node), so the child
+-/// must be reading the tunnel while the sweep runs — and only while it runs: the owner asked
+-/// for a measurement, not for a portal that stays open behind his back.
++/// One tunnel carries one node, so a sweep is a walk: raise the child, and for every row pick
++/// that node, wait for the child to take it, send a real request through the portal and keep
++/// the answer. The tunnel is put down at the end — a test is a measurement, not a connection —
++/// and the node the owner had picked is left as it was found. Rows that could not be raised
++/// stay without a number instead of borrowing a neighbour's.
+ Future<void> _testDelayWithChild(
+   WidgetRef ref,
+-  List<(String, String, int)> targets, {
++  List<XrayServerConfig> servers, {
+   required bool wasRunning,
+ }) async {
+-  if (targets.isEmpty) return;
++  if (servers.isEmpty) return;
++  final delay = ref.read(tcpDelayProvider.notifier);
++  final url = ref.read(appSettingProvider).testUrl;
++  final original = ref.read(portalSelectionProvider).xray;
+   final watch = Stopwatch()..start();
+   var raised = false;
+-  var stopped = false;
++  var measured = 0;
+   try {
+     if (!wasRunning) {
+       raised = await ref.read(setupActionProvider.notifier).setRunning(true);
+@@ -1514,24 +1523,41 @@ Future<void> _testDelayWithChild(
+         return;
+       }
+     }
+-    await ref.read(tcpDelayProvider.notifier).measureAll(targets);
+-    final delays = ref.read(tcpDelayProvider);
+-    final measured = targets.where((t) => delays[t.$1] != null).length;
++    for (final server in servers) {
++      final switched = await _restartChildOn(server);
++      if (!switched.ok) {
++        delay.record(server.name, null);
++        continue;
++      }
++      final probe = await probeThroughPortal(url);
++      delay.record(server.name, probe?.ms);
++      if (probe != null) measured++;
++      commonPrint.log(
++        'portal delay ${server.name}: ${probe?.describe() ?? 'no answer'}',
++      );
++    }
++  } finally {
++    var stopped = false;
++    if (raised) {
++      stopped = !await ref.read(setupActionProvider.notifier).setRunning(false);
++    } else if (original.isNotEmpty) {
++      final back = xrayServerFor(servers, original);
++      if (back != null) await _restartChildOn(back);
++    }
+     watch.stop();
++    commonPrint.log(
++      'portal test: sweep rows=${servers.length} measured=$measured '
++      'raised=${raised ? 'child' : 'none'} stopped_after=$stopped',
++    );
+     unawaited(
+       portalRuntime.noteTest(
+         mode: 'global',
+         raised: raised ? 'child' : 'none',
+         durationMs: watch.elapsedMilliseconds,
+-        stoppedAfter: false,
+-        detail: 'rows=${targets.length} measured=$measured',
++        stoppedAfter: stopped,
++        detail: 'rows=${servers.length} measured=$measured',
+       ),
+     );
+-  } finally {
+-    if (raised) {
+-      stopped = !await ref.read(setupActionProvider.notifier).setRunning(false);
+-      commonPrint.log('portal test: child put back after the sweep stopped=$stopped');
+-    }
+   }
+ }
+ 
