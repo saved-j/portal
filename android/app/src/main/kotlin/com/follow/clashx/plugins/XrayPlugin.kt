@@ -264,19 +264,29 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 put(
                     "settings",
                     JSONObject().apply {
+                        // Four keys, and nothing else, is the whole document this core can be
+                        // given on Android without it reading the interface table:
+                        //  - `name` must stay non-empty. An empty one sends
+                        //    infra/conf/tun.go to GetAvailableTunName(), which calls
+                        //    net.Interfaces() — the same netlink read the core is denied, one
+                        //    step earlier, at config build.
+                        //  - `autoSystemRoutingTable` must never be emitted. It is a []string of
+                        //    routes in this schema, not a flag, so a boolean refuses the whole
+                        //    config; and a non-empty list implies `autoOutboundsInterface: auto`,
+                        //    which resolves through net.InterfaceByName.
+                        //  - `autoOutboundsInterface` must never be emitted, for that reason.
+                        //    See the class comment: the uid exclusion is what keeps the core's
+                        //    transport out of the tunnel.
+                        //  - `autoSystemWfpBlockLeak` and `autoSystemDnsToGateway` are system
+                        //    takeovers: the first is Windows' firewall, and the second has no
+                        //    implementation on Android (proxy/tun's Android reader exposes no
+                        //    ConfigureSystemDNS), so it can only be checked, never honoured.
+                        //  - The system routes are the VpnService's and are already in place: the
+                        //    core has no root to add its own, and must not try to.
                         put("name", TUN_NAME)
                         put("mtu", tun.mtu)
                         put("gateway", JSONArray(tun.gateway))
                         put("dns", JSONArray(tun.dns))
-                        // The system routes are the VpnService's and are already in place:
-                        // the core has no root to add its own, and must not try to.
-                        //
-                        // `autoSystemRoutingTable` is absent on purpose: in this core's schema
-                        // it is a []string of routes to take over, not a flag, so a boolean
-                        // makes the core refuse the whole config
-                        // ("cannot unmarshal bool into ... TunConfig.autoSystemRoutingTable of
-                        // type []string"). An empty list is the same as leaving it out.
-                        put("autoSystemDnsToGateway", false)
                     },
                 )
             },
