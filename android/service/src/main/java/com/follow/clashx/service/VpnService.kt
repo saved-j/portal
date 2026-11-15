@@ -138,6 +138,7 @@ class VpnService : SystemVpnService(), ManagedService {
             addDnsServers(options)
             setMtu(options.tunMtu)
             configureAccessControl(options)
+            keepCoreOutOfTunnel(options)
             setSession(getString(CommonR.string.app_name))
             setBlocking(false)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -196,20 +197,16 @@ class VpnService : SystemVpnService(), ManagedService {
     }
 
     /**
-     * The simple portal's tunnel: no engine is started, and the descriptor goes to the child.
+     * The simple portal's tunnel: no engine is started, and the descriptor goes to the core.
      *
-     * The child cannot call protect() on the sockets it opens after exec, so the one thing
-     * that keeps its own transport out of the tunnel is binding those outbounds to the
-     * interface the tunnel rides on — which needs that interface's name, resolved here while
-     * the active network is known. Without it the child would dial its own node through the
-     * tun it is reading, so no interface means no start rather than a tunnel that eats itself.
+     * The core runs inside this process, so the sockets it opens for the node carry this app's
+     * uid — and that uid is the one the tunnel must not route. [keepCoreOutOfTunnel] is what
+     * states that, in the only way Android lets an app state it. Nothing here resolves an
+     * interface for the core: an interface name would be a second, weaker spelling of the same
+     * fact, and the core's own path for using one reads the interface table over rtnetlink,
+     * which an app uid cannot do.
      */
     private fun handOverToChild(descriptor: ParcelFileDescriptor, options: VpnOptions) {
-        val interfaceName = outboundInterface()
-        if (interfaceName == null) {
-            descriptor.close()
-            error("no active network interface: the child's own traffic would re-enter the tunnel")
-        }
         synchronized(tunLock) {
             tunOwnedByChild = true
             tunRunning = true
@@ -217,7 +214,6 @@ class VpnService : SystemVpnService(), ManagedService {
             XrayTunHolder.publish(
                 XrayTun(
                     descriptor = descriptor,
-                    interfaceName = interfaceName,
                     mtu = options.tunMtu,
                     gateway = listOf(IPV4_ADDRESS),
                     dns = listOf(DNS),
@@ -225,14 +221,6 @@ class VpnService : SystemVpnService(), ManagedService {
             )
         }
     }
-
-    /// The interface the tunnel's own traffic leaves through, which is the active network's.
-    private fun outboundInterface(): String? = runCatching {
-        val manager = connectivity ?: return null
-        val network = manager.activeNetwork ?: return null
-        val properties = manager.getLinkProperties(network) ?: return null
-        properties.interfaceName?.takeIf { it.isNotBlank() }
-    }.getOrNull()
 
     private fun Builder.addAddressAndRoutes(options: VpnOptions) {
         val ipv4Address = IPV4_ADDRESS.toCIDR()
@@ -273,12 +261,42 @@ class VpnService : SystemVpnService(), ManagedService {
         }
     }
 
+    /// Keeps this app's own traffic out of the tunnel it reads, by uid.
+    ///
+    /// The simple portal's core is a library in this process, so every socket it opens for the
+    /// node carries this app's uid. Without an exclusion the system would route that socket
+    /// straight back into the tun the core is reading: the core would send its own node traffic
+    /// into itself, and the connection would never leave the device. Android's answer is the
+    /// per-uid one — `addDisallowedApplication` makes the VPN install no route into the tun for
+    /// this package — which is what `VpnService.protect` does for a single socket and what
+    /// `autoOutboundsInterface` would have said in the core's own words. It is the only one that
+    /// works here: the core resolves that setting with `net.InterfaceByName`, and reading the
+    /// interface table over rtnetlink is denied to an app uid.
+    private fun Builder.keepCoreOutOfTunnel(options: VpnOptions) {
+        if (!options.xrayTun) return
+        try {
+            addDisallowedApplication(packageName)
+        } catch (throwable: Exception) {
+            // Reported instead of ignored: a tunnel that routes the core's own transport is one
+            // that carries nothing, and pretending to have it start is worse than not starting.
+            error("the portal core cannot be kept out of its own tunnel: ${throwable.message}")
+        }
+    }
+
     private fun Builder.configureAccessControl(options: VpnOptions) {
         val accessControl = options.accessControlProps
         if (!accessControl.enable) return
         when (accessControl.mode) {
             AccessControlMode.ACCEPT_SELECTED -> {
-                (accessControl.acceptList + packageName).forEach { name ->
+                // A package cannot be both allowed and disallowed, and the simple portal's core
+                // is this app: it stays out of the tunnel (keepCoreOutOfTunnel) rather than in
+                // it, so this list never names this app.
+                val names = if (options.xrayTun) {
+                    accessControl.acceptList - packageName
+                } else {
+                    accessControl.acceptList + packageName
+                }
+                names.forEach { name ->
                     addApplication(name, ::addAllowedApplication)
                 }
             }

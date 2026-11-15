@@ -3,21 +3,21 @@ package com.follow.clashx.common
 import android.os.ParcelFileDescriptor
 
 /**
- * The tunnel the VpnService established, and the facts the child needs to read it.
+ * The tunnel the VpnService established, and the facts the core needs to read it.
  *
- * A child process cannot create a VpnService and cannot open the tunnel itself, so the
- * service makes it and states its facts here: the descriptor, the tunnel's own addresses, and
- * the interface the child's outbound connections must leave through. [descriptor] stays owned
- * by the service; the child only borrows the number across exec and reads it.
+ * A library cannot create a VpnService and cannot open the tunnel itself, so the service makes
+ * it and states its facts here: the descriptor and the tunnel's own addresses. [descriptor]
+ * stays owned by the service; the core only borrows the number, in this same process, and
+ * reads it. Nothing here names the interface the core's own transport leaves by: that is the
+ * service's uid exclusion (see `VpnService.keepCoreOutOfTunnel`), not a name.
  */
 class XrayTun(
     val descriptor: ParcelFileDescriptor,
-    val interfaceName: String,
     val mtu: Int,
     val gateway: List<String>,
     val dns: List<String>,
 ) {
-    /// The number the child inherits. Valid only while [descriptor] is open.
+    /// The number the core is given. Valid only while [descriptor] is open.
     val fd: Int get() = descriptor.fd
 }
 

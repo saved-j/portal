@@ -1,0 +1,200 @@
+# 08 - the tun document names no outbound interface; the tunnel excludes this app's uid
+#
+# The device refused every start with `app/proxyman/inbound: failed to start proxy > route
+# ip+net: netlinkrib: permission denied`. That line comes from proxy/tun/handler.go: with
+# `autoOutboundsInterface` set, Handler.Start resolves the tun's index and then the interface
+# by name, and `net.InterfaceByName` reads the interface table over rtnetlink, which Android
+# denies to an app uid. There is no name to give the core that avoids that read, and the
+# setting is not what keeps the core's own transport out of its tunnel anyway: on Android the
+# VpnService states that per uid. So the key is gone from the document, and the service adds
+# its own package to `addDisallowedApplication` in the Builder that establishes the tunnel:
+# the system then installs no route into the tun for this uid, which is what
+# `VpnService.protect` does for one socket and needs no interface name at all. The plumbing
+# that only existed to feed the key (the `XrayTun.interfaceName` field, `outboundInterface()`
+# and the "no interface, no start" veto) goes with it, and access control no longer puts this
+# app on an allow list: a uid cannot be on both, and this one has to stay outside.
+
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+index 532a1271..a8033d28 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -35,10 +35,14 @@ import java.util.concurrent.atomic.AtomicLong
+  * a core that refuses the document, or one that never takes the descriptor, fails the start
+  * with its own words instead of falling back to a bridge it no longer has.
+  *
+- * Protecting the core's transport: every outbound is bound to the interface the tunnel rides
+- * on, stated as `autoOutboundsInterface`; the service resolves that interface and refuses to
+- * hand over a tunnel without one. Being in-process would allow `VpnService.protect`, but the
+- * binding is what states the intent, so it stays.
++ * Keeping the core's transport out of its own tunnel is the VpnService's job, not the
++ * document's: the service adds this app's package to `addDisallowedApplication`, so the system
++ * installs no route into the tun for this uid and every socket the core opens leaves by the
++ * underlying network. That is the Android-native substitute for binding outbounds to an
++ * interface, and the only one available here: `autoOutboundsInterface` makes the core resolve
++ * the interface with `net.InterfaceByName`, which reads the interface table over rtnetlink,
++ * and an app uid is denied that read (`netlinkrib: permission denied`). The exclusion is by
++ * uid, exactly like `VpnService.protect`, and it needs no interface name at all.
+  */
+ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     private lateinit var channel: MethodChannel
+@@ -229,7 +233,9 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+      * The panel document is passed through as it is — outbounds, routing, dns — and only its
+      * inbounds are replaced: a socks listener the panel declared would be a bridge into a
+      * core that no longer has anyone on the other side, so it goes. The tun inbound states
+-     * the descriptor's number, the tunnel's addresses, and the interface to dial the node on.
++     * the descriptor's number and the tunnel's addresses. It states no outbound interface:
++     * see the class comment — the core would have to enumerate interfaces to resolve one, and
++     * the service keeps this app out of the tunnel by uid instead.
+      */
+     private fun tunDocument(config: String, tun: XrayTun, logFile: File): String {
+         val root = JSONObject(config)
+@@ -261,9 +267,6 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+                         // ("cannot unmarshal bool into ... TunConfig.autoSystemRoutingTable of
+                         // type []string"). An empty list is the same as leaving it out.
+                         put("autoSystemDnsToGateway", false)
+-                        // Stated, not inferred: this is the one place the core's own
+-                        // transport is kept out of the tunnel it reads.
+-                        put("autoOutboundsInterface", tun.interfaceName)
+                     },
+                 )
+             },
+diff --git a/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+index 2abbe993..2699f869 100644
+--- a/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
++++ b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+@@ -3,21 +3,21 @@ package com.follow.clashx.common
+ import android.os.ParcelFileDescriptor
+ 
+ /**
+- * The tunnel the VpnService established, and the facts the child needs to read it.
++ * The tunnel the VpnService established, and the facts the core needs to read it.
+  *
+- * A child process cannot create a VpnService and cannot open the tunnel itself, so the
+- * service makes it and states its facts here: the descriptor, the tunnel's own addresses, and
+- * the interface the child's outbound connections must leave through. [descriptor] stays owned
+- * by the service; the child only borrows the number across exec and reads it.
++ * A library cannot create a VpnService and cannot open the tunnel itself, so the service makes
++ * it and states its facts here: the descriptor and the tunnel's own addresses. [descriptor]
++ * stays owned by the service; the core only borrows the number, in this same process, and
++ * reads it. Nothing here names the interface the core's own transport leaves by: that is the
++ * service's uid exclusion (see `VpnService.keepCoreOutOfTunnel`), not a name.
+  */
+ class XrayTun(
+     val descriptor: ParcelFileDescriptor,
+-    val interfaceName: String,
+     val mtu: Int,
+     val gateway: List<String>,
+     val dns: List<String>,
+ ) {
+-    /// The number the child inherits. Valid only while [descriptor] is open.
++    /// The number the core is given. Valid only while [descriptor] is open.
+     val fd: Int get() = descriptor.fd
+ }
+ 
+diff --git a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+index 4fc493bd..43fc434f 100644
+--- a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
++++ b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+@@ -138,6 +138,7 @@ class VpnService : SystemVpnService(), ManagedService {
+             addDnsServers(options)
+             setMtu(options.tunMtu)
+             configureAccessControl(options)
++            keepCoreOutOfTunnel(options)
+             setSession(getString(CommonR.string.app_name))
+             setBlocking(false)
+             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+@@ -196,20 +197,16 @@ class VpnService : SystemVpnService(), ManagedService {
+     }
+ 
+     /**
+-     * The simple portal's tunnel: no engine is started, and the descriptor goes to the child.
++     * The simple portal's tunnel: no engine is started, and the descriptor goes to the core.
+      *
+-     * The child cannot call protect() on the sockets it opens after exec, so the one thing
+-     * that keeps its own transport out of the tunnel is binding those outbounds to the
+-     * interface the tunnel rides on — which needs that interface's name, resolved here while
+-     * the active network is known. Without it the child would dial its own node through the
+-     * tun it is reading, so no interface means no start rather than a tunnel that eats itself.
++     * The core runs inside this process, so the sockets it opens for the node carry this app's
++     * uid — and that uid is the one the tunnel must not route. [keepCoreOutOfTunnel] is what
++     * states that, in the only way Android lets an app state it. Nothing here resolves an
++     * interface for the core: an interface name would be a second, weaker spelling of the same
++     * fact, and the core's own path for using one reads the interface table over rtnetlink,
++     * which an app uid cannot do.
+      */
+     private fun handOverToChild(descriptor: ParcelFileDescriptor, options: VpnOptions) {
+-        val interfaceName = outboundInterface()
+-        if (interfaceName == null) {
+-            descriptor.close()
+-            error("no active network interface: the child's own traffic would re-enter the tunnel")
+-        }
+         synchronized(tunLock) {
+             tunOwnedByChild = true
+             tunRunning = true
+@@ -217,7 +214,6 @@ class VpnService : SystemVpnService(), ManagedService {
+             XrayTunHolder.publish(
+                 XrayTun(
+                     descriptor = descriptor,
+-                    interfaceName = interfaceName,
+                     mtu = options.tunMtu,
+                     gateway = listOf(IPV4_ADDRESS),
+                     dns = listOf(DNS),
+@@ -226,14 +222,6 @@ class VpnService : SystemVpnService(), ManagedService {
+         }
+     }
+ 
+-    /// The interface the tunnel's own traffic leaves through, which is the active network's.
+-    private fun outboundInterface(): String? = runCatching {
+-        val manager = connectivity ?: return null
+-        val network = manager.activeNetwork ?: return null
+-        val properties = manager.getLinkProperties(network) ?: return null
+-        properties.interfaceName?.takeIf { it.isNotBlank() }
+-    }.getOrNull()
+-
+     private fun Builder.addAddressAndRoutes(options: VpnOptions) {
+         val ipv4Address = IPV4_ADDRESS.toCIDR()
+         addAddress(ipv4Address.address, ipv4Address.prefixLength)
+@@ -273,12 +261,42 @@ class VpnService : SystemVpnService(), ManagedService {
+         }
+     }
+ 
++    /// Keeps this app's own traffic out of the tunnel it reads, by uid.
++    ///
++    /// The simple portal's core is a library in this process, so every socket it opens for the
++    /// node carries this app's uid. Without an exclusion the system would route that socket
++    /// straight back into the tun the core is reading: the core would send its own node traffic
++    /// into itself, and the connection would never leave the device. Android's answer is the
++    /// per-uid one — `addDisallowedApplication` makes the VPN install no route into the tun for
++    /// this package — which is what `VpnService.protect` does for a single socket and what
++    /// `autoOutboundsInterface` would have said in the core's own words. It is the only one that
++    /// works here: the core resolves that setting with `net.InterfaceByName`, and reading the
++    /// interface table over rtnetlink is denied to an app uid.
++    private fun Builder.keepCoreOutOfTunnel(options: VpnOptions) {
++        if (!options.xrayTun) return
++        try {
++            addDisallowedApplication(packageName)
++        } catch (throwable: Exception) {
++            // Reported instead of ignored: a tunnel that routes the core's own transport is one
++            // that carries nothing, and pretending to have it start is worse than not starting.
++            error("the portal core cannot be kept out of its own tunnel: ${throwable.message}")
++        }
++    }
++
+     private fun Builder.configureAccessControl(options: VpnOptions) {
+         val accessControl = options.accessControlProps
+         if (!accessControl.enable) return
+         when (accessControl.mode) {
+             AccessControlMode.ACCEPT_SELECTED -> {
+-                (accessControl.acceptList + packageName).forEach { name ->
++                // A package cannot be both allowed and disallowed, and the simple portal's core
++                // is this app: it stays out of the tunnel (keepCoreOutOfTunnel) rather than in
++                // it, so this list never names this app.
++                val names = if (options.xrayTun) {
++                    accessControl.acceptList - packageName
++                } else {
++                    accessControl.acceptList + packageName
++                }
++                names.forEach { name ->
+                     addApplication(name, ::addAllowedApplication)
+                 }
+             }

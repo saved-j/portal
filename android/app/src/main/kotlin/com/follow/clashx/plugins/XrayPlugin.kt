@@ -35,10 +35,14 @@ import java.util.concurrent.atomic.AtomicLong
  * a core that refuses the document, or one that never takes the descriptor, fails the start
  * with its own words instead of falling back to a bridge it no longer has.
  *
- * Protecting the core's transport: every outbound is bound to the interface the tunnel rides
- * on, stated as `autoOutboundsInterface`; the service resolves that interface and refuses to
- * hand over a tunnel without one. Being in-process would allow `VpnService.protect`, but the
- * binding is what states the intent, so it stays.
+ * Keeping the core's transport out of its own tunnel is the VpnService's job, not the
+ * document's: the service adds this app's package to `addDisallowedApplication`, so the system
+ * installs no route into the tun for this uid and every socket the core opens leaves by the
+ * underlying network. That is the Android-native substitute for binding outbounds to an
+ * interface, and the only one available here: `autoOutboundsInterface` makes the core resolve
+ * the interface with `net.InterfaceByName`, which reads the interface table over rtnetlink,
+ * and an app uid is denied that read (`netlinkrib: permission denied`). The exclusion is by
+ * uid, exactly like `VpnService.protect`, and it needs no interface name at all.
  */
 class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var channel: MethodChannel
@@ -229,7 +233,9 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
      * The panel document is passed through as it is — outbounds, routing, dns — and only its
      * inbounds are replaced: a socks listener the panel declared would be a bridge into a
      * core that no longer has anyone on the other side, so it goes. The tun inbound states
-     * the descriptor's number, the tunnel's addresses, and the interface to dial the node on.
+     * the descriptor's number and the tunnel's addresses. It states no outbound interface:
+     * see the class comment — the core would have to enumerate interfaces to resolve one, and
+     * the service keeps this app out of the tunnel by uid instead.
      */
     private fun tunDocument(config: String, tun: XrayTun, logFile: File): String {
         val root = JSONObject(config)
@@ -261,9 +267,6 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                         // ("cannot unmarshal bool into ... TunConfig.autoSystemRoutingTable of
                         // type []string"). An empty list is the same as leaving it out.
                         put("autoSystemDnsToGateway", false)
-                        // Stated, not inferred: this is the one place the core's own
-                        // transport is kept out of the tunnel it reads.
-                        put("autoOutboundsInterface", tun.interfaceName)
                     },
                 )
             },
