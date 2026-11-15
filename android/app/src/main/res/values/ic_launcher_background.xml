@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#07090E</color>
+    <!-- The mark's own edge colour: a plate that is the picture's purple keeps any
+         system padding invisible instead of framing the icon in black. -->
+    <color name="ic_launcher_background">#120238</color>
 </resources>

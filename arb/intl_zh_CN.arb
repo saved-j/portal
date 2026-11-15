@@ -144,7 +144,7 @@
   "project": "项目",
   "core": "内核",
   "tabAnimation": "选项卡动画",
-  "desc": "基于 Prizrak 与 Xray 双核心的多平台客户端。开源、无广告、无遥测。",
+  "desc": "基于 FLClashX 的免费开源客户端。",
   "startVpn": "正在启动VPN…",
   "stopVpn": "正在停止VPN…",
   "localNetworkDeniedTip": "本地网络权限被拒绝：已改用 gvisor 栈，局域网无法访问。",
@@ -1052,5 +1052,7 @@
   "aboutCores": "核心",
   "aboutPortalNetworkCore": "门户网络核心",
   "aboutContributors": "贡献者",
-  "aboutBuiltOn": "基于"
+  "aboutBuiltOn": "基于",
+  "insertSubscriptionLink": "粘贴您的订阅链接",
+  "getSubscriptionHere": "在此获取订阅"
 }

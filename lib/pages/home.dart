@@ -73,7 +73,17 @@ class _HomeShell extends ConsumerWidget {
     final floating = ref.watch(
       appSettingProvider.select((state) => state.floatingNavigationBar),
     );
-    return Material(
+    // Back is a way to the working screen, not out of the app: on any other root page the
+    // gesture returns here instead of closing Portal.
+    final onDashboard =
+        ref.watch(currentPageLabelProvider) == PageLabel.dashboard;
+    return PopScope(
+      canPop: onDashboard,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleToPage(PageLabel.dashboard, ref);
+      },
+      child: Material(
       color: SurfaceLevel.page.colorOf(context.colorScheme),
       child: Column(
         children: [
@@ -142,6 +152,7 @@ class _HomeShell extends ConsumerWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

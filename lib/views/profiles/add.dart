@@ -1,165 +1,241 @@
 import 'dart:async';
 
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/pages/scan.dart';
-import 'package:fl_clash/plugins/app.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/views/profiles/custom/custom.dart';
-import 'package:fl_clash/features/form/form.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// The ways to add a profile, in a menu out of the control [builder] makes.
+/// Adding a subscription: one sheet, every way in visible at once.
+///
+/// The menu used to hide the link field, the file picker and the scanner behind three
+/// taps on a popup. A person adding a subscription knows what they have — a link, a file
+/// or a code — so the field, the paste key, the file key, the scanner and the Add button
+/// all sit on the same screen and cost exactly one tap.
 class AddProfileMenu extends ConsumerWidget {
   const AddProfileMenu({super.key, required this.builder});
 
   final Widget Function(PopupOpen open) builder;
 
-  Future<void> _handleAddProfileFormFile(WidgetRef ref) async {
-    unawaited(ref.read(profilesActionProvider.notifier).addProfileFormFile());
-  }
-
-  Future<void> _toScan(BuildContext context, WidgetRef ref) async {
-    final profilesAction = ref.read(profilesActionProvider.notifier);
-    if (system.isDesktop) {
-      unawaited(profilesAction.addProfileFormQrCode());
-      return;
-    }
-    final url = await BaseNavigator.push(context, const ScanPage());
-    if (url == null) {
-      return;
-    }
-    if (context.mounted) {
-      await whenRouteUncovered(context);
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(profilesAction.addProfileFromLink(url));
-    });
-  }
-
-  Future<void> _toAdd(BuildContext context, WidgetRef ref) async {
-    final profilesAction = ref.read(profilesActionProvider.notifier);
-    final appLocalizations = context.appLocalizations;
-    final res = await showNamedUrlsForm(
-      context,
-      title: appLocalizations.importFromLink,
-      urlLabel: appLocalizations.link,
-      batchTip: appLocalizations.batchLinkInputTip,
-      urlValidator: (value) {
-        if (value == null || value.isEmpty) {
-          return appLocalizations.emptyTip(appLocalizations.link);
-        }
-        if (!value.isUrl && !value.isShareLink) {
-          return appLocalizations.invalidLinkTip;
-        }
-        return null;
-      },
-      existingUrls: {
-        for (final profile in ref.read(profilesProvider))
-          if (profile.url.isNotEmpty) profile.url,
-      },
-      withAgeSecretKey: true,
-      withDeviceHeaders: true,
-      clipboardImport: true,
-    );
-    switch (res) {
-      case null:
-        return;
-      case [final single]:
-        await profilesAction.addProfileFromLink(
-          single.url,
-          label: single.label,
-          ageSecretKey: single.ageSecretKey,
-          sendDeviceHeaders: single.sendDeviceHeaders,
-        );
-      default:
-        await profilesAction.addProfilesFromLinks([
-          for (final item in res) item.url,
-        ]);
-    }
-    // The subscription is in: land on the working screen, not on the list of
-    // subscriptions, and leave nothing on the stack that Back would exit from.
-    if (!context.mounted) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
-  }
-
-  Future<void> _toSendFromPhone(WidgetRef ref) async {
-    final profilesAction = ref.read(profilesActionProvider.notifier);
-    if (!(await app?.requestLocalNetworkPermission() ?? true)) {
-      final appLocalizations = currentAppLocalizations;
-      final res = await dialogs.showMessage(
-        message: TextSpan(text: appLocalizations.sendFromPhonePermissionDenied),
-        confirmText: appLocalizations.settings,
-      );
-      if (res == true) {
-        await app?.openAppSettings();
-      }
-      return;
-    }
-    final link = await dialogs.showCommonDialog<String>(
-      child: const _SendFromPhoneDialog(),
-    );
-    if (link == null) {
-      return;
-    }
-    final appLocalizations = currentAppLocalizations;
-    final confirmed = await dialogs.showMessage(
-      title: appLocalizations.sendFromPhoneConfirmTitle,
-      message: TextSpan(text: link),
-      confirmText: appLocalizations.import,
-    );
-    if (confirmed == true) {
-      unawaited(profilesAction.addProfileFromLink(link));
-    }
-  }
-
-  void _toAddCustom(BuildContext context, WidgetRef ref) {
-    final profileId = ref
-        .read(profilesActionProvider.notifier)
-        .addCustomProfile(context.appLocalizations.unnamed);
-    unawaited(
-      BaseNavigator.push(
-        context,
-        CustomProfileView(profileId: profileId, isNew: true),
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Builder(
+      builder: (innerContext) => builder(
+        () => unawaited(_openSheet(innerContext, ref)),
       ),
     );
   }
+}
+
+Future<void> _openSheet(BuildContext context, WidgetRef ref) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => const _AddProfileSheet(),
+  );
+}
+
+class _AddProfileSheet extends ConsumerWidget {
+  const _AddProfileSheet();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    return AddProfileForm(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      showTitle: true,
+      onDone: () => Navigator.of(context).popUntil((route) => route.isFirst),
+    );
+  }
+}
+
+/// The subscription form itself: link field, paste, file, scanner, Add underneath.
+///
+/// It lives on the empty start screen as well as in a sheet, because a person who has
+/// just installed the app should not have to press "Add profile" to discover that there
+/// is something to add.
+class AddProfileForm extends ConsumerStatefulWidget {
+  const AddProfileForm({
+    super.key,
+    this.padding = const EdgeInsets.symmetric(horizontal: 4),
+    this.showTitle = false,
+    this.hint,
+    this.onDone,
+  });
+
+  final EdgeInsets padding;
+  final bool showTitle;
+
+  /// A line above the field, used on the start screen to say what the field wants.
+  final String? hint;
+  final VoidCallback? onDone;
+
+  @override
+  ConsumerState<AddProfileForm> createState() => _AddProfileFormState();
+}
+
+class _AddProfileFormState extends ConsumerState<AddProfileForm> {
+  final _controller = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (text.isEmpty) return;
+    setState(() {
+      _controller.text = text;
+      _error = null;
+    });
+  }
+
+  Future<void> _pickFile() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    await ref.read(profilesActionProvider.notifier).addProfileFormFile();
+    if (mounted) {
+      setState(() => _busy = false);
+      (widget.onDone ?? () => Navigator.of(context).pop())();
+    }
+  }
+
+  Future<void> _scan() async {
+    final url = await BaseNavigator.push<String>(context, const ScanPage());
+    if (!mounted || url == null) return;
+    setState(() {
+      _controller.text = url;
+      _error = null;
+    });
+  }
+
+  Future<void> _submit() async {
     final appLocalizations = context.appLocalizations;
-    return CommonPopupBox(
-      targetBuilder: builder,
-      popupBuilder: (_) => CommonPopupMenu(
-        items: [
-          CommonPopupMenuItem(
-            glyph: AppGlyphs.qrCode,
-            label: appLocalizations.qrcode,
-            onPressed: () => _toScan(context, ref),
-          ),
-          CommonPopupMenuItem(
-            glyph: AppGlyphs.importFile,
-            label: appLocalizations.file,
-            onPressed: () => _handleAddProfileFormFile(ref),
-          ),
-          CommonPopupMenuItem(
-            glyph: AppGlyphs.cloudDownload,
-            label: appLocalizations.link,
-            onPressed: () => _toAdd(context, ref),
-          ),
-          if (system.isTV)
-            CommonPopupMenuItem(
-              glyph: AppGlyphs.devices,
-              label: appLocalizations.sendFromPhone,
-              onPressed: () => _toSendFromPhone(ref),
+    final value = _controller.text.trim();
+    if (value.isEmpty) {
+      setState(() => _error = appLocalizations.emptyTip(appLocalizations.link));
+      return;
+    }
+    if (!value.isUrl && !value.isShareLink) {
+      setState(() => _error = appLocalizations.invalidLinkTip);
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    await ref.read(profilesActionProvider.notifier).addProfileFromLink(value);
+    if (!mounted) return;
+    if (widget.onDone != null) {
+      widget.onDone!();
+      return;
+    }
+    // Added from the start screen: the subscription is in, so go where it is used. Leaving
+    // the form on screen would make the person look for a way forward themselves.
+    ref.read(currentPageLabelProvider.notifier).toPage(PageLabel.dashboard);
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appLocalizations = context.appLocalizations;
+    final theme = Theme.of(context);
+    return Padding(
+      padding: widget.padding,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.showTitle) ...[
+            Text(
+              appLocalizations.addProfile,
+              style: theme.textTheme.titleMedium,
             ),
-          CommonPopupMenuItem(
-            section: const CommonPopupMenuSection(),
-            glyph: AppGlyphs.customize,
-            label: appLocalizations.customProfile,
-            onPressed: () => _toAddCustom(context, ref),
+            const SizedBox(height: 14),
+          ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  autofocus: true,
+                  minLines: 1,
+                  maxLines: 3,
+                  keyboardType: TextInputType.url,
+                  decoration: InputDecoration(
+                    hintText: widget.hint ?? appLocalizations.insertSubscriptionLink,
+                    errorText: _error,
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (_) {
+                    if (_error != null) setState(() => _error = null);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Every way in, side by side with the field: paste, file, code.
+              IconButton.filledTonal(
+                tooltip: appLocalizations.paste,
+                onPressed: _paste,
+                icon: const Icon(Icons.content_paste),
+              ),
+              IconButton.filledTonal(
+                tooltip: appLocalizations.file,
+                onPressed: _busy ? null : _pickFile,
+                icon: const GlyphIcon(AppGlyphs.importFile),
+              ),
+              IconButton.filledTonal(
+                tooltip: appLocalizations.qrcode,
+                onPressed: _scan,
+                icon: const GlyphIcon(AppGlyphs.qrCode),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _busy ? null : _submit,
+            child: _busy
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CommonCircleLoading(),
+                  )
+                : Text(appLocalizations.add),
+          ),
+          const SizedBox(height: 8),
+          if (widget.showTitle)
+            TextButton(
+            onPressed: _busy
+                ? null
+                : () {
+                    final profileId = ref
+                        .read(profilesActionProvider.notifier)
+                        .addCustomProfile(appLocalizations.unnamed);
+                    Navigator.of(context).pop();
+                    unawaited(
+                      BaseNavigator.push(
+                        context,
+                        CustomProfileView(profileId: profileId, isNew: true),
+                      ),
+                    );
+                  },
+            child: Text(appLocalizations.customProfile),
           ),
         ],
       ),

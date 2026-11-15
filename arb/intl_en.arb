@@ -144,7 +144,7 @@
   "project": "Project",
   "core": "Core",
   "tabAnimation": "Tab animation",
-  "desc": "A multi-platform client built on the Prizrak and Xray cores. Open source, no ads, no telemetry.",
+  "desc": "A free open-source client built on FLClashX.",
   "startVpn": "Starting VPN…",
   "stopVpn": "Stopping VPN…",
   "localNetworkDeniedTip": "Local network permission denied: using the gvisor stack, LAN is unreachable.",
@@ -1056,5 +1056,7 @@
   "aboutCores": "Cores",
   "aboutPortalNetworkCore": "portal network core",
   "aboutContributors": "Contributors",
-  "aboutBuiltOn": "Built on"
+  "aboutBuiltOn": "Built on",
+  "insertSubscriptionLink": "Paste your subscription link",
+  "getSubscriptionHere": "Get a subscription here"
 }

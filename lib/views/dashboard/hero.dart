@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:collection/collection.dart';
 import 'package:fl_clash/common/common.dart';
@@ -13,7 +16,6 @@ import 'package:fl_clash/views/tools.dart';
 import 'package:fl_clash/views/connection/connection_feeds.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'portal_controls.dart';
-import '../profiles/subscription_facts.dart';
 import 'portal_gateway.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -23,8 +25,6 @@ import 'package:flutter/services.dart';
 
 const heroMaxWidth = 520.0;
 
-const _logoSize = 96.0;
-const _connectHeight = 56.0;
 const _gap = 12.0;
 
 /// The hero home page: the service's logo and name over the plan, the
@@ -229,48 +229,73 @@ class _EmptyHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appLocalizations = context.appLocalizations;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _ServiceLogo(),
-        const SizedBox(height: 14),
+        // The same portal the working screen draws, in its closed state: the start screen
+        // is the product's face, not a stretched logo strip.
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final side = (constraints.maxWidth * 0.62).clamp(150.0, 300.0);
+            return Center(
+              child: PortalGatewayCore(
+                isStart: false,
+                suspended: false,
+                runTime: null,
+                size: side,
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 18),
         Text(
           appName,
           textAlign: TextAlign.center,
           style: AppTextStyle.title2.of(context, emphasized: true),
         ),
         const SizedBox(height: 24),
-        SizedBox(
-          height: _connectHeight,
-          child: AddProfileMenu(
-            builder: (open) => FilledButton.icon(
-              onPressed: open,
-              icon: const GlyphIcon(AppGlyphs.add, fill: 1),
-              label: Text(appLocalizations.addProfile),
-            ),
-          ),
-        ),
+        // No "Add profile" gate: the field, the paste key, the file picker, the scanner and
+        // its Add button are on the screen from the first launch.
+        const AddProfileForm(),
+        const SizedBox(height: 40),
+        const _GetSubscriptionLink(),
       ],
     );
   }
 }
 
-/// The app's own icon. The panel-logo branch that used to live here was unreachable —
-/// no call site ever passed a url — so the widget is what it always did in practice.
-class _ServiceLogo extends StatelessWidget {
-  const _ServiceLogo();
+/// The quiet way to get a subscription, under the form.
+///
+/// It is deliberately small and low-contrast: the screen's job is to take the link a person
+/// already has, and only to mention where one comes from.
+class _GetSubscriptionLink extends StatelessWidget {
+  const _GetSubscriptionLink();
+
+  static const _botUrl = 'https://t.me/portalconnect_bot';
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(_logoSize / 4),
-      child: Image.asset(
-        'assets/images/icon.png',
-        width: _logoSize,
-        height: _logoSize,
-        fit: BoxFit.cover,
+    final theme = Theme.of(context);
+    return Center(
+      child: TextButton(
+        onPressed: () => unawaited(
+          launchUrl(Uri.parse(_botUrl), mode: LaunchMode.externalApplication),
+        ),
+        style: TextButton.styleFrom(
+          foregroundColor: theme.colorScheme.onSurfaceVariant,
+          minimumSize: Size.zero,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: Text(
+          context.appLocalizations.getSubscriptionHere,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            decoration: TextDecoration.underline,
+            decorationColor: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
       ),
     );
   }

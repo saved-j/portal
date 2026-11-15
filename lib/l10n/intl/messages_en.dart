@@ -644,7 +644,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "deleteMultipTip": m21,
     "deleteTip": m22,
     "desc": MessageLookupByLibrary.simpleMessage(
-      "A multi-platform client built on the Prizrak and Xray cores. Open source, no ads, no telemetry.",
+      "A free open-source client built on FLClashX.",
     ),
     "destination": MessageLookupByLibrary.simpleMessage("Destination"),
     "destinationGeoIP": MessageLookupByLibrary.simpleMessage(
@@ -876,6 +876,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "geodataLoader": MessageLookupByLibrary.simpleMessage(
       "Geo low-memory mode",
     ),
+    "getSubscriptionHere": MessageLookupByLibrary.simpleMessage(
+      "Get a subscription here",
+    ),
     "global": MessageLookupByLibrary.simpleMessage("Simple portal"),
     "go": MessageLookupByLibrary.simpleMessage("Go"),
     "goDownload": MessageLookupByLibrary.simpleMessage("Download"),
@@ -979,6 +982,9 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "inputRuleContent": MessageLookupByLibrary.simpleMessage(
       "Enter the rule content",
+    ),
+    "insertSubscriptionLink": MessageLookupByLibrary.simpleMessage(
+      "Paste your subscription link",
     ),
     "installedAppsPermissionDeniedMessage":
         MessageLookupByLibrary.simpleMessage(

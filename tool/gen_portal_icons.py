@@ -12,7 +12,7 @@ import os
 from PIL import Image, ImageDraw, ImageEnhance
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = "/Volumes/Stuff/Downloads/Routers/@LOGO2.png"
+SRC = "/Volumes/Stuff/Downloads/Routers/@Graphics/@LOGO2.png"
 
 ANDROID_RES = os.path.join(ROOT, "android/app/src/main/res")
 MACOS_SET = os.path.join(ROOT, "macos/Runner/Assets.xcassets/AppIcon.appiconset")
@@ -49,6 +49,39 @@ def circle(image: Image.Image) -> Image.Image:
     out.putalpha(mask)
     return out
 
+
+
+def edge_extend(image: Image.Image, canvas: int, coverage: float) -> Image.Image:
+    """Art kept at its own scale, its border pixels stretched out to the canvas edge.
+
+    Android shows roughly the inner two thirds of a layer and applies an OEM mask on top.
+    Centring the art with a margin leaves a ring of background colour (the "black frame"
+    the owner saw), while scaling the art up crops the design. Stretching the outermost
+    pixels keeps the picture's proportions and makes its lines run to the icon edge.
+    """
+    inner = max(1, int(canvas * coverage))
+    art = image.resize((inner, inner), Image.LANCZOS)
+    out = Image.new("RGB", (canvas, canvas))
+    offset = (canvas - inner) // 2
+    # fill first with the art's own average so corners are never a foreign colour
+    out.paste(art.resize((canvas, canvas), Image.BILINEAR), (0, 0))
+    out.paste(art, (offset, offset))
+    if offset > 0:
+        left = art.crop((0, 0, 1, inner)).resize((offset, inner), Image.NEAREST)
+        right = art.crop((inner - 1, 0, inner, inner)).resize((offset, inner), Image.NEAREST)
+        top = art.crop((0, 0, inner, 1)).resize((inner, offset), Image.NEAREST)
+        bottom = art.crop((0, inner - 1, inner, inner)).resize((inner, offset), Image.NEAREST)
+        out.paste(left, (0, offset))
+        out.paste(right, (offset + inner, offset))
+        out.paste(top, (offset, 0))
+        out.paste(bottom, (offset, offset + inner))
+        tl = art.crop((0, 0, 1, 1)).resize((offset, offset), Image.NEAREST)
+        tr = art.crop((inner - 1, 0, inner, 1)).resize((offset, offset), Image.NEAREST)
+        bl = art.crop((0, inner - 1, 1, inner)).resize((offset, offset), Image.NEAREST)
+        br = art.crop((inner - 1, inner - 1, inner, inner)).resize((offset, offset), Image.NEAREST)
+        out.paste(tl, (0, 0)); out.paste(tr, (offset + inner, 0))
+        out.paste(bl, (0, offset + inner)); out.paste(br, (offset + inner, offset + inner))
+    return out
 
 def letter_p(size: int, color=(255, 255, 255, 255)) -> Image.Image:
     """A stylised П: two posts and a rounded bar, drawn to read at 24 dp."""
@@ -104,8 +137,8 @@ def main() -> None:
     adaptive = {"mdpi": 108, "hdpi": 162, "xhdpi": 216, "xxhdpi": 324, "xxxhdpi": 432}
     for dens, size in adaptive.items():
         # Full-bleed: the owner's mark is the icon, not a stamp inside a big margin.
-        save(square(size), f"{ANDROID_RES}/drawable-{dens}/ic_launcher_foreground.png")
-        save(letter_p(size // 2), f"{ANDROID_RES}/drawable-{dens}/ic_launcher_monochrome.png")
+        save(edge_extend(BASE, size, 72 / 108), f"{ANDROID_RES}/drawable-{dens}/ic_launcher_foreground.png")
+        save(letter_p(size), f"{ANDROID_RES}/drawable-{dens}/ic_launcher_monochrome.png")
 
     # splash: the mark itself, sitting on the void
     splash = {"mdpi": 96, "hdpi": 144, "xhdpi": 192, "xxhdpi": 288, "xxxhdpi": 384}

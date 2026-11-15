@@ -667,7 +667,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "deleteMultipTip": m21,
     "deleteTip": m22,
     "desc": MessageLookupByLibrary.simpleMessage(
-      "Мультиплатформенный клиент на ядрах Prizrak и Xray. Открытый исходный код, без рекламы и телеметрии.",
+      "Бесплатный клиент с открытым исходным кодом, построенный на FLClashX.",
     ),
     "destination": MessageLookupByLibrary.simpleMessage("Назначение"),
     "destinationGeoIP": MessageLookupByLibrary.simpleMessage(
@@ -911,6 +911,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "geodataLoader": MessageLookupByLibrary.simpleMessage(
       "Geo: экономия памяти",
     ),
+    "getSubscriptionHere": MessageLookupByLibrary.simpleMessage(
+      "Оформить подписку можно здесь",
+    ),
     "global": MessageLookupByLibrary.simpleMessage("Простой портал"),
     "go": MessageLookupByLibrary.simpleMessage("Перейти"),
     "goDownload": MessageLookupByLibrary.simpleMessage("Скачать"),
@@ -1014,6 +1017,9 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "inputRuleContent": MessageLookupByLibrary.simpleMessage(
       "Введите содержимое правила",
+    ),
+    "insertSubscriptionLink": MessageLookupByLibrary.simpleMessage(
+      "Вставьте свою ссылку подписки",
     ),
     "installedAppsPermissionDeniedMessage":
         MessageLookupByLibrary.simpleMessage(

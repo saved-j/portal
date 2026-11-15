@@ -1161,10 +1161,10 @@ class AppLocalizations {
     );
   }
 
-  /// `A multi-platform client built on the Prizrak and Xray cores. Open source, no ads, no telemetry.`
+  /// `A free open-source client built on FLClashX.`
   String get desc {
     return Intl.message(
-      'A multi-platform client built on the Prizrak and Xray cores. Open source, no ads, no telemetry.',
+      'A free open-source client built on FLClashX.',
       name: 'desc',
       desc: '',
       args: [],
@@ -8889,6 +8889,26 @@ class AppLocalizations {
   /// `Built on`
   String get aboutBuiltOn {
     return Intl.message('Built on', name: 'aboutBuiltOn', desc: '', args: []);
+  }
+
+  /// `Paste your subscription link`
+  String get insertSubscriptionLink {
+    return Intl.message(
+      'Paste your subscription link',
+      name: 'insertSubscriptionLink',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Get a subscription here`
+  String get getSubscriptionHere {
+    return Intl.message(
+      'Get a subscription here',
+      name: 'getSubscriptionHere',
+      desc: '',
+      args: [],
+    );
   }
 }
 

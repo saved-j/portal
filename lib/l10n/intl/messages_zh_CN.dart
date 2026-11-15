@@ -504,9 +504,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "delete": MessageLookupByLibrary.simpleMessage("删除"),
     "deleteMultipTip": m21,
     "deleteTip": m22,
-    "desc": MessageLookupByLibrary.simpleMessage(
-      "基于 Prizrak 与 Xray 双核心的多平台客户端。开源、无广告、无遥测。",
-    ),
+    "desc": MessageLookupByLibrary.simpleMessage("基于 FLClashX 的免费开源客户端。"),
     "destination": MessageLookupByLibrary.simpleMessage("目标地址"),
     "destinationGeoIP": MessageLookupByLibrary.simpleMessage("目标地理定位"),
     "destinationIPASN": MessageLookupByLibrary.simpleMessage("目标IP ASN"),
@@ -679,6 +677,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "geoSkipped": m32,
     "geoUpdated": m33,
     "geodataLoader": MessageLookupByLibrary.simpleMessage("Geo低内存模式"),
+    "getSubscriptionHere": MessageLookupByLibrary.simpleMessage("在此获取订阅"),
     "global": MessageLookupByLibrary.simpleMessage("简单门户"),
     "go": MessageLookupByLibrary.simpleMessage("前往"),
     "goDownload": MessageLookupByLibrary.simpleMessage("前往下载"),
@@ -758,6 +757,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "initiatorShort": MessageLookupByLibrary.simpleMessage("发起"),
     "inputProxyGroupName": MessageLookupByLibrary.simpleMessage("输入策略组名称"),
     "inputRuleContent": MessageLookupByLibrary.simpleMessage("输入规则内容"),
+    "insertSubscriptionLink": MessageLookupByLibrary.simpleMessage("粘贴您的订阅链接"),
     "installedAppsPermissionDeniedMessage":
         MessageLookupByLibrary.simpleMessage(
           "读取应用列表权限已被拒绝，无法获取已安装的应用。请前往系统设置手动开启。",
