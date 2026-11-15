@@ -1,0 +1,2076 @@
+# portal 1.03 patch 20 — one owner per generation, and every entry through one lock
+#
+# PortalRuntime (Off | Starting | Active | Stopping | Failed) with a monotonic generation and
+# a tunnel epoch; PortalRuntimeCoordinator serialises the power button, a row tap, Quick
+# Settings, the quick action, a revoke and a restart under one mutex with the documented
+# order coordinator -> transitionLock -> ServiceController.lock -> tunLock. Xray stop answers
+# only after `XrayStop` returned; XrayTunHolder is locked and epoch-bound; `dup()` only from a
+# live descriptor; `Active` only after the owner acknowledged the tunnel.
+# Expected on the device: `PortalRuntime generation=N owner=… phase=…` lines, one Active at a
+# time, no `Already closed`, no stale acknowledgement.
+# Rollback: revert this patch alone; 19/19b/19c stay as they are.
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/MainActivity.kt b/android/app/src/main/kotlin/com/follow/clashx/MainActivity.kt
+index 5dd0124f..d8acdce3 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/MainActivity.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/MainActivity.kt
+@@ -3,6 +3,7 @@ package com.follow.clashx
+ import android.os.Bundle
+ import com.follow.clashx.plugins.AppPlugin
+ import com.follow.clashx.plugins.BatteryPlugin
++import com.follow.clashx.plugins.PortalRuntimePlugin
+ import com.follow.clashx.plugins.ServicePlugin
+ import com.follow.clashx.plugins.TilePlugin
+ import com.follow.clashx.plugins.XrayPlugin
+@@ -35,6 +36,7 @@ class MainActivity : FlutterActivity() {
+         flutterEngine.plugins.add(AppPlugin())
+         flutterEngine.plugins.add(BatteryPlugin())
+         flutterEngine.plugins.add(ServicePlugin())
++        flutterEngine.plugins.add(PortalRuntimePlugin())
+         flutterEngine.plugins.add(TilePlugin())
+         flutterEngine.plugins.add(XrayPlugin())
+         ServiceState.attachFlutterEngine(flutterEngine)
+
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/PortalRuntimeCoordinator.kt b/android/app/src/main/kotlin/com/follow/clashx/PortalRuntimeCoordinator.kt
+new file mode 100644
+index 00000000..07f94799
+--- /dev/null
++++ b/android/app/src/main/kotlin/com/follow/clashx/PortalRuntimeCoordinator.kt
+@@ -0,0 +1,383 @@
++package com.follow.clashx
++
++import com.follow.clashx.common.GlobalState
++import com.follow.clashx.common.PortalOwner
++import com.follow.clashx.common.PortalRuntime
++import com.follow.clashx.common.PortalRuntimeState
++import com.follow.clashx.common.XrayTunHolder
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++
++/// What the child answered for one start: its own words, and the tunnel epoch it read.
++data class PortalChildStart(
++    val ok: Boolean,
++    val cancelled: Boolean = false,
++    val reason: String = "",
++    val epoch: Long = 0L,
++)
++
++/// What the child answered for one stop. `ok` is only ever true once `XrayStop` returned.
++data class PortalChildStop(
++    val ok: Boolean,
++    val reason: String = "",
++)
++
++/**
++ * The plugin's half of a transaction, as the coordinator needs it: start and stop that only
++ * return when the core itself has answered, and the flag it keeps.
++ *
++ * The coordinator never touches the core directly: the plugin owns the JNI calls and the
++ * executor they run on, and this is the narrow face it turns towards the one lock.
++ */
++interface PortalChildGateway {
++    fun start(config: String): PortalChildStart
++
++    fun stop(): PortalChildStop
++
++    val running: Boolean
++
++    /** The core's own last line, for a failure the coordinator has to report. */
++    val coreLine: String
++}
++
++/// The answer of one entry: what happened, and the record it left behind.
++data class PortalOutcome(
++    val ok: Boolean,
++    val cancelled: Boolean = false,
++    val reason: String = "",
++    val runtime: PortalRuntime = PortalRuntimeState.current(),
++) {
++    fun toMap(): Map<String, Any?> = mapOf(
++        "ok" to ok,
++        "cancelled" to cancelled,
++        "message" to reason,
++        "state" to runtime.toMap(),
++    )
++}
++
++/**
++ * The one gate every entry to the tunnel goes through.
++ *
++ * The power button, a row tap, Quick Settings, Always-on, a revoke and a restart all ended
++ * up here before, in three different places: a Dart flag around the mode switch, the
++ * service's own mutex around `ServiceController.start`, and a row tap that called Xray
++ * directly. Each was correct about its own little step and none of them knew about the
++ * others, which is how two readers of one interface, a start cancelled by its own stop and
++ * an `Already closed` descriptor all reached the device.
++ *
++ * Now there is one entry and one mutex, and the lock order is fixed and one-directional:
++ *
++ *     coordinator → transitionLock (ServiceStateMachine) → ServiceController.lock → tunLock
++ *
++ * Every path below follows it and none of them takes it backwards. A revoke is the one
++ * exception, and it is not a lock but a fence: it mints a new generation without waiting,
++ * so a transaction that is holding the mutex cannot publish its `Active` over a tunnel the
++ * system has already taken away.
++ *
++ * `Active` is published only after the owner has answered for itself — the child's
++ * `portal0 up`, or the engine's service and listener — with the generation and the tunnel
++ * epoch it was confirmed on.
++ */
++object PortalRuntimeCoordinator {
++    private const val TAG = "PortalRuntime"
++
++    private val mutex = Mutex()
++
++    @Volatile
++    private var child: PortalChildGateway? = null
++
++    /// Builds the child's document on demand, for an entry that does not carry one.
++    ///
++    /// Quick Settings and Always-on ask for a run without a Flutter call stack; the document
++    /// is the profile's, and only Dart can build it. This is how the one entry gets it, and
++    /// it is awaited inside the mutex so the profile it was built from is the one the
++    /// transaction confirms.
++    @Volatile
++    private var configSource: (suspend () -> String?)? = null
++
++    fun attachChild(gateway: PortalChildGateway) {
++        child = gateway
++    }
++
++    fun detachChild(gateway: PortalChildGateway) {
++        if (child === gateway) child = null
++    }
++
++    fun provideChildConfig(source: (suspend () -> String?)?) {
++        configSource = source
++    }
++
++    /** The owner the shared state asks for: the mode, as the app last wrote it. */
++    fun desiredOwner(): PortalOwner {
++        val options = runCatching { AndroidServiceStateHost.loadSharedState().vpnOptions }.getOrNull()
++        return if (options?.xrayTun == true) PortalOwner.Xray else PortalOwner.Mihomo
++    }
++
++    /** Quick Settings' start: the owner the mode names, and the document Dart builds. */
++    suspend fun openDesired(): PortalOutcome = open(desiredOwner())
++
++    fun status(): Map<String, Any?> = PortalRuntimeState.current().toMap() + mapOf(
++        "engine" to (ServiceController.runtime != null),
++        "child" to (child?.running == true),
++        "childLine" to (child?.coreLine.orEmpty()),
++    )
++
++    /** Opens the tunnel for [owner], or moves it there from whoever holds it now. */
++    suspend fun open(
++        owner: PortalOwner,
++        config: String? = null,
++        why: String = "app",
++    ): PortalOutcome = mutex.withLock {
++        GlobalState.log("$TAG entry=open owner=${owner.label} why=$why config=${config != null}")
++        guarded { openLocked(owner, config, why) }
++    }
++
++    /** Closes the tunnel: the child first, then the service, and the record follows. */
++    suspend fun close(reason: String = "stop"): PortalOutcome = mutex.withLock {
++        GlobalState.log("$TAG entry=close reason=$reason")
++        guarded { closeLocked(reason) }
++    }
++
++    suspend fun restart(config: String? = null): PortalOutcome = mutex.withLock {
++        GlobalState.log("$TAG entry=restart")
++        guarded {
++            val owner = desiredOwner()
++            val closed = closeLocked("restart")
++            if (!closed.ok) closed else openLocked(owner, config, "restart")
++        }
++    }
++
++    /** A row tap: the same owner, a new document, under the same lock. */
++    suspend fun startChild(config: String): PortalOutcome = mutex.withLock {
++        GlobalState.log("$TAG entry=startChild")
++        guarded {
++            val seen = PortalRuntimeState.current()
++            if (seen is PortalRuntime.Active && seen.owner == PortalOwner.Xray) {
++                // The tunnel stays: only the core reading it is replaced, and the same
++                // generation moves through Starting to Active so a late answer from the
++                // core that was just replaced cannot claim the record.
++                val generation = PortalRuntimeState.nextGeneration()
++                PortalRuntimeState.publish(PortalRuntime.Starting(generation, PortalOwner.Xray), "row")
++                startChildLocked(generation, config, "row")
++            } else {
++                openLocked(PortalOwner.Xray, config, "row")
++            }
++        }
++    }
++
++    /** Quick Settings and the launcher's quick action. */
++    suspend fun toggle(): PortalOutcome = mutex.withLock {
++        val running = PortalRuntimeState.current().isLive || ServiceController.runtime != null
++        GlobalState.log("$TAG entry=toggle running=$running")
++        guarded {
++            when {
++                running -> closeLocked("quick-settings")
++                else -> openLocked(desiredOwner(), null, "quick-settings")
++            }
++        }
++    }
++
++    // Any throw is this transaction's own failure; it must not leave a Starting record that
++    // nothing will ever finish, and it must not escape to a caller that only reads `ok`.
++    private suspend fun guarded(block: suspend () -> PortalOutcome): PortalOutcome = try {
++        block()
++    } catch (error: kotlinx.coroutines.CancellationException) {
++        GlobalState.log("$TAG transaction cancelled: $error")
++        throw error
++    } catch (error: Exception) {
++        val generation = PortalRuntimeState.nextGeneration()
++        val reason = error.message ?: error.toString()
++        GlobalState.log("$TAG transaction failed: $reason")
++        PortalRuntimeState.publish(PortalRuntime.Failed(generation, reason), "failed")
++        PortalOutcome(ok = false, reason = reason)
++    }
++
++    private suspend fun openLocked(
++        owner: PortalOwner,
++        config: String?,
++        why: String,
++    ): PortalOutcome {
++        val seen = PortalRuntimeState.current()
++        // The same owner, and nothing new to hand it: the portal is already what was asked.
++        if (seen is PortalRuntime.Active && seen.owner == owner &&
++            (owner == PortalOwner.Mihomo || config == null)
++        ) {
++            GlobalState.log("$TAG phase=Active owner=${owner.label} result=already-active")
++            return PortalOutcome(ok = true, runtime = seen)
++        }
++        val generation = PortalRuntimeState.nextGeneration()
++        PortalRuntimeState.publish(PortalRuntime.Starting(generation, owner), why)
++
++        // 1. Whoever holds the tunnel lets go first, and only after saying so.
++        releaseLocked(generation, seen, why)?.let { return it }
++        if (!stillCurrent(generation)) return stale(generation, "open")
++
++        // 2. The service, in the mode Dart has already written into the shared state.
++        GlobalState.log("$TAG phase=Starting owner=${owner.label} step=service")
++        val epochBefore = PortalRuntimeState.currentFdEpoch()
++        if (!startService(generation)) {
++            return failed(generation, "the service did not start for ${owner.label}")
++        }
++        // The service chose its own reader when it established the tunnel, from the options
++        // it had. A child's tunnel published for an engine start is a mismatch no answer
++        // can paper over: nothing of the engine would be reading it, and calling that
++        // `Active owner=Mihomo` is exactly the false record this patch exists to remove.
++        if (owner == PortalOwner.Mihomo && XrayTunHolder.currentEpoch() > epochBefore) {
++            stopService()
++            return failed(
++                generation,
++                "the service published a child tunnel while the engine was asked for one",
++            )
++        }
++        if (!stillCurrent(generation)) {
++            runCatching { ServiceState.requestStop() }
++            return stale(generation, "service start")
++        }
++
++        // 3. The child, when the tunnel is the child's: it alone can acknowledge reading it.
++        if (owner == PortalOwner.Xray) {
++            return startChildLocked(generation, config, why)
++        }
++        // 4. The engine answered by taking the descriptor in `Core.startTun`; publish it.
++        val epoch = PortalRuntimeState.currentFdEpoch()
++        PortalRuntimeState.publish(PortalRuntime.Active(generation, PortalOwner.Mihomo, epoch), why)
++        GlobalState.log("$TAG phase=Active owner=Mihomo generation=$generation fdEpoch=$epoch result=ok")
++        return PortalOutcome(ok = true, runtime = PortalRuntimeState.current())
++    }
++
++    private suspend fun startChildLocked(
++        generation: Long,
++        config: String?,
++        why: String,
++    ): PortalOutcome {
++        val gateway = child
++            ?: return failed(generation, "this build has no portal core for the tunnel")
++        val document = config ?: configSource?.invoke()
++        if (document.isNullOrBlank()) {
++            closeServiceAfterFailure()
++            return failed(generation, "no node document to start the portal core on")
++        }
++        if (!stillCurrent(generation)) {
++            closeServiceAfterFailure()
++            return stale(generation, "child start")
++        }
++        GlobalState.log("$TAG phase=Starting owner=Xray step=child generation=$generation")
++        val started = gateway.start(document)
++        if (!started.ok) {
++            // A core that refused has already let the tunnel go; the service must not stay
++            // up over an interface nothing reads.
++            closeServiceAfterFailure()
++            if (started.cancelled) {
++                GlobalState.log("$TAG phase=Failed owner=Xray generation=$generation cancelled")
++                return PortalOutcome(ok = false, cancelled = true, reason = started.reason)
++            }
++            return failed(generation, started.reason)
++        }
++        if (!stillCurrent(generation)) {
++            gateway.stop()
++            closeServiceAfterFailure()
++            return stale(generation, "child acknowledgement")
++        }
++        PortalRuntimeState.publish(
++            PortalRuntime.Active(generation, PortalOwner.Xray, started.epoch),
++            why,
++        )
++        GlobalState.log(
++            "$TAG phase=Active owner=Xray generation=$generation fdEpoch=${started.epoch} result=ok",
++        )
++        return PortalOutcome(ok = true, runtime = PortalRuntimeState.current())
++    }
++
++    /** Stops whoever holds the tunnel. `null` when there was nobody to stop. */
++    private suspend fun releaseLocked(
++        generation: Long,
++        seen: PortalRuntime,
++        why: String,
++    ): PortalOutcome? {
++        val previous = seen.owner
++        if (previous == null || (!seen.isLive && seen !is PortalRuntime.Failed)) return null
++        PortalRuntimeState.publish(PortalRuntime.Stopping(generation, previous), why)
++        GlobalState.log("$TAG phase=Stopping owner=${previous.label} generation=$generation")
++        if (previous == PortalOwner.Xray || child?.running == true) {
++            val stopped = child?.stop() ?: PortalChildStop(ok = true)
++            if (!stopped.ok) {
++                return failed(generation, "the portal core did not stop: ${stopped.reason}")
++            }
++            GlobalState.log("$TAG phase=Stopping owner=Xray generation=$generation xraystop=ok")
++        }
++        if (ServiceController.runtime != null && !stopService()) {
++            return failed(generation, "the service did not stop")
++        }
++        return null
++    }
++
++    private suspend fun closeLocked(reason: String): PortalOutcome {
++        val seen = PortalRuntimeState.current()
++        val generation = PortalRuntimeState.nextGeneration()
++        if (seen.isLive && seen.owner != null) {
++            PortalRuntimeState.publish(PortalRuntime.Stopping(generation, seen.owner!!), reason)
++            GlobalState.log(
++                "$TAG phase=Stopping owner=${seen.owner!!.label} generation=$generation reason=$reason",
++            )
++        }
++        var ok = true
++        var problem = ""
++        if (seen.owner == PortalOwner.Xray || child?.running == true) {
++            val stopped = child?.stop() ?: PortalChildStop(ok = true)
++            if (!stopped.ok) {
++                ok = false
++                problem = "the portal core did not stop: ${stopped.reason}"
++            }
++        }
++        if (ServiceController.runtime != null && !stopService()) {
++            ok = false
++            if (problem.isEmpty()) problem = "the service did not stop"
++        }
++        if (!ok) return failed(generation, problem)
++        PortalRuntimeState.publish(PortalRuntime.Off(generation), reason)
++        GlobalState.log("$TAG phase=Off generation=$generation result=ok reason=$reason")
++        return PortalOutcome(ok = true, runtime = PortalRuntimeState.current())
++    }
++
++    private suspend fun startService(generation: Long): Boolean {
++        val answered = ServiceState.requestStart().await()
++        GlobalState.log(
++            "$TAG generation=$generation step=service start=$answered " +
++                "engine=${ServiceController.runtime != null}",
++        )
++        return answered
++    }
++
++    // The stop is the service's own answer: what it returns is whether the transition that
++    // was asked for is still the newest one, and the record follows the tunnel being gone.
++    private suspend fun stopService(): Boolean {
++        val answered = ServiceState.requestStop().await()
++        GlobalState.log("$TAG step=service stop=$answered engine-off=${ServiceController.runtime == null}")
++        return answered
++    }
++
++    private suspend fun closeServiceAfterFailure() {
++        runCatching { stopService() }
++            .onFailure { GlobalState.log("$TAG unable to close the service after a failure: $it") }
++    }
++
++    private fun stillCurrent(generation: Long): Boolean = PortalRuntimeState.isCurrent(generation)
++
++    private fun stale(generation: Long, step: String): PortalOutcome {
++        GlobalState.log(
++            "$TAG generation=$generation step=$step result=stale " +
++                "(now ${PortalRuntimeState.current().describe()})",
++        )
++        return PortalOutcome(
++            ok = false,
++            cancelled = true,
++            reason = "a newer command took the portal during $step",
++        )
++    }
++
++    private fun failed(generation: Long, reason: String): PortalOutcome {
++        PortalRuntimeState.publish(PortalRuntime.Failed(generation, reason), "failed")
++        GlobalState.log("$TAG generation=$generation phase=Failed reason=$reason")
++        return PortalOutcome(ok = false, reason = reason)
++    }
++}
+
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/QuickActionActivity.kt b/android/app/src/main/kotlin/com/follow/clashx/QuickActionActivity.kt
+index 5766d934..412c96a8 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/QuickActionActivity.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/QuickActionActivity.kt
+@@ -47,10 +47,12 @@ class QuickActionActivity : Activity() {
+         mainThreadActionsInFlight++
+         GlobalState.launch {
+             try {
++                // The same entry the app and Quick Settings take: the coordinator decides
++                // the owner, the order and the generation, and this holds until it answers.
+                 when (action) {
+-                    QuickAction.START -> ServiceState.handleStartAction()
+-                    QuickAction.STOP -> ServiceState.handleStopAction()
+-                    QuickAction.TOGGLE -> ServiceState.handleToggleAction()
++                    QuickAction.START -> PortalRuntimeCoordinator.openDesired()
++                    QuickAction.STOP -> PortalRuntimeCoordinator.close("quick-action")
++                    QuickAction.TOGGLE -> PortalRuntimeCoordinator.toggle()
+                 }
+             } finally {
+                 withContext(Dispatchers.Main) { mainThreadActionsInFlight-- }
+
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt b/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
+index 8451143b..95347ab4 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
+@@ -8,6 +8,7 @@ import android.os.Handler
+ import android.os.IBinder
+ import android.os.Looper
+ import com.follow.clashx.common.GlobalState
++import com.follow.clashx.common.PortalRuntimeState
+ import com.follow.clashx.common.intent
+ import com.follow.clashx.core.Core
+ import com.follow.clashx.service.ManagedService
+@@ -58,7 +65,8 @@ object ServiceController {
+         val stopped = runCatching { Core.stopListener() }
+         GlobalState.log(
+             "engine listener owner=Off xrayTunActive=$xrayTunActive stop=" +
+-                (stopped.exceptionOrNull()?.toString() ?: "ok"),
++                (stopped.exceptionOrNull()?.toString() ?: "ok") +
++                " generation=${PortalRuntimeState.current().generation}",
+         )
+         xrayTunActive = false
+     }
+@@ -99,7 +107,8 @@ object ServiceController {
+             val stopped = runCatching { Core.stopListener() }
+             GlobalState.log(
+                 "engine listener owner=Xray stop before the hand-over=" +
+-                    (stopped.exceptionOrNull()?.toString() ?: "ok"),
++                    (stopped.exceptionOrNull()?.toString() ?: "ok") +
++                    " generation=${PortalRuntimeState.current().generation}",
+             )
+         }
+         val nextIntent = if (options.enable) {
+
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/ServiceStateMachine.kt b/android/app/src/main/kotlin/com/follow/clashx/ServiceStateMachine.kt
+index d32e243a..7b797048 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/ServiceStateMachine.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/ServiceStateMachine.kt
+@@ -1,5 +1,6 @@
+ package com.follow.clashx
+ 
++import com.follow.clashx.common.PortalRuntimeState
+ import com.follow.clashx.common.RunIntentArbiter
+ import com.follow.clashx.models.SharedState
+ import com.follow.clashx.service.models.NotificationParams
+@@ -421,6 +422,10 @@ internal class ServiceStateMachine(private val host: ServiceStateHost) {
+ 
+     private inline fun <T> transitioning(state: RunState, block: () -> T): T {
+         transition = state
++        // The phase in the same words as the portal's own record, with the generation it
++        // belongs to: a `STARTING` in the log without a number cannot be told from the one
++        // a newer transaction published a moment later.
++        host.log("service phase=$state generation=${PortalRuntimeState.current().generation}")
+         publish()
+         try {
+             return block()
+
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
+new file mode 100644
+index 00000000..333996c4
+--- /dev/null
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
+@@ -0,0 +1,122 @@
++package com.follow.clashx.plugins
++
++import com.follow.clashx.PortalOutcome
++import com.follow.clashx.PortalRuntimeCoordinator
++import com.follow.clashx.common.Components
++import com.follow.clashx.common.GlobalState
++import com.follow.clashx.common.PortalOwner
++import com.follow.clashx.common.PortalRuntimeState
++import io.flutter.embedding.engine.plugins.FlutterPlugin
++import io.flutter.plugin.common.MethodCall
++import io.flutter.plugin.common.MethodChannel
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.suspendCancellableCoroutine
++import kotlin.coroutines.resume
++
++/**
++ * The channel the app's own Dart drives the portal with.
++ *
++ * One entry, one answer: every call here goes through [PortalRuntimeCoordinator], which owns
++ * the mutex, the generation and the tunnel's owner. A call answers when the transaction is
++ * over — `ok` only when the owner acknowledged the tunnel — so a caller no longer has to
++ * guess from a fire-and-forget `true` whether the tunnel it asked for exists.
++ *
++ * `prepareChildConfig` is the reverse direction: an entry that arrived without a document
++ * (Quick Settings, Always-on) asks Dart for one inside the transaction, because the profile
++ * the document is built from lives there.
++ */
++class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
++    private lateinit var channel: MethodChannel
++
++    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
++        channel = MethodChannel(binding.binaryMessenger, CHANNEL)
++        channel.setMethodCallHandler(this)
++        // Dart builds the document; the coordinator asks for it while it holds the lock.
++        PortalRuntimeCoordinator.provideChildConfig {
++            requestChildConfig()
++        }
++    }
++
++    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
++        channel.setMethodCallHandler(null)
++        PortalRuntimeCoordinator.provideChildConfig(null)
++    }
++
++    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
++        when (call.method) {
++            "open" -> {
++                val owner = PortalOwner.of(call.argument<String>("owner"))
++                if (owner == null) {
++                    result.success(
++                        PortalOutcome(ok = false, reason = "unknown owner").toMap(),
++                    )
++                    return
++                }
++                val config = call.argument<String>("config")
++                GlobalState.launch { result.success(PortalRuntimeCoordinator.open(owner, config).toMap()) }
++            }
++
++            "close" -> GlobalState.launch {
++                result.success(PortalRuntimeCoordinator.close(call.argument<String>("reason") ?: "app").toMap())
++            }
++
++            "restart" -> GlobalState.launch {
++                result.success(PortalRuntimeCoordinator.restart(call.argument<String>("config")).toMap())
++            }
++
++            "startChild" -> {
++                val config = call.argument<String>("config")
++                if (config.isNullOrBlank()) {
++                    result.success(
++                        PortalOutcome(ok = false, reason = "empty config").toMap(),
++                    )
++                    return
++                }
++                GlobalState.launch {
++                    result.success(PortalRuntimeCoordinator.startChild(config).toMap())
++                }
++            }
++
++            "status" -> result.success(PortalRuntimeCoordinator.status())
++
++            else -> result.notImplemented()
++        }
++    }
++
++    /// Asks Dart for the document of the node the portal currently picks.
++    private suspend fun requestChildConfig(): String? =
++        suspendCancellableCoroutine { continuation ->
++            val main = android.os.Handler(android.os.Looper.getMainLooper())
++            main.post {
++                runCatching {
++                    channel.invokeMethod(
++                        "prepareChildConfig",
++                        null,
++                        object : MethodChannel.Result {
++                            override fun success(answer: Any?) {
++                                if (continuation.isActive) {
++                                    continuation.resume((answer as? String)?.takeIf { it.isNotBlank() })
++                                }
++                            }
++
++                            override fun error(code: String, message: String?, details: Any?) {
++                                GlobalState.log("prepareChildConfig failed: $code $message")
++                                if (continuation.isActive) continuation.resume(null)
++                            }
++
++                            override fun notImplemented() {
++                                if (continuation.isActive) continuation.resume(null)
++                            }
++                        },
++                    )
++                }.onFailure { error ->
++                    GlobalState.log("prepareChildConfig unavailable: $error")
++                    if (continuation.isActive) continuation.resume(null)
++                }
++            }
++        }
++
++    private companion object {
++        val CHANNEL = "${Components.PACKAGE_NAME}/portal"
++    }
++}
+
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+index d683e6c0..bf6c88c2 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -3,7 +3,13 @@ package com.follow.clashx.plugins
+ import android.content.Context
+ import android.system.Os
+ import android.util.Log
++import com.follow.clashx.PortalChildGateway
++import com.follow.clashx.PortalChildStart
++import com.follow.clashx.PortalChildStop
++import com.follow.clashx.PortalRuntimeCoordinator
+ import com.follow.clashx.common.Components
++import com.follow.clashx.common.GlobalState
++import com.follow.clashx.common.PortalRuntimeState
+ import com.follow.clashx.common.XrayChildControl
+ import com.follow.clashx.common.XrayTun
+ import com.follow.clashx.common.XrayTunHolder
+@@ -15,8 +21,12 @@ import org.json.JSONObject
+ import java.io.ByteArrayOutputStream
+ import java.io.File
+ import java.io.RandomAccessFile
++import java.util.concurrent.Callable
+ import java.util.concurrent.Executors
++import java.util.concurrent.TimeUnit
++import java.util.concurrent.TimeoutException
+ import java.util.concurrent.atomic.AtomicLong
++import kotlinx.coroutines.launch
+ 
+ /**
+  * Runs the bundled Xray on the simple portal's tunnel.
+@@ -44,7 +54,7 @@ import java.util.concurrent.atomic.AtomicLong
+  * and an app uid is denied that read (`netlinkrib: permission denied`). The exclusion is by
+  * uid, exactly like `VpnService.protect`, and it needs no interface name at all.
+  */
+-class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
++class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGateway {
+     private lateinit var channel: MethodChannel
+     private lateinit var appContext: Context
+     private val executor = Executors.newSingleThreadExecutor()
+@@ -111,10 +121,13 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+             takeCore()
+             requestNativeStop()
+         }
++        // The coordinator's child half: starts and stops that only answer once the core has.
++        PortalRuntimeCoordinator.attachChild(this)
+     }
+ 
+     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+         channel.setMethodCallHandler(null)
++        PortalRuntimeCoordinator.detachChild(this)
+         XrayChildControl.stop = null
+         nextOperation()
+         takeCore()
+@@ -124,42 +137,35 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+         when (call.method) {
+             "status" -> result.success(status())
++            // The channel is not a second way into the core: it is the same entry the mode
++            // switch and Quick Settings take, so the same mutex and the same generation
++            // decide the order. The plugin still answers with its own words.
+             "start" -> {
+                 val config = call.argument<String>("config")
+                 if (config.isNullOrBlank()) {
+                     result.success(failure("empty config"))
+                     return
+                 }
+-                // Numbered here, on the platform thread, so start and stop are ordered by
+-                // arrival: the newest command is the one that owns the core.
+-                val token = nextOperation()
+-                executor.execute {
+-                    if (!isCurrent(token)) {
+-                        result.success(cancelled())
+-                        return@execute
+-                    }
+-                    val outcome = start(token, config)
++                GlobalState.launch {
++                    val outcome = PortalRuntimeCoordinator.startChild(config)
+                     channel.invokeMethodOnMainThread("state", status())
+-                    result.success(outcome)
++                    replyOnMain(result, outcome.toMap())
+                 }
+             }
+-            "stop" -> {
+-                // Take the number first: that is what makes a start — waiting already, or
+-                // still queued behind this one — abandon its work instead of overriding the
+-                // stop. The native stop is queued rather than run here, so the caller is not
+-                // held for the core's wind-down; a start in flight ends on its own when it
+-                // sees the new number, which is also when the queue reaches this task.
+-                val token = nextOperation()
+-                takeCore()
+-                requestNativeStop()
+-                executor.execute {
+-                    // The report follows the stop, whatever arrived in between: what it says
+-                    // is the state after the core was asked to go.
+-                    if (isCurrent(token)) {
+-                        channel.invokeMethodOnMainThread("state", status())
+-                    }
+-                    result.success(mapOf("ok" to true, "message" to "stopped"))
+-                }
++            "stop" -> GlobalState.launch {
++                // Returns after `XrayStop` has returned: a stop that did not happen is not
++                // reported as one, which is what makes the next start's evidence meaningful.
++                val outcome = PortalRuntimeCoordinator.close("plugin-stop")
++                channel.invokeMethodOnMainThread("state", status())
++                replyOnMain(
++                result,
++                mapOf(
++                    "ok" to outcome.ok,
++                    "cancelled" to outcome.cancelled,
++                    "message" to outcome.reason.ifEmpty { "stopped" },
++                    "generation" to outcome.runtime.generation,
++                ),
++                )
+             }
+             else -> result.notImplemented()
+         }
+@@ -170,8 +176,90 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         "lastLine" to lastLine,
+         // Whether this plugin holds a tunnel: the core can only run while it does.
+         "tun" to (cachedTun != null),
++        // The record this core belongs to: a `running` flag without it cannot say whether
++        // the answer still describes the portal on screen.
++        "generation" to PortalRuntimeState.current().generation,
++        "phase" to PortalRuntimeState.current().phase,
++        "fdEpoch" to (cachedTun?.epoch ?: 0L),
+     )
+ 
++    private fun replyOnMain(result: MethodChannel.Result, value: Any?) {
++        android.os.Handler(android.os.Looper.getMainLooper()).post {
++            runCatching { result.success(value) }
++        }
++    }
++
++    // ---- PortalChildGateway: the child's half of the coordinator's transaction ------------
++
++    /// Starts the core on [config] and answers only after it acknowledged the tunnel.
++    ///
++    /// Runs on the plugin's own single thread and waits for that task, so a start queued
++    /// behind a stop runs after it instead of beside it, and the caller can treat the answer
++    /// as a fact of the core rather than of the queue.
++    override fun start(config: String): PortalChildStart {
++        val token = nextOperation()
++        val task = executor.submit(Callable { start(token, config) })
++        val outcome = try {
++            task.get(START_WAIT_MS, TimeUnit.MILLISECONDS)
++        } catch (error: TimeoutException) {
++            nextOperation()
++            task.cancel(true)
++            return PortalChildStart(
++                ok = false,
++                reason = "the core did not answer within ${START_WAIT_MS}ms: $lastLine",
++            )
++        } catch (error: Exception) {
++            return PortalChildStart(ok = false, reason = error.message ?: "$error")
++        }
++        val ok = outcome["ok"] == true
++        return PortalChildStart(
++            ok = ok,
++            cancelled = outcome["cancelled"] == true,
++            reason = if (ok) "" else (outcome["message"] as? String).orEmpty(),
++            epoch = (outcome["epoch"] as? Long) ?: 0L,
++        )
++    }
++
++    /// Stops the core, and answers only after `XrayStop` returned.
++    ///
++    /// The flag is taken on the calling thread — that is what makes a start that is still
++    /// waiting see a newer command — and the native call is queued behind whatever the
++    /// executor is doing, then waited for. Its own failure is reported as a failure: the
++    /// plugin used to answer `ok` for a stop that was merely enqueued.
++    override fun stop(): PortalChildStop {
++        val token = nextOperation()
++        val wasRunning = takeCore()
++        val task = executor.submit(Callable {
++            if (!wasRunning || !libraryLoaded) return@Callable Result.success(Unit)
++            runCatching { XrayStop() }
++        })
++        val outcome = try {
++            task.get(STOP_WAIT_MS, TimeUnit.MILLISECONDS)
++        } catch (error: TimeoutException) {
++            task.cancel(true)
++            return PortalChildStop(
++                ok = false,
++                reason = "XrayStop did not return within ${STOP_WAIT_MS}ms",
++            )
++        } catch (error: Exception) {
++            return PortalChildStop(ok = false, reason = error.message ?: "$error")
++        }
++        val problem = outcome.exceptionOrNull()
++        Log.i(
++            TAG,
++            "stop owner=Xray token=$token wasRunning=$wasRunning xraystop=${problem?.message ?: "ok"}",
++        )
++        return if (problem == null) {
++            PortalChildStop(ok = true)
++        } else {
++            PortalChildStop(ok = false, reason = "${problem.message}")
++        }
++    }
++
++    override val running: Boolean get() = coreRunning
++
++    override val coreLine: String get() = lastLine
++
+     private fun start(token: Long, config: String): Map<String, Any> {
+         // One core at a time: a restart after a tap replaces the core that is reading the
+         // tunnel, and two cores cannot share one descriptor.
+@@ -217,11 +308,17 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         // call runs; the core duplicates it once more for itself (proxy/tun does
+         // F_DUPFD_CLOEXEC on what it is handed), so closing this one on the way out leaves the
+         // core reading its own.
+-        val handoff = runCatching { tun.descriptor.dup() }.getOrElse { error ->
+-            return failure("cannot duplicate the tunnel descriptor: ${error.message}")
++        //
++        // `XrayTun.duplicate()` is the only way to it: it asks the descriptor whether it is
++        // still open under the same guard as the duplicate, so a tunnel the service closed in
++        // between answers `null` here instead of throwing `Already closed` out of `dup()`.
++        val handoff = tun.duplicate() ?: run {
++            cachedTun = null
++            XrayTunHolder.clear(tun.epoch)
++            return failure("the tunnel descriptor is closed: nothing to read")
+         }
+         val fd = handoff.fd
+-        Log.i(TAG, "handing tun fd $fd (a duplicate of ${tun.fd}) to the core")
++        Log.i(TAG, "handing tun fd $fd (a duplicate of ${tun.fd}, epoch ${tun.epoch}) to the core")
+         val attempt = try {
+             runCatching { XrayStart(document, fd, assets.absolutePath) }
+         } finally {
+@@ -244,7 +341,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+         coreRunning = true
+         lastLine = ""
+         return try {
+-            awaitAck(token, fd, logFile)
++            awaitAck(token, fd, logFile, tun.epoch)
+         } catch (e: Exception) {
+             Log.e(TAG, "unable to start xray", e)
+             stopCoreHere()
+@@ -368,7 +556,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+     /// to read. What it writes to the log the document names is the only evidence: the tun
+     /// reader says it started, or an `[Error]` line says it never will. Both end the wait —
+     /// one as the acknowledgement, one as the failure, each with the core's own words.
+-    private fun awaitAck(token: Long, fd: Int, logFile: File): Map<String, Any> {
++    private fun awaitAck(token: Long, fd: Int, logFile: File, epoch: Long): Map<String, Any> {
+         val tail = LogTail(logFile)
+         val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
+         while (System.currentTimeMillis() < deadline) {
+@@ -390,8 +578,12 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+                 // A failure line answers the start now, not at the deadline: a refused
+                 // document would otherwise sit out the whole timeout saying nothing.
+                 if (ACK_MARKERS.any { lastLine.contains(it, ignoreCase = true) }) {
+-                    Log.i(TAG, "xray is reading the tunnel on fd $fd")
+-                    return mapOf("ok" to true, "message" to "tunnel on fd $fd")
++                    Log.i(TAG, "xray is reading the tunnel on fd $fd (epoch $epoch)")
++                    return mapOf(
++                        "ok" to true,
++                        "message" to "tunnel on fd $fd",
++                        "epoch" to epoch,
++                    )
+                 }
+                 if (isCoreError(lastLine)) {
+                     Log.e(TAG, "xray failed to take the tunnel: $lastLine")
+@@ -566,6 +758,15 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+ 
+         private const val READY_TIMEOUT_MS = 12_000L
+ 
++        /// How long a coordinator entry waits for the core's own answer. Above the ack's own
++        /// deadline plus the tunnel wait, so a slow start reports the core's words rather
++        /// than this timeout.
++        private const val START_WAIT_MS = 45_000L
++
++        /// `XrayStop` returns when the core has let go of its tunnels; a stop that never
++        /// returns is a fact the caller has to hear instead of waiting forever.
++        private const val STOP_WAIT_MS = 30_000L
++
+         /// How often the log is read, and how finely a sleep is cut so a stop does not wait
+         /// out a whole interval before the start gives up.
+         private const val POLL_MS = 200L
+
+diff --git a/android/common/src/main/java/com/follow/clashx/common/PortalRuntime.kt b/android/common/src/main/java/com/follow/clashx/common/PortalRuntime.kt
+new file mode 100644
+index 00000000..25fa447e
+--- /dev/null
++++ b/android/common/src/main/java/com/follow/clashx/common/PortalRuntime.kt
+@@ -0,0 +1,191 @@
++package com.follow.clashx.common
++
++import java.util.concurrent.atomic.AtomicLong
++import java.util.concurrent.atomic.AtomicReference
++
++/**
++ * Who reads the one tunnel the VpnService established.
++ *
++ * `Mode.global` only says which owner the app *wants* next; this enum is the owner a
++ * generation actually has. The two are never the same question: a mode change while the
++ * portal is closed changes only the wish, and a wish that is being carried out is not yet
++ * a fact — that is what [PortalRuntime.Starting] and [PortalRuntime.Active] separate.
++ */
++enum class PortalOwner(val label: String) {
++    Mihomo("Mihomo"),
++    Xray("Xray"),
++    ;
++
++    companion object {
++        fun of(value: String?): PortalOwner? = entries.firstOrNull {
++            it.label.equals(value, ignoreCase = true) || it.name.equals(value, ignoreCase = true)
++        }
++    }
++}
++
++/**
++ * The process-wide record of the tunnel's owner, at one generation.
++ *
++ * Exactly one of these describes the process at any moment. A generation moves on every
++ * open, close, switch and restart, and a late answer from an older generation — a stop that
++ * finally returned, a start that acknowledged after the user closed the portal — is
++ * recognised by its number and cannot publish itself over the newer state. That is the
++ * difference between a portal that *is* owned and one that is *believed* to be owned: the
++ * plugin used to report `running`, the service `xrayTunActive`, and neither said which of
++ * the two was reading the descriptor now.
++ *
++ * [Active] is only ever published after the owner's own acknowledgement — `portal0 up` from
++ * the child's log, or a started service and its engine listener for the engine. Anything
++ * short of that is [Failed] with the owner's own words, and the portal is closed rather than
++ * reported open over a tunnel nothing reads.
++ */
++sealed class PortalRuntime {
++    abstract val generation: Long
++
++    /** The owner this state is about, if any: `Off` and a failed start name none. */
++    open val owner: PortalOwner? get() = null
++
++    /** The tunnel epoch this state was confirmed on; `0` before an establish. */
++    open val fdEpoch: Long get() = 0L
++
++    abstract val phase: String
++
++    /** Whether an owner is holding the tunnel right now. */
++    open val isLive: Boolean get() = false
++
++    data class Off(override val generation: Long = 0L) : PortalRuntime() {
++        override val phase: String get() = "Off"
++    }
++
++    data class Starting(
++        override val generation: Long,
++        override val owner: PortalOwner,
++    ) : PortalRuntime() {
++        override val phase: String get() = "Starting"
++        override val isLive: Boolean get() = true
++    }
++
++    data class Active(
++        override val generation: Long,
++        override val owner: PortalOwner,
++        override val fdEpoch: Long,
++    ) : PortalRuntime() {
++        override val phase: String get() = "Active"
++        override val isLive: Boolean get() = true
++    }
++
++    data class Stopping(
++        override val generation: Long,
++        override val owner: PortalOwner,
++    ) : PortalRuntime() {
++        override val phase: String get() = "Stopping"
++        override val isLive: Boolean get() = true
++    }
++
++    data class Failed(
++        override val generation: Long,
++        val reason: String,
++    ) : PortalRuntime() {
++        override val phase: String get() = "Failed"
++    }
++
++    /** One line: the record, in the log and on the channel, spelled the same way. */
++    fun describe(): String = buildString {
++        append("generation=").append(generation)
++        append(" phase=").append(phase)
++        owner?.let { append(" owner=").append(it.label) }
++        if (fdEpoch > 0) append(" fdEpoch=").append(fdEpoch)
++        if (this@PortalRuntime is Failed) append(" reason=").append(reason)
++    }
++
++    fun toMap(): Map<String, Any?> = mapOf(
++        "generation" to generation,
++        "phase" to phase,
++        "owner" to owner?.label,
++        "fdEpoch" to fdEpoch,
++        "reason" to (this as? Failed)?.reason.orEmpty(),
++        "running" to (this is Active),
++    )
++
++    companion object {
++        val initial: PortalRuntime = Off(0L)
++    }
++}
++
++/**
++ * The one place the record is written, and the one place a number is minted.
++ *
++ * [publish] refuses anything older than what it already holds, so a transaction that was
++ * overtaken — a revoke, a newer open, a close — cannot put its answer back on top. Closing
++ * is the exception only in appearance: a revoke mints a new generation first, which is why
++ * the late `Active` loses.
++ */
++object PortalRuntimeState {
++    private const val TAG = "PortalRuntime"
++
++    private val state = AtomicReference(PortalRuntime.initial)
++    private val generationSeq = AtomicLong(0)
++    private val fdEpochSeq = AtomicLong(0)
++
++    /// Called for every state that is accepted, with the state it replaced.
++    ///
++    /// The record does not know who reads it: the telemetry file is one reader, and it is
++    /// attached here rather than called by name so the record stays a record. A `null` hook
++    /// is a process that keeps no files — the log lines are written either way.
++    @Volatile
++    var onPublish: ((PortalRuntime, PortalRuntime, String) -> Unit)? = null
++
++    fun current(): PortalRuntime = state.get()
++
++    /** A number no earlier step holds; every entry takes one before it changes anything. */
++    fun nextGeneration(): Long = generationSeq.incrementAndGet()
++
++    /** A number for one established tunnel; it moves on every `establish()`. */
++    fun nextFdEpoch(): Long = fdEpochSeq.incrementAndGet()
++
++    fun currentFdEpoch(): Long = fdEpochSeq.get()
++
++    fun isCurrent(generation: Long): Boolean = state.get().generation == generation
++
++    /**
++     * Writes [next] when it still belongs to the newest generation.
++     *
++     * Equal numbers are allowed on purpose: one transaction publishes `Starting`, then
++     * `Stopping`, then `Active` under the same number, and those are its own steps. [why]
++     * is the entry that asked for the move — a button, a row, Quick Settings, a revoke —
++     * and it is part of the record, not of the logging: the one line per transition is
++     * written from here so no path can move the tunnel without saying who asked.
++     */
++    fun publish(next: PortalRuntime, why: String = ""): Boolean {
++        while (true) {
++            val seen = state.get()
++            if (next.generation < seen.generation) {
++                GlobalState.log(
++                    "$TAG refused a stale state: ${next.describe()} (current ${seen.describe()})",
++                )
++                return false
++            }
++            if (state.compareAndSet(seen, next)) {
++                GlobalState.log("$TAG ${next.describe()}${if (why.isEmpty()) "" else " why=$why"}")
++                onPublish?.invoke(seen, next, why)
++                return true
++            }
++        }
++    }
++
++    /**
++     * Takes the tunnel away without waiting for anybody.
++     *
++     * A revoke arrives from the system while a switch may be holding the coordinator's
++     * mutex, and a revoke that waited for that mutex would leave the descriptor being read
++     * by a core the system has already cut off. It fences instead: a new generation is
++     * minted, `Off` is published under it, and the transaction in flight finds its own
++     * number stale wherever it next reports.
++     */
++    fun revoke(reason: String, owner: PortalOwner? = state.get().owner): Long {
++        val generation = nextGeneration()
++        publish(PortalRuntime.Off(generation))
++        GlobalState.log("$TAG revoked owner=${owner?.label ?: "none"} reason=$reason")
++        return generation
++    }
++}
+
+diff --git a/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+index a01e3de9..ab624b9a 100644
+--- a/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
++++ b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+@@ -16,6 +16,9 @@ class XrayTun(
+     val mtu: Int,
+     val gateway: List<String>,
+     val dns: List<String>,
++    /// Which `establish()` made this tunnel. The service mints it, the plugin checks it, and
++    /// a descriptor from an older epoch is never handed to a core of the newer one.
++    val epoch: Long = 0L,
+ ) {
+     /// The number the core is given. Valid only while [descriptor] is open.
+     // `ParcelFileDescriptor.getFd()` throws `IllegalStateException: Already closed` on a closed
+@@ -30,7 +33,27 @@ class XrayTun(
+     /// number may already belong to the next file the process opened, so the descriptor itself
+     /// is asked. proxy/tun falls back to 0 for a number that was never set, which is how a
+     /// closed tunnel used to reach the core as a bare `inappropriate ioctl for device`.
+-    val live: Boolean get() = fd >= FIRST_TUN_FD && descriptor.fileDescriptor.valid()
++    ///
++    /// Both reads are guarded: `getFd()` *and* `getFileDescriptor()` throw
++    /// `IllegalStateException: Already closed` on a descriptor the service just closed, and a
++    /// reader has no business dying over the answer to a question it asked about a closing
++    /// tunnel. A closed tunnel is `false`, never an exception.
++    val live: Boolean get() = runCatching {
++        val number = descriptor.fd
++        number >= FIRST_TUN_FD && descriptor.fileDescriptor.valid()
++    }.getOrDefault(false)
++
++    /// A descriptor of its own, or `null` when this tunnel is no longer open.
++    ///
++    /// The one way to reach `dup()`: duplicating a closed descriptor throws
++    /// `Already closed`, and a number taken from one belongs to whatever file the process
++    /// opened next. The check and the duplicate happen under the same guard as [live], so a
++    /// newer stop that closes the descriptor between them cannot slip through.
++    @Synchronized
++    fun duplicate(): ParcelFileDescriptor? {
++        if (!live) return null
++        return runCatching { descriptor.dup() }.getOrNull()
++    }
+ 
+     companion object {
+         /// The first descriptor number that is not stdin, stdout or stderr: a tunnel is never
+@@ -50,14 +73,39 @@ class XrayTun(
+ object XrayTunHolder {
+     private const val POLL_MS = 50L
+ 
+-    @Volatile
++    // One guard for the slot, the epoch and the take: `take` clears what `publish` set, and
++    // two threads doing that beside each other is how one tunnel used to be handed to two
++    // starts. Every operation below is written against this lock and nothing else.
++    private val lock = Any()
++
+     private var pending: XrayTun? = null
+ 
+-    fun publish(tun: XrayTun?) {
++    /// The newest epoch this holder has seen, so an older publish cannot replace a newer one.
++    private var publishedEpoch: Long = 0L
++
++    fun publish(tun: XrayTun?) = synchronized(lock) {
++        if (tun != null && tun.epoch in 1 until publishedEpoch) {
++            GlobalState.log(
++                "XrayTunHolder dropped a publish of an older epoch ${tun.epoch} " +
++                    "(holding $publishedEpoch)",
++            )
++            return@synchronized
++        }
+         pending = tun
++        if (tun != null && tun.epoch > publishedEpoch) publishedEpoch = tun.epoch
++        Unit
++    }
++
++    /// The tunnel in hand, cleared as it is taken; an [epoch] given must match.
++    fun take(epoch: Long? = null): XrayTun? = synchronized(lock) {
++        val held = pending ?: return null
++        if (epoch != null && epoch != held.epoch) return null
++        pending = null
++        held
+     }
+ 
+-    fun take(): XrayTun? = pending?.also { pending = null }
++    /// The epoch of the newest tunnel the service published.
++    fun currentEpoch(): Long = synchronized(lock) { publishedEpoch }
+ 
+     /**
+      * Waits up to [timeoutMillis] for the service to publish.
+@@ -68,16 +116,23 @@ object XrayTunHolder {
+      * tunnel: a start whose cached descriptor was closed waits here for the VPN the service is
+      * establishing now, instead of reading a number that already belongs to another file.
+      */
+-    fun await(timeoutMillis: Long): XrayTun? {
++    fun await(timeoutMillis: Long, epoch: Long? = null): XrayTun? {
+         val deadline = System.currentTimeMillis() + timeoutMillis
+         while (System.currentTimeMillis() < deadline) {
+-            take()?.let { return it }
++            take(epoch)?.let { return it }
+             Thread.sleep(POLL_MS)
+         }
+-        return take()
++        return take(epoch)
+     }
+ 
+-    fun clear() {
++    /// Drops the slot, and only the slot of [epoch] when one is given.
++    ///
++    /// A stop that names the tunnel it is closing must not clear the tunnel that replaced it:
++    /// a newer `establish()` publishes while an older stop is still unwinding, and an
++    /// unconditional clear left the newer descriptor reachable by nobody.
++    fun clear(epoch: Long? = null) = synchronized(lock) {
++        val held = pending ?: return@synchronized
++        if (epoch != null && held.epoch > epoch) return@synchronized
+         pending = null
+     }
+ }
+
+diff --git a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+index f84e15c8..759b7a00 100644
+--- a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
++++ b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+@@ -11,6 +11,7 @@ import android.os.ParcelFileDescriptor
+ import androidx.core.content.getSystemService
+ import com.follow.clashx.common.AccessControlMode
+ import com.follow.clashx.common.GlobalState
++import com.follow.clashx.common.PortalRuntimeState
+ import com.follow.clashx.common.XrayChildControl
+ import com.follow.clashx.common.XrayTun
+ import com.follow.clashx.common.XrayTunHolder
+@@ -41,6 +42,10 @@ class VpnService : SystemVpnService(), ManagedService {
+     /// The simple portal's descriptor. The child borrows its number; the service keeps it.
+     private var xrayDescriptor: ParcelFileDescriptor? = null
+ 
++    /// The epoch of the descriptor in [xrayDescriptor], so a stop of an older tunnel cannot
++    /// clear the newer one the service has already published.
++    private var xrayEpoch = 0L
++
+     override fun onDestroy() {
+         try {
+             cleanup()
+@@ -129,6 +134,11 @@ class VpnService : SystemVpnService(), ManagedService {
+     }
+ 
+     override fun onRevoke() {
++        // The system took the tunnel away, and it does not wait for a switch that may be
++        // running: the record is fenced first, so a transaction in flight cannot publish its
++        // `Active` over an interface that no longer exists. The stop below is the same one
++        // every other close takes, and it is idempotent.
++        PortalRuntimeState.revoke("vpn-permission-revoked")
+         stop()
+         notifyVpnRevoked()
+     }
+@@ -151,9 +161,13 @@ class VpnService : SystemVpnService(), ManagedService {
+             owner
+         }
+         val owner = if (options.xrayTun) OWNER_XRAY else OWNER_MIHOMO
++        // One number per established interface, minted here and carried by the tunnel the
++        // child is handed: an acknowledgement that names an older epoch belongs to a
++        // descriptor this start has already replaced.
++        val fdEpoch = PortalRuntimeState.nextFdEpoch()
+         GlobalState.log(
+-            "tun generation=${tunGeneration.incrementAndGet()} owner=$owner previous=$previousOwner " +
+-                "stopped=${previousOwner != OWNER_OFF}",
++            "tun generation=${tunGeneration.incrementAndGet()} fdEpoch=$fdEpoch owner=$owner " +
++                "previous=$previousOwner stopped=${previousOwner != OWNER_OFF}",
+         )
+         val descriptor = with(Builder()) {
+             addAddressAndRoutes(options)
+@@ -187,7 +201,7 @@ class VpnService : SystemVpnService(), ManagedService {
+             establish() ?: error("VPN establishment was rejected by the system")
+         }
+         if (options.xrayTun) {
+-            handOverToChild(descriptor, options)
++            handOverToChild(descriptor, options, fdEpoch)
+             return
+         }
+         val fd = descriptor.detachFd()
+@@ -228,7 +242,11 @@ class VpnService : SystemVpnService(), ManagedService {
+      * fact, and the core's own path for using one reads the interface table over rtnetlink,
+      * which an app uid cannot do.
+      */
+-    private fun handOverToChild(descriptor: ParcelFileDescriptor, options: VpnOptions) {
++    private fun handOverToChild(
++        descriptor: ParcelFileDescriptor,
++        options: VpnOptions,
++        fdEpoch: Long,
++    ) {
+         synchronized(tunLock) {
+             // The previous tunnel was taken down in handleStart, before this establish: the
+             // system routes into the interface this start has just replaced, and the reader
+@@ -238,14 +256,17 @@ class VpnService : SystemVpnService(), ManagedService {
+             tunOwnedByChild = true
+             tunRunning = true
+             xrayDescriptor = descriptor
++            xrayEpoch = fdEpoch
+             XrayTunHolder.publish(
+                 XrayTun(
+                     descriptor = descriptor,
+                     mtu = options.tunMtu,
+                     gateway = listOf(IPV4_ADDRESS),
+                     dns = listOf(DNS),
++                    epoch = fdEpoch,
+                 ),
+             )
++            GlobalState.log("tun fdEpoch=$fdEpoch owner=$OWNER_XRAY published for the core")
+         }
+     }
+ 
+@@ -382,12 +403,16 @@ class VpnService : SystemVpnService(), ManagedService {
+             // The child goes first: it holds its own copy of the descriptor, and a process
+             // left reading a revoked tunnel keeps the interface alive for as long as it runs.
+             XrayChildControl.stop?.invoke()
+-            XrayTunHolder.clear()
++            // Only this tunnel's slot: a newer establish may already have published the
++            // descriptor of the next generation, and clearing it would leave that one
++            // reachable by nobody.
++            XrayTunHolder.clear(xrayEpoch)
+             xrayDescriptor?.let { descriptor ->
+                 runCatching { descriptor.close() }
+                     .onFailure { GlobalState.log("Unable to close the Xray tunnel: $it") }
+             }
+             xrayDescriptor = null
++            xrayEpoch = 0L
+             tunOwnedByChild = false
+         } else {
+             Core.stopTun()
+
+diff --git a/lib/core/lib.dart b/lib/core/lib.dart
+index 5c7a2f5d..165967be 100644
+--- a/lib/core/lib.dart
++++ b/lib/core/lib.dart
+@@ -1,6 +1,7 @@
+ import 'dart:async';
+ 
+ import 'package:fl_clash/common/common.dart';
++import 'package:fl_clash/plugins/portal_runtime.dart';
+ import 'package:fl_clash/plugins/service.dart';
+ import 'package:fl_clash/providers/providers.dart';
+ import 'package:fl_clash/state.dart';
+@@ -112,45 +113,52 @@ class CoreLib extends CoreHandlerInterface {
+     return _stop(allowClosed: true);
+   }
+ 
+-  // The service opens and closes the Core's listeners itself and reports a run
+-  // that ends, so once it takes the command the Core's own answer is moot.
++  // Every start, stop and restart of the tunnel is one transaction on the native side.
++  //
++  // These four methods used to be two calls each — the Go listener and then the service, in
++  // whichever order the caller happened to write — and the order was the ownership: the
++  // simple portal left the engine listening because `startListener` opened it first, and no
++  // caller could see whether the service it had asked for existed. The coordinator owns
++  // both halves now, in one order, under one lock, and answers only when the owner that
++  // took the tunnel has said so. The engine's Go listener is started inside the service's
++  // own start when the mode calls for it, which is why nothing here asks for it directly.
+   @override
+   Future<bool> startListener() async {
+-    await super.startListener();
+-    return await _service?.start() ?? false;
++    final answer = await portalRuntime.open(PortalOwner.mihomo);
++    return answer.ok;
+   }
+ 
+   @override
+   Future<bool> stopListener() async {
+-    final serviceStopped = await _service?.stop() ?? false;
+-    await super.stopListener();
+-    return serviceStopped;
++    final answer = await portalRuntime.close(reason: 'stop');
++    return answer.ok;
+   }
+ 
+-  // One command, so the service cannot let the start adopt the run the stop
+-  // had yet to end.
++  // One command, so the service cannot let the start adopt the run the stop had yet to end.
+   @override
+   Future<bool> restartListener() async {
+-    return await _service?.restart() ?? false;
++    final answer = await portalRuntime.restart();
++    return answer.ok;
+   }
+ 
+-  // The simple portal's tunnel is read by the child, and only the service makes and reads it.
+-  // The engine's own listener is not touched on either side: `startListener` above asks the
+-  // engine first and the service second, which is exactly what left the engine reading the
+-  // interface the child had been handed.
++  // The simple portal's tunnel is read by the child: the coordinator starts the service
++  // without the engine's listener, and the child gets the descriptor the service published.
+   @override
+   Future<bool> startPortalService() async {
+-    return await _service?.start() ?? false;
++    final answer = await portalRuntime.open(PortalOwner.xray);
++    return answer.ok;
+   }
+ 
+   @override
+   Future<bool> stopPortalService() async {
+-    return await _service?.stop() ?? false;
++    final answer = await portalRuntime.close(reason: 'portal-stop');
++    return answer.ok;
+   }
+ 
+   @override
+   Future<bool> restartPortalService() async {
+-    return await _service?.restart() ?? false;
++    final answer = await portalRuntime.restart();
++    return answer.ok;
+   }
+ 
+   @override
+
+diff --git a/lib/plugins/portal_runtime.dart b/lib/plugins/portal_runtime.dart
+new file mode 100644
+index 00000000..88ade4e3
+--- /dev/null
++++ b/lib/plugins/portal_runtime.dart
+@@ -0,0 +1,249 @@
++import 'dart:async';
++
++import 'package:flutter/foundation.dart';
++import 'package:flutter/services.dart';
++
++import '../common/constant.dart';
++import '../common/print.dart';
++import '../enum/enum.dart';
++
++/// Who reads the tunnel the Android service established.
++///
++/// The mode says which owner the app *wants*; this is the owner a generation actually has.
++/// They are different questions, and the switch used to answer the second with the first.
++enum PortalOwner {
++  mihomo('Mihomo'),
++  xray('Xray');
++
++  const PortalOwner(this.label);
++
++  /// The spelling the native record uses, so both sides name the same owner.
++  final String label;
++
++  static PortalOwner? of(String? value) {
++    for (final owner in values) {
++      if (owner.label == value || owner.name == value) return owner;
++    }
++    return null;
++  }
++}
++
++/// One published state of the portal, as the coordinator wrote it.
++///
++/// [phase] is one of `Off`, `Starting`, `Active`, `Stopping`, `Failed`. Only `Active` means
++/// an owner is reading the tunnel, and it is only published after that owner acknowledged
++/// it; `Starting` and `Stopping` mean the portal is in the middle of a transaction.
++class PortalRuntimeStatus {
++  const PortalRuntimeStatus({
++    required this.generation,
++    required this.phase,
++    this.owner,
++    this.fdEpoch = 0,
++    this.reason = '',
++    this.engine = false,
++    this.child = false,
++    this.childLine = '',
++  });
++
++  const PortalRuntimeStatus.unknown()
++      : generation = 0,
++        phase = 'Off',
++        owner = null,
++        fdEpoch = 0,
++        reason = '',
++        engine = false,
++        child = false,
++        childLine = '';
++
++  final int generation;
++  final String phase;
++  final PortalOwner? owner;
++  final int fdEpoch;
++  final String reason;
++
++  /// Whether the engine's service holds a run.
++  final bool engine;
++
++  /// Whether the child says it is reading the tunnel.
++  final bool child;
++
++  /// The child's own last line, for a refusal that has to be shown as it happened.
++  final String childLine;
++
++  bool get active => phase == 'Active';
++
++  bool get busy => phase == 'Starting' || phase == 'Stopping';
++
++  bool get failed => phase == 'Failed';
++
++  factory PortalRuntimeStatus.fromMap(Map<Object?, Object?> map) {
++    final phase = (map['phase'] as String?) ?? 'Off';
++    return PortalRuntimeStatus(
++      generation: (map['generation'] as num?)?.toInt() ?? 0,
++      phase: phase,
++      owner: PortalOwner.of(map['owner'] as String?),
++      fdEpoch: (map['fdEpoch'] as num?)?.toInt() ?? 0,
++      reason: (map['reason'] as String?) ?? '',
++      engine: map['engine'] == true,
++      child: map['child'] == true,
++      childLine: (map['childLine'] as String?) ?? '',
++    );
++  }
++
++  @override
++  String toString() =>
++      'PortalRuntimeStatus(generation: $generation, phase: $phase, '
++      'owner: ${owner?.label}, fdEpoch: $fdEpoch)';
++}
++
++/// The answer of one entry, and the record it left behind.
++class PortalRuntimeAnswer {
++  const PortalRuntimeAnswer({
++    required this.ok,
++    required this.status,
++    this.cancelled = false,
++    this.reason = '',
++  });
++
++  final bool ok;
++  final bool cancelled;
++  final String reason;
++  final PortalRuntimeStatus status;
++
++  bool get stale => cancelled;
++
++  factory PortalRuntimeAnswer.fromMap(Map<Object?, Object?> map) {
++    final state = map['state'];
++    return PortalRuntimeAnswer(
++      ok: map['ok'] == true,
++      cancelled: map['cancelled'] == true,
++      reason: (map['message'] as String?) ?? '',
++      status: state is Map
++          ? PortalRuntimeStatus.fromMap(state)
++          : const PortalRuntimeStatus.unknown(),
++    );
++  }
++}
++
++/// The portal's one entry, from the app's side.
++///
++/// Every call is one transaction on the native side: a single mutex, one generation, and an
++/// answer that arrives when the owner has acknowledged the tunnel. The app no longer starts
++/// the service and the child in two calls it hopes are ordered — that pair *was* the race.
++class PortalRuntime {
++  PortalRuntime._();
++
++  static final PortalRuntime instance = PortalRuntime._();
++
++  static const _channel = MethodChannel('$packageName/portal');
++
++  /// The newest record the app has seen. The switch screen reads it so a transaction in
++  /// flight is shown as one instead of as an open or a closed portal.
++  final ValueNotifier<PortalRuntimeStatus> status =
++      ValueNotifier(const PortalRuntimeStatus.unknown());
++
++  /// Builds the child's document for an entry that arrived without one.
++  ///
++  /// Quick Settings and Always-on can start the portal while no Flutter route is open; the
++  /// document belongs to the profile and only this side can build it, so the native side
++  /// asks for it inside the transaction.
++  Future<String?> Function()? childConfigBuilder;
++
++  void attach() {
++    _channel.setMethodCallHandler((call) async {
++      switch (call.method) {
++        case 'prepareChildConfig':
++          final builder = childConfigBuilder;
++          if (builder == null) return null;
++          try {
++            return await builder();
++          } catch (error) {
++            commonPrint.log(
++              'portal child config failed: $error',
++              logLevel: LogLevel.warning,
++            );
++            return null;
++          }
++        default:
++          return null;
++      }
++    });
++  }
++
++  Future<PortalRuntimeAnswer> open(
++    PortalOwner owner, {
++    String? config,
++  }) async {
++    return _invoke('open', {'owner': owner.label, 'config': ?config});
++  }
++
++  Future<PortalRuntimeAnswer> close({String reason = 'app'}) {
++    return _invoke('close', {'reason': reason});
++  }
++
++  Future<PortalRuntimeAnswer> restart({String? config}) {
++    return _invoke('restart', {'config': ?config});
++  }
++
++  /// A row tap while the child owns the tunnel: the same owner, a new document.
++  Future<PortalRuntimeAnswer> startChild(String config) {
++    return _invoke('startChild', {'config': config});
++  }
++
++  Future<PortalRuntimeStatus> refresh() async {
++    try {
++      final result = await _channel.invokeMethod<Map<Object?, Object?>>('status');
++      final next = result == null
++          ? const PortalRuntimeStatus.unknown()
++          : PortalRuntimeStatus.fromMap(result);
++      status.value = next;
++      return next;
++    } on PlatformException catch (error) {
++      commonPrint.log(
++        'portal status failed: ${error.message}',
++        logLevel: LogLevel.warning,
++      );
++      return status.value;
++    } on MissingPluginException {
++      return status.value;
++    }
++  }
++
++  Future<PortalRuntimeAnswer> _invoke(
++    String method,
++    Map<String, Object?> arguments,
++  ) async {
++    try {
++      final result = await _channel.invokeMethod<Map<Object?, Object?>>(
++        method,
++        arguments,
++      );
++      final answer = PortalRuntimeAnswer.fromMap(result ?? const {});
++      status.value = answer.status;
++      commonPrint.log(
++        'portal $method: ok=${answer.ok} ${answer.status}'
++        '${answer.reason.isEmpty ? '' : ' reason=${answer.reason}'}',
++      );
++      return answer;
++    } on PlatformException catch (error) {
++      commonPrint.log(
++        'portal $method failed: ${error.message}',
++        logLevel: LogLevel.error,
++      );
++      return PortalRuntimeAnswer(
++        ok: false,
++        reason: error.message ?? '$error',
++        status: status.value,
++      );
++    } on MissingPluginException {
++      // Desktop builds have no such channel: the engine alone is the portal there.
++      return PortalRuntimeAnswer(
++        ok: false,
++        reason: 'the portal runtime is not available in this build',
++        status: status.value,
++      );
++    }
++  }
++}
++
++final portalRuntime = PortalRuntime.instance;
+
+diff --git a/lib/plugins/xray.dart b/lib/plugins/xray.dart
+index 434c9704..c3beca1e 100644
+--- a/lib/plugins/xray.dart
++++ b/lib/plugins/xray.dart
+@@ -79,6 +79,15 @@ class XrayCore {
+   String lastLine = '';
+   bool running = false;
+ 
++  /// The portal generation this core's last answer belonged to.
++  ///
++  /// A start or a stop is answered by the coordinator, not by this channel alone: the
++  /// answer names the generation it left behind, and a caller that has since seen the
++  /// portal move on can tell a stale `ok` from a current one instead of trusting the flag.
++  int generation = 0;
++
++  bool isCurrentGeneration(int value) => value == generation;
++
+   /// A start that is still waiting, and the document it was asked to run.
+   ///
+   /// Two callers ask for a start at the same time — the mode switch and the row tap — and the
+@@ -122,6 +131,7 @@ class XrayCore {
+       final map = result?.cast<String, dynamic>() ?? const <String, dynamic>{};
+       final ok = map['ok'] == true;
+       running = ok;
++      generation = (map['generation'] as num?)?.toInt() ?? generation;
+       lastLine = (map['message'] as String?) ?? lastLine;
+       if (ok) return const PortalCoreResult.ok();
+       if (map['cancelled'] == true) {
+@@ -150,8 +160,18 @@ class XrayCore {
+       _inFlightConfig = null;
+     }
+     try {
+-      await _channel.invokeMethod('stop');
++      final answer = await _channel.invokeMethod<Map<dynamic, dynamic>>('stop');
++      final map = answer?.cast<String, dynamic>() ?? const <String, dynamic>{};
++      generation = (map['generation'] as num?)?.toInt() ?? generation;
+       running = false;
++      if (map['ok'] == false) {
++        // The coordinator reports a stop that did not happen: the caller must not treat it
++        // as one, because the next start's evidence depends on this core being gone.
++        lastLine = (map['message'] as String? ?? '').trim();
++        return PortalCoreResult.nativeError(
++          lastLine.isEmpty ? 'the portal core did not stop' : lastLine,
++        );
++      }
+       return const PortalCoreResult.ok();
+     } on PlatformException catch (error) {
+       lastLine = error.message ?? '$error';
+
+diff --git a/lib/providers/action.dart b/lib/providers/action.dart
+index 92f765e5..99d92b8e 100644
+--- a/lib/providers/action.dart
++++ b/lib/providers/action.dart
+@@ -14,6 +14,7 @@ import 'package:fl_clash/features/proxy_chains/store.dart';
+ import 'package:fl_clash/features/update/update.dart';
+ import 'package:fl_clash/models/models.dart';
+ import 'package:fl_clash/plugins/app.dart';
++import 'package:fl_clash/plugins/portal_runtime.dart';
+ import 'package:fl_clash/plugins/service.dart';
+ import 'package:fl_clash/plugins/xray.dart';
+ import 'package:fl_clash/providers/actions/system_exit.dart';
+
+diff --git a/lib/providers/actions/setup.dart b/lib/providers/actions/setup.dart
+index 43319a24..c27dc603 100644
+--- a/lib/providers/actions/setup.dart
++++ b/lib/providers/actions/setup.dart
+@@ -16,6 +16,19 @@ typedef BuiltProfile = ({
+   SetupBase? base,
+ });
+ 
++/// One node's document, ready to be the whole transaction's payload.
++class _PortalChildDocument {
++  const _PortalChildDocument({
++    required this.profileId,
++    required this.name,
++    required this.config,
++  });
++
++  final int? profileId;
++  final String name;
++  final String config;
++}
++
+ class _RunRequest {
+   final bool running;
+   final bool initialize;
+@@ -83,6 +96,13 @@ class SetupAction extends _$SetupAction {
+ 
+   @override
+   void build() {
++    if (system.isAndroid) {
++      // The native coordinator's reverse direction: an entry that arrives with no document
++      // (Quick Settings, Always-on) asks this side for the one the profile names, and the
++      // builder has to be in place before any such entry can arrive.
++      portalRuntime.attach();
++      portalRuntime.childConfigBuilder = () async => (await _portalChildDocument())?.config;
++    }
+     ref.onDispose(_stopRuntimeTicker);
+     ref.listen(appVisibleProvider, (_, _) => _syncRuntimeTicker());
+     ref.listen(
+@@ -314,101 +334,106 @@ class SetupAction extends _$SetupAction {
+     _startingChild = true;
+     try {
+       _lastPortalFailure = '';
++      // The service reads its options from the shared state, so the mode that just changed
++      // has to reach it before the tunnel is asked for.
+       await _syncPortalOptions();
+-      try {
+-        await _startPortalServiceRunning(request);
+-      } catch (_) {
++      // Prepared before anything is torn down: a profile with no node, or no engine format,
++      // leaves whatever is running exactly as it was.
++      final document = await _portalChildDocument();
++      if (document == null) {
+         _rollbackRunning(request);
+-        rethrow;
++        return false;
+       }
+-      final started = await _startPortalChild();
+-      if (started.ok) {
++      // One transaction: the previous owner lets go, the service establishes the tunnel, the
++      // child acknowledges it, and only then is `Active` published. A refusal closes the
++      // service again on the native side — a tunnel nothing reads is worse than no tunnel.
++      final answer = await portalRuntime.open(
++        PortalOwner.xray,
++        config: document.config,
++      );
++      if (answer.ok) {
++        _commitPortalPick(document);
++        // What the run is made of, for the screens that show it: the same value the engine
++        // path publishes once its listener answered.
++        ref.read(runningVpnOptionsProvider.notifier).value =
++            await ref.read(vpnOptionsProvider.future);
+         return true;
+       }
+-      await _tearDownSimplePortal();
+       _rollbackRunning(request);
+-      _reportPortalStartFailure(started);
++      _reportPortalFailureReason(
++        answer.cancelled
++            ? 'the switch to the portal was cancelled'
++            : (answer.reason.isEmpty
++                  ? 'the portal did not start'
++                  : answer.reason),
++      );
+       return false;
+     } finally {
+       _startingChild = false;
+     }
+   }
+ 
+-  /// The child's own answer, on screen and in the log: what it said, not what was inferred.
+-  void _reportPortalStartFailure(PortalCoreResult result) {
+-    final reason = result.reason;
+-    _lastPortalFailure = reason;
+-    commonPrint.log('portal did not start: $reason', logLevel: LogLevel.error);
+-    dialogs.showNotifier(
+-      currentAppLocalizations.portalStartFailed(reason),
+-      level: MessageLevel.error,
+-    );
+-  }
+-
+-  /// The service reads its options from the shared state, which the settings feed; a mode
+-  /// that just changed has to reach it before the service is asked to make the tunnel.
+-  Future<void> _syncPortalOptions() async {
+-    if (!system.isAndroid) return;
+-    await ref.read(vpnOptionsProvider.future);
+-    await service?.syncState(ref.read(sharedStateProvider).needSyncSharedState);
+-  }
+-
+-  Future<void> _tearDownSimplePortal() async {
+-    final stopped = await XrayCore.instance.stop();
+-    try {
+-      await setPortalServiceRunning(false);
+-    } catch (error) {
+-      commonPrint.log(
+-        'simple portal teardown failed: ${compactError(error)}',
+-        logLevel: LogLevel.warning,
+-      );
+-    }
+-    if (!stopped.ok && !stopped.cancelled) {
+-      commonPrint.log(
+-        'portal child did not stop: ${stopped.reason}',
+-        logLevel: LogLevel.warning,
+-      );
+-    }
+-    _clearTraffic();
+-  }
+-
+-  /// Starts the child on the pick the simple portal shows, and waits for its own answer.
++  /// The document the portal's child runs, and the node it belongs to.
+   ///
+-  /// The answer is the child's, not a state the app infers: `ok` only after the plugin saw
+-  /// the tunnel's reader come up, and the reason is the child's own last line otherwise.
+-  /// The pick is written only when the child answered, so a stale name never outlives the
+-  /// node that actually ran.
+-  Future<PortalCoreResult> _startPortalChild() async {
++  /// Building it is a read of the profile, never a start: the caller turns it into the one
++  /// transaction, and a profile that cannot produce a node is reported before anything of
++  /// the previous owner is stopped.
++  Future<_PortalChildDocument?> _portalChildDocument() async {
+     final profile = ref.read(currentProfileProvider);
+     if (profile == null) {
+-      return const PortalCoreResult.unavailable('no profile is selected');
++      _reportPortalFailureReason('no profile is selected');
++      return null;
+     }
+     final body = await profile.readXrayFormat();
+     if (body == null) {
+-      return const PortalCoreResult.unavailable(
+-        'this subscription has no engine format',
+-      );
++      _reportPortalFailureReason('this subscription has no engine format');
++      return null;
+     }
+-    // The stored pick is the node the child ran last *for this profile*, which is the one
+-    // the owner chose; an empty or stale name falls back to the panel's first server.
++    // The stored pick is the node the child ran last for this profile, which is the one the
++    // owner chose; an empty or stale name falls back to the panel's first server.
+     final settings = ref.read(appSettingProvider);
+     final server = xrayServerFor(
+       parseXraySubscription(body),
+       portalXrayPickFor(settings, profile.id),
+     );
+     if (server == null) {
+-      return const PortalCoreResult.unavailable(
++      _reportPortalFailureReason(
+         'this subscription has no node the portal core can run',
+       );
++      return null;
+     }
+-    final started = await XrayCore.instance.start(jsonEncode(server.config));
+-    if (started.ok) {
+-      ref
+-          .read(appSettingProvider.notifier)
+-          .update((state) => withPortalXrayPick(state, profile.id, server.name));
+-      commonPrint.log('portal child is reading the tunnel on ${server.name}');
+-    }
+-    return started;
++    return _PortalChildDocument(
++      profileId: profile.id,
++      name: server.name,
++      config: jsonEncode(server.config),
++    );
++  }
++
++  /// The pick is a commit, not a hope: written only for a node the child acknowledged.
++  void _commitPortalPick(_PortalChildDocument document) {
++    ref
++        .read(appSettingProvider.notifier)
++        .update(
++          (state) => withPortalXrayPick(state, document.profileId, document.name),
++        );
++    commonPrint.log('portal child is reading the tunnel on ${document.name}');
++  }
++
++  void _reportPortalFailureReason(String reason) {
++    _lastPortalFailure = reason;
++    commonPrint.log('portal did not start: $reason', logLevel: LogLevel.error);
++    dialogs.showNotifier(
++      currentAppLocalizations.portalStartFailed(reason),
++      level: MessageLevel.error,
++    );
++  }
++
++  /// The service reads its options from the shared state, which the settings feed; a mode
++  /// that just changed has to reach it before the service is asked to make the tunnel.
++  Future<void> _syncPortalOptions() async {
++    if (!system.isAndroid) return;
++    await ref.read(vpnOptionsProvider.future);
++    await service?.syncState(ref.read(sharedStateProvider).needSyncSharedState);
+   }
+ 
+   Future<void> _startCoreRunning(_RunRequest request) async {
+@@ -417,13 +442,6 @@ class SetupAction extends _$SetupAction {
+     }
+   }
+ 
+-  /// The service alone, on the way into the simple portal: no engine listener is opened.
+-  Future<void> _startPortalServiceRunning(_RunRequest request) async {
+-    if (!await _setPortalServiceRunning(request) && _isCurrent(request)) {
+-      throw _unansweredPortalService();
+-    }
+-  }
+-
+   Future<bool> _setPortalServiceRunning(_RunRequest request) {
+     return _listenerScheduler.run(() async {
+       if (!_isCurrent(request)) {
+@@ -604,22 +622,39 @@ class SetupAction extends _$SetupAction {
+     debouncer.call(FunctionTag.updateConfig, updateConfig);
+   }
+ 
++  /// A start carries the settings that are true *now*.
++  ///
++  /// The service reads its options from the shared state, and the state is only as fresh as
++  /// the last push: a mode that changed a moment ago is a setting the service has not heard
++  /// of yet. A start that arrived before the push used to be the caller's problem; with one
++  /// transaction it is this method's, because the transaction is what asks for the tunnel
++  /// and cannot resend anything itself.
+   @protected
+-  Future<bool> setCoreRunning(bool running) {
+-    return running ? _core.startListener() : _core.stopListener();
++  Future<bool> setCoreRunning(bool running) async {
++    if (!running) return _core.stopListener();
++    await _syncPortalOptions();
++    return _core.startListener();
+   }
+ 
+   @protected
+-  Future<bool> restartCoreRunning() => _core.restartListener();
++  Future<bool> restartCoreRunning() async {
++    await _syncPortalOptions();
++    return _core.restartListener();
++  }
+ 
+   /// The Android service alone: the simple portal's start, stop and restart.
+   @protected
+-  Future<bool> setPortalServiceRunning(bool running) {
+-    return running ? _core.startPortalService() : _core.stopPortalService();
++  Future<bool> setPortalServiceRunning(bool running) async {
++    if (!running) return _core.stopPortalService();
++    await _syncPortalOptions();
++    return _core.startPortalService();
+   }
+ 
+   @protected
+-  Future<bool> restartPortalServiceRunning() => _core.restartPortalService();
++  Future<bool> restartPortalServiceRunning() async {
++    await _syncPortalOptions();
++    return _core.restartPortalService();
++  }
+ 
+   @protected
+   void resetCoreTraffic() {
+
+diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
+index aec269f3..5837d676 100644
+--- a/lib/views/dashboard/portal_controls.dart
++++ b/lib/views/dashboard/portal_controls.dart
+@@ -13,6 +13,7 @@ import 'package:fl_clash/core/proxy_endpoints.dart';
+ import 'package:fl_clash/core/xray_ping.dart';
+ import 'package:fl_clash/core/xray_subscription.dart';
+ import '../profiles/subscription_facts.dart';
++import 'package:fl_clash/plugins/portal_runtime.dart';
+ import 'package:fl_clash/plugins/xray.dart';
+ import 'package:yaml/yaml.dart';
+ import 'dart:async';
+@@ -862,8 +904,11 @@ class PortalServerList extends ConsumerWidget {
+ /// The answer is the child's: `ok` only when it acknowledged the tunnel, and its own last
+ /// line otherwise. A refused node leaves nothing of the previous one alive, so the caller
+ /// must put the previous pick back — this function only reports what happened.
+-Future<PortalCoreResult> _restartChildOn(XrayServerConfig server) async {
+-  final started = await XrayCore.instance.start(jsonEncode(server.config));
++Future<PortalRuntimeAnswer> _restartChildOn(XrayServerConfig server) async {
++  // The tap is one entry of the same transaction the mode switch takes: the coordinator
++  // keeps the tunnel, replaces the core that reads it, and moves the generation so an
++  // acknowledgement from the core it just replaced cannot be mistaken for this one's.
++  final started = await portalRuntime.startChild(jsonEncode(server.config));
+   if (started.ok) {
+     commonPrint.log('xray is reading the tunnel on ${server.name}');
+     return started;
+@@ -1697,8 +1742,12 @@ class _PortalSwitchFailure implements Exception {
+ /// How long the engine gets to take a new mode before the switch calls it a failure.
+ const _modeApplyTimeout = Duration(seconds: 12);
+ 
+-/// A switch already in flight. A second tap is dropped rather than queued: two transactions
+-/// over one portal can only end with the second undoing the first.
++/// A switch already in flight **from this screen**. A second tap is dropped rather than
++/// queued: two transactions over one portal can only end with the second undoing the first.
++///
++/// This is only the double-tap guard: the truth is the native coordinator's mutex and
++/// generation, which also covers a start from Quick Settings, a revoke and a row tap that
++/// never passed through here.
+ var _portalSwitching = false;
+ 
+ /// Moves the portal between the two modes as one transaction.
+@@ -1711,6 +1760,10 @@ var _portalSwitching = false;
+ /// portal carrying nothing with nothing on screen to say why.
+ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
+   if (_portalSwitching) return;
++  // Another entry's transaction — Quick Settings, the quick action, Always-on — is already
++  // moving the portal; this one waits for it rather than racing it, and the tap is simply
++  // dropped, which is what the owner asked for by tapping once.
++  if (portalRuntime.status.value.busy) return;
+   _portalSwitching = true;
+   final setup = ref.read(setupActionProvider.notifier);
+   final previousMode = ref.read(patchClashConfigProvider.select((s) => s.mode));
+@@ -1722,7 +1775,9 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
+     }
+     // 2. The child is stopped before the next core wants the tunnel, and the answer is the
+     // plugin's: a stop that did not happen cannot be treated as one that did.
+-    final stopped = await XrayCore.instance.stop();
++    // The portal is down, and the child with it: `close` is the coordinator's own stop, so
++    // the core has returned from `XrayStop` before the next owner is asked for.
++    final stopped = await portalRuntime.close(reason: 'switch');
+     if (!stopped.ok && !stopped.cancelled) {
+       throw _PortalSwitchFailure('the portal core did not stop: ${stopped.reason}');
+     }
+@@ -1823,7 +1878,7 @@ Future<void> _rollBackPortal(
+ }) async {
+   final setup = ref.read(setupActionProvider.notifier);
+   try {
+-    final stopped = await XrayCore.instance.stop();
++    final stopped = await portalRuntime.close(reason: 'rollback');
+     if (!stopped.ok && !stopped.cancelled) {
+       throw _PortalSwitchFailure('the portal core did not stop: ${stopped.reason}');
+     }

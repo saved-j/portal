@@ -11,6 +11,7 @@ import android.os.ParcelFileDescriptor
 import androidx.core.content.getSystemService
 import com.follow.clashx.common.AccessControlMode
 import com.follow.clashx.common.GlobalState
+import com.follow.clashx.common.PortalRuntimeState
 import com.follow.clashx.common.XrayChildControl
 import com.follow.clashx.common.XrayTun
 import com.follow.clashx.common.XrayTunHolder
@@ -40,6 +41,10 @@ class VpnService : SystemVpnService(), ManagedService {
 
     /// The simple portal's descriptor. The child borrows its number; the service keeps it.
     private var xrayDescriptor: ParcelFileDescriptor? = null
+
+    /// The epoch of the descriptor in [xrayDescriptor], so a stop of an older tunnel cannot
+    /// clear the newer one the service has already published.
+    private var xrayEpoch = 0L
 
     override fun onDestroy() {
         try {
@@ -129,6 +134,11 @@ class VpnService : SystemVpnService(), ManagedService {
     }
 
     override fun onRevoke() {
+        // The system took the tunnel away, and it does not wait for a switch that may be
+        // running: the record is fenced first, so a transaction in flight cannot publish its
+        // `Active` over an interface that no longer exists. The stop below is the same one
+        // every other close takes, and it is idempotent.
+        PortalRuntimeState.revoke("vpn-permission-revoked")
         stop()
         notifyVpnRevoked()
     }
@@ -151,9 +161,13 @@ class VpnService : SystemVpnService(), ManagedService {
             owner
         }
         val owner = if (options.xrayTun) OWNER_XRAY else OWNER_MIHOMO
+        // One number per established interface, minted here and carried by the tunnel the
+        // child is handed: an acknowledgement that names an older epoch belongs to a
+        // descriptor this start has already replaced.
+        val fdEpoch = PortalRuntimeState.nextFdEpoch()
         GlobalState.log(
-            "tun generation=${tunGeneration.incrementAndGet()} owner=$owner previous=$previousOwner " +
-                "stopped=${previousOwner != OWNER_OFF}",
+            "tun generation=${tunGeneration.incrementAndGet()} fdEpoch=$fdEpoch owner=$owner " +
+                "previous=$previousOwner stopped=${previousOwner != OWNER_OFF}",
         )
         val descriptor = with(Builder()) {
             addAddressAndRoutes(options)
@@ -187,7 +201,7 @@ class VpnService : SystemVpnService(), ManagedService {
             establish() ?: error("VPN establishment was rejected by the system")
         }
         if (options.xrayTun) {
-            handOverToChild(descriptor, options)
+            handOverToChild(descriptor, options, fdEpoch)
             return
         }
         val fd = descriptor.detachFd()
@@ -228,7 +242,11 @@ class VpnService : SystemVpnService(), ManagedService {
      * fact, and the core's own path for using one reads the interface table over rtnetlink,
      * which an app uid cannot do.
      */
-    private fun handOverToChild(descriptor: ParcelFileDescriptor, options: VpnOptions) {
+    private fun handOverToChild(
+        descriptor: ParcelFileDescriptor,
+        options: VpnOptions,
+        fdEpoch: Long,
+    ) {
         synchronized(tunLock) {
             // The previous tunnel was taken down in handleStart, before this establish: the
             // system routes into the interface this start has just replaced, and the reader
@@ -238,14 +256,17 @@ class VpnService : SystemVpnService(), ManagedService {
             tunOwnedByChild = true
             tunRunning = true
             xrayDescriptor = descriptor
+            xrayEpoch = fdEpoch
             XrayTunHolder.publish(
                 XrayTun(
                     descriptor = descriptor,
                     mtu = options.tunMtu,
                     gateway = listOf(IPV4_ADDRESS),
                     dns = listOf(DNS),
+                    epoch = fdEpoch,
                 ),
             )
+            GlobalState.log("tun fdEpoch=$fdEpoch owner=$OWNER_XRAY published for the core")
         }
     }
 
@@ -382,12 +403,16 @@ class VpnService : SystemVpnService(), ManagedService {
             // The child goes first: it holds its own copy of the descriptor, and a process
             // left reading a revoked tunnel keeps the interface alive for as long as it runs.
             XrayChildControl.stop?.invoke()
-            XrayTunHolder.clear()
+            // Only this tunnel's slot: a newer establish may already have published the
+            // descriptor of the next generation, and clearing it would leave that one
+            // reachable by nobody.
+            XrayTunHolder.clear(xrayEpoch)
             xrayDescriptor?.let { descriptor ->
                 runCatching { descriptor.close() }
                     .onFailure { GlobalState.log("Unable to close the Xray tunnel: $it") }
             }
             xrayDescriptor = null
+            xrayEpoch = 0L
             tunOwnedByChild = false
         } else {
             Core.stopTun()

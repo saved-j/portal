@@ -47,10 +47,12 @@ class QuickActionActivity : Activity() {
         mainThreadActionsInFlight++
         GlobalState.launch {
             try {
+                // The same entry the app and Quick Settings take: the coordinator decides
+                // the owner, the order and the generation, and this holds until it answers.
                 when (action) {
-                    QuickAction.START -> ServiceState.handleStartAction()
-                    QuickAction.STOP -> ServiceState.handleStopAction()
-                    QuickAction.TOGGLE -> ServiceState.handleToggleAction()
+                    QuickAction.START -> PortalRuntimeCoordinator.openDesired()
+                    QuickAction.STOP -> PortalRuntimeCoordinator.close("quick-action")
+                    QuickAction.TOGGLE -> PortalRuntimeCoordinator.toggle()
                 }
             } finally {
                 withContext(Dispatchers.Main) { mainThreadActionsInFlight-- }

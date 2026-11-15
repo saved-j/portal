@@ -16,6 +16,19 @@ typedef BuiltProfile = ({
   SetupBase? base,
 });
 
+/// One node's document, ready to be the whole transaction's payload.
+class _PortalChildDocument {
+  const _PortalChildDocument({
+    required this.profileId,
+    required this.name,
+    required this.config,
+  });
+
+  final int? profileId;
+  final String name;
+  final String config;
+}
+
 class _RunRequest {
   final bool running;
   final bool initialize;
@@ -83,6 +96,13 @@ class SetupAction extends _$SetupAction {
 
   @override
   void build() {
+    if (system.isAndroid) {
+      // The native coordinator's reverse direction: an entry that arrives with no document
+      // (Quick Settings, Always-on) asks this side for the one the profile names, and the
+      // builder has to be in place before any such entry can arrive.
+      portalRuntime.attach();
+      portalRuntime.childConfigBuilder = () async => (await _portalChildDocument())?.config;
+    }
     ref.onDispose(_stopRuntimeTicker);
     ref.listen(appVisibleProvider, (_, _) => _syncRuntimeTicker());
     ref.listen(
@@ -314,29 +334,92 @@ class SetupAction extends _$SetupAction {
     _startingChild = true;
     try {
       _lastPortalFailure = '';
+      // The service reads its options from the shared state, so the mode that just changed
+      // has to reach it before the tunnel is asked for.
       await _syncPortalOptions();
-      try {
-        await _startPortalServiceRunning(request);
-      } catch (_) {
+      // Prepared before anything is torn down: a profile with no node, or no engine format,
+      // leaves whatever is running exactly as it was.
+      final document = await _portalChildDocument();
+      if (document == null) {
         _rollbackRunning(request);
-        rethrow;
+        return false;
       }
-      final started = await _startPortalChild();
-      if (started.ok) {
+      // One transaction: the previous owner lets go, the service establishes the tunnel, the
+      // child acknowledges it, and only then is `Active` published. A refusal closes the
+      // service again on the native side — a tunnel nothing reads is worse than no tunnel.
+      final answer = await portalRuntime.open(
+        PortalOwner.xray,
+        config: document.config,
+      );
+      if (answer.ok) {
+        _commitPortalPick(document);
+        // What the run is made of, for the screens that show it: the same value the engine
+        // path publishes once its listener answered.
+        ref.read(runningVpnOptionsProvider.notifier).value =
+            await ref.read(vpnOptionsProvider.future);
         return true;
       }
-      await _tearDownSimplePortal();
       _rollbackRunning(request);
-      _reportPortalStartFailure(started);
+      _reportPortalFailureReason(
+        answer.cancelled
+            ? 'the switch to the portal was cancelled'
+            : (answer.reason.isEmpty
+                  ? 'the portal did not start'
+                  : answer.reason),
+      );
       return false;
     } finally {
       _startingChild = false;
     }
   }
 
-  /// The child's own answer, on screen and in the log: what it said, not what was inferred.
-  void _reportPortalStartFailure(PortalCoreResult result) {
-    final reason = result.reason;
+  /// The document the portal's child runs, and the node it belongs to.
+  ///
+  /// Building it is a read of the profile, never a start: the caller turns it into the one
+  /// transaction, and a profile that cannot produce a node is reported before anything of
+  /// the previous owner is stopped.
+  Future<_PortalChildDocument?> _portalChildDocument() async {
+    final profile = ref.read(currentProfileProvider);
+    if (profile == null) {
+      _reportPortalFailureReason('no profile is selected');
+      return null;
+    }
+    final body = await profile.readXrayFormat();
+    if (body == null) {
+      _reportPortalFailureReason('this subscription has no engine format');
+      return null;
+    }
+    // The stored pick is the node the child ran last for this profile, which is the one the
+    // owner chose; an empty or stale name falls back to the panel's first server.
+    final settings = ref.read(appSettingProvider);
+    final server = xrayServerFor(
+      parseXraySubscription(body),
+      portalXrayPickFor(settings, profile.id),
+    );
+    if (server == null) {
+      _reportPortalFailureReason(
+        'this subscription has no node the portal core can run',
+      );
+      return null;
+    }
+    return _PortalChildDocument(
+      profileId: profile.id,
+      name: server.name,
+      config: jsonEncode(server.config),
+    );
+  }
+
+  /// The pick is a commit, not a hope: written only for a node the child acknowledged.
+  void _commitPortalPick(_PortalChildDocument document) {
+    ref
+        .read(appSettingProvider.notifier)
+        .update(
+          (state) => withPortalXrayPick(state, document.profileId, document.name),
+        );
+    commonPrint.log('portal child is reading the tunnel on ${document.name}');
+  }
+
+  void _reportPortalFailureReason(String reason) {
     _lastPortalFailure = reason;
     commonPrint.log('portal did not start: $reason', logLevel: LogLevel.error);
     dialogs.showNotifier(
@@ -353,74 +436,9 @@ class SetupAction extends _$SetupAction {
     await service?.syncState(ref.read(sharedStateProvider).needSyncSharedState);
   }
 
-  Future<void> _tearDownSimplePortal() async {
-    final stopped = await XrayCore.instance.stop();
-    try {
-      await setPortalServiceRunning(false);
-    } catch (error) {
-      commonPrint.log(
-        'simple portal teardown failed: ${compactError(error)}',
-        logLevel: LogLevel.warning,
-      );
-    }
-    if (!stopped.ok && !stopped.cancelled) {
-      commonPrint.log(
-        'portal child did not stop: ${stopped.reason}',
-        logLevel: LogLevel.warning,
-      );
-    }
-    _clearTraffic();
-  }
-
-  /// Starts the child on the pick the simple portal shows, and waits for its own answer.
-  ///
-  /// The answer is the child's, not a state the app infers: `ok` only after the plugin saw
-  /// the tunnel's reader come up, and the reason is the child's own last line otherwise.
-  /// The pick is written only when the child answered, so a stale name never outlives the
-  /// node that actually ran.
-  Future<PortalCoreResult> _startPortalChild() async {
-    final profile = ref.read(currentProfileProvider);
-    if (profile == null) {
-      return const PortalCoreResult.unavailable('no profile is selected');
-    }
-    final body = await profile.readXrayFormat();
-    if (body == null) {
-      return const PortalCoreResult.unavailable(
-        'this subscription has no engine format',
-      );
-    }
-    // The stored pick is the node the child ran last *for this profile*, which is the one
-    // the owner chose; an empty or stale name falls back to the panel's first server.
-    final settings = ref.read(appSettingProvider);
-    final server = xrayServerFor(
-      parseXraySubscription(body),
-      portalXrayPickFor(settings, profile.id),
-    );
-    if (server == null) {
-      return const PortalCoreResult.unavailable(
-        'this subscription has no node the portal core can run',
-      );
-    }
-    final started = await XrayCore.instance.start(jsonEncode(server.config));
-    if (started.ok) {
-      ref
-          .read(appSettingProvider.notifier)
-          .update((state) => withPortalXrayPick(state, profile.id, server.name));
-      commonPrint.log('portal child is reading the tunnel on ${server.name}');
-    }
-    return started;
-  }
-
   Future<void> _startCoreRunning(_RunRequest request) async {
     if (!await _setCoreRunning(request) && _isCurrent(request)) {
       throw _unanswered(CoreMethod.startListener);
-    }
-  }
-
-  /// The service alone, on the way into the simple portal: no engine listener is opened.
-  Future<void> _startPortalServiceRunning(_RunRequest request) async {
-    if (!await _setPortalServiceRunning(request) && _isCurrent(request)) {
-      throw _unansweredPortalService();
     }
   }
 
@@ -604,22 +622,39 @@ class SetupAction extends _$SetupAction {
     debouncer.call(FunctionTag.updateConfig, updateConfig);
   }
 
+  /// A start carries the settings that are true *now*.
+  ///
+  /// The service reads its options from the shared state, and the state is only as fresh as
+  /// the last push: a mode that changed a moment ago is a setting the service has not heard
+  /// of yet. A start that arrived before the push used to be the caller's problem; with one
+  /// transaction it is this method's, because the transaction is what asks for the tunnel
+  /// and cannot resend anything itself.
   @protected
-  Future<bool> setCoreRunning(bool running) {
-    return running ? _core.startListener() : _core.stopListener();
+  Future<bool> setCoreRunning(bool running) async {
+    if (!running) return _core.stopListener();
+    await _syncPortalOptions();
+    return _core.startListener();
   }
 
   @protected
-  Future<bool> restartCoreRunning() => _core.restartListener();
+  Future<bool> restartCoreRunning() async {
+    await _syncPortalOptions();
+    return _core.restartListener();
+  }
 
   /// The Android service alone: the simple portal's start, stop and restart.
   @protected
-  Future<bool> setPortalServiceRunning(bool running) {
-    return running ? _core.startPortalService() : _core.stopPortalService();
+  Future<bool> setPortalServiceRunning(bool running) async {
+    if (!running) return _core.stopPortalService();
+    await _syncPortalOptions();
+    return _core.startPortalService();
   }
 
   @protected
-  Future<bool> restartPortalServiceRunning() => _core.restartPortalService();
+  Future<bool> restartPortalServiceRunning() async {
+    await _syncPortalOptions();
+    return _core.restartPortalService();
+  }
 
   @protected
   void resetCoreTraffic() {

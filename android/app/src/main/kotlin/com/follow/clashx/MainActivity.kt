@@ -3,6 +3,7 @@ package com.follow.clashx
 import android.os.Bundle
 import com.follow.clashx.plugins.AppPlugin
 import com.follow.clashx.plugins.BatteryPlugin
+import com.follow.clashx.plugins.PortalRuntimePlugin
 import com.follow.clashx.plugins.ServicePlugin
 import com.follow.clashx.plugins.TilePlugin
 import com.follow.clashx.plugins.XrayPlugin
@@ -35,6 +36,7 @@ class MainActivity : FlutterActivity() {
         flutterEngine.plugins.add(AppPlugin())
         flutterEngine.plugins.add(BatteryPlugin())
         flutterEngine.plugins.add(ServicePlugin())
+        flutterEngine.plugins.add(PortalRuntimePlugin())
         flutterEngine.plugins.add(TilePlugin())
         flutterEngine.plugins.add(XrayPlugin())
         ServiceState.attachFlutterEngine(flutterEngine)

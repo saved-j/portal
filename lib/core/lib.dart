@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/plugins/portal_runtime.dart';
 import 'package:fl_clash/plugins/service.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
@@ -112,45 +113,52 @@ class CoreLib extends CoreHandlerInterface {
     return _stop(allowClosed: true);
   }
 
-  // The service opens and closes the Core's listeners itself and reports a run
-  // that ends, so once it takes the command the Core's own answer is moot.
+  // Every start, stop and restart of the tunnel is one transaction on the native side.
+  //
+  // These four methods used to be two calls each — the Go listener and then the service, in
+  // whichever order the caller happened to write — and the order was the ownership: the
+  // simple portal left the engine listening because `startListener` opened it first, and no
+  // caller could see whether the service it had asked for existed. The coordinator owns
+  // both halves now, in one order, under one lock, and answers only when the owner that
+  // took the tunnel has said so. The engine's Go listener is started inside the service's
+  // own start when the mode calls for it, which is why nothing here asks for it directly.
   @override
   Future<bool> startListener() async {
-    await super.startListener();
-    return await _service?.start() ?? false;
+    final answer = await portalRuntime.open(PortalOwner.mihomo);
+    return answer.ok;
   }
 
   @override
   Future<bool> stopListener() async {
-    final serviceStopped = await _service?.stop() ?? false;
-    await super.stopListener();
-    return serviceStopped;
+    final answer = await portalRuntime.close(reason: 'stop');
+    return answer.ok;
   }
 
-  // One command, so the service cannot let the start adopt the run the stop
-  // had yet to end.
+  // One command, so the service cannot let the start adopt the run the stop had yet to end.
   @override
   Future<bool> restartListener() async {
-    return await _service?.restart() ?? false;
+    final answer = await portalRuntime.restart();
+    return answer.ok;
   }
 
-  // The simple portal's tunnel is read by the child, and only the service makes and reads it.
-  // The engine's own listener is not touched on either side: `startListener` above asks the
-  // engine first and the service second, which is exactly what left the engine reading the
-  // interface the child had been handed.
+  // The simple portal's tunnel is read by the child: the coordinator starts the service
+  // without the engine's listener, and the child gets the descriptor the service published.
   @override
   Future<bool> startPortalService() async {
-    return await _service?.start() ?? false;
+    final answer = await portalRuntime.open(PortalOwner.xray);
+    return answer.ok;
   }
 
   @override
   Future<bool> stopPortalService() async {
-    return await _service?.stop() ?? false;
+    final answer = await portalRuntime.close(reason: 'portal-stop');
+    return answer.ok;
   }
 
   @override
   Future<bool> restartPortalService() async {
-    return await _service?.restart() ?? false;
+    final answer = await portalRuntime.restart();
+    return answer.ok;
   }
 
   @override

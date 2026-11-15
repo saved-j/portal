@@ -16,6 +16,9 @@ class XrayTun(
     val mtu: Int,
     val gateway: List<String>,
     val dns: List<String>,
+    /// Which `establish()` made this tunnel. The service mints it, the plugin checks it, and
+    /// a descriptor from an older epoch is never handed to a core of the newer one.
+    val epoch: Long = 0L,
 ) {
     /// The number the core is given. Valid only while [descriptor] is open.
     // `ParcelFileDescriptor.getFd()` throws `IllegalStateException: Already closed` on a closed
@@ -30,7 +33,27 @@ class XrayTun(
     /// number may already belong to the next file the process opened, so the descriptor itself
     /// is asked. proxy/tun falls back to 0 for a number that was never set, which is how a
     /// closed tunnel used to reach the core as a bare `inappropriate ioctl for device`.
-    val live: Boolean get() = fd >= FIRST_TUN_FD && descriptor.fileDescriptor.valid()
+    ///
+    /// Both reads are guarded: `getFd()` *and* `getFileDescriptor()` throw
+    /// `IllegalStateException: Already closed` on a descriptor the service just closed, and a
+    /// reader has no business dying over the answer to a question it asked about a closing
+    /// tunnel. A closed tunnel is `false`, never an exception.
+    val live: Boolean get() = runCatching {
+        val number = descriptor.fd
+        number >= FIRST_TUN_FD && descriptor.fileDescriptor.valid()
+    }.getOrDefault(false)
+
+    /// A descriptor of its own, or `null` when this tunnel is no longer open.
+    ///
+    /// The one way to reach `dup()`: duplicating a closed descriptor throws
+    /// `Already closed`, and a number taken from one belongs to whatever file the process
+    /// opened next. The check and the duplicate happen under the same guard as [live], so a
+    /// newer stop that closes the descriptor between them cannot slip through.
+    @Synchronized
+    fun duplicate(): ParcelFileDescriptor? {
+        if (!live) return null
+        return runCatching { descriptor.dup() }.getOrNull()
+    }
 
     companion object {
         /// The first descriptor number that is not stdin, stdout or stderr: a tunnel is never
@@ -50,14 +73,39 @@ class XrayTun(
 object XrayTunHolder {
     private const val POLL_MS = 50L
 
-    @Volatile
+    // One guard for the slot, the epoch and the take: `take` clears what `publish` set, and
+    // two threads doing that beside each other is how one tunnel used to be handed to two
+    // starts. Every operation below is written against this lock and nothing else.
+    private val lock = Any()
+
     private var pending: XrayTun? = null
 
-    fun publish(tun: XrayTun?) {
+    /// The newest epoch this holder has seen, so an older publish cannot replace a newer one.
+    private var publishedEpoch: Long = 0L
+
+    fun publish(tun: XrayTun?) = synchronized(lock) {
+        if (tun != null && tun.epoch in 1 until publishedEpoch) {
+            GlobalState.log(
+                "XrayTunHolder dropped a publish of an older epoch ${tun.epoch} " +
+                    "(holding $publishedEpoch)",
+            )
+            return@synchronized
+        }
         pending = tun
+        if (tun != null && tun.epoch > publishedEpoch) publishedEpoch = tun.epoch
+        Unit
     }
 
-    fun take(): XrayTun? = pending?.also { pending = null }
+    /// The tunnel in hand, cleared as it is taken; an [epoch] given must match.
+    fun take(epoch: Long? = null): XrayTun? = synchronized(lock) {
+        val held = pending ?: return null
+        if (epoch != null && epoch != held.epoch) return null
+        pending = null
+        held
+    }
+
+    /// The epoch of the newest tunnel the service published.
+    fun currentEpoch(): Long = synchronized(lock) { publishedEpoch }
 
     /**
      * Waits up to [timeoutMillis] for the service to publish.
@@ -68,16 +116,23 @@ object XrayTunHolder {
      * tunnel: a start whose cached descriptor was closed waits here for the VPN the service is
      * establishing now, instead of reading a number that already belongs to another file.
      */
-    fun await(timeoutMillis: Long): XrayTun? {
+    fun await(timeoutMillis: Long, epoch: Long? = null): XrayTun? {
         val deadline = System.currentTimeMillis() + timeoutMillis
         while (System.currentTimeMillis() < deadline) {
-            take()?.let { return it }
+            take(epoch)?.let { return it }
             Thread.sleep(POLL_MS)
         }
-        return take()
+        return take(epoch)
     }
 
-    fun clear() {
+    /// Drops the slot, and only the slot of [epoch] when one is given.
+    ///
+    /// A stop that names the tunnel it is closing must not clear the tunnel that replaced it:
+    /// a newer `establish()` publishes while an older stop is still unwinding, and an
+    /// unconditional clear left the newer descriptor reachable by nobody.
+    fun clear(epoch: Long? = null) = synchronized(lock) {
+        val held = pending ?: return@synchronized
+        if (epoch != null && held.epoch > epoch) return@synchronized
         pending = null
     }
 }

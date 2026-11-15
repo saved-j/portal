@@ -1,0 +1,249 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+
+import '../common/constant.dart';
+import '../common/print.dart';
+import '../enum/enum.dart';
+
+/// Who reads the tunnel the Android service established.
+///
+/// The mode says which owner the app *wants*; this is the owner a generation actually has.
+/// They are different questions, and the switch used to answer the second with the first.
+enum PortalOwner {
+  mihomo('Mihomo'),
+  xray('Xray');
+
+  const PortalOwner(this.label);
+
+  /// The spelling the native record uses, so both sides name the same owner.
+  final String label;
+
+  static PortalOwner? of(String? value) {
+    for (final owner in values) {
+      if (owner.label == value || owner.name == value) return owner;
+    }
+    return null;
+  }
+}
+
+/// One published state of the portal, as the coordinator wrote it.
+///
+/// [phase] is one of `Off`, `Starting`, `Active`, `Stopping`, `Failed`. Only `Active` means
+/// an owner is reading the tunnel, and it is only published after that owner acknowledged
+/// it; `Starting` and `Stopping` mean the portal is in the middle of a transaction.
+class PortalRuntimeStatus {
+  const PortalRuntimeStatus({
+    required this.generation,
+    required this.phase,
+    this.owner,
+    this.fdEpoch = 0,
+    this.reason = '',
+    this.engine = false,
+    this.child = false,
+    this.childLine = '',
+  });
+
+  const PortalRuntimeStatus.unknown()
+      : generation = 0,
+        phase = 'Off',
+        owner = null,
+        fdEpoch = 0,
+        reason = '',
+        engine = false,
+        child = false,
+        childLine = '';
+
+  final int generation;
+  final String phase;
+  final PortalOwner? owner;
+  final int fdEpoch;
+  final String reason;
+
+  /// Whether the engine's service holds a run.
+  final bool engine;
+
+  /// Whether the child says it is reading the tunnel.
+  final bool child;
+
+  /// The child's own last line, for a refusal that has to be shown as it happened.
+  final String childLine;
+
+  bool get active => phase == 'Active';
+
+  bool get busy => phase == 'Starting' || phase == 'Stopping';
+
+  bool get failed => phase == 'Failed';
+
+  factory PortalRuntimeStatus.fromMap(Map<Object?, Object?> map) {
+    final phase = (map['phase'] as String?) ?? 'Off';
+    return PortalRuntimeStatus(
+      generation: (map['generation'] as num?)?.toInt() ?? 0,
+      phase: phase,
+      owner: PortalOwner.of(map['owner'] as String?),
+      fdEpoch: (map['fdEpoch'] as num?)?.toInt() ?? 0,
+      reason: (map['reason'] as String?) ?? '',
+      engine: map['engine'] == true,
+      child: map['child'] == true,
+      childLine: (map['childLine'] as String?) ?? '',
+    );
+  }
+
+  @override
+  String toString() =>
+      'PortalRuntimeStatus(generation: $generation, phase: $phase, '
+      'owner: ${owner?.label}, fdEpoch: $fdEpoch)';
+}
+
+/// The answer of one entry, and the record it left behind.
+class PortalRuntimeAnswer {
+  const PortalRuntimeAnswer({
+    required this.ok,
+    required this.status,
+    this.cancelled = false,
+    this.reason = '',
+  });
+
+  final bool ok;
+  final bool cancelled;
+  final String reason;
+  final PortalRuntimeStatus status;
+
+  bool get stale => cancelled;
+
+  factory PortalRuntimeAnswer.fromMap(Map<Object?, Object?> map) {
+    final state = map['state'];
+    return PortalRuntimeAnswer(
+      ok: map['ok'] == true,
+      cancelled: map['cancelled'] == true,
+      reason: (map['message'] as String?) ?? '',
+      status: state is Map
+          ? PortalRuntimeStatus.fromMap(state)
+          : const PortalRuntimeStatus.unknown(),
+    );
+  }
+}
+
+/// The portal's one entry, from the app's side.
+///
+/// Every call is one transaction on the native side: a single mutex, one generation, and an
+/// answer that arrives when the owner has acknowledged the tunnel. The app no longer starts
+/// the service and the child in two calls it hopes are ordered — that pair *was* the race.
+class PortalRuntime {
+  PortalRuntime._();
+
+  static final PortalRuntime instance = PortalRuntime._();
+
+  static const _channel = MethodChannel('$packageName/portal');
+
+  /// The newest record the app has seen. The switch screen reads it so a transaction in
+  /// flight is shown as one instead of as an open or a closed portal.
+  final ValueNotifier<PortalRuntimeStatus> status =
+      ValueNotifier(const PortalRuntimeStatus.unknown());
+
+  /// Builds the child's document for an entry that arrived without one.
+  ///
+  /// Quick Settings and Always-on can start the portal while no Flutter route is open; the
+  /// document belongs to the profile and only this side can build it, so the native side
+  /// asks for it inside the transaction.
+  Future<String?> Function()? childConfigBuilder;
+
+  void attach() {
+    _channel.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'prepareChildConfig':
+          final builder = childConfigBuilder;
+          if (builder == null) return null;
+          try {
+            return await builder();
+          } catch (error) {
+            commonPrint.log(
+              'portal child config failed: $error',
+              logLevel: LogLevel.warning,
+            );
+            return null;
+          }
+        default:
+          return null;
+      }
+    });
+  }
+
+  Future<PortalRuntimeAnswer> open(
+    PortalOwner owner, {
+    String? config,
+  }) async {
+    return _invoke('open', {'owner': owner.label, 'config': ?config});
+  }
+
+  Future<PortalRuntimeAnswer> close({String reason = 'app'}) {
+    return _invoke('close', {'reason': reason});
+  }
+
+  Future<PortalRuntimeAnswer> restart({String? config}) {
+    return _invoke('restart', {'config': ?config});
+  }
+
+  /// A row tap while the child owns the tunnel: the same owner, a new document.
+  Future<PortalRuntimeAnswer> startChild(String config) {
+    return _invoke('startChild', {'config': config});
+  }
+
+  Future<PortalRuntimeStatus> refresh() async {
+    try {
+      final result = await _channel.invokeMethod<Map<Object?, Object?>>('status');
+      final next = result == null
+          ? const PortalRuntimeStatus.unknown()
+          : PortalRuntimeStatus.fromMap(result);
+      status.value = next;
+      return next;
+    } on PlatformException catch (error) {
+      commonPrint.log(
+        'portal status failed: ${error.message}',
+        logLevel: LogLevel.warning,
+      );
+      return status.value;
+    } on MissingPluginException {
+      return status.value;
+    }
+  }
+
+  Future<PortalRuntimeAnswer> _invoke(
+    String method,
+    Map<String, Object?> arguments,
+  ) async {
+    try {
+      final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+        method,
+        arguments,
+      );
+      final answer = PortalRuntimeAnswer.fromMap(result ?? const {});
+      status.value = answer.status;
+      commonPrint.log(
+        'portal $method: ok=${answer.ok} ${answer.status}'
+        '${answer.reason.isEmpty ? '' : ' reason=${answer.reason}'}',
+      );
+      return answer;
+    } on PlatformException catch (error) {
+      commonPrint.log(
+        'portal $method failed: ${error.message}',
+        logLevel: LogLevel.error,
+      );
+      return PortalRuntimeAnswer(
+        ok: false,
+        reason: error.message ?? '$error',
+        status: status.value,
+      );
+    } on MissingPluginException {
+      // Desktop builds have no such channel: the engine alone is the portal there.
+      return PortalRuntimeAnswer(
+        ok: false,
+        reason: 'the portal runtime is not available in this build',
+        status: status.value,
+      );
+    }
+  }
+}
+
+final portalRuntime = PortalRuntime.instance;

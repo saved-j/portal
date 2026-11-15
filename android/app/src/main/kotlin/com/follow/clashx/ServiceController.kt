@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import com.follow.clashx.common.GlobalState
+import com.follow.clashx.common.PortalRuntimeState
 import com.follow.clashx.common.intent
 import com.follow.clashx.core.Core
 import com.follow.clashx.service.ManagedService
@@ -58,7 +59,8 @@ object ServiceController {
         val stopped = runCatching { Core.stopListener() }
         GlobalState.log(
             "engine listener owner=Off xrayTunActive=$xrayTunActive stop=" +
-                (stopped.exceptionOrNull()?.toString() ?: "ok"),
+                (stopped.exceptionOrNull()?.toString() ?: "ok") +
+                " generation=${PortalRuntimeState.current().generation}",
         )
         xrayTunActive = false
     }
@@ -99,7 +101,8 @@ object ServiceController {
             val stopped = runCatching { Core.stopListener() }
             GlobalState.log(
                 "engine listener owner=Xray stop before the hand-over=" +
-                    (stopped.exceptionOrNull()?.toString() ?: "ok"),
+                    (stopped.exceptionOrNull()?.toString() ?: "ok") +
+                    " generation=${PortalRuntimeState.current().generation}",
             )
         }
         val nextIntent = if (options.enable) {

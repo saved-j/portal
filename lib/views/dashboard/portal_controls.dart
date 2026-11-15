@@ -13,6 +13,7 @@ import 'package:fl_clash/core/proxy_endpoints.dart';
 import 'package:fl_clash/core/xray_ping.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
 import '../profiles/subscription_facts.dart';
+import 'package:fl_clash/plugins/portal_runtime.dart';
 import 'package:fl_clash/plugins/xray.dart';
 import 'package:yaml/yaml.dart';
 import 'dart:async';
@@ -862,8 +863,11 @@ class PortalServerList extends ConsumerWidget {
 /// The answer is the child's: `ok` only when it acknowledged the tunnel, and its own last
 /// line otherwise. A refused node leaves nothing of the previous one alive, so the caller
 /// must put the previous pick back — this function only reports what happened.
-Future<PortalCoreResult> _restartChildOn(XrayServerConfig server) async {
-  final started = await XrayCore.instance.start(jsonEncode(server.config));
+Future<PortalRuntimeAnswer> _restartChildOn(XrayServerConfig server) async {
+  // The tap is one entry of the same transaction the mode switch takes: the coordinator
+  // keeps the tunnel, replaces the core that reads it, and moves the generation so an
+  // acknowledgement from the core it just replaced cannot be mistaken for this one's.
+  final started = await portalRuntime.startChild(jsonEncode(server.config));
   if (started.ok) {
     commonPrint.log('xray is reading the tunnel on ${server.name}');
     return started;
@@ -1697,8 +1701,12 @@ class _PortalSwitchFailure implements Exception {
 /// How long the engine gets to take a new mode before the switch calls it a failure.
 const _modeApplyTimeout = Duration(seconds: 12);
 
-/// A switch already in flight. A second tap is dropped rather than queued: two transactions
-/// over one portal can only end with the second undoing the first.
+/// A switch already in flight **from this screen**. A second tap is dropped rather than
+/// queued: two transactions over one portal can only end with the second undoing the first.
+///
+/// This is only the double-tap guard: the truth is the native coordinator's mutex and
+/// generation, which also covers a start from Quick Settings, a revoke and a row tap that
+/// never passed through here.
 var _portalSwitching = false;
 
 /// Moves the portal between the two modes as one transaction.
@@ -1711,6 +1719,10 @@ var _portalSwitching = false;
 /// portal carrying nothing with nothing on screen to say why.
 Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
   if (_portalSwitching) return;
+  // Another entry's transaction — Quick Settings, the quick action, Always-on — is already
+  // moving the portal; this one waits for it rather than racing it, and the tap is simply
+  // dropped, which is what the owner asked for by tapping once.
+  if (portalRuntime.status.value.busy) return;
   _portalSwitching = true;
   final setup = ref.read(setupActionProvider.notifier);
   final previousMode = ref.read(patchClashConfigProvider.select((s) => s.mode));
@@ -1722,7 +1734,9 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
     }
     // 2. The child is stopped before the next core wants the tunnel, and the answer is the
     // plugin's: a stop that did not happen cannot be treated as one that did.
-    final stopped = await XrayCore.instance.stop();
+    // The portal is down, and the child with it: `close` is the coordinator's own stop, so
+    // the core has returned from `XrayStop` before the next owner is asked for.
+    final stopped = await portalRuntime.close(reason: 'switch');
     if (!stopped.ok && !stopped.cancelled) {
       throw _PortalSwitchFailure('the portal core did not stop: ${stopped.reason}');
     }
@@ -1823,7 +1837,7 @@ Future<void> _rollBackPortal(
 }) async {
   final setup = ref.read(setupActionProvider.notifier);
   try {
-    final stopped = await XrayCore.instance.stop();
+    final stopped = await portalRuntime.close(reason: 'rollback');
     if (!stopped.ok && !stopped.cancelled) {
       throw _PortalSwitchFailure('the portal core did not stop: ${stopped.reason}');
     }

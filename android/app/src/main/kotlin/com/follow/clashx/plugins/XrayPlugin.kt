@@ -3,7 +3,13 @@ package com.follow.clashx.plugins
 import android.content.Context
 import android.system.Os
 import android.util.Log
+import com.follow.clashx.PortalChildGateway
+import com.follow.clashx.PortalChildStart
+import com.follow.clashx.PortalChildStop
+import com.follow.clashx.PortalRuntimeCoordinator
 import com.follow.clashx.common.Components
+import com.follow.clashx.common.GlobalState
+import com.follow.clashx.common.PortalRuntimeState
 import com.follow.clashx.common.XrayChildControl
 import com.follow.clashx.common.XrayTun
 import com.follow.clashx.common.XrayTunHolder
@@ -15,8 +21,12 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.RandomAccessFile
+import java.util.concurrent.Callable
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.launch
 
 /**
  * Runs the bundled Xray on the simple portal's tunnel.
@@ -44,7 +54,7 @@ import java.util.concurrent.atomic.AtomicLong
  * and an app uid is denied that read (`netlinkrib: permission denied`). The exclusion is by
  * uid, exactly like `VpnService.protect`, and it needs no interface name at all.
  */
-class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGateway {
     private lateinit var channel: MethodChannel
     private lateinit var appContext: Context
     private val executor = Executors.newSingleThreadExecutor()
@@ -111,10 +121,13 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             takeCore()
             requestNativeStop()
         }
+        // The coordinator's child half: starts and stops that only answer once the core has.
+        PortalRuntimeCoordinator.attachChild(this)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        PortalRuntimeCoordinator.detachChild(this)
         XrayChildControl.stop = null
         nextOperation()
         takeCore()
@@ -124,42 +137,35 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "status" -> result.success(status())
+            // The channel is not a second way into the core: it is the same entry the mode
+            // switch and Quick Settings take, so the same mutex and the same generation
+            // decide the order. The plugin still answers with its own words.
             "start" -> {
                 val config = call.argument<String>("config")
                 if (config.isNullOrBlank()) {
                     result.success(failure("empty config"))
                     return
                 }
-                // Numbered here, on the platform thread, so start and stop are ordered by
-                // arrival: the newest command is the one that owns the core.
-                val token = nextOperation()
-                executor.execute {
-                    if (!isCurrent(token)) {
-                        result.success(cancelled())
-                        return@execute
-                    }
-                    val outcome = start(token, config)
+                GlobalState.launch {
+                    val outcome = PortalRuntimeCoordinator.startChild(config)
                     channel.invokeMethodOnMainThread("state", status())
-                    result.success(outcome)
+                    replyOnMain(result, outcome.toMap())
                 }
             }
-            "stop" -> {
-                // Take the number first: that is what makes a start — waiting already, or
-                // still queued behind this one — abandon its work instead of overriding the
-                // stop. The native stop is queued rather than run here, so the caller is not
-                // held for the core's wind-down; a start in flight ends on its own when it
-                // sees the new number, which is also when the queue reaches this task.
-                val token = nextOperation()
-                takeCore()
-                requestNativeStop()
-                executor.execute {
-                    // The report follows the stop, whatever arrived in between: what it says
-                    // is the state after the core was asked to go.
-                    if (isCurrent(token)) {
-                        channel.invokeMethodOnMainThread("state", status())
-                    }
-                    result.success(mapOf("ok" to true, "message" to "stopped"))
-                }
+            "stop" -> GlobalState.launch {
+                // Returns after `XrayStop` has returned: a stop that did not happen is not
+                // reported as one, which is what makes the next start's evidence meaningful.
+                val outcome = PortalRuntimeCoordinator.close("plugin-stop")
+                channel.invokeMethodOnMainThread("state", status())
+                replyOnMain(
+                result,
+                mapOf(
+                    "ok" to outcome.ok,
+                    "cancelled" to outcome.cancelled,
+                    "message" to outcome.reason.ifEmpty { "stopped" },
+                    "generation" to outcome.runtime.generation,
+                ),
+                )
             }
             else -> result.notImplemented()
         }
@@ -170,7 +176,89 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         "lastLine" to lastLine,
         // Whether this plugin holds a tunnel: the core can only run while it does.
         "tun" to (cachedTun != null),
+        // The record this core belongs to: a `running` flag without it cannot say whether
+        // the answer still describes the portal on screen.
+        "generation" to PortalRuntimeState.current().generation,
+        "phase" to PortalRuntimeState.current().phase,
+        "fdEpoch" to (cachedTun?.epoch ?: 0L),
     )
+
+    private fun replyOnMain(result: MethodChannel.Result, value: Any?) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            runCatching { result.success(value) }
+        }
+    }
+
+    // ---- PortalChildGateway: the child's half of the coordinator's transaction ------------
+
+    /// Starts the core on [config] and answers only after it acknowledged the tunnel.
+    ///
+    /// Runs on the plugin's own single thread and waits for that task, so a start queued
+    /// behind a stop runs after it instead of beside it, and the caller can treat the answer
+    /// as a fact of the core rather than of the queue.
+    override fun start(config: String): PortalChildStart {
+        val token = nextOperation()
+        val task = executor.submit(Callable { start(token, config) })
+        val outcome = try {
+            task.get(START_WAIT_MS, TimeUnit.MILLISECONDS)
+        } catch (error: TimeoutException) {
+            nextOperation()
+            task.cancel(true)
+            return PortalChildStart(
+                ok = false,
+                reason = "the core did not answer within ${START_WAIT_MS}ms: $lastLine",
+            )
+        } catch (error: Exception) {
+            return PortalChildStart(ok = false, reason = error.message ?: "$error")
+        }
+        val ok = outcome["ok"] == true
+        return PortalChildStart(
+            ok = ok,
+            cancelled = outcome["cancelled"] == true,
+            reason = if (ok) "" else (outcome["message"] as? String).orEmpty(),
+            epoch = (outcome["epoch"] as? Long) ?: 0L,
+        )
+    }
+
+    /// Stops the core, and answers only after `XrayStop` returned.
+    ///
+    /// The flag is taken on the calling thread — that is what makes a start that is still
+    /// waiting see a newer command — and the native call is queued behind whatever the
+    /// executor is doing, then waited for. Its own failure is reported as a failure: the
+    /// plugin used to answer `ok` for a stop that was merely enqueued.
+    override fun stop(): PortalChildStop {
+        val token = nextOperation()
+        val wasRunning = takeCore()
+        val task = executor.submit(Callable {
+            if (!wasRunning || !libraryLoaded) return@Callable Result.success(Unit)
+            runCatching { XrayStop() }
+        })
+        val outcome = try {
+            task.get(STOP_WAIT_MS, TimeUnit.MILLISECONDS)
+        } catch (error: TimeoutException) {
+            task.cancel(true)
+            return PortalChildStop(
+                ok = false,
+                reason = "XrayStop did not return within ${STOP_WAIT_MS}ms",
+            )
+        } catch (error: Exception) {
+            return PortalChildStop(ok = false, reason = error.message ?: "$error")
+        }
+        val problem = outcome.exceptionOrNull()
+        Log.i(
+            TAG,
+            "stop owner=Xray token=$token wasRunning=$wasRunning xraystop=${problem?.message ?: "ok"}",
+        )
+        return if (problem == null) {
+            PortalChildStop(ok = true)
+        } else {
+            PortalChildStop(ok = false, reason = "${problem.message}")
+        }
+    }
+
+    override val running: Boolean get() = coreRunning
+
+    override val coreLine: String get() = lastLine
 
     private fun start(token: Long, config: String): Map<String, Any> {
         // One core at a time: a restart after a tap replaces the core that is reading the
@@ -217,11 +305,17 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         // call runs; the core duplicates it once more for itself (proxy/tun does
         // F_DUPFD_CLOEXEC on what it is handed), so closing this one on the way out leaves the
         // core reading its own.
-        val handoff = runCatching { tun.descriptor.dup() }.getOrElse { error ->
-            return failure("cannot duplicate the tunnel descriptor: ${error.message}")
+        //
+        // `XrayTun.duplicate()` is the only way to it: it asks the descriptor whether it is
+        // still open under the same guard as the duplicate, so a tunnel the service closed in
+        // between answers `null` here instead of throwing `Already closed` out of `dup()`.
+        val handoff = tun.duplicate() ?: run {
+            cachedTun = null
+            XrayTunHolder.clear(tun.epoch)
+            return failure("the tunnel descriptor is closed: nothing to read")
         }
         val fd = handoff.fd
-        Log.i(TAG, "handing tun fd $fd (a duplicate of ${tun.fd}) to the core")
+        Log.i(TAG, "handing tun fd $fd (a duplicate of ${tun.fd}, epoch ${tun.epoch}) to the core")
         val attempt = try {
             runCatching { XrayStart(document, fd, assets.absolutePath) }
         } finally {
@@ -244,7 +338,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         coreRunning = true
         lastLine = ""
         return try {
-            awaitAck(token, fd, logFile)
+            awaitAck(token, fd, logFile, tun.epoch)
         } catch (e: Exception) {
             Log.e(TAG, "unable to start xray", e)
             stopCoreHere()
@@ -368,7 +462,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     /// to read. What it writes to the log the document names is the only evidence: the tun
     /// reader says it started, or an `[Error]` line says it never will. Both end the wait —
     /// one as the acknowledgement, one as the failure, each with the core's own words.
-    private fun awaitAck(token: Long, fd: Int, logFile: File): Map<String, Any> {
+    private fun awaitAck(token: Long, fd: Int, logFile: File, epoch: Long): Map<String, Any> {
         val tail = LogTail(logFile)
         val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
@@ -390,8 +484,12 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 // A failure line answers the start now, not at the deadline: a refused
                 // document would otherwise sit out the whole timeout saying nothing.
                 if (ACK_MARKERS.any { lastLine.contains(it, ignoreCase = true) }) {
-                    Log.i(TAG, "xray is reading the tunnel on fd $fd")
-                    return mapOf("ok" to true, "message" to "tunnel on fd $fd")
+                    Log.i(TAG, "xray is reading the tunnel on fd $fd (epoch $epoch)")
+                    return mapOf(
+                        "ok" to true,
+                        "message" to "tunnel on fd $fd",
+                        "epoch" to epoch,
+                    )
                 }
                 if (isCoreError(lastLine)) {
                     Log.e(TAG, "xray failed to take the tunnel: $lastLine")
@@ -565,6 +663,15 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         private const val LIB_NAME = "xray"
 
         private const val READY_TIMEOUT_MS = 12_000L
+
+        /// How long a coordinator entry waits for the core's own answer. Above the ack's own
+        /// deadline plus the tunnel wait, so a slow start reports the core's words rather
+        /// than this timeout.
+        private const val START_WAIT_MS = 45_000L
+
+        /// `XrayStop` returns when the core has let go of its tunnels; a stop that never
+        /// returns is a fact the caller has to hear instead of waiting forever.
+        private const val STOP_WAIT_MS = 30_000L
 
         /// How often the log is read, and how finely a sleep is cut so a stop does not wait
         /// out a whole interval before the start gives up.

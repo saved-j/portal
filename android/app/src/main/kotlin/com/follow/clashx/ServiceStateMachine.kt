@@ -1,5 +1,6 @@
 package com.follow.clashx
 
+import com.follow.clashx.common.PortalRuntimeState
 import com.follow.clashx.common.RunIntentArbiter
 import com.follow.clashx.models.SharedState
 import com.follow.clashx.service.models.NotificationParams
@@ -421,6 +422,10 @@ internal class ServiceStateMachine(private val host: ServiceStateHost) {
 
     private inline fun <T> transitioning(state: RunState, block: () -> T): T {
         transition = state
+        // The phase in the same words as the portal's own record, with the generation it
+        // belongs to: a `STARTING` in the log without a number cannot be told from the one
+        // a newer transaction published a moment later.
+        host.log("service phase=$state generation=${PortalRuntimeState.current().generation}")
         publish()
         try {
             return block()
