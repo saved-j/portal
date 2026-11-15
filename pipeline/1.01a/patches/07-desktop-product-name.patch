@@ -1,5 +1,5 @@
 diff --git a/linux/CMakeLists.txt b/linux/CMakeLists.txt
-index bbc80d8c6a7a71e8f83f2cbb37245602920ec5b9..72aea95314e8ed2009dc357f698018da2fc776ce 100644
+index bbc80d8c..72aea953 100644
 --- a/linux/CMakeLists.txt
 +++ b/linux/CMakeLists.txt
 @@ -4,7 +4,7 @@ project(runner LANGUAGES CXX)
@@ -11,78 +11,8 @@ index bbc80d8c6a7a71e8f83f2cbb37245602920ec5b9..72aea95314e8ed2009dc357f698018da
  # The unique GTK application identifier for this application. See:
  # https://wiki.gnome.org/HowDoI/ChooseApplicationID
  set(APPLICATION_ID "com.follow.clashx")
-diff --git a/macos/Runner.xcodeproj/project.pbxproj b/macos/Runner.xcodeproj/project.pbxproj
-index 16f65d71f4077de71cf7b1b405e4b8c7749711ee..462f41a998f202ad0b123d66560c4b595f1edc48 100644
---- a/macos/Runner.xcodeproj/project.pbxproj
-+++ b/macos/Runner.xcodeproj/project.pbxproj
-@@ -408,7 +408,7 @@
- 			);
- 			runOnlyForDeploymentPostprocessing = 0;
- 			shellPath = /bin/sh;
--			shellScript = "# The bundle id comes from Channel.xcconfig, which setup.dart writes for\n# APP_ENV=pre; a build whose defines disagree would ship the wrong app.\n[ \"$CONFIGURATION\" = \"Debug\" ] && exit 0\nenv=pre\nfor define in $(echo \"$DART_DEFINES\" | tr ',' ' '); do\n  pair=$(echo \"$define\" | base64 --decode 2>/dev/null)\n  case \"$pair\" in APP_ENV=*) env=\"${pair#APP_ENV=}\" ;; esac\ndone\nexpected=com.follow.clashx\n[ \"$env\" = \"pre\" ] && expected=com.follow.clashx.pre\nif [ \"$PRODUCT_BUNDLE_IDENTIFIER\" != \"$expected\" ]; then\n  echo \"error: APP_ENV=$env needs bundle id $expected, not $PRODUCT_BUNDLE_IDENTIFIER; build with dart setup.dart macos --env $env\"\n  exit 1\nfi\n";
-+			shellScript = "# The bundle id comes from Channel.xcconfig, which setup.dart writes for\n# APP_ENV=pre; a build whose defines disagree would ship the wrong app.\n[ \"$CONFIGURATION\" = \"Debug\" ] && exit 0\nenv=pre\nfor define in $(echo \"$DART_DEFINES\" | tr ',' ' '); do\n  pair=$(echo \"$define\" | base64 --decode 2>/dev/null)\n  case \"$pair\" in APP_ENV=*) env=\"${pair#APP_ENV=}\" ;; esac\ndone\nexpected=io.portal.xfc\n[ \"$env\" = \"pre\" ] && expected=io.portal.xfc.pre\nif [ \"$PRODUCT_BUNDLE_IDENTIFIER\" != \"$expected\" ]; then\n  echo \"error: APP_ENV=$env needs bundle id $expected, not $PRODUCT_BUNDLE_IDENTIFIER; build with dart setup.dart macos --env $env\"\n  exit 1\nfi\n";
- 		};
- /* End PBXShellScriptBuildPhase section */
- 
-@@ -466,7 +466,7 @@
- 				CURRENT_PROJECT_VERSION = 1;
- 				GENERATE_INFOPLIST_FILE = YES;
- 				MARKETING_VERSION = 1.0;
--				PRODUCT_BUNDLE_IDENTIFIER = com.follow.flClashX.RunnerTests;
-+				PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.RunnerTests;
- 				PRODUCT_NAME = "$(TARGET_NAME)";
- 				SWIFT_VERSION = 5.0;
- 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fl_clash.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fl_clash";
-@@ -480,7 +480,7 @@
- 				CURRENT_PROJECT_VERSION = 1;
- 				GENERATE_INFOPLIST_FILE = YES;
- 				MARKETING_VERSION = 1.0;
--				PRODUCT_BUNDLE_IDENTIFIER = com.follow.flClashX.RunnerTests;
-+				PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.RunnerTests;
- 				PRODUCT_NAME = "$(TARGET_NAME)";
- 				SWIFT_VERSION = 5.0;
- 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fl_clash.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fl_clash";
-@@ -494,7 +494,7 @@
- 				CURRENT_PROJECT_VERSION = 1;
- 				GENERATE_INFOPLIST_FILE = YES;
- 				MARKETING_VERSION = 1.0;
--				PRODUCT_BUNDLE_IDENTIFIER = com.follow.flClashX.RunnerTests;
-+				PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.RunnerTests;
- 				PRODUCT_NAME = "$(TARGET_NAME)";
- 				SWIFT_VERSION = 5.0;
- 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fl_clash.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fl_clash";
-@@ -701,7 +701,7 @@
- 					"$(inherited)",
- 					"@executable_path/../Frameworks",
- 				);
--				PRODUCT_BUNDLE_IDENTIFIER = com.follow.clashx.debug;
-+				PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.debug;
- 				PROVISIONING_PROFILE_SPECIFIER = "";
- 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
- 				SWIFT_VERSION = 5.0;
-diff --git a/macos/Runner/Configs/AppInfo.xcconfig b/macos/Runner/Configs/AppInfo.xcconfig
-index b3353038471d154e778ca540ca78eccbf5f0f61c..1514e5d3b81b9f403c70992c18f88435b332ee53 100755
---- a/macos/Runner/Configs/AppInfo.xcconfig
-+++ b/macos/Runner/Configs/AppInfo.xcconfig
-@@ -5,13 +5,13 @@
- // 'flutter create' template.
- 
- // The application's name. By default this is also the title of the Flutter window.
--PRODUCT_NAME = FlClashX
-+PRODUCT_NAME = Portal
- 
- // The application's bundle identifier
--PRODUCT_BUNDLE_IDENTIFIER = com.follow.clashx
-+PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc
- 
- // The name the Finder, the Dock and the menu bar show
--APP_DISPLAY_NAME = FlClashX
-+APP_DISPLAY_NAME = Portal
- 
- // The copyright displayed in application information
- PRODUCT_COPYRIGHT = Copyright © 2023 com.follow. All rights reserved.
 diff --git a/windows/CMakeLists.txt b/windows/CMakeLists.txt
-index ea508ab285cfcb350c0a7d1b2cc9381c7ff7ad7d..9851fae1baf77b96eb4c7993e5fc348e220af453 100644
+index ea508ab2..9851fae1 100644
 --- a/windows/CMakeLists.txt
 +++ b/windows/CMakeLists.txt
 @@ -4,7 +4,7 @@ project(FlClashX LANGUAGES CXX)
@@ -95,7 +25,7 @@ index ea508ab285cfcb350c0a7d1b2cc9381c7ff7ad7d..9851fae1baf77b96eb4c7993e5fc348e
  # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
  # versions of CMake.
 diff --git a/windows/runner/Runner.rc b/windows/runner/Runner.rc
-index 0a0543636e572e32a20abeb30714495705ac4d7f..78b9601b22be5d0ee605270d99d512cfad64114c 100644
+index 0a054363..78b9601b 100644
 --- a/windows/runner/Runner.rc
 +++ b/windows/runner/Runner.rc
 @@ -89,21 +89,21 @@ BEGIN
@@ -129,7 +59,7 @@ index 0a0543636e572e32a20abeb30714495705ac4d7f..78b9601b22be5d0ee605270d99d512cf
              VALUE "ProductVersion", VERSION_AS_STRING "\0"
          END
 diff --git a/windows/runner/main.cpp b/windows/runner/main.cpp
-index 0e1b6161eb97fb5150ff0f4aae766ff2675d02ca..bb5abb16d90b53063d8fea8e052df816bc37c139 100644
+index 0e1b6161..bb5abb16 100644
 --- a/windows/runner/main.cpp
 +++ b/windows/runner/main.cpp
 @@ -50,9 +50,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,

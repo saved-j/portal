@@ -1,9 +1,9 @@
 diff --git a/apply.sh b/apply.sh
 new file mode 100755
-index 0000000000000000000000000000000000000000..8b51381bf95328f4bb601bc6b809712fc3843921
+index 00000000..6a9d5240
 --- /dev/null
 +++ b/apply.sh
-@@ -0,0 +1,149 @@
+@@ -0,0 +1,189 @@
 +#!/bin/bash
 +# Portal patch dispatcher.
 +#
@@ -65,7 +65,12 @@ index 0000000000000000000000000000000000000000..8b51381bf95328f4bb601bc6b809712f
 +    if want and got != want:
 +        raise SystemExit(f"sha256 mismatch for {p}\n  registry {want}\n  on disk  {got}")
 +    head = open(p, 'rb').read(4)
-+    if not head.startswith(b'From'):
++    mode = r.get('apply', 'git-am')
++    # A series is either an mbox series (git am) or a plain diff series (git apply).
++    if mode == 'git-apply':
++        if not head.startswith(b'diff'):
++            raise SystemExit(f"not a git diff: {p}")
++    elif not head.startswith(b'From'):
 +        raise SystemExit(f"not an mbox: {p}")
 +print(f"gate ok: {len(items)} item(s), checksums match")
 +PY
@@ -84,7 +89,9 @@ index 0000000000000000000000000000000000000000..8b51381bf95328f4bb601bc6b809712f
 +
 +verify() {
 +  local v=$1 dir; dir=$(series_dir "$v")
-+  [[ "$v" == "0.02" ]] || die "$v is an archive; only 0.02 is replayable"
++  local mode; mode=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('apply','git-am'))")
++  [[ "$mode" == "git-apply" || "$v" == "0.02" ]] || die "$v is an archive; it is not replayable"
++
 +  gate "$dir"
 +  local sha base
 +  sha=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json'))['base']['sha'])")
@@ -98,6 +105,14 @@ index 0000000000000000000000000000000000000000..8b51381bf95328f4bb601bc6b809712f
 +  git -C "$tmp/w" checkout -q -B verify-0.02 "$base"
 +  local applied=0
 +  while IFS= read -r patch; do
++    if [[ "$mode" == "git-apply" ]]; then
++      if git -C "$tmp/w" apply --whitespace=nowarn "$patch"; then
++        echo "  apply ok: $(basename "$patch")"
++        applied=$((applied + 1))
++        continue
++      fi
++      die "does not apply to pristine FlClashX: $patch"
++    fi
 +    if git -C "$tmp/w" am --quiet "$patch"; then
 +      echo "  am ok: $(basename "$patch")"
 +      applied=$((applied + 1))
@@ -107,15 +122,34 @@ index 0000000000000000000000000000000000000000..8b51381bf95328f4bb601bc6b809712f
 +    fi
 +  done < <(group_patches "$dir")
 +  [[ $applied -gt 0 ]] || die "no groups applied"
++  # A diff series leaves a dirty worktree; committing it is what makes the tree hash real.
++  if [[ "$mode" == "git-apply" ]]; then
++    git -C "$tmp/w" add -A >/dev/null
++    git -C "$tmp/w" -c user.name=verify -c user.email=verify@local \
++      commit -q -m "series $v" >/dev/null
++  fi
++
 +  # Exact equality, not a file walk: hash the committed product tree of this repo with the
 +  # pipeline directory removed, and compare it with the tree the groups produced. Build
 +  # artefacts (build/, dist/, gradlew, local.properties, .DS_Store) never enter a commit,
 +  # so they cannot make this comparison lie.
 +  local wt idx
-+  idx="$tmp/index"
-+  GIT_INDEX_FILE="$idx" git -C "$REPO" read-tree HEAD
-+  GIT_INDEX_FILE="$idx" git -C "$REPO" rm -r --cached --ignore-unmatch pipeline apply.sh >/dev/null
-+  wt=$(GIT_INDEX_FILE="$idx" git -C "$REPO" write-tree)
++  local compare; compare=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('compare','product'))")
++  # The series states the tree it must reproduce; that is the authority. HEAD may differ
++  # because the series itself lives in a later commit, and a snapshot cannot contain itself.
++  local declared; declared=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('tree',''))")
++  if [[ -n "$declared" ]]; then
++    wt=$declared
++  elif [[ "$compare" == "full" ]]; then
++    wt=$(git -C "$REPO" rev-parse 'HEAD^{tree}')
++  else
++    idx="$tmp/index"
++    GIT_INDEX_FILE="$idx" git -C "$REPO" read-tree HEAD
++    GIT_INDEX_FILE="$idx" git -C "$REPO" rm -r --cached --ignore-unmatch pipeline apply.sh >/dev/null
++    wt=$(GIT_INDEX_FILE="$idx" git -C "$REPO" write-tree)
++  fi
++
++
 +  local got; got=$(git -C "$tmp/w" rev-parse 'HEAD^{tree}')
 +  if [[ "$wt" == "$got" ]]; then
 +    echo "OK: $applied group(s) reproduce the committed product tree ($wt)"
@@ -128,7 +162,8 @@ index 0000000000000000000000000000000000000000..8b51381bf95328f4bb601bc6b809712f
 +
 +apply_series() {
 +  local v=$1 dest=${2:-} dir; dir=$(series_dir "$v")
-+  [[ "$v" == "0.02" ]] || die "$v is an archive and cannot be applied"
++  local mode; mode=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('apply','git-am'))")
++  [[ "$mode" == "git-apply" || "$v" == "0.02" ]] || die "$v is an archive and cannot be applied"
 +  gate "$dir"
 +  dest=${dest:-$HOME/.work/portal-$v}
 +  local sha; sha=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json'))['base']['sha'])")
@@ -136,10 +171,15 @@ index 0000000000000000000000000000000000000000..8b51381bf95328f4bb601bc6b809712f
 +  git clone -q --no-hardlinks "$REPO" "$dest"
 +  git -C "$dest" checkout -q -B "portal-$v" "$sha"
 +  while IFS= read -r patch; do
-+    git -C "$dest" am --quiet "$patch" || die "does not apply: $patch"
++    if [[ "$mode" == "git-apply" ]]; then
++      git -C "$dest" apply --whitespace=nowarn "$patch" || die "does not apply: $patch"
++    else
++      git -C "$dest" am --quiet "$patch" || die "does not apply: $patch"
++    fi
 +  done < <(group_patches "$dir")
 +  echo "ready: $dest (branch portal-$v, base ${sha:0:8})"
 +}
++
 +
 +case "${1:-}" in
 +  list|'') list_series ;;
@@ -153,101 +193,9 @@ index 0000000000000000000000000000000000000000..8b51381bf95328f4bb601bc6b809712f
 +    esac
 +    ;;
 +esac
-diff --git a/build.sh b/build.sh
-new file mode 100755
-index 0000000000000000000000000000000000000000..65da1832f651aca175e0100e582fb9e1b9e1542f
---- /dev/null
-+++ b/build.sh
-@@ -0,0 +1,86 @@
-+#!/bin/bash
-+# Portal build driver. One place for the environment; nothing lands in $HOME.
-+#
-+#   ./build.sh get        flutter pub get
-+#   ./build.sh macos      macOS .app (host: macOS + Xcode)
-+#   ./build.sh apk        Android .apk (host: any OS with SDK+NDK)
-+#   ./build.sh linux      Linux bundle (host: Linux only)
-+#   ./build.sh windows    Windows bundle (host: Windows only)
-+#   ./build.sh ios        iOS — not available, see below
-+#   ./build.sh run-macos  open the built .app
-+#
-+# Toolchain used on Mark's Mac: Flutter in /opt/homebrew/opt/flutter, JDK 17 keg-only,
-+# Xcode via DEVELOPER_DIR, Rust toolchain 1.99.0 pinned by plugins/rust_api/rust/rust-toolchain.toml.
-+# China mirrors: pub/flutter engine (flutter-io.cn), rustup (USTC), crates.io (USTC via ~/.cargo/config.toml).
-+set -euo pipefail
-+
-+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-+cd "$REPO"
-+
-+export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
-+export ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
-+export ANDROID_SDK_ROOT="$ANDROID_HOME"
-+export ANDROID_USER_HOME="${ANDROID_USER_HOME:-$HOME/.work/.android}"
-+export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.work/.gradle}"
-+export PUB_CACHE="${PUB_CACHE:-$HOME/.work/.pub-cache}"
-+# Do NOT point PUB_HOSTED_URL at pub.flutter-io.cn: a different hosted URL invalidates
-+# pubspec.lock and re-resolves packages upward (material_ui 1.5.0 -> 1.11.0 breaks the
-+# build with "MaterialShapes is imported from both"). pub.dev answers from here; only the
-+# Flutter engine artifacts need the mirror.
-+export FLUTTER_STORAGE_BASE_URL="${FLUTTER_STORAGE_BASE_URL:-https://storage.flutter-io.cn}"
-+export RUSTUP_DIST_SERVER="${RUSTUP_DIST_SERVER:-https://mirrors.ustc.edu.cn/rust-static}"
-+export RUSTUP_UPDATE_ROOT="${RUSTUP_UPDATE_ROOT:-https://mirrors.ustc.edu.cn/rust-static/rustup}"
-+export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
-+# ~/.work/toolchain/bin first: create-dmg shim maps the npm --dmg-title onto --volname
-+export PATH="$HOME/.work/toolchain/bin:/opt/homebrew/opt/flutter/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
-+
-+mkdir -p "$ANDROID_USER_HOME" "$GRADLE_USER_HOME" "$PUB_CACHE"
-+
-+host_guard() {
-+  # Flutter desktop builds are host-native: no cross-compiling for linux/windows.
-+  local want="$1" os
-+  os=$(uname -s)
-+  case "$want:$os" in
-+    linux:Linux|windows:*MINGW*|windows:*MSYS*|windows:CYGWIN*) ;;
-+    linux:*)   echo "error: Linux bundles must be built on Linux (Flutter has no cross-compile). Use CI." >&2; exit 1 ;;
-+    windows:*) echo "error: Windows bundles must be built on Windows. Use CI." >&2; exit 1 ;;
-+  esac
-+}
-+
-+# The child process is not stored in the repository: 33 MB of binary per ABI would bloat
-+# every diff. It is fetched once into jniLibs, where nothing but the app build reads it.
-+ensure_xray_android() {
-+  local dest="android/app/src/main/jniLibs/arm64-v8a/libxray.so"
-+  if [ -f "$dest" ]; then return 0; fi
-+  local work
-+  work=$(mktemp -d "${TMPDIR:-/tmp}/xray-fetch.XXXXXX")
-+  echo "fetching Xray 26.11.9 for android/arm64"
-+  curl -fL --retry 2 -o "$work/x.zip" \
-+    https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-android-arm64-v8a.zip || return 1
-+  mkdir -p "$work/out" "$(dirname "$dest")"
-+  unzip -q -o "$work/x.zip" -d "$work/out" || return 1
-+  cp -f "$work/out/xray" "$dest" && chmod 755 "$dest"
-+}
-+
-+case "${1:-get}" in
-+  get)        flutter --version; flutter pub get ;;
-+  macos)      APP_ENV=stable; dart setup.dart macos --env "$APP_ENV"
-+              ls -lh build/macos/Build/Products/Release/*.dmg 2>/dev/null || true ;;
-+  apk)        ensure_xray_android || exit 1
-+              dart setup.dart android --env stable
-+              ls -lh build/app/outputs/flutter-apk/*.apk 2>/dev/null || true ;;
-+  linux)      host_guard linux;   dart setup.dart linux --env stable ;;
-+  windows)    host_guard windows; dart setup.dart windows --env stable ;;
-+  ios)        cat >&2 <<'EOF'
-+error: this tree has no ios/ target — FlClashX ships android/macos/linux/windows only.
-+
-+To enable iOS:
-+  1. flutter create --platforms=ios .
-+  2. verify every plugin has an iOS implementation (rust_api helper and the gomobile core are the risk)
-+  3. build on macOS:  flutter build ios --release   (needs an Apple Developer account for signing)
-+Unsigned builds do not install on non-jailbroken devices; TestFlight is the realistic distribution.
-+EOF
-+              exit 1 ;;
-+  run-macos)  APP=$(ls -d build/macos/Build/Products/Release/*.app | head -1); open "$APP" ;;
-+  *) echo "usage: $0 {get|macos|apk|linux|windows|ios|run-macos}" >&2; exit 2 ;;
-+esac
 diff --git a/docs/DPI.md b/docs/DPI.md
 new file mode 100644
-index 0000000000000000000000000000000000000000..4f8efcba64bcd901f83d0df54bd5ac8a440f9785
+index 00000000..4f8efcba
 --- /dev/null
 +++ b/docs/DPI.md
 @@ -0,0 +1,90 @@
@@ -343,7 +291,7 @@ index 0000000000000000000000000000000000000000..4f8efcba64bcd901f83d0df54bd5ac8a
 +- Prizrak-Core `README` / outbound list for finalmask family **[verified]**
 diff --git a/docs/PIPELINE.md b/docs/PIPELINE.md
 new file mode 100644
-index 0000000000000000000000000000000000000000..4e4bc7cfcade0e025aa820b3644ab5da822897f9
+index 00000000..4e4bc7cf
 --- /dev/null
 +++ b/docs/PIPELINE.md
 @@ -0,0 +1,87 @@
@@ -434,114 +382,9 @@ index 0000000000000000000000000000000000000000..4e4bc7cfcade0e025aa820b3644ab5da
 +   hosted URLs and would break upstream CI. Revert it before committing.
 +2. `core/go.sum` must carry the checksums of the replaced modules; a build without them fails.
 +3. Machine-level mirrors (rustup, crates.io) belong in tool config, not in the repo.
-diff --git a/release.sh b/release.sh
-new file mode 100755
-index 0000000000000000000000000000000000000000..fb86a4e368a2bb3c7cf7046867e56bada33b498b
---- /dev/null
-+++ b/release.sh
-@@ -0,0 +1,43 @@
-+#!/bin/bash
-+# Publish a Portal release: tag → push → CI builds every platform → assets land in the
-+# GitHub release. Users download installers; nobody has to build anything.
-+#
-+#   ./release.sh v0.1.0            real release
-+#   ./release.sh v0.1.0 --draft    draft release (CI still uploads assets)
-+#
-+# Requires: gh authenticated (gh auth status), clean working tree, CI green on the commit.
-+set -euo pipefail
-+
-+VERSION="${1:-}"
-+MODE="${2:-}"
-+[[ -n "$VERSION" ]] || { echo "usage: $0 vX.Y.Z [--draft]" >&2; exit 2; }
-+[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "error: tag must look like v1.2.3" >&2; exit 2; }
-+
-+REPO_DIR="${REPO_DIR:-$HOME/.work/portal}"
-+cd "$REPO_DIR"
-+
-+git fetch --quiet origin
-+[[ -z "$(git status --porcelain)" ]] || { echo "error: working tree is dirty — commit or stash first" >&2; exit 1; }
-+git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null && { echo "error: tag $VERSION already exists" >&2; exit 1; }
-+
-+# The patch set must reproduce this tree, otherwise the release is not reproducible.
-+./apply.sh check
-+
-+echo "tagging $VERSION on $(git log -1 --format='%h %s')"
-+git tag -a "$VERSION" -m "Portal $VERSION"
-+git push --quiet origin HEAD "$VERSION"
-+echo "pushed. CI: $(gh repo view --json nameWithOwner -q .nameWithOwner) → Actions → build"
-+
-+if [[ "$MODE" == "--draft" ]]; then
-+  echo "note: CI creates the release; mark it draft afterwards in the web UI if needed"
-+fi
-+
-+cat <<EOF
-+
-+What users download from the release page (built by CI, not by them):
-+  macOS    FlClashX-*-macos-*.dmg        (or .zip)
-+  Windows  FlClashX-*-windows-*.zip      (or -setup.exe)
-+  Linux    FlClashX-*-linux-*.AppImage   (+ .deb/.rpm when packaged)
-+  Android  FlClashX-*-android-*.apk
-+  iOS      not built — the tree has no ios/ target yet
-+EOF
-diff --git a/setup.dart b/setup.dart
-index 6efb7b87fb36ad4c033f07f18804c8abf1fe0242..4bce2204f9dbdb08ba63e48d8dbb5901b0fba9f3 100755
---- a/setup.dart
-+++ b/setup.dart
-@@ -5,8 +5,8 @@ import 'package:args/args.dart';
- import 'package:path/path.dart' as p;
- import 'package:yaml/yaml.dart';
- 
--const _appName = 'FlClashX';
--const _bundleId = 'com.follow.clashx';
-+const _appName = 'Portal';
-+const _bundleId = 'io.portal.xfc';
- const _distDir = 'dist';
- 
- const _allTargets = <String, String>{
-@@ -183,7 +183,7 @@ String createPackageTargets(String platform, String? customTargets) {
- /// pre-release gets its own bundle id and name, so it installs beside the
- /// stable app; null for every other build, which goes without the file.
- String? macosChannelConfig(String env) => env == 'pre'
--    ? 'PRODUCT_BUNDLE_IDENTIFIER = com.follow.clashx.pre\n'
-+    ? 'PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.pre\n'
-           'APP_DISPLAY_NAME = $_appName Pre\n'
-     : null;
- 
-@@ -220,25 +220,25 @@ class DesktopIdentity {
- const stableDesktop = DesktopIdentity(
-   pre: false,
-   executable: _appName,
--  helper: 'FlClashXHelperService',
-+  helper: 'PortalHelperService',
-   displayName: _appName,
-   bundleId: _bundleId,
-   packageName: 'flclashx',
-   installDir: _appName,
-   helperUnit: 'flclashx-helper',
--  windowsDataDir: r'com.follow\clashx',
-+  windowsDataDir: r'io.portal\xfc',
- );
- 
- const preDesktop = DesktopIdentity(
-   pre: true,
--  executable: 'FlClashXPre',
--  helper: 'FlClashXPreHelperService',
-+  executable: 'PortalPre',
-+  helper: 'PortalPreHelperService',
-   displayName: '$_appName Pre',
-   bundleId: '$_bundleId.pre',
-   packageName: 'flclashx-pre',
--  installDir: 'FlClashXPre',
-+  installDir: 'PortalPre',
-   helperUnit: 'flclashx-pre-helper',
--  windowsDataDir: r'com.follow\clashx.pre',
-+  windowsDataDir: r'io.portal\xfc.pre',
- );
- 
- const _preWindowsAppId = '3B6E2F0A-9C41-4D57-8A2E-7F1D5C0B9E63';
 diff --git a/test/panel_config_test.dart b/test/panel_config_test.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..3dcc9c6ac44c36620226ac0918fa2d368a832ce4
+index 00000000..3dcc9c6a
 --- /dev/null
 +++ b/test/panel_config_test.dart
 @@ -0,0 +1,55 @@
@@ -602,7 +445,7 @@ index 0000000000000000000000000000000000000000..3dcc9c6ac44c36620226ac0918fa2d36
 +}
 diff --git a/test/proxy_endpoints_test.dart b/test/proxy_endpoints_test.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..6c0e48eca49c1fc99e7be77533fc418aab51b922
+index 00000000..6c0e48ec
 --- /dev/null
 +++ b/test/proxy_endpoints_test.dart
 @@ -0,0 +1,31 @@
@@ -638,7 +481,7 @@ index 0000000000000000000000000000000000000000..6c0e48eca49c1fc99e7be77533fc418a
 +  });
 +}
 diff --git a/test/setup_test.dart b/test/setup_test.dart
-index a07f74add26e1743add0653c30854c4d9355dc05..059212ecd343d79c3258c9d76b12ca5473c854df 100644
+index a07f74ad..059212ec 100644
 --- a/test/setup_test.dart
 +++ b/test/setup_test.dart
 @@ -12,16 +12,16 @@ void main() {
@@ -878,7 +721,7 @@ index a07f74add26e1743add0653c30854c4d9355dc05..059212ecd343d79c3258c9d76b12ca54
          binary.writeAsBytesSync(setup.utf16le('clashx'));
 diff --git a/test/subscription_availability_test.dart b/test/subscription_availability_test.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..718f3943c551a61fb9222a1706d7a54962538339
+index 00000000..718f3943
 --- /dev/null
 +++ b/test/subscription_availability_test.dart
 @@ -0,0 +1,88 @@
@@ -972,7 +815,7 @@ index 0000000000000000000000000000000000000000..718f3943c551a61fb9222a1706d7a549
 +}
 diff --git a/test/subscription_formats_test.dart b/test/subscription_formats_test.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..a9005c285b9e0e029ee2e46921cfb3f11de87231
+index 00000000..a9005c28
 --- /dev/null
 +++ b/test/subscription_formats_test.dart
 @@ -0,0 +1,42 @@
@@ -1020,7 +863,7 @@ index 0000000000000000000000000000000000000000..a9005c285b9e0e029ee2e46921cfb3f1
 +}
 diff --git a/test/subscription_guard_test.dart b/test/subscription_guard_test.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..dc4cc593c7b0262e1b590c84d3b4e0e58c05ae69
+index 00000000..dc4cc593
 --- /dev/null
 +++ b/test/subscription_guard_test.dart
 @@ -0,0 +1,41 @@
@@ -1067,7 +910,7 @@ index 0000000000000000000000000000000000000000..dc4cc593c7b0262e1b590c84d3b4e0e5
 +}
 diff --git a/test/xray_bridge_config_test.dart b/test/xray_bridge_config_test.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..d3d6fe6fd1ecbb81fffbe473ca0590c2d1c5fe18
+index 00000000..d3d6fe6f
 --- /dev/null
 +++ b/test/xray_bridge_config_test.dart
 @@ -0,0 +1,69 @@
@@ -1142,7 +985,7 @@ index 0000000000000000000000000000000000000000..d3d6fe6fd1ecbb81fffbe473ca0590c2
 +}
 diff --git a/test/xray_config_test.dart b/test/xray_config_test.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..cddf7bc6d78c2a11cc0d3e3dbafde7eb5bc1efe9
+index 00000000..cddf7bc6
 --- /dev/null
 +++ b/test/xray_config_test.dart
 @@ -0,0 +1,100 @@
@@ -1248,7 +1091,7 @@ index 0000000000000000000000000000000000000000..cddf7bc6d78c2a11cc0d3e3dbafde7eb
 +}
 diff --git a/test/xray_servers_test.dart b/test/xray_servers_test.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..52d5e7a74a1c201228a3441fd10670990fcaf92d
+index 00000000..52d5e7a7
 --- /dev/null
 +++ b/test/xray_servers_test.dart
 @@ -0,0 +1,94 @@
@@ -1348,7 +1191,7 @@ index 0000000000000000000000000000000000000000..52d5e7a74a1c201228a3441fd1067099
 +}
 diff --git a/test/xray_subscription_test.dart b/test/xray_subscription_test.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..622354a6e078429d5d71925cc5271ff11bc9b306
+index 00000000..622354a6
 --- /dev/null
 +++ b/test/xray_subscription_test.dart
 @@ -0,0 +1,157 @@
@@ -1511,7 +1354,7 @@ index 0000000000000000000000000000000000000000..622354a6e078429d5d71925cc5271ff1
 +}
 diff --git a/test/xray_switch_test.dart b/test/xray_switch_test.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..03576853d92d15634e0c4d9b4d569846979b9fda
+index 00000000..03576853
 --- /dev/null
 +++ b/test/xray_switch_test.dart
 @@ -0,0 +1,62 @@

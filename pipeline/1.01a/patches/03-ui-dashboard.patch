@@ -1,5 +1,5 @@
 diff --git a/lib/pages/home.dart b/lib/pages/home.dart
-index d4e913ba19d5b510a0572008208c85fe895a7bd1..9c6af8c41e7111ed33b98a22d804bf2e31a93851 100644
+index d4e913ba..9c6af8c4 100644
 --- a/lib/pages/home.dart
 +++ b/lib/pages/home.dart
 @@ -55,6 +55,10 @@ class HomePage extends ConsumerWidget {
@@ -62,7 +62,7 @@ index d4e913ba19d5b510a0572008208c85fe895a7bd1..9c6af8c41e7111ed33b98a22d804bf2e
    }
  }
 diff --git a/lib/views/dashboard/dashboard.dart b/lib/views/dashboard/dashboard.dart
-index 66821acb77b0a0fa59ff034c8ae2e96d8a6fb22e..4dcce94acb0ff77038fb2e39d4d99835069288a7 100644
+index 66821acb..4dcce94a 100644
 --- a/lib/views/dashboard/dashboard.dart
 +++ b/lib/views/dashboard/dashboard.dart
 @@ -70,12 +70,29 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
@@ -113,7 +113,7 @@ index 66821acb77b0a0fa59ff034c8ae2e96d8a6fb22e..4dcce94acb0ff77038fb2e39d4d99835
                  .read(setupActionProvider.notifier)
                  .pickMode(mode == Mode.global ? Mode.rule : Mode.global),
 diff --git a/lib/views/dashboard/hero.dart b/lib/views/dashboard/hero.dart
-index bff7fb331bc423a6fef223bf1854ccfc2188700f..7389ebce346c1f518ac0cb4d67bb5f80e52a4804 100644
+index bff7fb33..7389ebce 100644
 --- a/lib/views/dashboard/hero.dart
 +++ b/lib/views/dashboard/hero.dart
 @@ -1,29 +1,30 @@
@@ -964,7 +964,7 @@ index bff7fb331bc423a6fef223bf1854ccfc2188700f..7389ebce346c1f518ac0cb4d67bb5f80
  }
 diff --git a/lib/views/dashboard/portal_controls.dart b/lib/views/dashboard/portal_controls.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..c54f64c708d51f22d9ca6ff80f85433a564b3f5a
+index 00000000..c54f64c7
 --- /dev/null
 +++ b/lib/views/dashboard/portal_controls.dart
 @@ -0,0 +1,1330 @@
@@ -2300,7 +2300,7 @@ index 0000000000000000000000000000000000000000..c54f64c708d51f22d9ca6ff80f85433a
 +
 diff --git a/lib/views/dashboard/portal_gateway.dart b/lib/views/dashboard/portal_gateway.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..b6df1592a65d2d16321dfc30ef593c64cde5f28c
+index 00000000..b6df1592
 --- /dev/null
 +++ b/lib/views/dashboard/portal_gateway.dart
 @@ -0,0 +1,631 @@
@@ -2936,7 +2936,7 @@ index 0000000000000000000000000000000000000000..b6df1592a65d2d16321dfc30ef593c64
 +  return n - n.floorToDouble();
 +}
 diff --git a/lib/views/dashboard/widgets/card.dart b/lib/views/dashboard/widgets/card.dart
-index 965e345610f544f19bb42baf6f047b9c6ddda8fd..15c8f4c341da044eba91e191ab16edfc3805079d 100644
+index 965e3456..15c8f4c3 100644
 --- a/lib/views/dashboard/widgets/card.dart
 +++ b/lib/views/dashboard/widgets/card.dart
 @@ -8,7 +8,8 @@ import 'package:fl_clash/views/dashboard/style.dart';
@@ -2950,7 +2950,7 @@ index 965e345610f544f19bb42baf6f047b9c6ddda8fd..15c8f4c341da044eba91e191ab16edfc
  EdgeInsets dashboardCardPadding(DashboardDensity density) => switch (density) {
    DashboardDensity.standard => const EdgeInsets.symmetric(
 diff --git a/lib/views/dashboard/widgets/current_outbound.dart b/lib/views/dashboard/widgets/current_outbound.dart
-index b788b55a5f7483ac5ccd893ec89d6a745a90bdb5..fdd7909469dd15bb58c414494583f120ebe11cfc 100644
+index b788b55a..fdd79094 100644
 --- a/lib/views/dashboard/widgets/current_outbound.dart
 +++ b/lib/views/dashboard/widgets/current_outbound.dart
 @@ -15,14 +15,16 @@ import 'package:fl_clash/views/dashboard/style.dart';
@@ -2974,7 +2974,7 @@ index b788b55a5f7483ac5ccd893ec89d6a745a90bdb5..fdd7909469dd15bb58c414494583f120
  const _decorationGrowth = 0.12;
  
 diff --git a/lib/views/dashboard/widgets/network_takeover.dart b/lib/views/dashboard/widgets/network_takeover.dart
-index 060a6aee6d69c164e56038beada839fcbc620fa4..5213dded448807425fa21eb34f9a377b86b7148b 100644
+index 060a6aee..5213dded 100644
 --- a/lib/views/dashboard/widgets/network_takeover.dart
 +++ b/lib/views/dashboard/widgets/network_takeover.dart
 @@ -7,7 +7,8 @@ import 'package:fl_clash/views/dashboard/style.dart';
@@ -2988,7 +2988,7 @@ index 060a6aee6d69c164e56038beada839fcbc620fa4..5213dded448807425fa21eb34f9a377b
  import 'card.dart';
  
 diff --git a/lib/views/dashboard/widgets/proxy_groups.dart b/lib/views/dashboard/widgets/proxy_groups.dart
-index 53d839dbb1ff94354a283531cf4f6eeb8a1617dc..58f83906094ce9105962f1da71de48001d3f12e2 100644
+index 53d839db..58f83906 100644
 --- a/lib/views/dashboard/widgets/proxy_groups.dart
 +++ b/lib/views/dashboard/widgets/proxy_groups.dart
 @@ -9,7 +9,8 @@ import 'package:fl_clash/views/proxies/proxies.dart';

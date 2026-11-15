@@ -144,7 +144,18 @@ verify() {
   fi
 
 
-  local got; got=$(git -C "$tmp/w" rev-parse 'HEAD^{tree}')
+  local got
+  if [[ "$compare" == "product" ]]; then
+    # Both sides are compared as products: the pipeline directory is not part of the tree
+    # a series reproduces, and the clone inherits the base's own pipeline copy.
+    local gidx="$tmp/gindex"
+    GIT_INDEX_FILE="$gidx" git -C "$tmp/w" read-tree HEAD
+    GIT_INDEX_FILE="$gidx" git -C "$tmp/w" rm -r --cached --ignore-unmatch pipeline >/dev/null
+    got=$(GIT_INDEX_FILE="$gidx" git -C "$tmp/w" write-tree)
+  else
+    got=$(git -C "$tmp/w" rev-parse 'HEAD^{tree}')
+  fi
+
   if [[ "$wt" == "$got" ]]; then
     echo "OK: $applied group(s) reproduce the committed product tree ($wt)"
   else

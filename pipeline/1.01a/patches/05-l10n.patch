@@ -1,5 +1,5 @@
 diff --git a/arb/intl_en.arb b/arb/intl_en.arb
-index af3549a93245959420e9a18c1db193f74b0b74aa..b67eda951233463c1c65aaf74f497b1bac70cdef 100644
+index af3549a9..b67eda95 100644
 --- a/arb/intl_en.arb
 +++ b/arb/intl_en.arb
 @@ -1,13 +1,13 @@
@@ -230,7 +230,7 @@ index af3549a93245959420e9a18c1db193f74b0b74aa..b67eda951233463c1c65aaf74f497b1b
 +  "getSubscriptionHere": "Get a subscription here"
  }
 diff --git a/arb/intl_ru.arb b/arb/intl_ru.arb
-index 3d421bbbe25ece6b3ee3dc17f80a853404186ea9..ceaaa13e860e4a99f04d76e7e77d30487b64042d 100644
+index 3d421bbb..ceaaa13e 100644
 --- a/arb/intl_ru.arb
 +++ b/arb/intl_ru.arb
 @@ -1,13 +1,13 @@
@@ -447,7 +447,7 @@ index 3d421bbbe25ece6b3ee3dc17f80a853404186ea9..ceaaa13e860e4a99f04d76e7e77d3048
 +  "getSubscriptionHere": "Оформить подписку можно здесь"
  }
 diff --git a/arb/intl_zh_CN.arb b/arb/intl_zh_CN.arb
-index b85bcb90e474565ca39e618c1cd77f140317e35d..f986c2c4d9c4e72e84e3f4155e1f0174b6bcb686 100644
+index b85bcb90..f986c2c4 100644
 --- a/arb/intl_zh_CN.arb
 +++ b/arb/intl_zh_CN.arb
 @@ -1,13 +1,13 @@
@@ -612,7 +612,7 @@ index b85bcb90e474565ca39e618c1cd77f140317e35d..f986c2c4d9c4e72e84e3f4155e1f0174
 +  "getSubscriptionHere": "在此获取订阅"
  }
 diff --git a/lib/l10n/intl/messages_en.dart b/lib/l10n/intl/messages_en.dart
-index 7490d2f97b33714eee9d105eb332e269ea1e3e15..25ef52a77e14deec7c38574d0ae2f931c427013c 100644
+index 7490d2f9..25ef52a7 100644
 --- a/lib/l10n/intl/messages_en.dart
 +++ b/lib/l10n/intl/messages_en.dart
 @@ -33,7 +33,7 @@ class MessageLookup extends MessageLookupByLibrary {
@@ -1562,7 +1562,7 @@ index 7490d2f97b33714eee9d105eb332e269ea1e3e15..25ef52a77e14deec7c38574d0ae2f931
      "zhCN": MessageLookupByLibrary.simpleMessage("Simplified Chinese"),
    };
 diff --git a/lib/l10n/intl/messages_es.dart b/lib/l10n/intl/messages_es.dart
-index f382e5cd3fb355d8cbbeb083e1be7dc15e5dc140..cb7975912fa8897f7b1a011a4f8cea82236bc2a9 100644
+index f382e5cd..cb797591 100644
 --- a/lib/l10n/intl/messages_es.dart
 +++ b/lib/l10n/intl/messages_es.dart
 @@ -92,184 +92,185 @@ class MessageLookup extends MessageLookupByLibrary {
@@ -2254,7 +2254,7 @@ index f382e5cd3fb355d8cbbeb083e1be7dc15e5dc140..cb7975912fa8897f7b1a011a4f8cea82
      "zhCN": MessageLookupByLibrary.simpleMessage("Chino simplificado"),
    };
 diff --git a/lib/l10n/intl/messages_fr.dart b/lib/l10n/intl/messages_fr.dart
-index 6ac0473a15259443eb3f7515d819d164b329489d..396e01a24244e98b00ce6bafae4d6c83a07ee712 100644
+index 6ac0473a..396e01a2 100644
 --- a/lib/l10n/intl/messages_fr.dart
 +++ b/lib/l10n/intl/messages_fr.dart
 @@ -94,186 +94,186 @@ class MessageLookup extends MessageLookupByLibrary {
@@ -2948,7 +2948,7 @@ index 6ac0473a15259443eb3f7515d819d164b329489d..396e01a24244e98b00ce6bafae4d6c83
      "zhCN": MessageLookupByLibrary.simpleMessage("Chinois simplifié"),
    };
 diff --git a/lib/l10n/intl/messages_ja.dart b/lib/l10n/intl/messages_ja.dart
-index 86d1781e5f242f26af875bbcbdfa4947ad38b5b3..765862777f29ddf633c18f9ad4f31ff0a602691c 100644
+index 86d1781e..76586277 100644
 --- a/lib/l10n/intl/messages_ja.dart
 +++ b/lib/l10n/intl/messages_ja.dart
 @@ -79,157 +79,157 @@ class MessageLookup extends MessageLookupByLibrary {
@@ -3589,7 +3589,7 @@ index 86d1781e5f242f26af875bbcbdfa4947ad38b5b3..765862777f29ddf633c18f9ad4f31ff0
      "zhCN": MessageLookupByLibrary.simpleMessage("簡体字中国語"),
    };
 diff --git a/lib/l10n/intl/messages_ko.dart b/lib/l10n/intl/messages_ko.dart
-index 1f0333cf5c081a9aa898ef934e57103081161dda..71bb07ba97737958699aa92136a30fdba33ae981 100644
+index 1f0333cf..71bb07ba 100644
 --- a/lib/l10n/intl/messages_ko.dart
 +++ b/lib/l10n/intl/messages_ko.dart
 @@ -79,160 +79,160 @@ class MessageLookup extends MessageLookupByLibrary {
@@ -4233,7 +4233,7 @@ index 1f0333cf5c081a9aa898ef934e57103081161dda..71bb07ba97737958699aa92136a30fdb
      "zhCN": MessageLookupByLibrary.simpleMessage("중국어 간체"),
    };
 diff --git a/lib/l10n/intl/messages_ru.dart b/lib/l10n/intl/messages_ru.dart
-index ed61e54f6da5ec7d05151e7259b72435e67c8692..7b7e5d7fa5567c4e243201c5d2794b796a8644fc 100644
+index ed61e54f..7b7e5d7f 100644
 --- a/lib/l10n/intl/messages_ru.dart
 +++ b/lib/l10n/intl/messages_ru.dart
 @@ -88,194 +88,209 @@ class MessageLookup extends MessageLookupByLibrary {
@@ -5138,7 +5138,7 @@ index ed61e54f6da5ec7d05151e7259b72435e67c8692..7b7e5d7fa5567c4e243201c5d2794b79
      "zhCN": MessageLookupByLibrary.simpleMessage("Упрощённый китайский"),
    };
 diff --git a/lib/l10n/intl/messages_zh_CN.dart b/lib/l10n/intl/messages_zh_CN.dart
-index 9831a321885a3651bdf33a43ba75e86c664f96a1..06c7c23695b181c104b3f327d586ba61f853b435 100644
+index 9831a321..06c7c236 100644
 --- a/lib/l10n/intl/messages_zh_CN.dart
 +++ b/lib/l10n/intl/messages_zh_CN.dart
 @@ -31,7 +31,7 @@ class MessageLookup extends MessageLookupByLibrary {
@@ -5956,7 +5956,7 @@ index 9831a321885a3651bdf33a43ba75e86c664f96a1..06c7c23695b181c104b3f327d586ba61
      "zhCN": MessageLookupByLibrary.simpleMessage("中文简体"),
    };
 diff --git a/lib/l10n/l10n.dart b/lib/l10n/l10n.dart
-index 40d2f7adeb76491c6b6dd8c4435bf1e0b17c04d1..582f0cec6b997b0e0cee109be35b02f9d1d0d04f 100644
+index 40d2f7ad..582f0cec 100644
 --- a/lib/l10n/l10n.dart
 +++ b/lib/l10n/l10n.dart
 @@ -60,14 +60,14 @@ class AppLocalizations {

@@ -1,5 +1,5 @@
 diff --git a/lib/models/config.dart b/lib/models/config.dart
-index f9aef7e5694186e0f77d07d46a47cadfc97dca6a..72334908645063f7c577685ccafa373b6af4c24b 100644
+index f9aef7e5..72334908 100644
 --- a/lib/models/config.dart
 +++ b/lib/models/config.dart
 @@ -260,6 +260,11 @@ abstract class AppSettingProps with _$AppSettingProps {
@@ -15,7 +15,7 @@ index f9aef7e5694186e0f77d07d46a47cadfc97dca6a..72334908645063f7c577685ccafa373b
      @JsonKey(readValue: _readTabAnimation)
      TabAnimation tabAnimation,
 diff --git a/lib/models/generated/config.freezed.dart b/lib/models/generated/config.freezed.dart
-index ab07d2ca440fb09bbc979d371c6aa115c3659d22..d53c35eedac68ba78d793402bf8cfe4652b86047 100644
+index ab07d2ca..d53c35ee 100644
 --- a/lib/models/generated/config.freezed.dart
 +++ b/lib/models/generated/config.freezed.dart
 @@ -303,7 +303,9 @@ as String,
@@ -206,7 +206,7 @@ index ab07d2ca440fb09bbc979d371c6aa115c3659d22..d53c35eedac68ba78d793402bf8cfe46
  as bool,autoCheckUpdate: null == autoCheckUpdate ? _self.autoCheckUpdate : autoCheckUpdate // ignore: cast_nullable_to_non_nullable
  as bool,hiddenUpdate: freezed == hiddenUpdate ? _self.hiddenUpdate : hiddenUpdate // ignore: cast_nullable_to_non_nullable
 diff --git a/lib/models/generated/config.g.dart b/lib/models/generated/config.g.dart
-index 48fb15bc3a2be0bed8fb2b6b27754068fe8dc4a2..4bedc0029725289a1ee296ac985b3fcb788552aa 100644
+index 48fb15bc..4bedc002 100644
 --- a/lib/models/generated/config.g.dart
 +++ b/lib/models/generated/config.g.dart
 @@ -38,6 +38,8 @@ _AppSettingProps _$AppSettingPropsFromJson(
@@ -228,7 +228,7 @@ index 48fb15bc3a2be0bed8fb2b6b27754068fe8dc4a2..4bedc0029725289a1ee296ac985b3fcb
        'floatingNavigationBar': instance.floatingNavigationBar,
        'autoCheckUpdate': instance.autoCheckUpdate,
 diff --git a/lib/models/profile.dart b/lib/models/profile.dart
-index f5605a0a36b7190fca054f9e31ad936d4bc37cb7..fa864ffafee70a5ace355b471437bca49305f11d 100644
+index f5605a0a..fa864ffa 100644
 --- a/lib/models/profile.dart
 +++ b/lib/models/profile.dart
 @@ -1,8 +1,14 @@
@@ -465,7 +465,7 @@ index f5605a0a36b7190fca054f9e31ad936d4bc37cb7..fa864ffafee70a5ace355b471437bca4
 +  }
 +}
 diff --git a/lib/models/provider_headers.dart b/lib/models/provider_headers.dart
-index ab1a2a780afb5a61e629e21cd8d5f4f95161f728..76acfd1f49ac41e43284fa708984b5072999e6ec 100644
+index ab1a2a78..76acfd1f 100644
 --- a/lib/models/provider_headers.dart
 +++ b/lib/models/provider_headers.dart
 @@ -28,6 +28,34 @@ class ProviderHeaders {
@@ -503,8 +503,93 @@ index ab1a2a780afb5a61e629e21cd8d5f4f95161f728..76acfd1f49ac41e43284fa708984b507
    String? get webPageUrl {
      final url = text('profile-web-page-url');
      return url != null && url.isUrl ? url : null;
+diff --git a/lib/providers/generated/action.g.dart b/lib/providers/generated/action.g.dart
+index fbb4b28a..44aca030 100644
+--- a/lib/providers/generated/action.g.dart
++++ b/lib/providers/generated/action.g.dart
+@@ -40,7 +40,7 @@ final class CommonActionProvider extends $NotifierProvider<CommonAction, void> {
+   }
+ }
+ 
+-String _$commonActionHash() => r'c6f5289eeec410fc7852d7e496c3e9a14f7220eb';
++String _$commonActionHash() => r'ac604ee78837182b2d152ec09cb748805c9df112';
+ 
+ abstract class _$CommonAction extends $Notifier<void> {
+   void build();
+@@ -150,7 +150,7 @@ final class ProfileHeadersActionProvider
+ }
+ 
+ String _$profileHeadersActionHash() =>
+-    r'175ee9ee62e3c674705374d2039f4e8151a1b30c';
++    r'52a310d12d09d105325337eaa9e0478988d74349';
+ 
+ /// Lands once per update of, or switch to, a profile; edits in between stay.
+ 
+diff --git a/lib/providers/generated/state.g.dart b/lib/providers/generated/state.g.dart
+index b7ef4904..7a5dc5f8 100644
+--- a/lib/providers/generated/state.g.dart
++++ b/lib/providers/generated/state.g.dart
+@@ -2089,7 +2089,7 @@ final class CurrentGroupsStateProvider
+ }
+ 
+ String _$currentGroupsStateHash() =>
+-    r'b334885e3b790e3c5f70bf05addff9d98cb93178';
++    r'ee0289ead2087c2f0cc724081400c79fa981eefc';
+ 
+ @ProviderFor(proxyState)
+ final proxyStateProvider = ProxyStateProvider._();
+@@ -3991,16 +3991,28 @@ String _$widgetEditingDeniedHash() =>
+     r'7b80292720b5fa889e0e8a79cebaf93e2208ad1a';
+ 
+ /// The outbound modes the current panel leaves on offer.
++///
++/// Portal Connect has no user-facing "direct": the only way to get untunnelled
++/// traffic is to switch the portal off, so the mode is never offered here even
++/// though the engine still understands it.
+ 
+ @ProviderFor(availableModes)
+ final availableModesProvider = AvailableModesProvider._();
+ 
+ /// The outbound modes the current panel leaves on offer.
++///
++/// Portal Connect has no user-facing "direct": the only way to get untunnelled
++/// traffic is to switch the portal off, so the mode is never offered here even
++/// though the engine still understands it.
+ 
+ final class AvailableModesProvider
+     extends $FunctionalProvider<List<Mode>, List<Mode>, List<Mode>>
+     with $Provider<List<Mode>> {
+   /// The outbound modes the current panel leaves on offer.
++  ///
++  /// Portal Connect has no user-facing "direct": the only way to get untunnelled
++  /// traffic is to switch the portal off, so the mode is never offered here even
++  /// though the engine still understands it.
+   AvailableModesProvider._()
+     : super(
+         from: null,
+@@ -4034,7 +4046,7 @@ final class AvailableModesProvider
+   }
+ }
+ 
+-String _$availableModesHash() => r'd62b18b7ed38014dc69828fbf893ba404bfa0a77';
++String _$availableModesHash() => r'dc4dd8b2ea972aaf80083b422a1c1d8b5578d239';
+ 
+ @ProviderFor(announcement)
+ final announcementProvider = AnnouncementProvider._();
+diff --git a/lib/providers/state.dart b/lib/providers/state.dart
+index 2b0ab5d7..78e974b1 100644
+--- a/lib/providers/state.dart
++++ b/lib/providers/state.dart
+@@ -21,6 +21,7 @@ import 'app.dart';
+ import 'config.dart';
+ import 'core.dart';
+ import 'database.dart';
++import 'package:fl_clash/common/outbound.dart';
+ 
+ part 'generated/state.g.dart';
+ part 'state/proxies.dart';
 diff --git a/lib/providers/state/profile.dart b/lib/providers/state/profile.dart
-index 1b93c8f9ee9f9a61d77e97f7991f5f91d9f337f6..d90e2ee4b7634c72ceddaf15daa50f6cc614bd6d 100644
+index 1b93c8f9..d90e2ee4 100644
 --- a/lib/providers/state/profile.dart
 +++ b/lib/providers/state/profile.dart
 @@ -133,12 +133,16 @@ bool widgetEditingDenied(Ref ref) {
@@ -525,8 +610,58 @@ index 1b93c8f9ee9f9a61d77e97f7991f5f91d9f337f6..d90e2ee4b7634c72ceddaf15daa50f6c
    ];
  }
  
+diff --git a/lib/providers/state/proxies.dart b/lib/providers/state/proxies.dart
+index b06ce18d..f5459882 100644
+--- a/lib/providers/state/proxies.dart
++++ b/lib/providers/state/proxies.dart
+@@ -11,14 +11,23 @@ GroupsState currentGroupsState(Ref ref) {
+   final shown = switch (mode) {
+     Mode.direct => const <Group>[],
+     Mode.global when globalOverride => groups.where(isGlobal),
+-    Mode.global => groups,
++    Mode.global => groups.where(_selectable),
+     Mode.rule => groups.where(
+-      (item) => item.hidden == false && !(globalOverride && isGlobal(item)),
++      (item) =>
++          item.hidden == false &&
++          _selectable(item) &&
++          !(globalOverride && isGlobal(item)),
+     ),
+   };
+   return GroupsState(value: shown.map(_withoutSelection).toList());
+ }
+ 
++/// Portal Connect never shows the engine's built-in outbounds as choices: DIRECT
++/// and REJECT are routing targets, not portals, and picking one by hand is how a
++/// user silently ends up without a tunnel. GLOBAL stays: it is the mihomo
++/// selector the global mode relies on.
++bool _selectable(Group group) => !isBuiltinOutboundName(group.name);
++
+ Group _withoutSelection(Group group) {
+   final all = group.all.any(_hasSelection)
+       ? [
+@@ -26,9 +35,18 @@ Group _withoutSelection(Group group) {
+             _hasSelection(proxy) ? proxy.copyWith(now: '') : proxy,
+         ]
+       : group.all;
+-  return group.copyWith(now: '', all: all);
++  // The GLOBAL group lists every outbound the engine knows, including the built-in
++  // DIRECT and REJECT. They are routing targets, not portals, so they never reach
++  // the picker even when they sit as members of a selectable group.
++  final selectable = [
++    for (final proxy in all)
++      if (_selectableMember(proxy)) proxy,
++  ];
++  return group.copyWith(now: '', all: selectable);
+ }
+ 
++bool _selectableMember(Proxy proxy) => !isBuiltinOutboundName(proxy.name);
++
+ bool _hasSelection(Proxy proxy) => proxy.now?.isNotEmpty ?? false;
+ 
+ @riverpod
 diff --git a/lib/views/profiles/add.dart b/lib/views/profiles/add.dart
-index 8c88c54ea28ce76d6ca84045f25df683d7660dd1..2802c18f5d633d1df733dcd12cdcd42256fd2d50 100644
+index 8c88c54e..2802c18f 100644
 --- a/lib/views/profiles/add.dart
 +++ b/lib/views/profiles/add.dart
 @@ -1,165 +1,241 @@
@@ -899,7 +1034,7 @@ index 8c88c54ea28ce76d6ca84045f25df683d7660dd1..2802c18f5d633d1df733dcd12cdcd422
          ],
        ),
 diff --git a/lib/views/profiles/profiles.dart b/lib/views/profiles/profiles.dart
-index c17d108ea8ca88031bee989d31413904cb13540e..9b4da251a5061109d056cf005ce55bdf8f8ea4d5 100644
+index c17d108e..9b4da251 100644
 --- a/lib/views/profiles/profiles.dart
 +++ b/lib/views/profiles/profiles.dart
 @@ -17,13 +17,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1105,7 +1240,7 @@ index c17d108ea8ca88031bee989d31413904cb13540e..9b4da251a5061109d056cf005ce55bdf
    }
 diff --git a/lib/views/profiles/subscription_facts.dart b/lib/views/profiles/subscription_facts.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..caeba579a5dea00970debafa672d9103f2c0a87f
+index 00000000..caeba579
 --- /dev/null
 +++ b/lib/views/profiles/subscription_facts.dart
 @@ -0,0 +1,46 @@
@@ -1157,7 +1292,7 @@ index 0000000000000000000000000000000000000000..caeba579a5dea00970debafa672d9103
 +    '${date.month.toString().padLeft(2, '0')}.${date.year}';
 diff --git a/lib/views/profiles/subscription_lights.dart b/lib/views/profiles/subscription_lights.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..d1e5ed199e44b8f4da6d37aa24407c07d6dc71f1
+index 00000000..d1e5ed19
 --- /dev/null
 +++ b/lib/views/profiles/subscription_lights.dart
 @@ -0,0 +1,140 @@
