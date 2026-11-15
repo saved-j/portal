@@ -1,0 +1,245 @@
+# portal 1.03 patch 28 — the engine config is the profile's own
+#
+# The network mode's list carried a group and a row no panel ever sent: `XRAY-SOCKS`, with a
+# `SOCKS5` badge, under a `PORTAL-XRAY` group. They were not in the profile YAML and not in a
+# stale file: `lib/common/task.dart` injected them into **every** pushed config
+#
+#   rawConfig['proxies'] = [ ...profile's..., {name: XRAY-SOCKS, type: socks5, 127.0.0.1:10808} ]
+#   rawConfig['proxy-groups'] = [ {name: PORTAL-XRAY, type: select, proxies: [XRAY-SOCKS],
+#                                  hidden: true}, ...profile's... ]
+#
+# for a bridge design — route the engine's traffic through a local Xray over a socks inbound —
+# that was abandoned when the simple portal became its own core. `lib/core/xray_bridge_config.dart`,
+# the module that produced that shape (`withXrayBridge`, and the `GLOBAL` override that pointed
+# the global selector at `PORTAL-XRAY`), is called from nowhere: `grep -rn withXrayBridge lib/`
+# finds only its own file and its own test. So the config kept announcing a node that does not
+# exist, and the list drew it.
+#
+# Now the pushed document is exactly the profile's: its `proxies:`, its `proxy-groups:`, its
+# `rules:`. The injection is gone, the dead bridge module and its test are deleted, and
+# `grep -rn "XRAY-SOCKS|PORTAL-XRAY" lib/ test/ android/` has no hit outside this patch's own
+# comment. Nothing resurrects them on a fresh start: `_setupConfig` rebuilds the document from
+# the profile on every run and pushes it when the md5 moved, so the first start on this build
+# replaces the engine's cached config instead of reading it back.
+#
+# Version: 0.5.3-portal-duo-2d+2026111404.
+diff --git a/lib/common/task.dart b/lib/common/task.dart
+index 8414bfac..49880c76 100644
+--- a/lib/common/task.dart
++++ b/lib/common/task.dart
+@@ -394,32 +394,11 @@ Future<RealProfile> _makeRealProfileTask(MakeRealProfileState data) async {
+         .toList();
+   }
+   applyProxyChains(rawConfig, data.proxyChains);
+-  // The local Xray owns the real node when the portal network is off. Its socks inbound is
+-  // always declared so the switch is a pure mode change: nothing has to be rebuilt, and no
+-  // connection is dropped when the owner flips it.
+-  rawConfig['proxies'] = [
+-    ...?(rawConfig['proxies'] as List?)?.where(
+-      (item) => item is! Map || item['name'] != 'XRAY-SOCKS',
+-    ),
+-    {
+-      'name': 'XRAY-SOCKS',
+-      'type': 'socks5',
+-      'server': '127.0.0.1',
+-      'port': 10808,
+-      'udp': false,
+-    },
+-  ];
+-  rawConfig['proxy-groups'] = [
+-    {
+-      'name': 'PORTAL-XRAY',
+-      'type': 'select',
+-      'proxies': ['XRAY-SOCKS'],
+-      'hidden': true,
+-    },
+-    ...?(rawConfig['proxy-groups'] as List?)?.where(
+-      (item) => item is! Map || item['name'] != 'PORTAL-XRAY',
+-    ),
+-  ];
++  // The pushed document is the profile's own: its proxies, its groups, its rules. Nothing is
++  // injected here any more. This is where a `XRAY-SOCKS` proxy and a `PORTAL-XRAY` group used
++  // to be added for the local bridge — a design that was abandoned when the simple portal
++  // became its own core — and they were still being pushed, so the network mode's list showed
++  // a group and a SOCKS5 row that no panel ever sent and no server ever answered.
+   rawConfig['rules'] = rules;
+   final yaml = await _encodeYaml(Map<String, dynamic>.from(rawConfig));
+   return (yaml: yaml, md5: yaml.toMd5(), counts: configCountsOf(rawConfig));
+diff --git a/lib/core/xray_bridge_config.dart b/lib/core/xray_bridge_config.dart
+deleted file mode 100644
+index 78a42fed..00000000
+--- a/lib/core/xray_bridge_config.dart
++++ /dev/null
+@@ -1,84 +0,0 @@
+-/// Wraps the engine's own configuration so that all traffic leaves through Xray.
+-///
+-/// The app keeps mihomo for TUN, DNS and the rule engine. When the owner turns the
+-/// "Сеть порталов" switch off, the simple mode must not route through the subscription's
+-/// own outbounds — it must hand everything to a local Xray that owns the real node.
+-///
+-/// That is done by adding one socks5 proxy pointing at 127.0.0.1 and forcing global mode.
+-/// This file is the whole of that decision, so it can be tested without a tunnel.
+-library;
+-
+-const xrayBridgeTag = 'portal-xray';
+-const xrayBridgeGroup = 'PORTAL-XRAY';
+-const xrayDefaultPort = 10808;
+-
+-/// Returns a copy of [config] in which every connection goes to the local Xray.
+-///
+-/// The original map is not modified: switching back must be possible by simply dropping
+-/// the returned copy.
+-Map<String, dynamic> withXrayBridge(
+-  Map<String, dynamic> config, {
+-  int port = xrayDefaultPort,
+-}) {
+-  final out = <String, dynamic>{...config};
+-
+-  final proxies = <dynamic>[
+-    ...?(config['proxies'] as List?)?.where(
+-      (p) => p is Map && p['name'] != xrayBridgeTag,
+-    ),
+-    {
+-      'name': xrayBridgeTag,
+-      'type': 'socks5',
+-      'server': '127.0.0.1',
+-      'port': port,
+-      'udp': false,
+-      'skip-cert-verify': true,
+-    },
+-  ];
+-  out['proxies'] = proxies;
+-
+-  final groups = <dynamic>[
+-    ...?(config['proxy-groups'] as List?)?.where(
+-      (g) => g is Map && g['name'] != xrayBridgeGroup,
+-    ),
+-    {
+-      'name': xrayBridgeGroup,
+-      'type': 'select',
+-      'proxies': [xrayBridgeTag],
+-    },
+-  ];
+-  out['proxy-groups'] = groups;
+-
+-  // Global mode plus this one group is what makes the engine a plain pipe: no rules of
+-  // its own, nothing selected by delay, everything into Xray.
+-  out['mode'] = 'global';
+-  out['GLOBAL'] = xrayBridgeGroup;
+-
+-  return out;
+-}
+-
+-/// True when [config] already carries the bridge, so a second switch-off cannot stack
+-/// a second socks proxy or a second group on top of the first.
+-bool hasXrayBridge(Map<String, dynamic> config) {
+-  final proxies = (config['proxies'] as List?) ?? const [];
+-  return proxies.any((p) => p is Map && p['name'] == xrayBridgeTag);
+-}
+-
+-/// Removes the bridge and restores the mode the config had before it was wrapped.
+-Map<String, dynamic> withoutXrayBridge(
+-  Map<String, dynamic> config, {
+-  String restoreMode = 'rule',
+-}) {
+-  final out = <String, dynamic>{...config};
+-  out['proxies'] = ((config['proxies'] as List?) ?? const [])
+-      .where((p) => !(p is Map && p['name'] == xrayBridgeTag))
+-      .toList();
+-  out['proxy-groups'] = ((config['proxy-groups'] as List?) ?? const [])
+-      .where((g) => !(g is Map && g['name'] == xrayBridgeGroup))
+-      .toList();
+-  if (out['GLOBAL'] == xrayBridgeGroup) {
+-    out.remove('GLOBAL');
+-  }
+-  out['mode'] = restoreMode;
+-  return out;
+-}
+diff --git a/pubspec.yaml b/pubspec.yaml
+index 821401ba..6e8ccd5d 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -1,7 +1,7 @@
+ name: fl_clash
+ description: FlClashX, a fork of FlClash - a multi-platform proxy client based on ClashMeta for Remnawave users.
+ publish_to: 'none'
+-version: 0.5.3-portal-duo-2c+2026111403
++version: 0.5.3-portal-duo-2d+2026111404
+ environment:
+   sdk: '>=3.10.0 <4.0.0'
+ 
+diff --git a/test/xray_bridge_config_test.dart b/test/xray_bridge_config_test.dart
+deleted file mode 100644
+index d3d6fe6f..00000000
+--- a/test/xray_bridge_config_test.dart
++++ /dev/null
+@@ -1,69 +0,0 @@
+-import 'package:fl_clash/core/xray_bridge_config.dart';
+-import 'package:flutter_test/flutter_test.dart';
+-
+-void main() {
+-  Map<String, dynamic> base() => {
+-        'mode': 'rule',
+-        'proxies': [
+-          {'name': 'node-a', 'type': 'vless', 'server': 'a', 'port': 443},
+-        ],
+-        'proxy-groups': [
+-          {'name': 'Auto', 'type': 'url-test', 'proxies': ['node-a']},
+-        ],
+-        'rules': ['DOMAIN-SUFFIX,vk.com,Auto'],
+-      };
+-
+-  test('the bridge adds one socks proxy and one group, and forces global mode', () {
+-    final wrapped = withXrayBridge(base());
+-    final proxies = wrapped['proxies'] as List;
+-    final groups = wrapped['proxy-groups'] as List;
+-
+-    expect(proxies.length, 2);
+-    final bridge = proxies.last as Map;
+-    expect(bridge['name'], xrayBridgeTag);
+-    expect(bridge['type'], 'socks5');
+-    expect(bridge['server'], '127.0.0.1');
+-    expect(bridge['port'], 10808);
+-
+-    expect(groups.length, 2);
+-    expect((groups.last as Map)['proxies'], [xrayBridgeTag]);
+-    expect(wrapped['mode'], 'global');
+-    expect(wrapped['GLOBAL'], xrayBridgeGroup);
+-
+-    // the subscription's own entries are still there, just unused in global mode
+-    expect((proxies.first as Map)['name'], 'node-a');
+-  });
+-
+-  test('the original config is left untouched', () {
+-    final original = base();
+-    withXrayBridge(original);
+-    expect((original['proxies'] as List).length, 1);
+-    expect(original['mode'], 'rule');
+-    expect(original.containsKey('GLOBAL'), isFalse);
+-  });
+-
+-  test('wrapping twice does not stack a second bridge', () {
+-    final once = withXrayBridge(base());
+-    final twice = withXrayBridge(once);
+-    final names = (twice['proxies'] as List).map((p) => (p as Map)['name']);
+-    expect(names.where((n) => n == xrayBridgeTag).length, 1);
+-    final groups = (twice['proxy-groups'] as List).map((g) => (g as Map)['name']);
+-    expect(groups.where((n) => n == xrayBridgeGroup).length, 1);
+-  });
+-
+-  test('removing the bridge restores the previous mode and drops only its entries', () {
+-    final wrapped = withXrayBridge(base());
+-    final restored = withoutXrayBridge(wrapped, restoreMode: 'rule');
+-
+-    expect(restored['mode'], 'rule');
+-    expect(restored.containsKey('GLOBAL'), isFalse);
+-    expect((restored['proxies'] as List).length, 1);
+-    expect((restored['proxy-groups'] as List).length, 1);
+-    expect((restored['rules'] as List).length, 1);
+-  });
+-
+-  test('a custom port is honoured', () {
+-    final wrapped = withXrayBridge(base(), port: 2080);
+-    expect(((wrapped['proxies'] as List).last as Map)['port'], 2080);
+-  });
+-}

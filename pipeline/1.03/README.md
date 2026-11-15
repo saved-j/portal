@@ -246,6 +246,16 @@ the device, not a redesign.
   transitions as `kind=availability feed=… attempts=n/3 state=…`. ru/en/zh_CN strings; version
   0.5.3-portal-duo-2c+2026111403.
 
+- `28-engine-config-is-the-profile's-own` — the network mode's list was drawing `XRAY-SOCKS`
+  (badge `SOCKS5`) under a `PORTAL-XRAY` group that no panel ever sent. It was not the profile
+  and not a stale file: `lib/common/task.dart` injected both into **every** pushed engine config
+  for a bridge design abandoned when the simple portal became its own core, and
+  `lib/core/xray_bridge_config.dart` (the module that produced that shape, including the
+  `GLOBAL` override) is called from nowhere. The injection is removed, the dead bridge module
+  and its test are deleted, and the pushed document is exactly the profile's own `proxies:`,
+  `proxy-groups:` and `rules:` — the list carries `VPN - Main`, `Auto Europe`, `Auto America`,
+  `Auto Asia` and their members, and nothing else. Version 0.5.3-portal-duo-2d+2026111404.
+
 Apply (to a tree that does not already carry the 01..02 commit):
 ```
 git -C <clone> checkout -B work <1.02a commit>   # tree f8044d71

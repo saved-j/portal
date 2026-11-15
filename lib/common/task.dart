@@ -394,32 +394,11 @@ Future<RealProfile> _makeRealProfileTask(MakeRealProfileState data) async {
         .toList();
   }
   applyProxyChains(rawConfig, data.proxyChains);
-  // The local Xray owns the real node when the portal network is off. Its socks inbound is
-  // always declared so the switch is a pure mode change: nothing has to be rebuilt, and no
-  // connection is dropped when the owner flips it.
-  rawConfig['proxies'] = [
-    ...?(rawConfig['proxies'] as List?)?.where(
-      (item) => item is! Map || item['name'] != 'XRAY-SOCKS',
-    ),
-    {
-      'name': 'XRAY-SOCKS',
-      'type': 'socks5',
-      'server': '127.0.0.1',
-      'port': 10808,
-      'udp': false,
-    },
-  ];
-  rawConfig['proxy-groups'] = [
-    {
-      'name': 'PORTAL-XRAY',
-      'type': 'select',
-      'proxies': ['XRAY-SOCKS'],
-      'hidden': true,
-    },
-    ...?(rawConfig['proxy-groups'] as List?)?.where(
-      (item) => item is! Map || item['name'] != 'PORTAL-XRAY',
-    ),
-  ];
+  // The pushed document is the profile's own: its proxies, its groups, its rules. Nothing is
+  // injected here any more. This is where a `XRAY-SOCKS` proxy and a `PORTAL-XRAY` group used
+  // to be added for the local bridge — a design that was abandoned when the simple portal
+  // became its own core — and they were still being pushed, so the network mode's list showed
+  // a group and a SOCKS5 row that no panel ever sent and no server ever answered.
   rawConfig['rules'] = rules;
   final yaml = await _encodeYaml(Map<String, dynamic>.from(rawConfig));
   return (yaml: yaml, md5: yaml.toMd5(), counts: configCountsOf(rawConfig));
