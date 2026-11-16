@@ -1274,9 +1274,12 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
         // Measures the servers of this list once, from a lifecycle method: a build pass is
         // not the place to start work, and a rebuild is not a reason to start it again.
         _TcpDelaySweep(
-          xrayServers,
+          servers: xrayServers,
+          engineProxies: simple ? const <Proxy>[] : members,
+          simple: simple,
           wasRunning: portalRuntime.status.value.active &&
-              portalRuntime.status.value.owner == PortalOwner.xray,
+              portalRuntime.status.value.owner ==
+                  (simple ? PortalOwner.xray : PortalOwner.mihomo),
         ),
         // The filter strip belongs to the engine's rules. In the simple portal the list is
         // the second core's own servers, so there are no filters to show.
@@ -1402,19 +1405,28 @@ bool _sameTargets(
   return true;
 }
 
-/// Starts one delay sweep for the servers the list is showing.
+/// Starts one delay sweep for the servers the list is showing — whichever core they belong to.
 ///
-/// From a lifecycle method, not the build pass: a widget can be rebuilt many times a frame
-/// for reasons that have nothing to do with the servers, and starting the measurement there
-/// restarted it on every rebuild while the map was still empty. The sweep itself owns its
-/// cancellation — a newer list bumps the generation inside the notifier, which drops the
-/// answers of the older one.
+/// From a lifecycle method, not the build pass: a widget can be rebuilt many times a frame for
+/// reasons that have nothing to do with the servers, and starting the measurement there
+/// restarted it on every rebuild while the map was still empty. The sweep owns its
+/// cancellation — a newer list, or a mode switch, drops the answers of the older one.
 class _TcpDelaySweep extends ConsumerStatefulWidget {
-  const _TcpDelaySweep(this.servers, {required this.wasRunning});
+  const _TcpDelaySweep({
+    required this.servers,
+    required this.engineProxies,
+    required this.simple,
+    required this.wasRunning,
+  });
 
-  /// The list's own servers: what a sweep measures is the subscription's nodes, not the
-  /// rows that happen to be scrolled into view.
+  /// The second core's servers, empty in the network mode.
   final List<XrayServerConfig> servers;
+
+  /// The engine's nodes, empty in the simple portal.
+  final List<Proxy> engineProxies;
+
+  /// Which core this list belongs to.
+  final bool simple;
 
   /// Whether the portal was already carrying traffic when the list asked for numbers.
   final bool wasRunning;
@@ -1429,35 +1441,40 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
   @override
   void initState() {
     super.initState();
-    _start(widget.servers);
+    _start();
   }
 
   @override
   void didUpdateWidget(covariant _TcpDelaySweep oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _start(widget.servers);
+    // A different mode is a different list: its sweep is its own, even if the names repeat.
+    if (oldWidget.simple != widget.simple) {
+      _asked = null;
+    }
+    _start();
   }
 
-  void _start(List<XrayServerConfig> servers) {
-    if (servers.isEmpty) return;
-    final names = [for (final server in servers) server.name];
+  void _start() {
+    final names = [
+      if (widget.simple)
+        for (final server in widget.servers) server.name
+      else
+        for (final proxy in widget.engineProxies) proxy.name,
+    ];
+    if (names.isEmpty) return;
     final asked = _asked;
     // The same list asking again is the same sweep, not a second one: a rebuild must not
-    // spend the phone's traffic on numbers that are already in flight.
-    if (asked != null && asked.length == names.length && _sameNames(asked, names)) return;
+    // spend the phone's traffic on numbers that are already in flight. Which rows are out of
+    // date is the notifier's question, not this widget's.
+    if (asked != null && _sameNames(asked, names)) return;
     _asked = names;
-    unawaited(
-      _testDelayWithChild(ref, servers, wasRunning: widget.wasRunning),
-    );
-  }
-
-  @override
-  void dispose() {
-    // The sweep belongs to this list. Leaving it revokes the answers still in flight: a
-    // handshake that lands after the list is gone must not write a delay for a row the next
-    // list never asked about.
-    ref.read(tcpDelayProvider.notifier).cancel();
-    super.dispose();
+    if (widget.simple) {
+      unawaited(_testDelayWithChild(ref, widget.servers, wasRunning: widget.wasRunning));
+    } else {
+      unawaited(
+        _testDelayWithEngine(ref, widget.engineProxies, wasRunning: widget.wasRunning),
+      );
+    }
   }
 
   @override
@@ -1486,8 +1503,32 @@ Future<void> _testDelayWithEngine(
   required bool wasRunning,
 }) async {
   if (proxies.isEmpty) return;
+  // Two minutes of a row's own number is good enough: a mode switch fills the gaps instead
+  // of re-measuring a list it had just finished.
+  final delay = ref.read(tcpDelayProvider.notifier);
+  final stale = [
+    for (final proxy in proxies)
+      if (!delay.isFresh(proxy.name)) proxy,
+  ];
+  if (stale.isEmpty) {
+    commonPrint.log(
+      'portal test: every engine row was measured within '
+      '${_delayFreshness.inMinutes} minutes, nothing to do',
+    );
+    return;
+  }
   if (wasRunning) {
-    await ref.read(proxiesActionProvider.notifier).delayTest(proxies, testUrl);
+    await ref.read(proxiesActionProvider.notifier).delayTest(stale, testUrl);
+    // The engine answers into its own map; the rows' numbers are taken from there, and each
+    // answer is stamped so a switch back does not ask again.
+    for (final proxy in stale) {
+      final value = ref.read(delayProvider(proxyName: proxy.name));
+      delay.record(proxy.name, (value != null && value > 0) ? value : null);
+    }
+    commonPrint.log(
+      'portal test: engine sweep rows=${stale.length}/${proxies.length} '
+      'kept_open=yes',
+    );
     return;
   }
   final testing = ref.read(delayTestingGroupsProvider.notifier);
