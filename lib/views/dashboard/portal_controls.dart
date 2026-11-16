@@ -180,6 +180,43 @@ final portalPendingProvider =
 final tcpDelayProvider =
     NotifierProvider<TcpDelayNotifier, Map<String, int?>>(TcpDelayNotifier.new);
 
+/// The engine's rows' numbers, kept apart from the child's.
+///
+/// The two lists name different servers and measure them differently: the child's number is a
+/// request this process dials through its node, the engine's is the engine's own URLTEST. They
+/// look the same on screen and must never share storage: a name that exists in both
+/// subscriptions would otherwise show the other core's number, and a switch would look like
+/// nothing had been measured at all.
+final engineDelayProvider =
+    NotifierProvider<EngineDelayNotifier, Map<String, int?>>(EngineDelayNotifier.new);
+
+class EngineDelayNotifier extends Notifier<Map<String, int?>> {
+  final SweepLedger ledger = SweepLedger();
+
+  int get sweepId => ledger.id;
+  Mode? get sweepMode => ledger.mode;
+  int beginSweep(Mode mode) => ledger.begin(mode);
+  void cancelSweep() {
+    ledger.cancel();
+  }
+
+  bool isCurrentSweep(int id, Mode mode) => ledger.isCurrent(id, mode);
+  bool isFresh(String name) => ledger.isFresh(name);
+
+  @override
+  Map<String, int?> build() => const {};
+
+  void record(String name, int? ms) {
+    state = {...state, name: ms};
+    ledger.record(name, ms);
+  }
+
+  void resetForProfile() {
+    ledger.reset();
+    state = const {};
+  }
+}
+
 class TcpDelayNotifier extends Notifier<Map<String, int?>> {
   /// The sweep's bookkeeping: freshness of each row and which sweep is the newest.
   ///
@@ -1141,6 +1178,7 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
       // A bump, not a reset: the sweep that was running must not take the next number and
       // believe it is current again.
       ref.read(tcpDelayProvider.notifier).cancelSweep();
+      ref.read(engineDelayProvider.notifier).cancelSweep();
       commonPrint.log('portal test: sweep cancelled, mode is now ${next.name}');
     });
     ref.listen(currentProfileIdProvider, (previous, next) {
@@ -1148,6 +1186,7 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
       // Another subscription: its rows, their dates and the sweep in flight are not this
       // profile's answers.
       ref.read(tcpDelayProvider.notifier).resetForProfile();
+      ref.read(engineDelayProvider.notifier).resetForProfile();
     });
     ref.listen(xrayServersProvider, (previous, next) {
       final servers = next.value;
@@ -1285,11 +1324,13 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
         // on which family member happened to be created first — and the subscriptions
         // outlived the sort.
         final xrayDelays = ref.watch(tcpDelayProvider);
+        final engineDelays = ref.watch(engineDelayProvider);
         final ranks = <String, int>{};
         for (final proxy in members) {
           final value = xrayServerByName.containsKey(proxy.name)
               ? xrayDelays[proxy.name]
-              : ref.read(delayProvider(proxyName: proxy.name));
+              : engineDelays[proxy.name] ??
+                  ref.read(delayProvider(proxyName: proxy.name));
           // -1 is mihomo's timeout marker, not a fast server.
           ranks[proxy.name] = value == null || value <= 0 ? 1 << 30 : value;
         }
@@ -1535,7 +1576,7 @@ Future<void> _testDelayWithEngine(
   if (proxies.isEmpty) return;
   // Two minutes of a row's own number is good enough: a mode switch fills the gaps instead
   // of re-measuring a list it had just finished.
-  final delay = ref.read(tcpDelayProvider.notifier);
+  final delay = ref.read(engineDelayProvider.notifier);
   final stale = [
     for (final proxy in proxies)
       if (!delay.isFresh(proxy.name)) proxy,
@@ -2129,9 +2170,12 @@ class _ServerRowState extends ConsumerState<_ServerRow>
     // milliseconds to Finland — that handshake went to the engine's fake-IP.
     final measurable =
         widget.xrayServer != null && widget.tcpHost.isNotEmpty && widget.tcpPort > 0;
+    // Two cores, two maps: a row's number is read from the map of the core that produced it,
+    // so a name present in both subscriptions can never show the other core's value.
     final delay = measurable
         ? ref.watch(tcpDelayProvider)[widget.proxy.name]
-        : ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
+        : ref.watch(engineDelayProvider)[widget.proxy.name] ??
+            ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
     final color = widget.selected
         ? scheme.onPrimaryContainer
         : scheme.onSurfaceVariant;
