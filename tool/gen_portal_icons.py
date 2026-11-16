@@ -83,19 +83,56 @@ def edge_extend(image: Image.Image, canvas: int, coverage: float) -> Image.Image
         out.paste(bl, (0, offset + inner)); out.paste(br, (offset + inner, offset + inner))
     return out
 
+# Notification small icon, in pixels per density. A small icon is 24x24 dp with ~1 dp of
+# padding, and the system uses the alpha channel only: anything that is not transparent is
+# drawn white. That is why the slot is a silhouette, not a picture — a coloured PNG becomes a
+# white square, and content wider than the optical square is clipped by the circle the shade
+# draws around it.
+NOTIFICATION_DP = 24.0
+
+# 24 dp in pixels per density bucket (mdpi .. xxxhdpi).
+NOTIFICATION_PX = {"mdpi": 24, "hdpi": 36, "xhdpi": 48, "xxhdpi": 72, "xxxhdpi": 96}
+NOTIFICATION_PADDING_DP = 1.0
+
+
+def notification_p(size_px: int, dp: float, color=(255, 255, 255, 255)) -> Image.Image:
+    """A П drawn to the notification spec: 24 dp canvas, 1 dp padding, alpha only."""
+    scale = 8
+    canvas = Image.new("RGBA", (size_px * scale, size_px * scale), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+    edge = size_px * scale
+    # 3 dp of margin on every side at 24 dp: the system draws the small icon inside a circle,
+    # and a letter that reaches the edge has its corners cut by that circle. 3 dp leaves the
+    # whole glyph inside the inscribed square (24/√2 ≈ 17 dp) with room to spare.
+    # 5 dp of margin at 24 dp: content then spans 14 dp, inside the inscribed square of the
+    # circle the system draws the small icon in (24/√2 ≈ 17 dp). Anything wider has its
+    # corners clipped, which is exactly the "black corners" the owner saw in the shade.
+    margin = edge * (5.0 / dp)
+    left, right = int(margin), int(edge - margin)
+    top, bottom = int(margin), int(edge - margin)
+    stroke = max(2, int((right - left) * 0.30))
+    radius = max(1, int(stroke * 0.4))
+    draw.rounded_rectangle((left, top, right, top + stroke), radius=radius, fill=color)
+    draw.rounded_rectangle((left, top, left + stroke, bottom), radius=radius, fill=color)
+    draw.rounded_rectangle((right - stroke, top, right, bottom), radius=radius, fill=color)
+    return canvas.resize((size_px, size_px), Image.LANCZOS)
+
+
 def letter_p(size: int, color=(255, 255, 255, 255)) -> Image.Image:
     """A stylised П: two posts and a rounded bar, drawn to read at 24 dp."""
     scale = 4
     canvas = Image.new("RGBA", (size * scale, size * scale), (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas)
     s = size * scale
-    # A tile is inset by the system and shown at ~24 dp: the letter has to fill the
-    # canvas, or it reads as a speck.
-    stroke = int(s * 0.19)
-    left = int(s * 0.10)
-    right = int(s * 0.90)
-    top = int(s * 0.12)
-    bottom = int(s * 0.90)
+    # A tile is drawn inside a circle by the system: content wider than the inscribed square
+    # (1/√2 ≈ 0.71 of the diameter) has its corners cut off, which reads as the glyph hitting
+    # the rounding with black left in the corners. The letter therefore takes 62% of the
+    # canvas — still large at 24 dp, and clear of the mask on every launcher.
+    stroke = int(s * 0.15)
+    left = int(s * 0.19)
+    right = int(s * 0.81)
+    top = int(s * 0.21)
+    bottom = int(s * 0.81)
     radius = int(stroke * 0.45)
     # bar
     draw.rounded_rectangle((left, top, right, top + stroke), radius=radius, fill=color)
@@ -148,6 +185,17 @@ def main() -> None:
     # Quick Settings tile: a silhouette, so the letter, not the picture
     for dens, size in densities.items():
         save(letter_p(size), f"{ANDROID_RES}/drawable-{dens}/ic_qs_portal.png")
+
+    # The notification's small icon (foreground service, and the status bar's own copy).
+    # 24 dp per density, white on transparent, content inside the circle's inscribed square —
+    # the size and the silhouette the system asks for.
+    #
+    # Two copies on purpose: the service module has its own R and the notification is built
+    # there (`NotificationModule`), so the resource has to exist in both.
+    for dens, px in NOTIFICATION_PX.items():
+        icon = notification_p(px, NOTIFICATION_DP)
+        save(icon, f"{ANDROID_RES}/drawable-{dens}/ic_service.png")
+        save(icon, f"{ROOT}/android/service/src/main/res/drawable-{dens}/ic_service.png")
 
     # Flutter asset + tray
     save(square(1024), f"{ASSETS}/icon.png")

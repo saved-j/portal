@@ -427,12 +427,23 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
     private fun tunDocument(config: String, tun: XrayTun, logFile: File): String {
         val root = JSONObject(config)
         val inbounds = JSONArray()
+        // A panel's own listeners are not ours to keep. Whatever the document declares as an
+        // entry point — socks, http, mixed, dokodemo, anything else — would be a port this app
+        // opens on the phone on the provider's terms, and an inbound without credentials is an
+        // open relay to whoever can reach it. The tunnel is the only way in that this app
+        // needs, so every declared inbound goes; the tun inbound below is put in its place.
+        // Linux and Android both reach 127.0.0.1 from other apps, so "it listens on loopback"
+        // is not a protection either.
+        val dropped = mutableListOf<String>()
         root.optJSONArray("inbounds")?.let { existing ->
             for (index in 0 until existing.length()) {
                 val item = existing.optJSONObject(index) ?: continue
-                if (item.optString("protocol") == "socks") continue
-                inbounds.put(item)
+                val protocol = item.optString("protocol").ifEmpty { "?" }
+                dropped.add("$protocol@${item.optString("listen")}")
             }
+        }
+        if (dropped.isNotEmpty()) {
+            Log.i(TAG, "inbounds from the subscription are dropped: ${dropped.joinToString(", ")}")
         }
         inbounds.put(
             JSONObject().apply {
