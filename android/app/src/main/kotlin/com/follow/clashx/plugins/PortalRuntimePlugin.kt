@@ -33,6 +33,7 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
         channel.setMethodCallHandler(this)
+        attached = true
         // Dart builds the document; the coordinator asks for it while it holds the lock.
         PortalRuntimeCoordinator.provideChildConfig {
             requestChildConfig()
@@ -40,6 +41,7 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        attached = false
         channel.setMethodCallHandler(null)
         PortalRuntimeCoordinator.provideChildConfig(null)
     }
@@ -160,6 +162,14 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     /// Asks Dart for the document of the node the portal currently picks.
     private suspend fun requestChildConfig(): String? =
         suspendCancellableCoroutine { continuation ->
+            // A start with no Flutter engine — the tile, the notification — must not wait for
+            // one. `invokeMethod` on a channel whose engine is gone never answers, and the
+            // caller (the coordinator, holding the tunnel lock) would wait forever with the
+            // shade already collapsed and nothing happening.
+            if (!attached) {
+                if (continuation.isActive) continuation.resume(null)
+                return@suspendCancellableCoroutine
+            }
             val main = android.os.Handler(android.os.Looper.getMainLooper())
             main.post {
                 runCatching {
@@ -189,6 +199,10 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
             }
         }
+
+    /// Whether a Flutter engine is attached and can answer `prepareChildConfig`.
+    @Volatile
+    private var attached = false
 
     private companion object {
         val CHANNEL = "${Components.PACKAGE_NAME}/portal"

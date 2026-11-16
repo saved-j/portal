@@ -1,6 +1,7 @@
 package com.follow.clashx
 
 import com.follow.clashx.common.GlobalState
+import java.io.File
 import com.follow.clashx.common.PortalOwner
 import com.follow.clashx.common.PortalRuntime
 import com.follow.clashx.common.PortalRuntimeState
@@ -81,6 +82,9 @@ data class PortalOutcome(
 object PortalRuntimeCoordinator {
     private const val TAG = "PortalRuntime"
 
+    /// The last document a run actually started on, for a start with no Flutter engine.
+    private const val SAVED_DOCUMENT = "portal-last-node.json"
+
     private val mutex = Mutex()
 
     @Volatile
@@ -107,13 +111,36 @@ object PortalRuntimeCoordinator {
         configSource = source
     }
 
+    /// The node document the previous run used, kept on disk for a start with no Flutter.
+    ///
+    /// The tile can be tapped while the app is not running, and at that moment there is no Dart
+    /// side to build a document — `configSource` is a call into a Flutter engine that does not
+    /// exist. 0.01a answered that by starting from the saved preferences, and that is what makes
+    /// the tile work with the app thrown out of memory. This is the same idea: the last document
+    /// a run actually started on, written next to the core's own files and replayed when no
+    /// builder answers.
+    private fun savedDocumentFile(): File =
+        File(GlobalState.application.filesDir, SAVED_DOCUMENT)
+
+    fun rememberDocument(document: String) {
+        runCatching { savedDocumentFile().writeText(document, Charsets.UTF_8) }
+            .onFailure { GlobalState.log("$TAG cannot save the node document: ${it.message}") }
+    }
+
+    fun savedDocument(): String? = runCatching {
+        val file = savedDocumentFile()
+        if (!file.exists()) return null
+        file.readText(Charsets.UTF_8).takeIf { it.isNotBlank() }
+    }.getOrNull()
+
     /** The owner the shared state asks for: the mode, as the app last wrote it. */
     fun desiredOwner(): PortalOwner {
         val options = runCatching { AndroidServiceStateHost.loadSharedState().vpnOptions }.getOrNull()
         return if (options?.xrayTun == true) PortalOwner.Xray else PortalOwner.Mihomo
     }
 
-    /** Quick Settings' start: the owner the mode names, and the document Dart builds. */
+    /// Quick Settings' start: the owner the mode names, and the document Dart builds — or, with
+    /// no engine attached, the document the last run started on.
     suspend fun openDesired(): PortalOutcome = open(desiredOwner())
 
     fun status(): Map<String, Any?> = PortalRuntimeState.current().toMap() + mapOf(
@@ -252,7 +279,12 @@ object PortalRuntimeCoordinator {
     ): PortalOutcome {
         val gateway = child
             ?: return failed(generation, "this build has no portal core for the tunnel")
-        val document = config ?: configSource?.invoke()
+        // A caller that carries a document is the app itself; one that does not is the tile, and
+        // the builder it would ask may be a Flutter engine that is not running. The last document
+        // a run started on is the honest answer there — it is the node the owner last used.
+        val document = config
+            ?: configSource?.invoke()?.takeIf { it.isNotBlank() }
+            ?: savedDocument()
         if (document.isNullOrBlank()) {
             closeServiceAfterFailure()
             return failed(generation, "no node document to start the portal core on")
@@ -262,6 +294,10 @@ object PortalRuntimeCoordinator {
             return stale(generation, "child start")
         }
         GlobalState.log("$TAG phase=Starting owner=Xray step=child generation=$generation")
+        // Remembered before the start, not after: a core that refuses still names the document a
+        // later no-Flutter start would have to try, and a start that fails is not a reason to
+        // forget which node the owner picked.
+        rememberDocument(document)
         val started = gateway.start(document)
         if (!started.ok) {
             // A core that refused has already let the tunnel go; the service must not stay
