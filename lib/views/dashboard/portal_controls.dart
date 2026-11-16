@@ -187,9 +187,26 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
   /// inside it, because the list draws values and this only decides whether to ask again.
   final Map<String, DateTime> measuredAt = {};
 
-  /// A sweep in flight, or null. A mode switch cancels it before starting its own: two sweeps
-  /// writing into one map is how rows from the mode that just went away light up again.
-  int? runningSweep;
+  /// The identifier of the newest sweep. It only ever grows.
+  ///
+  /// A sweep is current while its own number is still the newest one; cancelling is a bump,
+  /// never a reset to null. A reset made the next sweep take the same number, and a sweep that
+  /// had been cancelled then believed it was current again and wrote rows for a list nobody
+  /// was looking at.
+  int sweepId = 0;
+
+  /// The newest sweep, or 0 when none is running.
+  int get runningSweep => sweepId;
+
+  /// The mode the newest sweep belongs to, so a cancelled sweep can tell it was cancelled.
+  Mode? sweepMode;
+
+  /// Bumps the identifier and forgets which mode the old sweep served.
+  void cancelSweep() {
+    sweepId++;
+    sweepMode = null;
+    _generation++;
+  }
 
   /// True when [name] has a number younger than [maxAge].
   bool isFresh(String name, {Duration maxAge = _delayFreshness}) {
@@ -204,11 +221,24 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
 
   @override
   Map<String, int?> build() {
-    // The measurements belong to the profile: a different one is a different set of
-    // servers, so the map goes with it instead of lighting up names that only look alike.
+    // The measurements belong to the profile: a different one is a different set of servers,
+    // so the rows, their dates and the sweep in flight all go with it instead of lighting up
+    // names that only look alike.
     ref.watch(currentProfileIdProvider);
     ref.onDispose(() => _generation++);
     return const {};
+  }
+
+  /// True while [id] is still the newest sweep and nobody has switched the mode since.
+  bool isCurrentSweep(int id, Mode mode) => sweepId == id && sweepMode == mode;
+
+  /// Forgets everything measured for the previous profile: its rows, their dates and the
+  /// sweep that was running. A profile change is a different subscription, and a number from
+  /// the old one must not look fresh under a name that only matches by accident.
+  void resetForProfile() {
+    measuredAt.clear();
+    state = const {};
+    cancelSweep();
   }
 
   /// The node the child is carrying traffic on, or null when no child holds the tunnel.
@@ -1115,9 +1145,16 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
     // about to write are the servers of a list nobody is looking at any more.
     ref.listen(patchClashConfigProvider.select((s) => s.mode), (previous, next) {
       if (previous == next) return;
-      ref.read(tcpDelayProvider.notifier).cancel();
-      ref.read(tcpDelayProvider.notifier).runningSweep = null;
+      // A bump, not a reset: the sweep that was running must not take the next number and
+      // believe it is current again.
+      ref.read(tcpDelayProvider.notifier).cancelSweep();
       commonPrint.log('portal test: sweep cancelled, mode is now ${next.name}');
+    });
+    ref.listen(currentProfileIdProvider, (previous, next) {
+      if (previous == next) return;
+      // Another subscription: its rows, their dates and the sweep in flight are not this
+      // profile's answers.
+      ref.read(tcpDelayProvider.notifier).resetForProfile();
     });
     ref.listen(xrayServersProvider, (previous, next) {
       final servers = next.value;
@@ -1535,8 +1572,12 @@ Future<void> _testDelayWithEngine(
   final subject = ref.read(portalGroupProvider) ?? '';
   if (subject.isNotEmpty) testing.start(subject);
   final watch = Stopwatch()..start();
-  // Raised for the test and put down again: the engine's delay API answers whenever it runs,
-  // and the owner asked for a measurement, not for a portal that stays open behind his back.
+  // This sweep owns the engine it raises, and only for as long as it is still the newest one:
+  // the engine is put down in `finally`, so a sweep that has been superseded — a mode switch,
+  // an open portal — must not put down the tunnel somebody else is using by then.
+  final sweep = ++delay.sweepId;
+  delay.sweepMode = Mode.rule;
+  final ownerBefore = portalRuntime.status.value.owner;
   final started = await ref.read(setupActionProvider.notifier).setRunning(true);
   var stopped = false;
   try {
@@ -1560,8 +1601,19 @@ Future<void> _testDelayWithEngine(
     await _waitForEngine(ref);
     await ref.read(proxiesActionProvider.notifier).delayTest(proxies, testUrl);
   } finally {
-    if (started) {
+    // Only a sweep that still owns the tunnel puts it down: a mode switch, or an owner that
+    // changed while the sweep ran, means the engine now belongs to somebody else.
+    final stillMine = started &&
+        delay.isCurrentSweep(sweep, Mode.rule) &&
+        portalRuntime.status.value.owner == ownerBefore;
+    if (stillMine) {
       stopped = await ref.read(setupActionProvider.notifier).setRunning(false);
+    } else if (started) {
+      commonPrint.log(
+        'portal test: engine not stopped, the sweep was superseded '
+        '(mode=${ref.read(patchClashConfigProvider).mode.name} '
+        'owner=${portalRuntime.status.value.owner?.name})',
+      );
     }
     watch.stop();
     if (subject.isNotEmpty) testing.stop(subject);
@@ -1614,8 +1666,8 @@ Future<void> _testDelayWithChild(
     );
     return;
   }
-  final sweep = (delay.runningSweep ?? 0) + 1;
-  delay.runningSweep = sweep;
+  final sweep = ++delay.sweepId;
+  delay.sweepMode = Mode.global;
   for (final entry in stale) {
     delay.record(entry.name, null);
   }
@@ -1628,7 +1680,7 @@ Future<void> _testDelayWithChild(
   try {
     for (var index = 0; index < stale.length; index += _sweepChunk) {
       // A newer sweep — a mode switch, a tap on the other list — owns the map from here.
-      if (delay.runningSweep != sweep) {
+      if (!delay.isCurrentSweep(sweep, Mode.global)) {
         failure = 'cancelled';
         break;
       }
@@ -1644,7 +1696,7 @@ Future<void> _testDelayWithChild(
         timeoutMs: _sweepTimeoutMs,
         limit: _sweepWorkers,
       );
-      if (delay.runningSweep != sweep) {
+      if (!delay.isCurrentSweep(sweep, Mode.global)) {
         failure = 'cancelled';
         break;
       }
@@ -1674,7 +1726,8 @@ Future<void> _testDelayWithChild(
     }
   } finally {
     await portalRuntime.stopMeasure();
-    if (delay.runningSweep == sweep) delay.runningSweep = null;
+    // Nothing to clear: the identifier only grows, so a sweep that has been superseded can
+    // never look current again.
     watch.stop();
     commonPrint.log(
       'portal test: sweep rows=${stale.length}/${measure.entries.length} measured=$measured '
