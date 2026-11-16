@@ -316,30 +316,36 @@ class PortalRuntime {
     }
   }
 
-  /// Starts a measurement core on a document that listens on local socks ports.
+  /// Runs one sweep in the measurement's own core slot.
   ///
-  /// It is not the portal: nothing is published, no generation moves, the tunnel is untouched.
-  /// The plugin refuses while the portal's own child runs — one core at a time — so the sweep
-  /// puts the portal down first and raises it again afterwards.
-  Future<({bool ok, String message})> startMeasure(String config) async {
+  /// It is not the portal: no generation moves, the tunnel's instance is not touched, and the
+  /// portal can stay open while the numbers come in. Answers the core's JSON verbatim; the
+  /// caller parses it with [parseMeasured].
+  Future<({bool ok, String message, String rows})> startMeasure({
+    required String config,
+    required String tags,
+    required String url,
+    int timeoutMs = 8000,
+  }) async {
     try {
       final result = await _channel.invokeMethod<Map<Object?, Object?>>(
         'measureStart',
-        {'config': config},
+        {'config': config, 'tags': tags, 'url': url, 'timeoutMs': timeoutMs},
       );
       return (
         ok: result?['ok'] == true,
         message: '${result?['message'] ?? ''}',
+        rows: '${result?['rows'] ?? ''}',
       );
     } on PlatformException catch (error) {
-      return (ok: false, message: error.message ?? '$error');
+      return (ok: false, message: error.message ?? '$error', rows: '');
     } on MissingPluginException {
-      return (ok: false, message: 'no child on this platform');
+      return (ok: false, message: 'no child on this platform', rows: '');
     }
   }
 
-  /// Stops the measurement core. A failure is reported, not hidden: the caller restores the
-  /// portal right after, and a core left running would refuse that start.
+  /// Closes the measurement instance. A failure is reported, not hidden: a core left behind
+  /// would keep its listeners and its memory for the rest of the process.
   Future<bool> stopMeasure() async {
     try {
       final result = await _channel.invokeMethod<Map<Object?, Object?>>('measureStop');

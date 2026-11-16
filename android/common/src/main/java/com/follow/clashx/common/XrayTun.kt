@@ -158,7 +158,7 @@ object XrayChildControl {
 /// at all, which is exactly what the caller must hear.
 object PortalMeasureBridge {
     @Volatile
-    var start: ((String) -> Map<String, Any>)? = null
+    var start: ((String, String, String, Int) -> Map<String, Any>)? = null
 
     @Volatile
     var stop: (() -> Boolean)? = null

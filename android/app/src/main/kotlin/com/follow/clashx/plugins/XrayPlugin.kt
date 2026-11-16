@@ -106,6 +106,21 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
 
     private external fun XrayVersion(): String?
 
+    /// Times every node of a document in the measurement's own instance.
+    ///
+    /// The answer is JSON: `{"rows":[{"tag","delay","error"}]}`, delay in milliseconds,
+    /// -1 failed and -2 timed out. The measurement has its own core slot, so a sweep runs
+    /// while the portal's child keeps reading the tunnel.
+    private external fun XrayMeasure(
+        config: String,
+        tags: String,
+        url: String,
+        timeoutMs: Int,
+    ): String?
+
+    /// Closes the measurement instance and leaves the tunnel's alone.
+    private external fun XrayMeasureStop()
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         appContext = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
@@ -115,20 +130,17 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         // any start the service's teardown interrupted before it could open the core.
         // The dashboard speaks to the portal channel, the core lives here: the bridge is the
         // one line between them, and it is only set while this plugin holds the library.
-        PortalMeasureBridge.start = { config ->
-            val task = executor.submit(Callable { startMeasure(config) })
+        PortalMeasureBridge.start = { config, tags, url, timeoutMs ->
+            val task = executor.submit(Callable { measure(config, tags, url, timeoutMs) })
             try {
-                task.get(START_WAIT_MS, TimeUnit.MILLISECONDS)
+                task.get(MEASURE_WAIT_MS, TimeUnit.MILLISECONDS)
             } catch (error: Exception) {
                 task.cancel(true)
                 mapOf("ok" to false, "message" to (error.message ?: "$error"))
             }
         }
         PortalMeasureBridge.stop = {
-            val task = executor.submit(Callable {
-                stopCoreHere()
-                true
-            })
+            val task = executor.submit(Callable { stopMeasure() })
             runCatching { task.get(STOP_WAIT_MS, TimeUnit.MILLISECONDS) }.getOrDefault(false)
         }
         XrayChildControl.stop = {
@@ -192,39 +204,6 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         }
     }
 
-    /// Starts the core on a document that carries its own listeners and needs no tunnel.
-    ///
-    /// Called only by the test sweep: every node the subscription holds is an outbound of this
-    /// document, each behind its own local socks inbound, so a request to one port is served
-    /// by one node — the way the engine answers a delay test for its whole list at once.
-    private fun startMeasure(config: String): Map<String, Any> {
-        if (coreRunning) {
-            return mapOf(
-                "ok" to false,
-                "message" to "the portal's own core is running: a measurement needs it to itself",
-            )
-        }
-        val configFile = File(appContext.filesDir, MEASURE_CONFIG_NAME)
-        runCatching { configFile.writeText(config, Charsets.UTF_8) }.onFailure { error ->
-            return mapOf("ok" to false, "message" to "cannot write ${configFile.name}: ${error.message}")
-        }
-        val assets = installGeoAssets()
-        runCatching { Os.setenv(ASSET_ENV, assets.absolutePath, true) }
-        ensureLibrary()?.let { problem -> return mapOf("ok" to false, "message" to problem) }
-        val attempt = runCatching { XrayStart(config, -1, assets.absolutePath) }
-        if (attempt.isFailure) {
-            val error = attempt.exceptionOrNull()
-            Log.e(TAG, "unable to start the measurement core", error)
-            return mapOf("ok" to false, "message" to (error?.message ?: "unable to start"))
-        }
-        val nativeError = attempt.getOrNull()
-        if (nativeError != null) {
-            return mapOf("ok" to false, "message" to nativeError)
-        }
-        coreRunning = true
-        return mapOf("ok" to true, "message" to "")
-    }
-
     private fun status(): Map<String, Any> = mapOf(
         "running" to coreRunning,
         "lastLine" to lastLine,
@@ -243,13 +222,6 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         }
     }
 
-    // ---- PortalChildGateway: the child's half of the coordinator's transaction ------------
-
-    /// Starts the core on [config] and answers only after it acknowledged the tunnel.
-    ///
-    /// Runs on the plugin's own single thread and waits for that task, so a start queued
-    /// behind a stop runs after it instead of beside it, and the caller can treat the answer
-    /// as a fact of the core rather than of the queue.
     override fun start(config: String): PortalChildStart {
         val token = nextOperation()
         val task = executor.submit(Callable { start(token, config) })
@@ -400,6 +372,38 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
             Log.e(TAG, "unable to start xray", e)
             stopCoreHere()
             failure(e.message ?: "unable to start xray")
+        }
+    }
+
+
+    /// Times every node of [config] in the measurement's own core instance.
+    ///
+    /// This is the whole sweep: one document whose outbounds are the nodes, one tag list, one
+    /// call. Nothing listens, so there is no port to hand over and nothing for Dart to speak;
+    /// the tunnel's instance is not touched, which is what lets a sweep run beside an open
+    /// portal. Answers JSON: `{"rows":[{tag,delay,error}]}` or `{"error":...}`.
+    private fun measure(config: String, tags: String, url: String, timeoutMs: Int): Map<String, Any> {
+        ensureLibrary()?.let { problem ->
+            return mapOf("ok" to false, "message" to problem)
+        }
+        val answer = runCatching { XrayMeasure(config, tags, url, timeoutMs) }
+            .getOrElse { error ->
+                Log.e(TAG, "measurement raised", error)
+                return mapOf("ok" to false, "message" to (error.message ?: "$error"))
+            }
+            ?: return mapOf("ok" to false, "message" to "no answer from the core")
+        return mapOf("ok" to true, "message" to "", "rows" to answer)
+    }
+
+    /// Closes the measurement instance, if one is running. The tunnel's core is not stopped.
+    private fun stopMeasure(): Boolean {
+        if (!libraryLoaded) return false
+        return runCatching {
+            XrayMeasureStop()
+            true
+        }.getOrElse { error ->
+            Log.w(TAG, "measurement stop raised: ${error.message}")
+            false
         }
     }
 
@@ -820,6 +824,11 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         /// `XrayStop` returns when the core has let go of its tunnels; a stop that never
         /// returns is a fact the caller has to hear instead of waiting forever.
         private const val STOP_WAIT_MS = 30_000L
+
+        /// A sweep of a whole subscription takes seconds; the cap is the Incy one (120 s) plus
+        /// room for the answer to travel, after which the caller is told it failed rather than
+        /// left waiting on a wedged core.
+        private const val MEASURE_WAIT_MS = 130_000L
 
         /// How often the log is read, and how finely a sleep is cut so a stop does not wait
         /// out a whole interval before the start gives up.

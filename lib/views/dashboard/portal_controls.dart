@@ -1486,11 +1486,10 @@ Future<void> _testDelayWithEngine(
 
 /// Times every node of the subscription at once, the way the engine does it.
 ///
-/// One core holds all the nodes, each behind its own local socks port, so a request to one
-/// port is served by one node: twenty-four measurements run side by side instead of
-/// twenty-four restarts. The portal's own child cannot share the library, so it is put down
-/// for the sweep and raised again afterwards on the node the owner had picked — a test is a
-/// measurement, and the portal ends where it started.
+/// One core holds all the nodes and each request is dialled through the node's own tag, so the
+/// whole list is measured side by side instead of one restart per node. The sweep has its own
+/// core slot, so an open portal keeps carrying traffic while the numbers arrive — nothing is
+/// put down and nothing has to be raised again.
 Future<void> _testDelayWithChild(
   WidgetRef ref,
   List<XrayServerConfig> servers, {
@@ -1501,58 +1500,54 @@ Future<void> _testDelayWithChild(
   if (measure.entries.isEmpty) return;
   final delay = ref.read(tcpDelayProvider.notifier);
   final url = ref.read(appSettingProvider).testUrl;
-  final runtime = portalRuntime;
-  final setup = ref.read(setupActionProvider.notifier);
   final watch = Stopwatch()..start();
-  var measured = 0;
   for (final entry in measure.entries) {
     delay.record(entry.name, null);
   }
+  var measured = 0;
+  var failure = '';
   try {
-    if (wasRunning) {
-      await setup.setRunning(false);
-    }
-    final started = await runtime.startMeasure(measure.config);
-    if (!started.ok) {
-      final reason = started.message;
+    final answer = await portalRuntime.startMeasure(
+      config: measure.config,
+      tags: jsonEncode([for (final entry in measure.entries) entry.tag]),
+      url: url,
+    );
+    if (!answer.ok) {
+      failure = answer.message;
       commonPrint.log(
-        'portal test: the measuring core did not start${reason.isEmpty ? '' : ': $reason'}',
+        'portal test: the sweep did not run${failure.isEmpty ? '' : ': $failure'}',
         logLevel: LogLevel.warning,
       );
       return;
     }
-    // Bounded like the engine's own pool: enough to finish in seconds, few enough that the
-    // numbers are not measuring each other.
-    const batch = 12;
-    for (var index = 0; index < measure.entries.length; index += batch) {
-      final chunk = measure.entries.skip(index).take(batch).toList();
-      final answers = await Future.wait([
-        for (final entry in chunk)
-          measureNode(port: entry.port, url: url),
-      ]);
-      for (var i = 0; i < chunk.length; i++) {
-        delay.record(chunk[i].name, answers[i]);
-        if (answers[i] != null) measured++;
+    failure = measuredError(answer.rows);
+    final byTag = {for (final row in parseMeasured(answer.rows)) row.tag: row};
+    for (final entry in measure.entries) {
+      final row = byTag[entry.tag];
+      delay.record(entry.name, row?.delay);
+      if (row?.delay != null) {
+        measured++;
+      } else if (row != null && row.error.isNotEmpty) {
+        commonPrint.log('portal delay ${entry.name}: ${row.error}');
       }
     }
   } finally {
-    await runtime.stopMeasure();
-    var restored = false;
-    if (wasRunning) {
-      restored = await setup.setRunning(true);
-    }
+    await portalRuntime.stopMeasure();
     watch.stop();
     commonPrint.log(
       'portal test: sweep rows=${measure.entries.length} measured=$measured '
-      'restored=$restored duration_ms=${watch.elapsedMilliseconds}',
+      'kept_open=${wasRunning ? 'yes' : 'no'} '
+      'duration_ms=${watch.elapsedMilliseconds}'
+      '${failure.isEmpty ? '' : ' error=$failure'}',
     );
     unawaited(
       portalRuntime.noteTest(
         mode: 'global',
         raised: 'none',
         durationMs: watch.elapsedMilliseconds,
-        stoppedAfter: !wasRunning,
-        detail: 'rows=${measure.entries.length} measured=$measured restored=$restored',
+        stoppedAfter: false,
+        detail: 'rows=${measure.entries.length} measured=$measured'
+            '${failure.isEmpty ? '' : ' error=$failure'}',
       ),
     );
   }

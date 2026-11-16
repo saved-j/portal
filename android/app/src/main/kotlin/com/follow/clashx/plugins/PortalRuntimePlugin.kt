@@ -84,8 +84,11 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             // channel reaches it.
             "measureStart" -> {
                 val config = call.argument<String>("config")
+                val tags = call.argument<String>("tags")
+                val url = call.argument<String>("url") ?: ""
+                val timeoutMs = (call.argument<Number>("timeoutMs") ?: 8000).toInt()
                 val bridge = PortalMeasureBridge.start
-                if (config.isNullOrBlank() || bridge == null) {
+                if (config.isNullOrBlank() || tags.isNullOrBlank() || bridge == null) {
                     result.success(
                         mapOf(
                             "ok" to false,
@@ -94,7 +97,7 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     )
                     return
                 }
-                GlobalState.launch { result.success(bridge(config)) }
+                GlobalState.launch { result.success(bridge(config, tags, url, timeoutMs)) }
             }
 
             "measureStop" -> {
