@@ -484,6 +484,17 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         // query to 198.18.0.2:53, and the core must answer it with its DNS module instead of
         // routing the packet somewhere that cannot exist.
         hijackTunnelDns(root)
+        // A document that carries an observatory or a balancer asks the core to keep notes on
+        // its own outbounds. Two pieces make that work inside a tunnel and neither is the
+        // panel's business to get right:
+        //  - `stats`, an empty object: the burst observatory reports into it, and a document
+        //    that names `burstObservatory` without it is refused by the core at build.
+        //  - a direct rule for the DNS servers' own addresses. The DNS module resolves names
+        //    through the `dns` outbound, whose queries are ordinary connections to those
+        //    addresses; without the rule they come back into the router, are handed to the
+        //    balancer, and the balancer's health check asks DNS again — a loop that answers
+        //    nothing and looks like a dead node.
+        prepareObservatory(root)
         // The acknowledgement this start waits for is an info-level line, and it is only
         // written if the core logs at all — the panel's own level may filter it out. `error`
         // is the core's general log; `access` records requests, which is not what a start
@@ -573,6 +584,91 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         }
         routing.put("rules", rules)
         Log.i(TAG, "tunnel dns goes to outbound $dnsTag; ${rules.length()} routing rules")
+    }
+
+    /// Makes an observatory or balancer document work inside the tunnel.
+    ///
+    /// Only the documents that ask for it are touched: a plain single-node document keeps its
+    /// own routing untouched. `stats` is added empty because the burst observatory writes its
+    /// results there and the core refuses the document without it, and the DNS servers' own
+    /// addresses get a direct rule first — the pattern Happ ships — so a resolver query cannot
+    /// be routed back through the node whose health depends on it.
+    private fun prepareObservatory(root: JSONObject) {
+        val wantsObservatory = root.has("observatory") || root.has("burstObservatory") ||
+            root.optJSONObject("routing")?.optJSONArray("balancers")?.length()?.let { it > 0 } == true
+        if (!wantsObservatory) return
+        if (!root.has("stats")) root.put("stats", JSONObject())
+
+        val addresses = JsonArrayOfDnsAddresses(root)
+        if (addresses.isEmpty()) return
+        val outbounds = root.optJSONArray("outbounds") ?: JSONArray().also { root.put("outbounds", it) }
+        var directTag: String? = null
+        for (index in 0 until outbounds.length()) {
+            val item = outbounds.optJSONObject(index) ?: continue
+            if (!item.optString("protocol").equals("freedom", ignoreCase = true)) continue
+            val tag = item.optString("tag")
+            if (tag.isNotEmpty()) {
+                directTag = tag
+                break
+            }
+        }
+        if (directTag == null) {
+            directTag = DIRECT_OUTBOUND_TAG
+            outbounds.put(
+                JSONObject().apply {
+                    put("tag", directTag)
+                    put("protocol", "freedom")
+                },
+            )
+        }
+        val routing = root.optJSONObject("routing") ?: JSONObject().also { root.put("routing", it) }
+        val existing = routing.optJSONArray("rules") ?: JSONArray()
+        val rules = JSONArray()
+        // First, so nothing later can claim these addresses: the resolver's own traffic is not
+        // a payload to be routed, it is how this core finds out where anything is.
+        rules.put(
+            JSONObject().apply {
+                put("type", "field")
+                put("ip", JSONArray(addresses))
+                put("outboundTag", directTag)
+            },
+        )
+        for (index in 0 until existing.length()) {
+            val item = existing.optJSONObject(index) ?: continue
+            if (isDirectDnsRule(item)) continue
+            rules.put(item)
+        }
+        routing.put("rules", rules)
+        Log.i(TAG, "observatory document: stats added, ${addresses.size} dns address(es) go direct")
+    }
+
+    /// The literal addresses of the document's own DNS servers: a rule can only name IPs.
+    private fun JsonArrayOfDnsAddresses(root: JSONObject): List<String> {
+        val servers = root.optJSONObject("dns")?.optJSONArray("servers") ?: return emptyList()
+        val found = mutableListOf<String>()
+        for (index in 0 until servers.length()) {
+            val raw = when (val item = servers.opt(index)) {
+                is String -> item
+                is JSONObject -> item.optString("address")
+                else -> ""
+            }
+            // `8.8.8.8`, `8.8.8.8:53`, `https://1.1.1.1/dns-query`: take the host and keep it
+            // only when it is an address, never a name.
+            val host = raw.removePrefix("https://").removePrefix("tls://")
+                .removePrefix("quic://").substringBefore('/').substringBefore(':')
+            if (host.count { it == '.' } == 3 && host.all { it.isDigit() || it == '.' }) {
+                found.add(host)
+            }
+        }
+        return found
+    }
+
+    /// The direct rule this class writes for the resolver's own addresses.
+    private fun isDirectDnsRule(rule: JSONObject): Boolean {
+        if (!rule.optString("type").equals("field", ignoreCase = true)) return false
+        if (rule.optJSONArray("ip") == null) return false
+        return rule.optString("outboundTag") == DIRECT_OUTBOUND_TAG ||
+            rule.optJSONArray("inboundTag") == null && rule.optJSONArray("domain") == null
     }
 
     /// The rule this class writes, whichever tag an older version gave it.
@@ -858,6 +954,9 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
 
         /// The document the core is started from, and the log this start reads.
         private const val CONFIG_NAME = "xray-tun.json"
+
+        /// The direct outbound this class adds when a document needs one and has none.
+        private const val DIRECT_OUTBOUND_TAG = "portal-direct"
 
         /// The measurement core's own document: a different file, so a sweep can never be
         /// mistaken for the tunnel's configuration or overwrite it.
