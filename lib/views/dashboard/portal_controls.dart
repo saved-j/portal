@@ -180,6 +180,23 @@ final tcpDelayProvider =
     NotifierProvider<TcpDelayNotifier, Map<String, int?>>(TcpDelayNotifier.new);
 
 class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+  /// When each row was measured, by the phone's own clock.
+  ///
+  /// A number is a fact with a date: a mode switch asks for a sweep only when a row is older
+  /// than a minute, and a row's own number is used to decide that. Kept beside the map, not
+  /// inside it, because the list draws values and this only decides whether to ask again.
+  final Map<String, DateTime> measuredAt = {};
+
+  /// A sweep in flight, or null. A mode switch cancels it before starting its own: two sweeps
+  /// writing into one map is how rows from the mode that just went away light up again.
+  int? runningSweep;
+
+  /// True when [name] has a number younger than [maxAge].
+  bool isFresh(String name, {Duration maxAge = _delayFreshness}) {
+    final at = measuredAt[name];
+    if (at == null) return false;
+    return DateTime.now().difference(at) < maxAge;
+  }
   /// Bumped by every sweep, and by a profile change. An answer arriving under an older
   /// number belongs to servers the list no longer shows — usually names that repeat in the
   /// new subscription — so it is dropped instead of written under the current key.
@@ -287,6 +304,9 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
   /// One answer, written from a sweep that measured the row itself.
   void record(String name, int? ms) {
     state = {...state, name: ms};
+    // A dash is "asked, no answer" and counts as a measurement too: asking again within the
+    // minute would only spend another timeout on a node that just refused.
+    measuredAt[name] = DateTime.now();
   }
 
   Future<void> measureOne(String name, String host, int port) async {
@@ -1091,6 +1111,14 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
     // are no groups to ask, and 'Сеть порталов' must then draw the engine's names instead of
     // the portal's. The listen is not a write during the build — it fires when the engine
     // publishes, which is when there is something worth keeping.
+    // Any switch of mode stops the sweep that belonged to the other list: the numbers it was
+    // about to write are the servers of a list nobody is looking at any more.
+    ref.listen(patchClashConfigProvider.select((s) => s.mode), (previous, next) {
+      if (previous == next) return;
+      ref.read(tcpDelayProvider.notifier).cancel();
+      ref.read(tcpDelayProvider.notifier).runningSweep = null;
+      commonPrint.log('portal test: sweep cancelled, mode is now ${next.name}');
+    });
     ref.listen(xrayServersProvider, (previous, next) {
       final servers = next.value;
       if (servers == null || servers.isEmpty) return;
@@ -1532,7 +1560,22 @@ Future<void> _testDelayWithChild(
   final delay = ref.read(tcpDelayProvider.notifier);
   final url = ref.read(appSettingProvider).testUrl;
   final watch = Stopwatch()..start();
-  for (final entry in measure.entries) {
+  // Rows measured less than a minute ago are not asked again: a mode switch is a reason to
+  // fill the gaps, not to spend the phone's traffic on numbers that are still true.
+  final stale = [
+    for (final entry in measure.entries)
+      if (!delay.isFresh(entry.name)) entry,
+  ];
+  if (stale.isEmpty) {
+    commonPrint.log(
+      'portal test: every row was measured within '
+      '${_delayFreshness.inMinutes} minutes, nothing to do',
+    );
+    return;
+  }
+  final sweep = (delay.runningSweep ?? 0) + 1;
+  delay.runningSweep = sweep;
+  for (final entry in stale) {
     delay.record(entry.name, null);
   }
   var measured = 0;
@@ -1542,12 +1585,17 @@ Future<void> _testDelayWithChild(
   // only what it passes.
   final visible = _visibleServerNames(ref);
   try {
-    for (var index = 0; index < measure.entries.length; index += _sweepChunk) {
+    for (var index = 0; index < stale.length; index += _sweepChunk) {
+      // A newer sweep — a mode switch, a tap on the other list — owns the map from here.
+      if (delay.runningSweep != sweep) {
+        failure = 'cancelled';
+        break;
+      }
       if (watch.elapsed > _sweepDeadline) {
         failure = 'deadline';
         break;
       }
-      final chunk = measure.entries.skip(index).take(_sweepChunk).toList();
+      final chunk = stale.skip(index).take(_sweepChunk).toList();
       final answer = await portalRuntime.startMeasure(
         config: measure.config,
         tags: jsonEncode([for (final entry in chunk) entry.tag]),
@@ -1555,6 +1603,10 @@ Future<void> _testDelayWithChild(
         timeoutMs: _sweepTimeoutMs,
         limit: _sweepWorkers,
       );
+      if (delay.runningSweep != sweep) {
+        failure = 'cancelled';
+        break;
+      }
       if (!answer.ok) {
         failure = answer.message;
         commonPrint.log(
@@ -1581,9 +1633,10 @@ Future<void> _testDelayWithChild(
     }
   } finally {
     await portalRuntime.stopMeasure();
+    if (delay.runningSweep == sweep) delay.runningSweep = null;
     watch.stop();
     commonPrint.log(
-      'portal test: sweep rows=${measure.entries.length} measured=$measured '
+      'portal test: sweep rows=${stale.length}/${measure.entries.length} measured=$measured '
       'visible=${visible.length} kept_open=${wasRunning ? 'yes' : 'no'} '
       'duration_ms=${watch.elapsedMilliseconds}'
       '${failure.isEmpty ? '' : ' error=$failure'}',
@@ -1594,13 +1647,20 @@ Future<void> _testDelayWithChild(
         raised: 'none',
         durationMs: watch.elapsedMilliseconds,
         stoppedAfter: false,
-        detail: 'rows=${measure.entries.length} measured=$measured'
+        detail: 'rows=${stale.length}/${measure.entries.length} measured=$measured'
             ' visible=${visible.length}'
             '${failure.isEmpty ? '' : ' error=$failure'}',
       ),
     );
   }
 }
+
+/// How long a measurement stays good enough to skip.
+///
+/// Two minutes, not one: a node's reachability does not change in a minute, and a switch
+/// back to the mode just left must not re-measure half the list it had just finished. What a
+/// switch does is fill the gaps — only rows older than this are asked again.
+const _delayFreshness = Duration(minutes: 2);
 
 /// How many nodes one sweep call carries. Small enough that the first numbers land while the
 /// list is still being looked at, large enough that a 24-node subscription is three calls.
