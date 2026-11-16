@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
+import 'package:fl_clash/core/sweep_ledger.dart';
 import 'package:fl_clash/core/xray_measure.dart';
 import 'package:fl_clash/core/xray_ping.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
@@ -180,40 +181,35 @@ final tcpDelayProvider =
     NotifierProvider<TcpDelayNotifier, Map<String, int?>>(TcpDelayNotifier.new);
 
 class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+  /// The sweep's bookkeeping: freshness of each row and which sweep is the newest.
+  ///
+  /// Kept in a pure object so the rules that were wrong twice (a cancelled sweep coming back
+  /// to life, another profile's dates looking fresh) are pinned by tests instead of memory.
+  final SweepLedger ledger = SweepLedger();
+
   /// When each row was measured, by the phone's own clock.
-  ///
-  /// A number is a fact with a date: a mode switch asks for a sweep only when a row is older
-  /// than a minute, and a row's own number is used to decide that. Kept beside the map, not
-  /// inside it, because the list draws values and this only decides whether to ask again.
-  final Map<String, DateTime> measuredAt = {};
+  Map<String, DateTime> get measuredAt => ledger.measuredAt;
 
-  /// The identifier of the newest sweep. It only ever grows.
-  ///
-  /// A sweep is current while its own number is still the newest one; cancelling is a bump,
-  /// never a reset to null. A reset made the next sweep take the same number, and a sweep that
-  /// had been cancelled then believed it was current again and wrote rows for a list nobody
-  /// was looking at.
-  int sweepId = 0;
+  /// The newest sweep's number. It only ever grows.
+  int get sweepId => ledger.id;
 
-  /// The newest sweep, or 0 when none is running.
-  int get runningSweep => sweepId;
+  /// The mode the newest sweep belongs to.
+  Mode? get sweepMode => ledger.mode;
 
-  /// The mode the newest sweep belongs to, so a cancelled sweep can tell it was cancelled.
-  Mode? sweepMode;
+  /// Starts a sweep for [mode] and answers its number.
+  int beginSweep(Mode mode) => ledger.begin(mode);
 
-  /// Bumps the identifier and forgets which mode the old sweep served.
+  /// Supersedes whatever is running — a mode switch, a new list.
   void cancelSweep() {
-    sweepId++;
-    sweepMode = null;
+    ledger.cancel();
     _generation++;
   }
 
-  /// True when [name] has a number younger than [maxAge].
-  bool isFresh(String name, {Duration maxAge = _delayFreshness}) {
-    final at = measuredAt[name];
-    if (at == null) return false;
-    return DateTime.now().difference(at) < maxAge;
-  }
+  /// True while [id] is still the newest sweep and the mode has not changed.
+  bool isCurrentSweep(int id, Mode mode) => ledger.isCurrent(id, mode);
+
+  /// True when [name] has a number younger than the freshness window.
+  bool isFresh(String name) => ledger.isFresh(name);
   /// Bumped by every sweep, and by a profile change. An answer arriving under an older
   /// number belongs to servers the list no longer shows — usually names that repeat in the
   /// new subscription — so it is dropped instead of written under the current key.
@@ -229,16 +225,13 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
     return const {};
   }
 
-  /// True while [id] is still the newest sweep and nobody has switched the mode since.
-  bool isCurrentSweep(int id, Mode mode) => sweepId == id && sweepMode == mode;
-
   /// Forgets everything measured for the previous profile: its rows, their dates and the
   /// sweep that was running. A profile change is a different subscription, and a number from
   /// the old one must not look fresh under a name that only matches by accident.
   void resetForProfile() {
-    measuredAt.clear();
+    ledger.reset();
     state = const {};
-    cancelSweep();
+    _generation++;
   }
 
   /// The node the child is carrying traffic on, or null when no child holds the tunnel.
@@ -334,9 +327,9 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
   /// One answer, written from a sweep that measured the row itself.
   void record(String name, int? ms) {
     state = {...state, name: ms};
-    // A dash is "asked, no answer" and counts as a measurement too: asking again within the
-    // minute would only spend another timeout on a node that just refused.
-    measuredAt[name] = DateTime.now();
+    // A dash counts as a measurement too: asking again inside the window would only spend
+    // another timeout on a node that just refused.
+    ledger.record(name, ms);
   }
 
   Future<void> measureOne(String name, String host, int port) async {
@@ -1575,8 +1568,7 @@ Future<void> _testDelayWithEngine(
   // This sweep owns the engine it raises, and only for as long as it is still the newest one:
   // the engine is put down in `finally`, so a sweep that has been superseded — a mode switch,
   // an open portal — must not put down the tunnel somebody else is using by then.
-  final sweep = ++delay.sweepId;
-  delay.sweepMode = Mode.rule;
+  final sweep = delay.beginSweep(Mode.rule);
   final ownerBefore = portalRuntime.status.value.owner;
   final started = await ref.read(setupActionProvider.notifier).setRunning(true);
   var stopped = false;
@@ -1671,8 +1663,7 @@ Future<void> _testDelayWithChild(
     );
     return;
   }
-  final sweep = ++delay.sweepId;
-  delay.sweepMode = Mode.global;
+  final sweep = delay.beginSweep(Mode.global);
   for (final entry in stale) {
     delay.record(entry.name, null);
   }
