@@ -71,6 +71,37 @@ void main() {
     });
   });
 
+  group('a deliberate press ignores the window', () {
+    test('a fresh row is measured again when forced', () {
+      ledger.record('Эстония', 120);
+      expect(ledger.needsMeasurement('Эстония'), isFalse);
+      expect(ledger.needsMeasurement('Эстония', force: true), isTrue);
+    });
+
+    test('a stale row is measured anyway', () {
+      ledger.record('Эстония', 120);
+      clock = clock.add(const Duration(minutes: 3));
+      expect(ledger.needsMeasurement('Эстония'), isTrue);
+    });
+  });
+
+  group('the same list is not swept twice', () {
+    test('asking again for the same names inside the window is skipped', () {
+      expect(ledger.shouldStart(Mode.global, 'a|b'), isTrue);
+      ledger.markStarted(Mode.global, 'a|b');
+      expect(ledger.shouldStart(Mode.global, 'a|b'), isFalse);
+
+      clock = clock.add(const Duration(minutes: 2, seconds: 1));
+      expect(ledger.shouldStart(Mode.global, 'a|b'), isTrue);
+    });
+
+    test('a different list or another mode is a new sweep', () {
+      ledger.markStarted(Mode.global, 'a|b');
+      expect(ledger.shouldStart(Mode.global, 'a|b|c'), isTrue);
+      expect(ledger.shouldStart(Mode.rule, 'a|b'), isTrue);
+    });
+  });
+
   group('another profile is another subscription', () {
     test('reset forgets the rows and the dates', () {
       ledger.record('Эстония', 120);

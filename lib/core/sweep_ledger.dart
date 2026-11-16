@@ -43,6 +43,31 @@ class SweepLedger {
   /// The rows that carry a number, and when.
   Map<String, DateTime> get measuredAt => Map.unmodifiable(_measuredAt);
 
+  Mode? _lastMode;
+  int _lastListHash = 0;
+  DateTime? _lastStartedAt;
+
+  /// Whether this list needs a sweep at all.
+  ///
+  /// A rebuild recreates the widget that asks, and a recreated widget has no memory: without
+  /// this, every rebuild began a new sweep and cancelled the one in flight, so the numbers
+  /// never finished arriving. The rule is the list's own: the same mode and the same names,
+  /// swept less than [freshness] ago, is the sweep that is already running or just finished.
+  bool shouldStart(Mode mode, String listKey) {
+    final at = _lastStartedAt;
+    if (at == null || _lastMode != mode || _lastListHash != listKey.hashCode) {
+      return true;
+    }
+    return _now().difference(at) >= freshness;
+  }
+
+  /// Remembers which list was just swept, and when.
+  void markStarted(Mode mode, String listKey) {
+    _lastMode = mode;
+    _lastListHash = listKey.hashCode;
+    _lastStartedAt = _now();
+  }
+
   /// Starts a sweep for [mode] and answers its number.
   ///
   /// Starting one is what supersedes the previous: nobody else has to clear anything.
@@ -68,6 +93,13 @@ class SweepLedger {
   void record(String name, int? _) {
     _measuredAt[name] = _now();
   }
+
+  /// Whether [name] should be measured now.
+  ///
+  /// [force] is a deliberate press of the test button: it measures everything in front of the
+  /// owner whatever the window says. The automatic sweep passes nothing and respects it.
+  bool needsMeasurement(String name, {bool force = false}) =>
+      force || !isFresh(name);
 
   /// True when [name] carries a number younger than [freshness].
   bool isFresh(String name) {

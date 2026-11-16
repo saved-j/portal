@@ -1082,6 +1082,7 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                             ref,
                             servers,
                             wasRunning: running,
+                            force: true,
                           ),
                         );
                         return;
@@ -1096,6 +1097,7 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                           ],
                           testUrl: group.testUrl,
                           wasRunning: running,
+                          force: true,
                         ),
                       );
                     },
@@ -1507,8 +1509,6 @@ class _TcpDelaySweep extends ConsumerStatefulWidget {
 }
 
 class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
-  List<String>? _asked;
-
   @override
   void initState() {
     super.initState();
@@ -1518,10 +1518,6 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
   @override
   void didUpdateWidget(covariant _TcpDelaySweep oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // A different mode is a different list: its sweep is its own, even if the names repeat.
-    if (oldWidget.simple != widget.simple) {
-      _asked = null;
-    }
     _start();
   }
 
@@ -1533,12 +1529,16 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
         for (final proxy in widget.engineProxies) proxy.name,
     ];
     if (names.isEmpty) return;
-    final asked = _asked;
-    // The same list asking again is the same sweep, not a second one: a rebuild must not
-    // spend the phone's traffic on numbers that are already in flight. Which rows are out of
-    // date is the notifier's question, not this widget's.
-    if (asked != null && _sameNames(asked, names)) return;
-    _asked = names;
+    // Whether this list needs a sweep is the ledger's question, not this widget's: a rebuild
+    // recreates the widget, and a recreated widget that always asked began a second sweep
+    // that cancelled the one in flight.
+    final ledger = widget.simple
+        ? ref.read(tcpDelayProvider.notifier).ledger
+        : ref.read(engineDelayProvider.notifier).ledger;
+    final mode = widget.simple ? Mode.global : Mode.rule;
+    final key = names.join('\u0000');
+    if (!ledger.shouldStart(mode, key)) return;
+    ledger.markStarted(mode, key);
     if (widget.simple) {
       unawaited(_testDelayWithChild(ref, widget.servers, wasRunning: widget.wasRunning));
     } else {
@@ -1572,6 +1572,7 @@ Future<void> _testDelayWithEngine(
   List<Proxy> proxies, {
   String? testUrl,
   required bool wasRunning,
+  bool force = false,
 }) async {
   if (proxies.isEmpty) return;
   // Two minutes of a row's own number is good enough: a mode switch fills the gaps instead
@@ -1579,7 +1580,7 @@ Future<void> _testDelayWithEngine(
   final delay = ref.read(engineDelayProvider.notifier);
   final stale = [
     for (final proxy in proxies)
-      if (!delay.isFresh(proxy.name)) proxy,
+      if (delay.ledger.needsMeasurement(proxy.name, force: force)) proxy,
   ];
   if (stale.isEmpty) {
     commonPrint.log(
@@ -1684,6 +1685,7 @@ Future<void> _testDelayWithChild(
   WidgetRef ref,
   List<XrayServerConfig> servers, {
   required bool wasRunning,
+  bool force = false,
 }) async {
   if (servers.isEmpty) return;
   final measure = measureConfig(servers);
@@ -1693,9 +1695,11 @@ Future<void> _testDelayWithChild(
   final watch = Stopwatch()..start();
   // Rows measured less than a minute ago are not asked again: a mode switch is a reason to
   // fill the gaps, not to spend the phone's traffic on numbers that are still true.
+  // A press of the test button measures everything in front of the owner: the two-minute
+  // window is for the automatic sweep at launch and after a switch, not for a deliberate press.
   final stale = [
     for (final entry in measure.entries)
-      if (!delay.isFresh(entry.name)) entry,
+      if (delay.ledger.needsMeasurement(entry.name, force: force)) entry,
   ];
   if (stale.isEmpty) {
     commonPrint.log(
