@@ -116,6 +116,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         tags: String,
         url: String,
         timeoutMs: Int,
+        limit: Int,
     ): String?
 
     /// Closes the measurement instance and leaves the tunnel's alone.
@@ -130,8 +131,8 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         // any start the service's teardown interrupted before it could open the core.
         // The dashboard speaks to the portal channel, the core lives here: the bridge is the
         // one line between them, and it is only set while this plugin holds the library.
-        PortalMeasureBridge.start = { config, tags, url, timeoutMs ->
-            val task = executor.submit(Callable { measure(config, tags, url, timeoutMs) })
+        PortalMeasureBridge.start = { config, tags, url, timeoutMs, limit ->
+            val task = executor.submit(Callable { measure(config, tags, url, timeoutMs, limit) })
             try {
                 task.get(MEASURE_WAIT_MS, TimeUnit.MILLISECONDS)
             } catch (error: Exception) {
@@ -382,11 +383,17 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
     /// call. Nothing listens, so there is no port to hand over and nothing for Dart to speak;
     /// the tunnel's instance is not touched, which is what lets a sweep run beside an open
     /// portal. Answers JSON: `{"rows":[{tag,delay,error}]}` or `{"error":...}`.
-    private fun measure(config: String, tags: String, url: String, timeoutMs: Int): Map<String, Any> {
+    private fun measure(
+        config: String,
+        tags: String,
+        url: String,
+        timeoutMs: Int,
+        limit: Int,
+    ): Map<String, Any> {
         ensureLibrary()?.let { problem ->
             return mapOf("ok" to false, "message" to problem)
         }
-        val answer = runCatching { XrayMeasure(config, tags, url, timeoutMs) }
+        val answer = runCatching { XrayMeasure(config, tags, url, timeoutMs, limit) }
             .getOrElse { error ->
                 Log.e(TAG, "measurement raised", error)
                 return mapOf("ok" to false, "message" to (error.message ?: "$error"))

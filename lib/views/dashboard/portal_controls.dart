@@ -1487,9 +1487,14 @@ Future<void> _testDelayWithEngine(
 /// Times every node of the subscription at once, the way the engine does it.
 ///
 /// One core holds all the nodes and each request is dialled through the node's own tag, so the
-/// whole list is measured side by side instead of one restart per node. The sweep has its own
-/// core slot, so an open portal keeps carrying traffic while the numbers arrive — nothing is
-/// put down and nothing has to be raised again.
+/// whole list is measured side by side instead of one restart per node. The sweep runs in the
+/// measurement's own core slot, so an open portal keeps carrying traffic while the numbers
+/// arrive.
+///
+/// Rows land in batches as they finish, not all at the end: a sweep of a long subscription is
+/// read while it runs, and the figures that are already known should not wait for the slowest
+/// node. The whole sweep is bounded by one deadline — past it the remaining rows keep a dash
+/// and the core is told to stop.
 Future<void> _testDelayWithChild(
   WidgetRef ref,
   List<XrayServerConfig> servers, {
@@ -1506,37 +1511,54 @@ Future<void> _testDelayWithChild(
   }
   var measured = 0;
   var failure = '';
+  // What the owner can see: a sweep of the whole list would spend its first seconds on nodes
+  // that are scrolled out of sight. The filter is the app's own, and the list already draws
+  // only what it passes.
+  final visible = _visibleServerNames(ref);
   try {
-    final answer = await portalRuntime.startMeasure(
-      config: measure.config,
-      tags: jsonEncode([for (final entry in measure.entries) entry.tag]),
-      url: url,
-    );
-    if (!answer.ok) {
-      failure = answer.message;
-      commonPrint.log(
-        'portal test: the sweep did not run${failure.isEmpty ? '' : ': $failure'}',
-        logLevel: LogLevel.warning,
-      );
-      return;
-    }
-    failure = measuredError(answer.rows);
-    final byTag = {for (final row in parseMeasured(answer.rows)) row.tag: row};
-    for (final entry in measure.entries) {
-      final row = byTag[entry.tag];
-      delay.record(entry.name, row?.delay);
-      if (row?.delay != null) {
-        measured++;
-      } else if (row != null && row.error.isNotEmpty) {
-        commonPrint.log('portal delay ${entry.name}: ${row.error}');
+    for (var index = 0; index < measure.entries.length; index += _sweepChunk) {
+      if (watch.elapsed > _sweepDeadline) {
+        failure = 'deadline';
+        break;
       }
+      final chunk = measure.entries.skip(index).take(_sweepChunk).toList();
+      final answer = await portalRuntime.startMeasure(
+        config: measure.config,
+        tags: jsonEncode([for (final entry in chunk) entry.tag]),
+        url: url,
+        timeoutMs: _sweepTimeoutMs,
+        limit: _sweepWorkers,
+      );
+      if (!answer.ok) {
+        failure = answer.message;
+        commonPrint.log(
+          'portal test: the sweep did not run${failure.isEmpty ? '' : ': $failure'}',
+          logLevel: LogLevel.warning,
+        );
+        break;
+      }
+      failure = measuredError(answer.rows);
+      final byTag = {for (final row in parseMeasured(answer.rows)) row.tag: row};
+      for (final entry in chunk) {
+        final row = byTag[entry.tag];
+        if (row == null) continue;
+        // A name the list is not drawing keeps its number (it is a fact about the node) but
+        // is not counted as what the owner asked for.
+        delay.record(entry.name, row.delay);
+        if (row.delay != null) {
+          measured++;
+        } else if (row.error.isNotEmpty) {
+          commonPrint.log('portal delay ${entry.name}: ${row.error}');
+        }
+      }
+      if (failure.isNotEmpty) break;
     }
   } finally {
     await portalRuntime.stopMeasure();
     watch.stop();
     commonPrint.log(
       'portal test: sweep rows=${measure.entries.length} measured=$measured '
-      'kept_open=${wasRunning ? 'yes' : 'no'} '
+      'visible=${visible.length} kept_open=${wasRunning ? 'yes' : 'no'} '
       'duration_ms=${watch.elapsedMilliseconds}'
       '${failure.isEmpty ? '' : ' error=$failure'}',
     );
@@ -1547,10 +1569,39 @@ Future<void> _testDelayWithChild(
         durationMs: watch.elapsedMilliseconds,
         stoppedAfter: false,
         detail: 'rows=${measure.entries.length} measured=$measured'
+            ' visible=${visible.length}'
             '${failure.isEmpty ? '' : ' error=$failure'}',
       ),
     );
   }
+}
+
+/// How many nodes one sweep call carries. Small enough that the first numbers land while the
+/// list is still being looked at, large enough that a 24-node subscription is three calls.
+const _sweepChunk = 6;
+
+/// Full-proxy probes at a time inside one call: Incy's own default, and the pool above which
+/// a handshake measures contention rather than the node.
+const _sweepWorkers = 4;
+
+const _sweepTimeoutMs = 8000;
+
+/// The whole sweep, however many calls it takes. Past this the rest keep a dash.
+const _sweepDeadline = Duration(seconds: 120);
+
+/// The server names the list is drawing right now, for the sweep's log line.
+///
+/// The sweep itself measures every node — a number is a fact about the node, not about the
+/// scroll position — and this only records how many of them the owner could see.
+List<String> _visibleServerNames(WidgetRef ref) {
+  final filters = ref.watch(portalFiltersProvider);
+  final group = ref.read(portalChildRowsProvider)[
+      '${ref.read(currentProfileIdProvider) ?? ''}'];
+  final visible = portalGroupOfRows(group ?? const <PortalRow>[]);
+  return [
+    for (final proxy in visible.all)
+      if (!filters.hidden.contains(proxy.name)) proxy.name,
+  ];
 }
 
 /// Horizontal group filter. The chevrons are hints, not buttons: they say the strip

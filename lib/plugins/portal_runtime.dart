@@ -326,11 +326,18 @@ class PortalRuntime {
     required String tags,
     required String url,
     int timeoutMs = 8000,
+    int limit = 0,
   }) async {
     try {
       final result = await _channel.invokeMethod<Map<Object?, Object?>>(
         'measureStart',
-        {'config': config, 'tags': tags, 'url': url, 'timeoutMs': timeoutMs},
+        {
+          'config': config,
+          'tags': tags,
+          'url': url,
+          'timeoutMs': timeoutMs,
+          'limit': limit,
+        },
       );
       return (
         ok: result?['ok'] == true,
