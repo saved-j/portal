@@ -1601,11 +1601,16 @@ Future<void> _testDelayWithEngine(
     await _waitForEngine(ref);
     await ref.read(proxiesActionProvider.notifier).delayTest(proxies, testUrl);
   } finally {
-    // Only a sweep that still owns the tunnel puts it down: a mode switch, or an owner that
-    // changed while the sweep ran, means the engine now belongs to somebody else.
+    // Only a sweep that still owns what it raised puts it down. Two proofs, because the two
+    // ways of being superseded look different: the sweep's own id and mode (a newer sweep, a
+    // mode switch), and the owner the runtime reports (something else took the tunnel — the
+    // portal, the service, a start the owner asked for). `ownerBefore` is null for a sweep that
+    // raised the engine itself, so a runtime that now reports an owner is another owner, and
+    // one that reports none is the engine this sweep started.
+    final ownerNow = portalRuntime.status.value.owner;
     final stillMine = started &&
         delay.isCurrentSweep(sweep, Mode.rule) &&
-        portalRuntime.status.value.owner == ownerBefore;
+        (ownerNow == ownerBefore || (ownerBefore == null && ownerNow == PortalOwner.mihomo));
     if (stillMine) {
       stopped = await ref.read(setupActionProvider.notifier).setRunning(false);
     } else if (started) {

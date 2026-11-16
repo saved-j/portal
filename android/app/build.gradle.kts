@@ -56,7 +56,15 @@ android {
         // Flutter rewrites local.properties from pubspec.yaml on every build, and pubspec only
         // accepts a semver core, so the shop-facing name is set here where nothing overwrites
         // it. PORTAL_VERSION_NAME lets a build override it without touching this file.
-        versionName = System.getenv("PORTAL_VERSION_NAME") ?: "0.5.6_1a-portal-duo"
+        // The shop-facing name is the pubspec's base version plus the release suffix. Flutter
+        // writes `flutter.versionName` into local.properties from pubspec.yaml on every build,
+        // so the two cannot drift: bumping pubspec alone bumps what the phone reports.
+        val baseVersion = localProperties.getProperty("flutter.versionName") ?: "0.0.0"
+        // The owner's name for this line is `0.5.6_1a-portal-duo`: an underscore, which a
+        // semver core does not accept, so the base comes from pubspec and the suffix is added
+        // here. An explicit PORTAL_VERSION_NAME still wins for a one-off build.
+        versionName =
+            System.getenv("PORTAL_VERSION_NAME") ?: "${baseVersion}_1a-portal-duo"
     }
 
     signingConfigs {
@@ -105,8 +113,25 @@ android {
                     resValue("string", "app_name", "FlClashX Pre")
                 }
             } else {
-                signingConfig = signingConfigs.getByName("debug")
-                applicationIdSuffix = ".dev"
+                // A release build without a keystore is a build that must not be shipped: it
+                // was silently signed with the debug key and given the .dev id, so an APK that
+                // looked like a release installed as a different app on top of nothing and
+                // could never be updated by a properly signed one. `flutter run --release`
+                // still needs a signing config, so it keeps the debug key; everything else
+                // stops here with the reason.
+                val forTooling = gradle.startParameter.taskNames.any {
+                    it.contains("assembleRelease", ignoreCase = true)
+                } && System.getenv("PORTAL_ALLOW_UNSIGNED_RELEASE") == "1"
+                if (forTooling) {
+                    signingConfig = signingConfigs.getByName("debug")
+                    applicationIdSuffix = ".dev"
+                } else {
+                    throw GradleException(
+                        "release build without android/app/keystore.jks and the storePassword/" +
+                            "keyAlias/keyPassword entries in local.properties. " +
+                            "Set PORTAL_ALLOW_UNSIGNED_RELEASE=1 for a debug-signed test build.",
+                    )
+                }
             }
 
             proguardFiles(
