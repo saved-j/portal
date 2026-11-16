@@ -4,6 +4,7 @@ import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
+import 'package:fl_clash/views/tools.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -101,6 +102,17 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             )
           : null,
       iconActions: [
+        // The original dashboard has no bottom island any more, and the island was where
+        // settings lived. A gear at the right edge of the bar, beside the core status and the
+        // mode toggle, keeps the way in where someone used to ClashX expects to find it.
+        if (!editing && !hero)
+          IconButtonData(
+            glyph: AppGlyphs.settings,
+            tooltip: appLocalizations.tools,
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ToolsView()),
+            ),
+          ),
         if (mode != null && !hero && ref.watch(globalModeAllowedProvider))
           IconButtonData(
             glyph: mode == Mode.global ? AppGlyphs.proxies : AppGlyphs.rules,

@@ -2,6 +2,7 @@ package com.follow.clashx
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.core.content.pm.ShortcutManagerCompat
@@ -20,8 +21,26 @@ class QuickActionActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Android 12 passes touches through another app's window only if it is fully transparent.
-        window.attributes = window.attributes.apply { alpha = 0f }
+        // Android 12 passes touches through another app's window only if it is fully
+        // transparent. `alpha = 0f` makes the window transparent but not *fully* one in the
+        // system's eyes, and on a translucent theme that is enough for the system to run the
+        // activity's open/close animation — which is the flash Mark saw when tapping the tile.
+        // A 1px transparent window, no dim and no transition is the combination that the system
+        // treats as "not really a window".
+        window.attributes = window.attributes.apply {
+            width = 1
+            height = 1
+            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            alpha = 0f
+            dimAmount = 0f
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                // No enter/exit animation at all: nothing to see, nothing to animate.
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+        window.setDimAmount(0f)
+        // Kept on purpose: the touch that opened this window must not reach the app behind it.
         window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
         // A recreated instance gets the same intent again; a second dispatch turns a TOGGLE back.
         if (savedInstanceState == null) {

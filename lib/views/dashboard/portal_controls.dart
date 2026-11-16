@@ -190,6 +190,51 @@ final tcpDelayProvider =
 final engineDelayProvider =
     NotifierProvider<EngineDelayNotifier, Map<String, int?>>(EngineDelayNotifier.new);
 
+/// Whether the list pings itself on a timer, and the timer itself.
+///
+/// A long press on the bolt turns it on and off; while it is on the whole list is measured
+/// every [_autoPingInterval], which is what makes "auto" of a panel's own selector mean
+/// something. It starts off in every session: a timer that survives a restart is a timer the
+/// owner has forgotten about.
+class AutoPingNotifier extends Notifier<bool> {
+  Timer? _timer;
+  VoidCallback? _sweep;
+
+  @override
+  bool build() {
+    ref.onDispose(() => _timer?.cancel());
+    return false;
+  }
+
+  bool get enabled => state;
+
+  /// Turns the timer on with [sweep] as the work, or off and cancels it.
+  void setEnabled(bool value, {VoidCallback? sweep}) {
+    if (sweep != null) _sweep = sweep;
+    if (state == value) return;
+    state = value;
+    _timer?.cancel();
+    _timer = null;
+    if (!value) {
+      commonPrint.log('portal auto ping: off');
+      return;
+    }
+    commonPrint.log(
+      'portal auto ping: on, every ${_autoPingInterval.inSeconds} s',
+    );
+    _timer = Timer.periodic(_autoPingInterval, (_) {
+      _sweep?.call();
+    });
+  }
+}
+
+final autoPingProvider =
+    NotifierProvider<AutoPingNotifier, bool>(AutoPingNotifier.new);
+
+/// The timer's own period. mihomo's own url-test groups re-test on a similar clock; a minute
+/// is short enough that a node going bad is noticed while the owner is still looking.
+const _autoPingInterval = Duration(seconds: 60);
+
 class EngineDelayNotifier extends Notifier<Map<String, int?>> {
   final SweepLedger ledger = SweepLedger();
 
@@ -935,6 +980,7 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
     );
     final group = shown.group;
     final sort = ref.watch(portalSortProvider);
+    final autoPing = ref.watch(autoPingProvider);
     // Both modes answer through one provider: what is on disk, and how many times in a row
     // this run has failed to fetch it. Each control speaks only for its own mode, and the
     // stricter answer wins.
@@ -1050,7 +1096,64 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                 size: 18,
               ),
             ),
-            IconButton(
+            Builder(
+              builder: (context) {
+                // The same work serves a tap and the timer: measure the whole list in front of
+                // the owner, whichever core it belongs to.
+                void measureAll({required bool force}) {
+                  final simple =
+                      ref.read(patchClashConfigProvider).mode == Mode.global;
+                  if (simple) {
+                    final servers = <XrayServerConfig>[
+                      for (final server
+                          in ref.read(xrayServersProvider).value ??
+                              const <XrayServerConfig>[])
+                        if (server.port > 0) server,
+                    ];
+                    if (servers.isEmpty) return;
+                    unawaited(
+                      _testDelayWithChild(
+                        ref,
+                        servers,
+                        wasRunning: running,
+                        force: force,
+                      ),
+                    );
+                    return;
+                  }
+                  if (group == null) return;
+                  unawaited(
+                    _testDelayWithEngine(
+                      ref,
+                      [
+                        for (final proxy in group.all)
+                          if (!_isBuiltinOutbound(proxy.name)) proxy,
+                      ],
+                      testUrl: group.testUrl,
+                      wasRunning: running,
+                      force: force,
+                    ),
+                  );
+                }
+
+                // The timer runs the same sweep without forcing: what it re-measures is what
+                // has gone stale, which inside one minute is the whole list anyway.
+                ref.listen(autoPingProvider, (previous, next) {
+                  if (next) {
+                    measureAll(force: false);
+                  }
+                });
+
+                return GestureDetector(
+                  onLongPress: () {
+                    HapticFeedback.heavyImpact();
+                    final auto = ref.read(autoPingProvider.notifier);
+                    auto.setEnabled(
+                      !auto.enabled,
+                      sweep: () => measureAll(force: true),
+                    );
+                  },
+                  child: IconButton(
               tooltip: context.appLocalizations.delayTest,
               // A delay test says which servers answer, so it must not depend on the portal
               // being open: the test wakes the engine for its duration and closes it again.
@@ -1058,50 +1161,8 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                   ? null
                   : () {
                       HapticFeedback.mediumImpact();
-                      // In the simple portal the list is the second core's, so the engine test
-                      // has nothing to measure — its own servers are timed directly instead, and
-                      // a fake address is a dash there. In the network mode the engine holds
-                      // every server of the list and answers with its own proxied delay, which is
-                      // the only number that is a fact about the node rather than about a
-                      // handshake the phone performed to a local listener.
-                      // The test is about the list in front of the owner, whichever core it
-                      // belongs to: in the simple portal that is the child's whole list, in the
-                      // network mode every member of the visible groups. One press measures all
-                      // of them; a single node is measured by holding its row.
-                      final simple = ref.read(patchClashConfigProvider).mode == Mode.global;
-                      if (simple) {
-                        final servers = <XrayServerConfig>[
-                          for (final server
-                              in ref.read(xrayServersProvider).value ??
-                                  const <XrayServerConfig>[])
-                            if (server.port > 0) server,
-                        ];
-                        if (servers.isEmpty) return;
-                        unawaited(
-                          _testDelayWithChild(
-                            ref,
-                            servers,
-                            wasRunning: running,
-                            force: true,
-                          ),
-                        );
-                        return;
-                      }
-                      if (group == null) return;
-                      unawaited(
-                        _testDelayWithEngine(
-                          ref,
-                          [
-                            for (final proxy in group.all)
-                              if (!_isBuiltinOutbound(proxy.name)) proxy,
-                          ],
-                          testUrl: group.testUrl,
-                          wasRunning: running,
-                          force: true,
-                        ),
-                      );
+                      measureAll(force: true);
                     },
-              // A test in flight spins instead of pretending nothing is happening.
               icon: testing
                   ? SizedBox.square(
                       dimension: 16,
@@ -1113,8 +1174,16 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                   : GlyphIcon(
                       AppGlyphs.bolt,
                       size: 18,
-                      color: theme.colorScheme.onSurfaceVariant,
+                      // The timer announces itself: the bolt turns primary while the list
+                      // re-measures itself, so an automatic number is never mistaken for a
+                      // deliberate one.
+                      color: autoPing
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
                     ),
+                  ),
+                );
+              },
             ),
           ],
         ),

@@ -47,6 +47,11 @@ class SweepLedger {
   int _lastListHash = 0;
   DateTime? _lastStartedAt;
 
+  /// Whether an automatic sweep is due: the list has never been swept, or its last sweep is
+  /// older than [freshness]. Used by the repeating timer, which must not re-measure a list
+  /// that was just done by the sweep at launch or after a switch.
+  bool isDue(Mode mode, String listKey) => shouldStart(mode, listKey);
+
   /// Whether this list needs a sweep at all.
   ///
   /// A rebuild recreates the widget that asks, and a recreated widget has no memory: without
