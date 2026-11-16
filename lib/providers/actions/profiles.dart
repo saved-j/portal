@@ -353,6 +353,12 @@ class ProfilesAction extends _$ProfilesAction {
         return;
       }
       if (profile.id == ref.read(currentProfileIdProvider)) {
+        // The simple portal runs no engine, so the engine's apply is a no-op for it: the
+        // child has to be told to read the file that has just been replaced, or the portal
+        // keeps running the nodes of the previous revision until it is reopened.
+        unawaited(
+          ref.read(setupActionProvider.notifier).reapplyPortalDocument(),
+        );
         ref
             .read(setupActionProvider.notifier)
             .applyProfileDebounce(silence: true);

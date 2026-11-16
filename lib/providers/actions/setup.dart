@@ -841,6 +841,31 @@ class SetupAction extends _$SetupAction {
 
   /// For leaving an editor: a profile whose inputs match the config the Core
   /// already runs is not rebuilt, which on a large profile takes a while.
+  /// Replaces the running child's document with the profile that has just arrived.
+  ///
+  /// A subscription update in the simple portal used to change only the file: nothing asked
+  /// the child to read it, so the portal kept running the nodes of the previous revision until
+  /// it was closed and opened again. The child is replaced on the same tunnel the way a node
+  /// tap replaces it — same node if it still exists, the profile's first otherwise — and a
+  /// document that cannot be built leaves the running child exactly as it was.
+  Future<bool> reapplyPortalDocument() async {
+    if (!_isSimplePortal || !ref.read(isStartProvider)) return false;
+    final document = await _portalChildDocument();
+    if (document == null) return false;
+    final answer = await portalRuntime.startChild(document.config);
+    if (answer.ok) {
+      _commitPortalPick(document);
+      commonPrint.log('portal child reloaded on ${document.name}');
+      return true;
+    }
+    commonPrint.log(
+      'portal child reload refused, the previous document keeps running: '
+      '${answer.reason}',
+      logLevel: LogLevel.warning,
+    );
+    return false;
+  }
+
   void autoApplyProfile() {
     runAfterFrame(() async {
       if (!await inputsApplied()) {
