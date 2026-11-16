@@ -664,6 +664,16 @@ PortalShown _portalShown(
 
 String _portalListMark = '';
 
+/// Two lists are the same sweep when their names match, in order: the nodes behind them are
+/// the subscription's own and do not change under a rebuild.
+bool _sameNames(List<String> a, List<String> b) {
+  if (a.length != b.length) return false;
+  for (var index = 0; index < a.length; index++) {
+    if (a[index] != b[index]) return false;
+  }
+  return true;
+}
+
 /// The servers the second core offers.
 ///
 /// The subscription body is an array of full xray configurations and each element is one
@@ -1088,6 +1098,8 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
             profileId: '${ref.read(currentProfileIdProvider) ?? ''}',
             servers: servers,
           );
+      // Nothing to start here: `_TcpDelaySweep` owns the launch measurement, from a lifecycle
+      // method, and the button asks for a fresh one.
     });
     ref.listen(groupsProvider, (previous, next) {
       if (next.isEmpty) return;
@@ -1233,7 +1245,11 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
       children: [
         // Measures the servers of this list once, from a lifecycle method: a build pass is
         // not the place to start work, and a rebuild is not a reason to start it again.
-        _TcpDelaySweep(targets),
+        _TcpDelaySweep(
+          xrayServers,
+          wasRunning: portalRuntime.status.value.active &&
+              portalRuntime.status.value.owner == PortalOwner.xray,
+        ),
         // The filter strip belongs to the engine's rules. In the simple portal the list is
         // the second core's own servers, so there are no filters to show.
         if (!simple && xrayServers.isEmpty && groups.length > 1) const _GroupStrip(),
@@ -1366,35 +1382,45 @@ bool _sameTargets(
 /// cancellation — a newer list bumps the generation inside the notifier, which drops the
 /// answers of the older one.
 class _TcpDelaySweep extends ConsumerStatefulWidget {
-  const _TcpDelaySweep(this.targets);
+  const _TcpDelaySweep(this.servers, {required this.wasRunning});
 
-  final List<(String, String, int)> targets;
+  /// The list's own servers: what a sweep measures is the subscription's nodes, not the
+  /// rows that happen to be scrolled into view.
+  final List<XrayServerConfig> servers;
+
+  /// Whether the portal was already carrying traffic when the list asked for numbers.
+  final bool wasRunning;
 
   @override
   ConsumerState<_TcpDelaySweep> createState() => _TcpDelaySweepState();
 }
 
 class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
-  List<(String, String, int)>? _asked;
+  List<String>? _asked;
 
   @override
   void initState() {
     super.initState();
-    _start(widget.targets);
+    _start(widget.servers);
   }
 
   @override
   void didUpdateWidget(covariant _TcpDelaySweep oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _start(widget.targets);
+    _start(widget.servers);
   }
 
-  void _start(List<(String, String, int)> targets) {
-    if (targets.isEmpty) return;
+  void _start(List<XrayServerConfig> servers) {
+    if (servers.isEmpty) return;
+    final names = [for (final server in servers) server.name];
     final asked = _asked;
-    if (asked != null && _sameTargets(asked, targets)) return;
-    _asked = targets;
-    unawaited(ref.read(tcpDelayProvider.notifier).measureAll(targets));
+    // The same list asking again is the same sweep, not a second one: a rebuild must not
+    // spend the phone's traffic on numbers that are already in flight.
+    if (asked != null && asked.length == names.length && _sameNames(asked, names)) return;
+    _asked = names;
+    unawaited(
+      _testDelayWithChild(ref, servers, wasRunning: widget.wasRunning),
+    );
   }
 
   @override
