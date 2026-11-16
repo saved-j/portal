@@ -79,7 +79,7 @@ Future<PanelBackdropImage?> panelBackdropImage(Ref ref) async {
           );
     return (image: image, animated: await _isAnimated(file.path));
   } catch (error) {
-    commonPrint.log('backdrop ${background.url} unavailable: $error');
+    commonPrint.log('backdrop ${redactUrl(background.url)} unavailable: $error');
     rethrow;
   }
 }
@@ -118,7 +118,7 @@ Future<String?> panelLogoPath(Ref ref, String url) async {
   try {
     return (await DefaultCacheManager().getSingleFile(url)).path;
   } catch (error) {
-    commonPrint.log('logo $url unavailable: $error');
+    commonPrint.log('logo ${redactUrl(url)} unavailable: $error');
     rethrow;
   }
 }

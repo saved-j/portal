@@ -8,6 +8,7 @@ export 'cidr.dart';
 export 'compute.dart';
 export 'constant.dart';
 export 'dashboard_url.dart';
+export 'redact.dart';
 export 'file_logger.dart';
 export 'context.dart';
 export 'converter.dart';
