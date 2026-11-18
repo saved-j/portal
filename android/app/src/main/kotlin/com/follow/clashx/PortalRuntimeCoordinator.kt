@@ -396,8 +396,14 @@ object PortalRuntimeCoordinator {
         // a shortcut, a boot — has nothing in memory yet, and without this line the request is
         // refused as if the app had no profile. The same state is what the 0.01a tile path
         // loaded before asking; here it is loaded for every entry, once, before the ask.
-        runCatching { ServiceState.syncSharedState(AndroidServiceStateHost.loadSharedState()) }
-            .onFailure { GlobalState.log("$TAG cannot load the shared state: ${it.message}") }
+        // Only a start with nothing in hand needs the file: with Flutter attached the machine
+        // already holds the options Dart just wrote, and loading over them would bring back the
+        // mode the disk had a moment ago — the service would then build the other core's tunnel
+        // and the engine start would be refused as a mismatch.
+        if (!ServiceState.hasSharedState) {
+            runCatching { ServiceState.syncSharedState(AndroidServiceStateHost.loadSharedState()) }
+                .onFailure { GlobalState.log("$TAG cannot load the shared state: ${it.message}") }
+        }
         // The engine must be configured before a tunnel is handed to it: its config lives in
         // memory and is normally written by Dart, which a start from the shade does not have.
         // Without this the service comes up carrying nothing, and calling that `Active` is the

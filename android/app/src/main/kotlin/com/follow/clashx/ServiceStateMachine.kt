@@ -283,6 +283,13 @@ internal class ServiceStateMachine(private val host: ServiceStateHost) {
         host.updateNotificationParams(notificationParams(sharedState))
     }
 
+    /// Whether this machine already holds options, from the app's own push or an earlier load.
+    ///
+    /// A start that came from Dart has them fresh in memory; reading the file over them would
+    /// replace a mode that just changed with the one that was on disk a moment ago, and the
+    /// service would then establish the other core's tunnel.
+    val hasSharedState: Boolean get() = sharedState.vpnOptions != null
+
     /// Makes the engine ready to carry a tunnel, for a start that did not come from the app.
     ///
     /// The engine's configuration lives in memory and is written by the Flutter side. A start
