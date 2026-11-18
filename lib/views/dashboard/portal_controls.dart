@@ -33,16 +33,16 @@ enum PortalSort {
 
 extension PortalSortExt on PortalSort {
   String get label => switch (this) {
-        PortalSort.subscription => 'asInSubscription',
-        PortalSort.ping => 'byPing',
-        PortalSort.alphabet => 'byName',
-      };
+    PortalSort.subscription => 'asInSubscription',
+    PortalSort.ping => 'byPing',
+    PortalSort.alphabet => 'byName',
+  };
 
   PortalSort get next => switch (this) {
-        PortalSort.subscription => PortalSort.ping,
-        PortalSort.ping => PortalSort.alphabet,
-        PortalSort.alphabet => PortalSort.subscription,
-      };
+    PortalSort.subscription => PortalSort.ping,
+    PortalSort.ping => PortalSort.alphabet,
+    PortalSort.alphabet => PortalSort.subscription,
+  };
 }
 
 /// The order of the server list, kept per mode.
@@ -59,7 +59,9 @@ class PortalSortNotifier extends Notifier<PortalSort> {
     // Watched, so flipping the switch re-reads the other mode's stored order.
     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
     final settings = ref.watch(appSettingProvider);
-    final stored = mode == Mode.global ? settings.portalSortXray : settings.portalSortRules;
+    final stored = mode == Mode.global
+        ? settings.portalSortXray
+        : settings.portalSortRules;
     return PortalSort.values.firstWhere(
       (value) => value.name == stored,
       orElse: () => PortalSort.subscription,
@@ -68,7 +70,9 @@ class PortalSortNotifier extends Notifier<PortalSort> {
 
   void cycle() {
     final next = state.next;
-    ref.read(appSettingProvider.notifier).update(
+    ref
+        .read(appSettingProvider.notifier)
+        .update(
           (settings) => _simple
               ? settings.copyWith(portalSortXray: next.name)
               : settings.copyWith(portalSortRules: next.name),
@@ -76,8 +80,31 @@ class PortalSortNotifier extends Notifier<PortalSort> {
   }
 }
 
-final portalSortProvider =
-    NotifierProvider<PortalSortNotifier, PortalSort>(PortalSortNotifier.new);
+final portalSortProvider = NotifierProvider<PortalSortNotifier, PortalSort>(
+  PortalSortNotifier.new,
+);
+
+/// What a server row says under its name: the protocol, or the panel's note.
+///
+/// Both are true and neither is optional: the protocol distinguishes two servers of one
+/// country, and the note is what the panel tells the owner about the node («только Gemini»).
+/// A row is one line tall for a name and two for an answer, so they share the second line —
+/// and a double tap on the row swaps it.
+enum ServerRowDetail { protocol, note }
+
+class PortalRowDetailNotifier extends Notifier<ServerRowDetail> {
+  @override
+  ServerRowDetail build() => ServerRowDetail.protocol;
+
+  void toggle() => state = state == ServerRowDetail.protocol
+      ? ServerRowDetail.note
+      : ServerRowDetail.protocol;
+}
+
+final portalRowDetailProvider =
+    NotifierProvider<PortalRowDetailNotifier, ServerRowDetail>(
+      PortalRowDetailNotifier.new,
+    );
 
 /// The server picked in each mode, kept apart and keyed by profile.
 ///
@@ -137,8 +164,11 @@ class PortalSelectionNotifier
   }
 }
 
-final portalSelectionProvider = NotifierProvider<PortalSelectionNotifier,
-    ({Map<String, String> rules, String xray})>(PortalSelectionNotifier.new);
+final portalSelectionProvider =
+    NotifierProvider<
+      PortalSelectionNotifier,
+      ({Map<String, String> rules, String xray})
+    >(PortalSelectionNotifier.new);
 
 /// Which group the strip shows. Null means "the first one the panel offers",
 /// which survives subscription updates that reorder groups.
@@ -149,8 +179,9 @@ class PortalGroupNotifier extends Notifier<String?> {
   void pick(String? name) => state = name;
 }
 
-final portalGroupProvider =
-    NotifierProvider<PortalGroupNotifier, String?>(PortalGroupNotifier.new);
+final portalGroupProvider = NotifierProvider<PortalGroupNotifier, String?>(
+  PortalGroupNotifier.new,
+);
 
 /// The row the user just tapped. The engine may take a moment to switch, so the
 /// highlight moves at once and this clears when the group reports the same choice.
@@ -168,7 +199,8 @@ class PortalPendingNotifier extends Notifier<Map<String, String>> {
 
 final portalPendingProvider =
     NotifierProvider<PortalPendingNotifier, Map<String, String>>(
-        PortalPendingNotifier.new);
+      PortalPendingNotifier.new,
+    );
 
 /// Delays measured by this process, for the servers of the simple portal.
 ///
@@ -177,8 +209,9 @@ final portalPendingProvider =
 /// row is never put in this map: its number is the engine's own, taken through the tunnel it
 /// built. A missing key means "not asked yet"; a null entry means "asked, no answer" — and a
 /// null is also the honest answer for a name that only resolves to the tunnel's own address.
-final tcpDelayProvider =
-    NotifierProvider<TcpDelayNotifier, Map<String, int?>>(TcpDelayNotifier.new);
+final tcpDelayProvider = NotifierProvider<TcpDelayNotifier, Map<String, int?>>(
+  TcpDelayNotifier.new,
+);
 
 /// The engine's rows' numbers, kept apart from the child's.
 ///
@@ -188,7 +221,9 @@ final tcpDelayProvider =
 /// subscriptions would otherwise show the other core's number, and a switch would look like
 /// nothing had been measured at all.
 final engineDelayProvider =
-    NotifierProvider<EngineDelayNotifier, Map<String, int?>>(EngineDelayNotifier.new);
+    NotifierProvider<EngineDelayNotifier, Map<String, int?>>(
+      EngineDelayNotifier.new,
+    );
 
 /// Whether the list pings itself on a timer, and the timer itself.
 ///
@@ -196,7 +231,6 @@ final engineDelayProvider =
 /// every [_autoPingInterval], which is what makes "auto" of a panel's own selector mean
 /// something. It starts off in every session: a timer that survives a restart is a timer the
 /// owner has forgotten about.
-
 
 class EngineDelayNotifier extends Notifier<Map<String, int?>> {
   final SweepLedger ledger = SweepLedger();
@@ -255,6 +289,7 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
 
   /// True when [name] has a number younger than the freshness window.
   bool isFresh(String name) => ledger.isFresh(name);
+
   /// Bumped by every sweep, and by a profile change. An answer arriving under an older
   /// number belongs to servers the list no longer shows — usually names that repeat in the
   /// new subscription — so it is dropped instead of written under the current key.
@@ -288,7 +323,6 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
     // another timeout on a node that just refused.
     ledger.record(name, ms);
   }
-
 
   /// Revokes every sweep in flight, for a list that is gone or has been replaced.
   ///
@@ -325,7 +359,8 @@ class PortalBypassNotifier extends Notifier<Map<String, String?>> {
       return;
     }
     // Bypass routes to the engine's own built-in, whatever the panel calls it.
-    final target = group.all
+    final target =
+        group.all
             .where((proxy) => _isBuiltinOutbound(proxy.name))
             .map((proxy) => proxy.name)
             .firstOrNull ??
@@ -337,7 +372,8 @@ class PortalBypassNotifier extends Notifier<Map<String, String?>> {
 
 final portalBypassProvider =
     NotifierProvider<PortalBypassNotifier, Map<String, String?>>(
-        PortalBypassNotifier.new);
+      PortalBypassNotifier.new,
+    );
 
 /// How the filter chips are drawn. Default 2 is 'name + server + icon'. Lives in a
 /// provider so switching the mode does not reset the user's choice.
@@ -348,18 +384,14 @@ class PortalDisplayNotifier extends Notifier<int> {
   void cycle() => state = (state + 1) % 5;
 }
 
-final portalDisplayProvider =
-    NotifierProvider<PortalDisplayNotifier, int>(PortalDisplayNotifier.new);
-
+final portalDisplayProvider = NotifierProvider<PortalDisplayNotifier, int>(
+  PortalDisplayNotifier.new,
+);
 
 /// What is actually crossing the wire right now: how many connections are open, and how
 /// fast the wire moves, taken from the engine's own answers. Nothing here is inferred or
 /// animated for show.
-typedef PortalLive = ({
-  int connections,
-  int down,
-  int up,
-});
+typedef PortalLive = ({int connections, int down, int up});
 
 /// The rate comes from the traffic sample, not from the connection list.
 ///
@@ -370,7 +402,9 @@ typedef PortalLive = ({
 /// already draw from; that is the same number the tray title shows, so the portal and the
 /// cards now agree instead of one of them standing still.
 final portalLiveProvider = Provider<PortalLive>((ref) {
-  final connections = ref.watch(requestsProvider.select((state) => state.length));
+  final connections = ref.watch(
+    requestsProvider.select((state) => state.length),
+  );
   final sample = ref.watch(
     trafficsProvider.select((state) => state.list.safeLast(const Traffic())),
   );
@@ -381,7 +415,8 @@ final portalLiveProvider = Provider<PortalLive>((ref) {
   );
 });
 
-class PortalFiltersNotifier extends Notifier<({Set<String> hidden, List<String> order})> {
+class PortalFiltersNotifier
+    extends Notifier<({Set<String> hidden, List<String> order})> {
   @override
   ({Set<String> hidden, List<String> order}) build() =>
       (hidden: <String>{}, order: const <String>[]);
@@ -394,23 +429,29 @@ class PortalFiltersNotifier extends Notifier<({Set<String> hidden, List<String> 
 
   void reorder(List<String> order) =>
       state = (hidden: state.hidden, order: order);
-
 }
 
-final portalFiltersProvider = NotifierProvider<PortalFiltersNotifier,
-    ({Set<String> hidden, List<String> order})>(PortalFiltersNotifier.new);
+final portalFiltersProvider =
+    NotifierProvider<
+      PortalFiltersNotifier,
+      ({Set<String> hidden, List<String> order})
+    >(PortalFiltersNotifier.new);
 
 /// The engine's built-in outbounds sometimes arrive decorated ('DIRECT 🇷🇺',
 /// 'Direct '), so the check is on the leading word, not on an exact match.
 bool _isBuiltinOutbound(String name) => isBuiltinOutboundName(name);
 
 List<Group> portalGroups(List<Group> all) => [
-      for (final item in all)
-        if (item.hidden != true && !_isBuiltinOutbound(item.name)) item,
-    ];
+  for (final item in all)
+    if (item.hidden != true && !_isBuiltinOutbound(item.name)) item,
+];
 
 /// Same list, after the user's own order and hidden set.
-List<Group> portalVisibleGroups(List<Group> all, Set<String> hidden, List<String> order) {
+List<Group> portalVisibleGroups(
+  List<Group> all,
+  Set<String> hidden,
+  List<String> order,
+) {
   final visible = [
     for (final group in portalGroups(all))
       if (!hidden.contains(group.name)) group,
@@ -453,7 +494,8 @@ class PortalFeedsNotifier extends Notifier<Map<PortalFeed, FeedStrikes>> {
 
 final portalFeedsProvider =
     NotifierProvider<PortalFeedsNotifier, Map<PortalFeed, FeedStrikes>>(
-        PortalFeedsNotifier.new);
+      PortalFeedsNotifier.new,
+    );
 
 /// One mode's answer, as the controls read it.
 typedef ModeAvailability = ({
@@ -472,40 +514,44 @@ typedef ModeAvailability = ({
 /// available, so a control never flickers off while the answer is on its way.
 final portalAvailabilityProvider =
     Provider<({ModeAvailability engine, ModeAvailability xray})>((ref) {
-  final strikes = ref.watch(portalFeedsProvider);
-  final engineFile = ref.watch(engineFormatStatusProvider).value;
-  final servers = ref.watch(xrayServersProvider).value;
-  final engineStrikes = strikes[PortalFeed.engine] ?? const FeedStrikes();
-  final xrayStrikes = strikes[PortalFeed.xray] ?? const FeedStrikes();
-  final fileProblem = engineFile == null || engineFile.status == EngineFormatStatus.ok
-      ? ''
-      : engineFile.reason;
-  // No nodes is not a slow answer: the simple portal has nothing to start with, and the
-  // switch has to say so rather than open a portal that carries no traffic.
-  final noServers = servers != null && servers.isEmpty;
-  return (
-    engine: (
-      available: !engineStrikes.blocked && fileProblem.isEmpty,
-      strikes: engineStrikes,
-      reason: engineStrikes.blocked ? engineStrikes.reason : fileProblem,
-    ),
-    xray: (
-      available: !xrayStrikes.blocked && !noServers,
-      strikes: xrayStrikes,
-      reason: xrayStrikes.blocked
-          ? xrayStrikes.reason
-          : (noServers
-              ? 'this subscription carries no nodes for the portal'
-              : ''),
-    ),
-  );
-});
+      final strikes = ref.watch(portalFeedsProvider);
+      final engineFile = ref.watch(engineFormatStatusProvider).value;
+      final servers = ref.watch(xrayServersProvider).value;
+      final engineStrikes = strikes[PortalFeed.engine] ?? const FeedStrikes();
+      final xrayStrikes = strikes[PortalFeed.xray] ?? const FeedStrikes();
+      final fileProblem =
+          engineFile == null || engineFile.status == EngineFormatStatus.ok
+          ? ''
+          : engineFile.reason;
+      // No nodes is not a slow answer: the simple portal has nothing to start with, and the
+      // switch has to say so rather than open a portal that carries no traffic.
+      final noServers = servers != null && servers.isEmpty;
+      return (
+        engine: (
+          available: !engineStrikes.blocked && fileProblem.isEmpty,
+          strikes: engineStrikes,
+          reason: engineStrikes.blocked ? engineStrikes.reason : fileProblem,
+        ),
+        xray: (
+          available: !xrayStrikes.blocked && !noServers,
+          strikes: xrayStrikes,
+          reason: xrayStrikes.blocked
+              ? xrayStrikes.reason
+              : (noServers
+                    ? 'this subscription carries no nodes for the portal'
+                    : ''),
+        ),
+      );
+    });
 
 /// A refusal's reason, with the count in the reader's own language.
 ///
 /// The count is the fact the owner can act on ("it failed three times"), and the detail is
 /// the last failure's own words (`http 502`), which is what a support question needs.
-String _availabilityReason(AppLocalizations l10n, ModeAvailability availability) {
+String _availabilityReason(
+  AppLocalizations l10n,
+  ModeAvailability availability,
+) {
   final strikes = availability.strikes;
   if (!strikes.blocked) return availability.reason;
   return '${l10n.portalStrikes(strikes.failures)} (${strikes.reason})';
@@ -541,7 +587,7 @@ PortalShown _portalShown(
   final cachedRows = simple
       ? const <PortalRow>[]
       : (ref.watch(portalEngineRowsProvider)[profileKey] ??
-          const <PortalRow>[]);
+            const <PortalRow>[]);
   final profileRows = simple
       ? const <PortalRow>[]
       : (ref.watch(profilePortalRowsProvider).value ?? const <PortalRow>[]);
@@ -554,24 +600,24 @@ PortalShown _portalShown(
   // A live answer is the named group and nothing else. Substituting another group here is how
   // a pick went to the wrong filter: the chip said one name while the rows belonged to
   // another, and the tap carried that other name to the engine.
-  final engineLive = !simple &&
-      status.active &&
-      status.owner == PortalOwner.mihomo
+  final engineLive =
+      !simple && status.active && status.owner == PortalOwner.mihomo
       ? (groupName == null
-          ? groups.firstOrNull
-          : groups.where((g) => g.name == groupName).firstOrNull)
+            ? groups.firstOrNull
+            : groups.where((g) => g.name == groupName).firstOrNull)
       : null;
-  final childLive = simple &&
-      status.active &&
-      status.owner == PortalOwner.xray &&
-      servers.isNotEmpty
+  final childLive =
+      simple &&
+          status.active &&
+          status.owner == PortalOwner.xray &&
+          servers.isNotEmpty
       ? portalGroupOfServers(servers)
       : null;
   final live = engineLive != null
       ? (group: engineLive, owner: RowsOwner.engine)
       : childLive != null
-          ? (group: childLive, owner: RowsOwner.child)
-          : null;
+      ? (group: childLive, owner: RowsOwner.child)
+      : null;
   final shown = portalShownRows(
     mode: mode,
     live: live,
@@ -646,8 +692,9 @@ String _portalListMark = '';
 /// The subscription body is an array of full xray configurations and each element is one
 /// server, so the list is built from those elements — name, description and the config that
 /// would be started if it were chosen.
-final xrayServersProvider =
-    FutureProvider.autoDispose<List<XrayServerConfig>>((ref) async {
+final xrayServersProvider = FutureProvider.autoDispose<List<XrayServerConfig>>((
+  ref,
+) async {
   final profile = ref.read(currentProfileProvider);
   if (profile == null) return const [];
   final body = await profile.readXrayFormat();
@@ -720,8 +767,9 @@ String? engineFormatProblem(Object? document) {
 /// The "Сеть порталов" switch is meaningless without one: rules live in that YAML, and a
 /// subscription the panel only serves for Xray has nothing to route. Unknown counts as
 /// available so the switch does not flicker off while the file is being checked.
-final engineFormatStatusProvider =
-    FutureProvider.autoDispose<EngineFormatCheck>((ref) async {
+final engineFormatStatusProvider = FutureProvider.autoDispose<EngineFormatCheck>((
+  ref,
+) async {
   final profile = ref.watch(currentProfileProvider);
   if (profile == null) {
     return (status: EngineFormatStatus.empty, reason: 'no profile is selected');
@@ -831,23 +879,27 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
     final xrayAvailable = availability.xray.available;
     final engineReason = engineAvailable
         ? ''
-        : context.appLocalizations
-            .engineFormatUnusable(_availabilityReason(context.appLocalizations, availability.engine));
+        : context.appLocalizations.engineFormatUnusable(
+            _availabilityReason(context.appLocalizations, availability.engine),
+          );
     final xrayReason = xrayAvailable
         ? ''
-        : context.appLocalizations
-            .portalModeUnavailable(_availabilityReason(context.appLocalizations, availability.xray));
+        : context.appLocalizations.portalModeUnavailable(
+            _availabilityReason(context.appLocalizations, availability.xray),
+          );
     // Both dark is its own sentence: it names both reasons once, instead of leaving the
     // owner to work out why neither side of the switch moves.
     final bothUnavailable = !engineAvailable && !xrayAvailable;
     final shownReason = bothUnavailable
         ? context.appLocalizations.portalModesUnavailable(
-            [availability.engine.reason, availability.xray.reason]
-                .where((reason) => reason.isNotEmpty)
-                .join(' · '),
+            [
+              availability.engine.reason,
+              availability.xray.reason,
+            ].where((reason) => reason.isNotEmpty).join(' · '),
           )
         : (simple ? engineReason : xrayReason);
-    final testing = group != null &&
+    final testing =
+        group != null &&
         ref.watch(
           delayTestingGroupsProvider.select((s) => s.contains(group.name)),
         );
@@ -865,9 +917,9 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
             GestureDetector(
               // A plain tap on 'Сеть порталов' opens the proxies dashboard: that is what
               // the network mode is for. The double tap still edits the filter strip.
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ProxiesView()),
-              ),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const ProxiesView())),
 
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -884,7 +936,9 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                       // config must not look switched off.
                       value: mode == Mode.rule,
                       activeThumbColor: _liveGreen(context),
-                      activeTrackColor: _liveGreen(context).withValues(alpha: 0.4),
+                      activeTrackColor: _liveGreen(
+                        context,
+                      ).withValues(alpha: 0.4),
                       // Dead only when neither side can be entered. With one side alive the
                       // switch stays live and the direction that is not offered refuses with its
                       // own reason, because a control that moves and snaps back teaches nothing.
@@ -902,9 +956,7 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                               HapticFeedback.selectionClick();
                               // The thumb has already moved; the portal underneath either
                               // comes up on the other core or comes back exactly as it was.
-                              unawaited(
-                                _switchPortal(ref, toSimple: !value),
-                              );
+                              unawaited(_switchPortal(ref, toSimple: !value));
                             },
                     ),
                   ),
@@ -924,19 +976,18 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
             const Spacer(),
             const SizedBox(width: 4),
             IconButton(
-              tooltip: context.appLocalizations.sortTooltip(sortLabelFor(context, sort)),
+              tooltip: context.appLocalizations.sortTooltip(
+                sortLabelFor(context, sort),
+              ),
               onPressed: () {
                 HapticFeedback.selectionClick();
                 ref.read(portalSortProvider.notifier).cycle();
               },
-              icon: GlyphIcon(
-                switch (sort) {
-                  PortalSort.subscription => AppGlyphs.sliders,
-                  PortalSort.ping => AppGlyphs.sort,
-                  PortalSort.alphabet => AppGlyphs.textShort,
-                },
-                size: 18,
-              ),
+              icon: GlyphIcon(switch (sort) {
+                PortalSort.subscription => AppGlyphs.sliders,
+                PortalSort.ping => AppGlyphs.sort,
+                PortalSort.alphabet => AppGlyphs.textShort,
+              }, size: 18),
             ),
             Builder(
               builder: (context) {
@@ -980,7 +1031,10 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
 
                 // The timer runs the same sweep without forcing: what it re-measures is what
                 // has gone stale, which inside one period is the whole list anyway.
-                ref.listen(autoPingProvider.select((s) => s.enabled), (previous, next) {
+                ref.listen(autoPingProvider.select((s) => s.enabled), (
+                  previous,
+                  next,
+                ) {
                   if (next) {
                     measureAll(force: false);
                   }
@@ -996,51 +1050,54 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                   // Long and short presses are both owned here; the button inside only paints.
                   behavior: HitTestBehavior.opaque,
                   child: IconButton(
-              // No tooltip: a Tooltip opens on long press by default, which swallowed the
-              // gesture this button exists for — the period menu answered nothing because the
-              // tooltip took the press first. The label stays for screen readers.
-              tooltip: null,
-              // A delay test says which servers answer, so it must not depend on the portal
-              // being open: the test wakes the engine for its duration and closes it again.
-              // A tap is the switch: on, the list keeps refreshing itself; off, the numbers
-              // grow stale and nothing is spent in the background.
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                final auto = ref.read(autoPingProvider.notifier);
-                final turningOn = !auto.current.enabled;
-                auto.setEnabled(
-                  turningOn,
-                  tick: () => measureAll(force: false),
-                );
-                // A document built while the switch was off carries no schedule at all, so a
-                // running core has to be restarted on one that does.
-                final live = ref.read(portalStatusProvider);
-                if (turningOn &&
-                    live.active &&
-                    live.owner == PortalOwner.xray) {
-                  unawaited(
-                    ref.read(setupActionProvider.notifier).reapplyPortalDocument(),
-                  );
-                }
-              },
-              icon: testing
-                  ? SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: theme.colorScheme.primary,
-                      ),
-                    )
-                  : GlyphIcon(
-                      AppGlyphs.bolt,
-                      size: 18,
-                      // The switch reads at a glance: lit while the list keeps measuring
-                      // itself, faded when it does not.
-                      color: autoPing.enabled
-                          ? const Color(0xFF00F5A0)
-                          : theme.colorScheme.onSurfaceVariant
-                              .withValues(alpha: 0.4),
-                    ),
+                    // No tooltip: a Tooltip opens on long press by default, which swallowed the
+                    // gesture this button exists for — the period menu answered nothing because the
+                    // tooltip took the press first. The label stays for screen readers.
+                    tooltip: null,
+                    // A delay test says which servers answer, so it must not depend on the portal
+                    // being open: the test wakes the engine for its duration and closes it again.
+                    // A tap is the switch: on, the list keeps refreshing itself; off, the numbers
+                    // grow stale and nothing is spent in the background.
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      final auto = ref.read(autoPingProvider.notifier);
+                      final turningOn = !auto.current.enabled;
+                      auto.setEnabled(
+                        turningOn,
+                        tick: () => measureAll(force: false),
+                      );
+                      // A document built while the switch was off carries no schedule at all, so a
+                      // running core has to be restarted on one that does.
+                      final live = ref.read(portalStatusProvider);
+                      if (turningOn &&
+                          live.active &&
+                          live.owner == PortalOwner.xray) {
+                        unawaited(
+                          ref
+                              .read(setupActionProvider.notifier)
+                              .reapplyPortalDocument(),
+                        );
+                      }
+                    },
+                    icon: testing
+                        ? SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: theme.colorScheme.primary,
+                            ),
+                          )
+                        : GlyphIcon(
+                            AppGlyphs.bolt,
+                            size: 18,
+                            // The switch reads at a glance: lit while the list keeps measuring
+                            // itself, faded when it does not.
+                            color: autoPing.enabled
+                                ? const Color(0xFF00F5A0)
+                                : theme.colorScheme.onSurfaceVariant.withValues(
+                                    alpha: 0.4,
+                                  ),
+                          ),
                   ),
                 );
               },
@@ -1104,7 +1161,10 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
     // publishes, which is when there is something worth keeping.
     // Any switch of mode stops the sweep that belonged to the other list: the numbers it was
     // about to write are the servers of a list nobody is looking at any more.
-    ref.listen(patchClashConfigProvider.select((s) => s.mode), (previous, next) {
+    ref.listen(patchClashConfigProvider.select((s) => s.mode), (
+      previous,
+      next,
+    ) {
       if (previous == next) return;
       // A bump, not a reset: the sweep that was running must not take the next number and
       // believe it is current again.
@@ -1122,7 +1182,9 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
     ref.listen(xrayServersProvider, (previous, next) {
       final servers = next.value;
       if (servers == null || servers.isEmpty) return;
-      ref.read(portalChildRowsProvider.notifier).remember(
+      ref
+          .read(portalChildRowsProvider.notifier)
+          .remember(
             profileId: '${ref.read(currentProfileIdProvider) ?? ''}',
             servers: servers,
           );
@@ -1181,8 +1243,9 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
         padding: const EdgeInsets.all(16),
         child: Text(
           context.appLocalizations.proxyGroupEmpty,
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -1197,25 +1260,30 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
     // Two picks, one list each: the engine's own selection lights the rules list, and the
     // child's stored node lights the simple portal. The engine's answer belongs to another
     // build of the subscription, so it must not move the highlight on this one.
-    final bypassedGroup = ref.watch(portalBypassProvider).containsKey(group.name);
+    final bypassedGroup = ref
+        .watch(portalBypassProvider)
+        .containsKey(group.name);
     final chosenName = ref.watch(selectedProxyNameProvider(group.name));
     final selection = ref.watch(portalSelectionProvider);
     final xrayPick = selection.xray;
     final rulesPick = selection.rules[group.name];
-    final xrayPicked =
-        xrayServers.any((server) => server.name == xrayPick) ? xrayPick : null;
+    final xrayPicked = xrayServers.any((server) => server.name == xrayPick)
+        ? xrayPick
+        : null;
     // While the child's own list has not arrived, the rows on screen are still the ones its
     // stored pick names — so the highlight stays on the node that was confirmed, and it
     // moves only when a new pick has been acknowledged.
     final heldXrayPick =
-        simple && xrayPick.isNotEmpty && group.all.any((p) => p.name == xrayPick);
+        simple &&
+        xrayPick.isNotEmpty &&
+        group.all.any((p) => p.name == xrayPick);
     final selectedName = bypassedGroup
         ? null
         : xrayServers.isNotEmpty
-            ? xrayPicked
-            : heldXrayPick
-                ? xrayPick
-                : (pending ?? chosenName ?? rulesPick);
+        ? xrayPicked
+        : heldXrayPick
+        ? xrayPick
+        : (pending ?? chosenName ?? rulesPick);
     // Measure once when the list arrives: a portal whose servers all read "—" until you
     // press something looks broken, and a closed portal is no reason not to know. Only the
     // simple portal is measured here: those are the servers no engine holds. In the network
@@ -1260,7 +1328,7 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
           final value = xrayServerByName.containsKey(proxy.name)
               ? xrayDelays[proxy.name]
               : engineDelays[proxy.name] ??
-                  ref.read(delayProvider(proxyName: proxy.name));
+                    ref.read(delayProvider(proxyName: proxy.name));
           // -1 is mihomo's timeout marker, not a fast server.
           ranks[proxy.name] = value == null || value <= 0 ? 1 << 30 : value;
         }
@@ -1278,20 +1346,23 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
           servers: xrayServers,
           engineProxies: simple ? const <Proxy>[] : members,
           simple: simple,
-          wasRunning: portalRuntime.status.value.active &&
+          wasRunning:
+              portalRuntime.status.value.active &&
               portalRuntime.status.value.owner ==
                   (simple ? PortalOwner.xray : PortalOwner.mihomo),
         ),
         // The filter strip belongs to the engine's rules. In the simple portal the list is
         // the second core's own servers, so there are no filters to show.
-        if (!simple && xrayServers.isEmpty && groups.length > 1) const _GroupStrip(),
+        if (!simple && xrayServers.isEmpty && groups.length > 1)
+          const _GroupStrip(),
         if (!simple && groups.length == 1)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: Text(
               group.name,
-              style: theme.textTheme.labelLarge
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         for (final proxy in members)
@@ -1334,8 +1405,8 @@ Future<PortalRuntimeAnswer> _restartChildOn(
   // The document is the whole list with this node selected, never this node alone: the core
   // must keep timing the others for the list to have numbers at all.
   final servers = [
-    for (final item in ref.read(xrayServersProvider).value ??
-        const <XrayServerConfig>[])
+    for (final item
+        in ref.read(xrayServersProvider).value ?? const <XrayServerConfig>[])
       if (item.port > 0) item,
   ];
   final document = servers.any((item) => item.name == server.name)
@@ -1358,7 +1429,6 @@ Future<PortalRuntimeAnswer> _restartChildOn(
   );
   return started;
 }
-
 
 /// Starts the child for a row the owner tapped, and says what happened when it refuses.
 ///
@@ -1397,7 +1467,8 @@ Future<void> _startFromList(WidgetRef ref, XrayServerConfig server) async {
 /// Starts the node that was confirmed before a refused one, so the portal keeps carrying.
 Future<bool> _restoreXrayNode(WidgetRef ref, String name) async {
   if (name.isEmpty) return false;
-  final servers = ref.read(xrayServersProvider).value ?? const <XrayServerConfig>[];
+  final servers =
+      ref.read(xrayServersProvider).value ?? const <XrayServerConfig>[];
   final server = xrayServerFor(servers, name);
   if (server == null) return false;
   final restored = await _restartChildOn(ref, server);
@@ -1487,7 +1558,11 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
         .keys
         .any((name) => widget.servers.any((server) => server.name == name));
     if (answered) return;
-    await _testDelayWithChild(ref, widget.servers, wasRunning: widget.wasRunning);
+    await _testDelayWithChild(
+      ref,
+      widget.servers,
+      wasRunning: widget.wasRunning,
+    );
   }
 
   /// Writes what the child core has already timed into the Xray map.
@@ -1573,7 +1648,11 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
       unawaited(_readOrSweep());
     } else {
       unawaited(
-        _testDelayWithEngine(ref, widget.engineProxies, wasRunning: widget.wasRunning),
+        _testDelayWithEngine(
+          ref,
+          widget.engineProxies,
+          wasRunning: widget.wasRunning,
+        ),
       );
     }
   }
@@ -1672,9 +1751,11 @@ Future<void> _testDelayWithEngine(
     // raised the engine itself, so a runtime that now reports an owner is another owner, and
     // one that reports none is the engine this sweep started.
     final ownerNow = portalRuntime.status.value.owner;
-    final stillMine = started &&
+    final stillMine =
+        started &&
         delay.isCurrentSweep(sweep, Mode.rule) &&
-        (ownerNow == ownerBefore || (ownerBefore == null && ownerNow == PortalOwner.mihomo));
+        (ownerNow == ownerBefore ||
+            (ownerBefore == null && ownerNow == PortalOwner.mihomo));
     if (stillMine) {
       stopped = await ref.read(setupActionProvider.notifier).setRunning(false);
     } else if (started) {
@@ -1780,7 +1861,9 @@ Future<void> _testDelayWithChild(
         break;
       }
       failure = measuredError(answer.rows);
-      final byTag = {for (final row in parseMeasured(answer.rows)) row.tag: row};
+      final byTag = {
+        for (final row in parseMeasured(answer.rows)) row.tag: row,
+      };
       for (final entry in chunk) {
         final row = byTag[entry.tag];
         if (row == null) continue;
@@ -1812,7 +1895,8 @@ Future<void> _testDelayWithChild(
         raised: 'none',
         durationMs: watch.elapsedMilliseconds,
         stoppedAfter: false,
-        detail: 'rows=${stale.length}/${measure.entries.length} measured=$measured'
+        detail:
+            'rows=${stale.length}/${measure.entries.length} measured=$measured'
             ' visible=${visible.length}'
             '${failure.isEmpty ? '' : ' error=$failure'}',
       ),
@@ -1831,8 +1915,9 @@ Future<void> _showAutoPingPeriod(BuildContext context, WidgetRef ref) async {
   final simple =
       ref.read(patchClashConfigProvider.select((s) => s.mode)) == Mode.global;
   // What "as in the subscription" would mean, read from the profile itself.
-  final subscriptionInterval =
-      simple ? null : ref.read(subscriptionPingIntervalProvider).value;
+  final subscriptionInterval = simple
+      ? null
+      : ref.read(subscriptionPingIntervalProvider).value;
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => _AutoPingPeriodDialog(
@@ -1885,8 +1970,12 @@ class _AutoPingPeriodDialog extends StatefulWidget {
   final bool simple;
   final Duration? subscriptionInterval;
   final AutoPingState initial;
-  final void Function({bool? enabled, Duration? interval, bool? asInSubscription})
-      onChanged;
+  final void Function({
+    bool? enabled,
+    Duration? interval,
+    bool? asInSubscription,
+  })
+  onChanged;
   final ({String hold, String battery}) hints;
   final VoidCallback onClose;
 
@@ -1928,9 +2017,9 @@ class _AutoPingPeriodDialogState extends State<_AutoPingPeriodDialog> {
     // shows the number that is really in effect.
     final value = _default
         ? 1.0 +
-            (autoPingStops.indexOf(_effectiveSubscriptionPeriod) < 0
-                ? 0
-                : autoPingStops.indexOf(_effectiveSubscriptionPeriod))
+              (autoPingStops.indexOf(_effectiveSubscriptionPeriod) < 0
+                  ? 0
+                  : autoPingStops.indexOf(_effectiveSubscriptionPeriod))
         : _value;
     return AlertDialog(
       title: Text(l10n.autoPingPeriod),
@@ -1947,10 +2036,7 @@ class _AutoPingPeriodDialogState extends State<_AutoPingPeriodDialog> {
                 child: TextButton(
                   onPressed: () {
                     setState(() => _default = true);
-                    widget.onChanged(
-                      enabled: true,
-                      asInSubscription: true,
-                    );
+                    widget.onChanged(enabled: true, asInSubscription: true);
                   },
                   child: Text(
                     // The button names what is in force, not a mode: after it is pressed it
@@ -1979,8 +2065,10 @@ class _AutoPingPeriodDialogState extends State<_AutoPingPeriodDialog> {
                   widget.onChanged(enabled: false, asInSubscription: false);
                   return;
                 }
-                final index =
-                    (next - 1).round().clamp(0, autoPingStops.length - 1);
+                final index = (next - 1).round().clamp(
+                  0,
+                  autoPingStops.length - 1,
+                );
                 setState(() {
                   _default = false;
                   _enabled = true;
@@ -1997,11 +2085,11 @@ class _AutoPingPeriodDialogState extends State<_AutoPingPeriodDialog> {
               child: Text(
                 _default
                     ? (widget.subscriptionInterval == null
-                        ? l10n.autoPingAsInSubscription
-                        : _periodLabel(l10n, widget.subscriptionInterval!))
+                          ? l10n.autoPingAsInSubscription
+                          : _periodLabel(l10n, widget.subscriptionInterval!))
                     : (_enabled
-                        ? _periodLabel(l10n, _interval)
-                        : l10n.autoPingOff),
+                          ? _periodLabel(l10n, _interval)
+                          : l10n.autoPingOff),
                 style: theme.textTheme.titleMedium,
               ),
             ),
@@ -2018,7 +2106,6 @@ class _AutoPingPeriodDialogState extends State<_AutoPingPeriodDialog> {
     );
   }
 }
-
 
 String _periodLabel(AppLocalizations l10n, Duration value) {
   if (value.inSeconds < 60) return '${value.inSeconds} ${l10n.seconds}';
@@ -2056,8 +2143,9 @@ const _sweepDeadline = Duration(seconds: 120);
 /// scroll position — and this only records how many of them the owner could see.
 List<String> _visibleServerNames(WidgetRef ref) {
   final filters = ref.watch(portalFiltersProvider);
-  final group = ref.read(portalChildRowsProvider)[
-      '${ref.read(currentProfileIdProvider) ?? ''}'];
+  final group = ref.read(
+    portalChildRowsProvider,
+  )['${ref.read(currentProfileIdProvider) ?? ''}'];
   final visible = portalGroupOfRows(group ?? const <PortalRow>[]);
   return [
     for (final proxy in visible.all)
@@ -2079,7 +2167,6 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
   final _controller = ScrollController();
   var _canBack = false;
   var _canForward = false;
-
 
   @override
   void initState() {
@@ -2132,7 +2219,11 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
     }
     final allGroups = ref.watch(groupsProvider);
     final filters = ref.watch(portalFiltersProvider);
-    final groups = portalVisibleGroups(allGroups, filters.hidden, filters.order);
+    final groups = portalVisibleGroups(
+      allGroups,
+      filters.hidden,
+      filters.order,
+    );
     final display = ref.watch(portalDisplayProvider);
     final active = ref.watch(portalGroupProvider) ?? groups.firstOrNull?.name;
     final bypassedNames = ref.watch(portalBypassProvider).keys.toSet();
@@ -2149,9 +2240,9 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
           },
           onLongPress: () {
             HapticFeedback.mediumImpact();
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ProxiesView()),
-            );
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ProxiesView()));
           },
           child: const Padding(
             padding: EdgeInsets.only(right: 6),
@@ -2188,123 +2279,134 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                 child: Row(
                   children: [
                     for (final item in groups)
-                      Builder(builder: (context) {
-                        // A filter the panel already routes to DIRECT is a bypass by
-                        // definition: it should look that way before anyone touches it.
-                        // A hand-picked server wins over the panel's DIRECT at once:
-                        // the chip colours the moment the user chooses, without
-                        // waiting for the engine to confirm the route.
-                        final picked = pendingByGroup[item.name] != null;
-                        final bypassed = bypassedNames.contains(item.name) ||
-                            (_isBuiltinOutbound(item.now ?? '') && !picked);
-                        return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 3),
-                        child: GestureDetector(
-                          // Long press turns the filter into a bypass: the engine gets
-                          // DIRECT, the chip goes grey, nobody has to hunt for DIRECT
-                          // in the server list.
-                          onLongPress: () {
-                            HapticFeedback.mediumImpact();
-                            ref
-                                .read(portalBypassProvider.notifier)
-                                .toggle(ref, item);
-                          },
-                          child: Opacity(
-                            opacity: bypassed ? 0.45 : 1,
-                            child: ChoiceChip(
-                          showCheckmark: false,
-                          // Five layouts, one row each: name, name+server,
-                          // icon+server, icon. Everything centres by construction.
-                          label: Builder(
-                            builder: (context) {
-                              // 0 name · 1 name+server · 2 name+server+icon ·
-                              // 3 icon+server · 4 icon
-                              final showIcon = display >= 2;
-                              final showName = display <= 2;
-                              final mark = SizedBox.square(
-                                dimension: 16,
-                                child: CommonTargetIcon(
-                                  src: item.icon,
-                                  fallback: GroupMonogram(item.name),
-                                ),
-                              );
-                              // A bypassed filter has no server on screen at all:
-                              // the user should see "nothing goes through here", not
-                              // the word DIRECT.
-                              // What the user just picked wins over what the engine
-                              // has confirmed: the chip must name the chosen server
-                              // in the same frame as the tap.
-                              final server =
-                                  bypassed ? null : (picked ? pendingByGroup[item.name] : item.now);
-                              // Two storeys in every layout, all five of them: the filter on top,
-                              // the server it answers with underneath. The five layouts then
-                              // differ only in what the top storey carries — name, name+icon or the
-                              // icon alone — so a chip never changes its height when the owner
-                              // cycles the layout, and the answer is always in the same place.
-                              final top = <Widget>[
-                                if (showIcon) mark,
-                                if (showIcon && showName) const SizedBox(width: 6),
-                                if (showName)
-                                  Flexible(
-                                    child: Text(
-                                      item.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                              ];
-                              // No placeholder: a chip with no server simply has no second
-                              // line. A dash would be a value the engine never gave.
-                              final bottom =
-                                  server == null || server == item.name ? null : server;
-                              return Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: top.isEmpty
-                                        ? [mark]
-                                        : top,
-                                  ),
-                                  if (bottom != null) ...[
-                                    const SizedBox(height: 1),
-                                    Text(
-                                      bottom,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall
-                                          ?.copyWith(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant,
+                      Builder(
+                        builder: (context) {
+                          // A filter the panel already routes to DIRECT is a bypass by
+                          // definition: it should look that way before anyone touches it.
+                          // A hand-picked server wins over the panel's DIRECT at once:
+                          // the chip colours the moment the user chooses, without
+                          // waiting for the engine to confirm the route.
+                          final picked = pendingByGroup[item.name] != null;
+                          final bypassed =
+                              bypassedNames.contains(item.name) ||
+                              (_isBuiltinOutbound(item.now ?? '') && !picked);
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 3),
+                            child: GestureDetector(
+                              // Long press turns the filter into a bypass: the engine gets
+                              // DIRECT, the chip goes grey, nobody has to hunt for DIRECT
+                              // in the server list.
+                              onLongPress: () {
+                                HapticFeedback.mediumImpact();
+                                ref
+                                    .read(portalBypassProvider.notifier)
+                                    .toggle(ref, item);
+                              },
+                              child: Opacity(
+                                opacity: bypassed ? 0.45 : 1,
+                                child: ChoiceChip(
+                                  showCheckmark: false,
+                                  // Five layouts, one row each: name, name+server,
+                                  // icon+server, icon. Everything centres by construction.
+                                  label: Builder(
+                                    builder: (context) {
+                                      // 0 name · 1 name+server · 2 name+server+icon ·
+                                      // 3 icon+server · 4 icon
+                                      final showIcon = display >= 2;
+                                      final showName = display <= 2;
+                                      final mark = SizedBox.square(
+                                        dimension: 16,
+                                        child: CommonTargetIcon(
+                                          src: item.icon,
+                                          fallback: GroupMonogram(item.name),
+                                        ),
+                                      );
+                                      // A bypassed filter has no server on screen at all:
+                                      // the user should see "nothing goes through here", not
+                                      // the word DIRECT.
+                                      // What the user just picked wins over what the engine
+                                      // has confirmed: the chip must name the chosen server
+                                      // in the same frame as the tap.
+                                      final server = bypassed
+                                          ? null
+                                          : (picked
+                                                ? pendingByGroup[item.name]
+                                                : item.now);
+                                      // Two storeys in every layout, all five of them: the filter on top,
+                                      // the server it answers with underneath. The five layouts then
+                                      // differ only in what the top storey carries — name, name+icon or the
+                                      // icon alone — so a chip never changes its height when the owner
+                                      // cycles the layout, and the answer is always in the same place.
+                                      final top = <Widget>[
+                                        if (showIcon) mark,
+                                        if (showIcon && showName)
+                                          const SizedBox(width: 6),
+                                        if (showName)
+                                          Flexible(
+                                            child: Text(
+                                              item.name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           ),
-                                    ),
-                                  ],
-                                ],
-                              );
-                            },
-                          ),
-                          selected: item.name == active,
-                          onSelected: (_) {
-                            HapticFeedback.selectionClick();
-                            ref
-                                .read(portalGroupProvider.notifier)
-                                .pick(item.name);
-                            // The porthole's mark reads the profile's current group; a
-                            // chip that only moved its own state left the two disagreeing.
-                            ref
-                                .read(proxiesActionProvider.notifier)
-                                .updateCurrentGroupName(item.name);
-                          },
+                                      ];
+                                      // No placeholder: a chip with no server simply has no second
+                                      // line. A dash would be a value the engine never gave.
+                                      final bottom =
+                                          server == null || server == item.name
+                                          ? null
+                                          : server;
+                                      return Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: top.isEmpty
+                                                ? [mark]
+                                                : top,
+                                          ),
+                                          if (bottom != null) ...[
+                                            const SizedBox(height: 1),
+                                            Text(
+                                              bottom,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .labelSmall
+                                                  ?.copyWith(
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant,
+                                                  ),
+                                            ),
+                                          ],
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                  selected: item.name == active,
+                                  onSelected: (_) {
+                                    HapticFeedback.selectionClick();
+                                    ref
+                                        .read(portalGroupProvider.notifier)
+                                        .pick(item.name);
+                                    // The porthole's mark reads the profile's current group; a
+                                    // chip that only moved its own state left the two disagreeing.
+                                    ref
+                                        .read(proxiesActionProvider.notifier)
+                                        .updateCurrentGroupName(item.name);
+                                  },
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      );
-                      }),
+                          );
+                        },
+                      ),
                   ],
                 ),
               ),
@@ -2327,17 +2429,20 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
 /// and reads as "salad" on white, so light theme gets a deeper emerald instead.
 Color _liveGreen(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark
-        ? const Color(0xFF00F5A0)
-        : const Color(0xFF0E9F6E);
-
-// Theme-aware: the neon palette is right on the dark screen and unreadable on white.
-Color _delayFast(BuildContext context) => Theme.of(context).brightness == Brightness.dark
     ? const Color(0xFF00F5A0)
     : const Color(0xFF0E9F6E);
-Color _delaySlow(BuildContext context) => Theme.of(context).brightness == Brightness.dark
+
+// Theme-aware: the neon palette is right on the dark screen and unreadable on white.
+Color _delayFast(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+    ? const Color(0xFF00F5A0)
+    : const Color(0xFF0E9F6E);
+Color _delaySlow(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
     ? const Color(0xFFFFC107)
     : const Color(0xFFB26A00);
-Color _delayBad(BuildContext context) => Theme.of(context).brightness == Brightness.dark
+Color _delayBad(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
     ? const Color(0xFFFF4B6E)
     : const Color(0xFFB3261E);
 
@@ -2397,7 +2502,6 @@ class _ServerRow extends ConsumerStatefulWidget {
 
 class _ServerRowState extends ConsumerState<_ServerRow>
     with SingleTickerProviderStateMixin {
-
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 420),
@@ -2442,13 +2546,15 @@ class _ServerRowState extends ConsumerState<_ServerRow>
     // the engine's own delay. Mixing the two is how the engine's rows read single-digit
     // milliseconds to Finland — that handshake went to the engine's fake-IP.
     final measurable =
-        widget.xrayServer != null && widget.tcpHost.isNotEmpty && widget.tcpPort > 0;
+        widget.xrayServer != null &&
+        widget.tcpHost.isNotEmpty &&
+        widget.tcpPort > 0;
     // Two cores, two maps: a row's number is read from the map of the core that produced it,
     // so a name present in both subscriptions can never show the other core's value.
     final delay = measurable
         ? ref.watch(tcpDelayProvider)[widget.proxy.name]
         : ref.watch(engineDelayProvider)[widget.proxy.name] ??
-            ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
+              ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
     final color = widget.selected
         ? scheme.onPrimaryContainer
         : scheme.onSurfaceVariant;
@@ -2479,157 +2585,161 @@ class _ServerRowState extends ConsumerState<_ServerRow>
           child: child,
         );
       },
-      child: ListTile(
-        dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-        leading: GlyphIcon(
-          widget.selected ? AppGlyphs.check : AppGlyphs.proxies,
-          size: 20,
-          color: color,
-        ),
-        // The title, then the panel's own note about the server — «только Gemini»,
-        // «для ИИ» — under it, when the panel wrote one. A note is a fact about the node,
-        // not part of its name: it is drawn small and muted, drops out when it would not
-        // fit, and never joins the name the engine is asked to select.
-        title: Builder(
-          builder: (context) {
-            final head = node == null || node == widget.proxy.name
-                ? widget.proxy.name
-                : '${widget.proxy.name} · $node';
-            final note = _serverNote(widget.proxy);
-            final base = theme.textTheme.bodyLarge?.copyWith(
-              color: widget.selected ? scheme.onPrimaryContainer : null,
-              fontWeight: widget.selected ? FontWeight.w600 : null,
-            );
-            if (note.isEmpty) {
-              return Text(
-                head,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: base,
+      // `ListTile` offers no double tap, and the row needs one: two answers share its second
+      // line, and the owner says which. The gesture wraps the tile so a single tap still goes
+      // to the tile itself, and a double tap swaps the line without selecting anything.
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onDoubleTap: () {
+          HapticFeedback.selectionClick();
+          ref.read(portalRowDetailProvider.notifier).toggle();
+        },
+        child: ListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+          leading: GlyphIcon(
+            widget.selected ? AppGlyphs.check : AppGlyphs.proxies,
+            size: 20,
+            color: color,
+          ),
+          // The title, then the panel's own note about the server — «только Gemini»,
+          // «для ИИ» — under it, when the panel wrote one. A note is a fact about the node,
+          // not part of its name: it is drawn small and muted, drops out when it would not
+          // fit, and never joins the name the engine is asked to select.
+          title: Builder(
+            builder: (context) {
+              final head = node == null || node == widget.proxy.name
+                  ? widget.proxy.name
+                  : '${widget.proxy.name} · $node';
+              final note = _serverNote(widget.proxy);
+              final detail = ref.watch(portalRowDetailProvider);
+              final under = detail == ServerRowDetail.note
+                  ? note
+                  : widget.proxy.type.toUpperCase();
+              final base = theme.textTheme.bodyLarge?.copyWith(
+                color: widget.selected ? scheme.onPrimaryContainer : null,
+                fontWeight: widget.selected ? FontWeight.w600 : null,
               );
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
+              if (under.isEmpty) {
+                return Text(
                   head,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: base,
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  note,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: widget.selected
-                        ? scheme.onPrimaryContainer.withValues(alpha: 0.75)
-                        : scheme.onSurfaceVariant,
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    head,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: base,
                   ),
+                  const SizedBox(height: 1),
+                  Text(
+                    under,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: widget.selected
+                          ? scheme.onPrimaryContainer.withValues(alpha: 0.75)
+                          : scheme.onSurfaceVariant,
+                      letterSpacing: detail == ServerRowDetail.protocol
+                          ? 0.4
+                          : 0,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _delayText(delay),
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: _delayColor(context, delay),
+                  fontWeight: FontWeight.w600,
                 ),
-              ],
-            );
-          },
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // The protocol is part of the row, always: it is what distinguishes two
-            // servers of the same country, and hiding it behind a gesture made the list
-            // read as if every server spoke the same thing.
-            Text(
-              widget.proxy.type.toUpperCase(),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                letterSpacing: 0.4,
               ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              _delayText(delay),
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: _delayColor(context, delay),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        onTap: () {
-          HapticFeedback.selectionClick();
-          final server = widget.xrayServer;
-          if (server != null) {
-            // The simple portal's list is the child's, and a tap there is the child's
-            // business: keep the pick and restart the child on it. The engine is not asked
-            // to change a proxy it does not have — it has none in this mode.
-            unawaited(_startFromList(ref, server));
-            return;
-          }
-          // The filter the owner has chosen is the one this pick belongs to. A list drawn
-          // from a fallback carries the rows of the subscription, not the name of a live
-          // group, so the row's own group can be another filter than the one on screen —
-          // and writing under it is how a server changed in a filter the owner never opened.
-          final chosenGroup =
-              ref.read(portalGroupProvider) ?? widget.group.name;
-          // Picking a portal by hand is also the way out of a bypass: the filter stops
-          // being grey, because it is no longer routed around the portal.
-          ref.read(portalBypassProvider.notifier).forget(chosenGroup);
-          ref
-              .read(portalPendingProvider.notifier)
-              .pick(chosenGroup, widget.proxy.name);
-          // The engine answers for itself, and this is what the list shows when it has
-          // nothing to say — a fresh start, or a return from the simple portal.
-          ref
-              .read(portalSelectionProvider.notifier)
-              .pickRule(chosenGroup, widget.proxy.name);
-          // A closed portal has no core to answer: the pick is stored for the start that
-          // follows, which builds its document with this server already chosen. Asking the
-          // engine now would fail and roll the pick back.
-          final proxies = ref.read(proxiesActionProvider.notifier);
-          if (ref.read(runTimeProvider) == null) {
-            proxies.storeSelection(
+            ],
+          ),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            final server = widget.xrayServer;
+            if (server != null) {
+              // The simple portal's list is the child's, and a tap there is the child's
+              // business: keep the pick and restart the child on it. The engine is not asked
+              // to change a proxy it does not have — it has none in this mode.
+              unawaited(_startFromList(ref, server));
+              return;
+            }
+            // The filter the owner has chosen is the one this pick belongs to. A list drawn
+            // from a fallback carries the rows of the subscription, not the name of a live
+            // group, so the row's own group can be another filter than the one on screen —
+            // and writing under it is how a server changed in a filter the owner never opened.
+            final chosenGroup =
+                ref.read(portalGroupProvider) ?? widget.group.name;
+            // Picking a portal by hand is also the way out of a bypass: the filter stops
+            // being grey, because it is no longer routed around the portal.
+            ref.read(portalBypassProvider.notifier).forget(chosenGroup);
+            ref
+                .read(portalPendingProvider.notifier)
+                .pick(chosenGroup, widget.proxy.name);
+            // The engine answers for itself, and this is what the list shows when it has
+            // nothing to say — a fresh start, or a return from the simple portal.
+            ref
+                .read(portalSelectionProvider.notifier)
+                .pickRule(chosenGroup, widget.proxy.name);
+            // A closed portal has no core to answer: the pick is stored for the start that
+            // follows, which builds its document with this server already chosen. Asking the
+            // engine now would fail and roll the pick back.
+            final proxies = ref.read(proxiesActionProvider.notifier);
+            if (ref.read(runTimeProvider) == null) {
+              proxies.storeSelection(
+                groupName: chosenGroup,
+                proxyName: widget.proxy.name,
+              );
+              return;
+            }
+            proxies.changeProxy(
               groupName: chosenGroup,
               proxyName: widget.proxy.name,
             );
-            return;
-          }
-          proxies.changeProxy(
-            groupName: chosenGroup,
-            proxyName: widget.proxy.name,
-          );
-        },
-        // A long press answers the question a person actually has about one server: does
-        // this one respond, and how fast — not what protocol it speaks, which is on the row
-        // already.
-        onLongPress: () {
-          HapticFeedback.mediumImpact();
-          if (measurable) {
-            // One row, timed by the core that already holds every node: the same call the sweep
-            // makes, narrowed to this tag. No portal is raised for it and the number cannot be
-            // the phone's own latency, because this app's uid is outside the tunnel.
-            final server = widget.xrayServer;
-            if (server != null) {
-              unawaited(
-                _testDelayWithChild(
-                  ref,
-                  [server],
-                  wasRunning: ref.read(runTimeProvider) != null,
-                  force: true,
-                ),
-              );
+          },
+          // A long press answers the question a person actually has about one server: does
+          // this one respond, and how fast — not what protocol it speaks, which is on the row
+          // already.
+          onLongPress: () {
+            HapticFeedback.mediumImpact();
+            if (measurable) {
+              // One row, timed by the core that already holds every node: the same call the sweep
+              // makes, narrowed to this tag. No portal is raised for it and the number cannot be
+              // the phone's own latency, because this app's uid is outside the tunnel.
+              final server = widget.xrayServer;
+              if (server != null) {
+                unawaited(
+                  _testDelayWithChild(
+                    ref,
+                    [server],
+                    wasRunning: ref.read(runTimeProvider) != null,
+                    force: true,
+                  ),
+                );
+              }
+              return;
             }
-            return;
-          }
-          unawaited(
-            _testDelayWithEngine(
-              ref,
-              [widget.proxy],
-              wasRunning: ref.read(runTimeProvider) != null,
-            ),
-          );
-        },
+            unawaited(
+              _testDelayWithEngine(ref, [
+                widget.proxy,
+              ], wasRunning: ref.read(runTimeProvider) != null),
+            );
+          },
+        ),
       ),
     );
   }
@@ -2663,8 +2773,8 @@ class PortalPlanCard extends ConsumerWidget {
     final name = profile == null
         ? ''
         : (profile.headers.displayName ??
-            profile.headers.serviceName ??
-            profile.realLabel);
+              profile.headers.serviceName ??
+              profile.realLabel);
 
     return Card(
       margin: EdgeInsets.zero,
@@ -2683,8 +2793,9 @@ class PortalPlanCard extends ConsumerWidget {
               Builder(
                 builder: (context) {
                   final facts = SubscriptionFacts.of(profile);
-                  final meta = theme.textTheme.labelMedium
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+                  final meta = theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  );
                   final expiry = facts.expiry == '—'
                       ? '—'
                       : context.appLocalizations.expiresUntil(facts.expiry);
@@ -2724,8 +2835,9 @@ class PortalPlanCard extends ConsumerWidget {
             else
               Text(
                 name,
-                style: theme.textTheme.labelMedium
-                    ?.copyWith(color: theme.colorScheme.onSurface),
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.onSurface,
+                ),
               ),
             if (announcement != null && announcement.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -2735,8 +2847,9 @@ class PortalPlanCard extends ConsumerWidget {
                 announcement,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ],
@@ -2779,13 +2892,16 @@ class _FilterEditorSheet extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(context.appLocalizations.filtersTitle,
-                style: theme.textTheme.titleMedium),
+            Text(
+              context.appLocalizations.filtersTitle,
+              style: theme.textTheme.titleMedium,
+            ),
             const SizedBox(height: 4),
             Text(
               context.appLocalizations.filtersHint,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 8),
             Flexible(
@@ -2815,7 +2931,8 @@ class _FilterEditorSheet extends ConsumerWidget {
                           SizedBox.square(
                             dimension: 20,
                             child: CommonTargetIcon(
-                              src: groups
+                              src:
+                                  groups
                                       .where((g) => g.name == name)
                                       .firstOrNull
                                       ?.icon ??
@@ -2946,7 +3063,9 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
       final mode = await setup.pickMode(Mode.rule);
       if (!mode.ok) {
         throw _PortalSwitchFailure(
-          mode.cancelled ? 'the switch to the network was cancelled' : mode.reason,
+          mode.cancelled
+              ? 'the switch to the network was cancelled'
+              : mode.reason,
         );
       }
       // While the simple portal was open the engine carried no configuration at all — the
@@ -3049,13 +3168,17 @@ Future<void> _rollBackPortal(
   try {
     final stopped = await portalRuntime.close(reason: 'rollback');
     if (!stopped.ok && !stopped.cancelled) {
-      throw _PortalSwitchFailure('the portal core did not stop: ${stopped.reason}');
+      throw _PortalSwitchFailure(
+        'the portal core did not stop: ${stopped.reason}',
+      );
     }
     if (previousMode == Mode.global) {
       // The tunnel again, with the child on the node the profile still names.
       final entered = await _enterSimplePortal(ref);
       if (!entered.ok) {
-        throw _PortalSwitchFailure('the portal mode did not come back: ${entered.reason}');
+        throw _PortalSwitchFailure(
+          'the portal mode did not come back: ${entered.reason}',
+        );
       }
     } else {
       final mode = await setup.pickMode(previousMode);
