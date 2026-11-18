@@ -17,7 +17,7 @@ import 'dart:convert';
 import 'xray_subscription.dart';
 
 /// The tag prefix every node's outbound carries. The observatory selects by it.
-const portalNodeTagPrefix = 'node-';
+const portalNodeTagPrefix = 'node:';
 
 /// The outbound the selected node's traffic goes to before the core starts.
 const portalSelectedTag = 'portal-selected';
@@ -38,14 +38,20 @@ String portalChildDocument(
   String probeUrl = 'https://www.gstatic.com/generate_204',
 }) {
   final outbounds = <Map<String, Object?>>[];
-  final tags = <String>[];
+  final seen = <String, int>{};
   for (var index = 0; index < servers.length; index++) {
     final server = servers[index];
     final node = _nodeOutbound(server.config);
     if (node == null) continue;
-    final tag = '$portalNodeTagPrefix$index';
+    // The tag carries the name, not the position. Two lists of the same subscription can
+    // differ in order — one has the auto-select group, the other does not — and a tag that
+    // means "the third node" then names the wrong row. The name is the only thing both
+    // sides agree on, so it is what the tag says.
+    final repeat = seen.update(server.name, (count) => count + 1, ifAbsent: () => 0);
+    final tag = repeat == 0
+        ? '$portalNodeTagPrefix${server.name}'
+        : '$portalNodeTagPrefix${server.name}#$repeat';
     outbounds.add({...node, 'tag': tag});
-    tags.add(tag);
     if (server.name == selected) {
       // The selected node keeps a second handle with a stable tag, so the routing rule below
       // does not have to name an index that changes when the subscription is re-read.
@@ -97,16 +103,32 @@ String portalChildDocument(
 /// The order of the tag indexes is the order of the subscription, so the list the app keeps and
 /// the list the core runs name the same nodes — this is the one place that mapping is written.
 String? portalNameForTag(List<XrayServerConfig> servers, String tag) {
-  if (!tag.startsWith(portalNodeTagPrefix)) return null;
-  final index = int.tryParse(tag.substring(portalNodeTagPrefix.length));
-  if (index == null || index < 0 || index >= servers.length) return null;
-  return servers[index].name;
+  final name = portalNameOfTag(tag);
+  if (name == null) return null;
+  // Checked against the list rather than trusted: a tag from a document built on an older
+  // subscription must not put its figure on a row of the newer one.
+  for (final server in servers) {
+    if (server.name == name) return name;
+  }
+  return null;
 }
 
-/// The tag of [name] in a document built by [portalChildDocument], or null.
+/// The name a tag carries, with no list to check it against.
+String? portalNameOfTag(String tag) {
+  if (!tag.startsWith(portalNodeTagPrefix)) return null;
+  var name = tag.substring(portalNodeTagPrefix.length);
+  final repeat = name.lastIndexOf('#');
+  if (repeat > 0) {
+    final suffix = name.substring(repeat + 1);
+    if (int.tryParse(suffix) != null) name = name.substring(0, repeat);
+  }
+  return name.isEmpty ? null : name;
+}
+
+/// The tag of the first node called [name] in a document built by [portalChildDocument].
 String? portalTagOf(List<XrayServerConfig> servers, String name) {
-  for (var index = 0; index < servers.length; index++) {
-    if (servers[index].name == name) return '$portalNodeTagPrefix$index';
+  for (final server in servers) {
+    if (server.name == name) return '$portalNodeTagPrefix$name';
   }
   return null;
 }

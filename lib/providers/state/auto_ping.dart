@@ -65,8 +65,11 @@ class AutoPingState {
       );
 }
 
+// Kept alive: the timer is the switch's own state and must not be cancelled because the list
+// that draws the bolt was rebuilt while a read was in flight.
 final autoPingProvider =
     NotifierProvider<AutoPingNotifier, AutoPingState>(AutoPingNotifier.new);
+
 
 /// Default period. The same order as mihomo's own url-test clock, but chosen for what the
 /// owner reads, not for what a balancer needs: a minute is short enough that a dead node is

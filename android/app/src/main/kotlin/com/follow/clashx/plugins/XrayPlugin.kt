@@ -149,7 +149,18 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
             val task = executor.submit(Callable { stopMeasure() })
             runCatching { task.get(STOP_WAIT_MS, TimeUnit.MILLISECONDS) }.getOrDefault(false)
         }
-        PortalMeasureBridge.observatory = { observatory() }
+        // Same thread discipline as a measurement: the Go entry point is entered on this
+        // plugin's own executor, which is the only place a native call has ever returned from
+        // here without aborting the process.
+        PortalMeasureBridge.observatory = {
+            val task = executor.submit(Callable { observatory() })
+            try {
+                task.get(MEASURE_WAIT_MS, TimeUnit.MILLISECONDS)
+            } catch (error: Exception) {
+                task.cancel(true)
+                mapOf<String, Any>("ok" to false, "message" to (error.message ?: "$error"))
+            }
+        }
         XrayChildControl.stop = {
             nextOperation()
             // The service is closing the descriptor it owns: the tunnel in hand is gone with

@@ -1565,6 +1565,9 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
   /// What the last read said, so the log carries changes instead of a pulse.
   String _lastObservatoryNote = '';
 
+  /// Tags the core reported that this list cannot name, reported once each.
+  final Set<String> _unknownTags = <String>{};
+
   /// The clock that reads the child core's own numbers. Reading is free, measuring is not: the
   /// core times every node itself on the owner's period, and this only asks what it has.
   Timer? _reading;
@@ -1640,7 +1643,18 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
       // the clock as if it were the node's.
       if (delay is! num || delay < 0) continue;
       final name = portalNameForTag(widget.servers, tag);
-      if (name == null) continue;
+      if (name == null) {
+        // A tag the app cannot name is a row that will never show a number: report it once,
+        // with the first name the list does know, instead of leaving the list quietly short.
+        if (_unknownTags.add(tag)) {
+          final first = widget.servers.isEmpty ? '' : widget.servers.first.name;
+          commonPrint.log(
+            'portal observatory: tag $tag is not in the list '
+            '(${widget.servers.length} servers, first $first)',
+          );
+        }
+        continue;
+      }
       notifier.record(name, delay.round());
       written++;
     }
@@ -2322,6 +2336,7 @@ class _ServerRow extends ConsumerStatefulWidget {
 
 class _ServerRowState extends ConsumerState<_ServerRow>
     with SingleTickerProviderStateMixin {
+
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 420),
@@ -2679,22 +2694,6 @@ class _FilterEditorSheet extends ConsumerWidget {
     );
   }
 }
-
-/// Both corner badges stay hidden until a double tap asks for them: a permanent
-/// counter is noise on a screen that is about the portal, not about the numbers.
-class PortalBadgeNotifier extends Notifier<bool> {
-  @override
-  bool build() => false;
-
-  void toggle() => state = !state;
-}
-
-final portalProfilesBadgeProvider =
-    NotifierProvider<PortalBadgeNotifier, bool>(PortalBadgeNotifier.new);
-final portalConnectionsBadgeProvider =
-    NotifierProvider<PortalBadgeNotifier, bool>(PortalBadgeNotifier.new);
-
-
 
 /// A reason the portal could not move, carried as a sentence the owner can read.
 class _PortalSwitchFailure implements Exception {

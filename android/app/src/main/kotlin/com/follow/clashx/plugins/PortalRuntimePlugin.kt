@@ -118,7 +118,17 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     result.success(mapOf("ok" to false, "message" to "no child on this platform"))
                     return
                 }
-                result.success(bridge())
+                // Off the platform thread, and off any coroutine dispatcher: the native call is
+                // entered from a plain worker thread, which is the shape that returns instead of
+                // aborting ("unknown caller pc" traces pointed at the Go entry frame itself).
+                Thread {
+                    val answer = runCatching { bridge() }.getOrElse { error ->
+                        mapOf<String, Any>("ok" to false, "message" to (error.message ?: "$error"))
+                    }
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        runCatching { result.success(answer) }
+                    }
+                }.start()
             }
 
             "status" -> result.success(PortalRuntimeCoordinator.status())
