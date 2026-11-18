@@ -24,20 +24,23 @@
 приложении.
 
 Мы сделали **два ядра в одном приложении** на базе [FlClashX](https://github.com/pluralplay/FlClashX),
-вдохновившись multicore: **Prizrak** (сборка mihomo) несёт «Сеть порталов», **Xray** — «Простой
-портал». Режимы полностью раздельные: свои серверы, свои замеры, свои настройки. Переключение на
-горячую — меньше секунды, без перезапуска приложения. Интерфейс упрощён до двух понятных состояний
-вместо десятка экранов.
+вдохновившись [MULTICORE](https://github.com/fatyzzz/multicore): **Prizrak** (сборка mihomo) несёт
+«Сеть порталов», **Xray** — «Простой портал». Режимы полностью раздельные: свои серверы, свои
+замеры, свои настройки. Переключение на горячую — меньше секунды, без перезапуска приложения.
+Интерфейс упрощён до двух понятных состояний вместо десятка экранов.
 
 ## Два режима
 
-**Сеть порталов** — правила и сплит-туннели. Ядро Prizrak: группы, автоматический выбор, маршруты
-по доменам и приложениям. Решение принимает правило, а не весь трафик целиком.
+**Сеть порталов** — это когда каждый отдельный сервис по правилам из mihomo-подписки уходит своим
+маршрутом. Ютуб через Нидерланды, Телеграм через Польшу, а российские сервисы — через Россию:
+вдруг вы уехали в отпуск и нужно зайти в свой банк. Решение принимает правило, а не весь трафик
+целиком.
 
-**Простой портал** — одно ядро Xray и ни одного лишнего процесса. Для подписок с новыми
-протоколами: то, что ещё не дошло до сборок mihomo, уже работает здесь.
+**Простой портал** — классический клиент Xray: почти весь трафик заворачивается в один выбранный
+сервер, плюс ряд статических сплит-туннелей, намертво прописанных в конфиге.
 
 Один список подписок питает оба ядра; какое из них несёт трафик — решает приложение, а не подписка.
+Если подписка поддерживает только один тип — активным для такой подписки будет только один режим.
 
 ## Что уже есть
 
@@ -94,11 +97,21 @@ quickly, because that is where it lands first.**
 Serious work needs both — new protocols *and* split tunnels — and, honestly, in one application.
 
 Portal runs **two cores in one app**, built on [FlClashX](https://github.com/pluralplay/FlClashX)
-and inspired by multicore: **Prizrak** (a mihomo build) carries the *portal network*, **Xray**
-carries the *simple portal*. The two modes are fully separate — their own servers, their own
-latency figures, their own settings — and switching between them hot takes under a second, without
-restarting the app. The interface is trimmed to two understandable states instead of a dozen
-screens.
+and inspired by [MULTICORE](https://github.com/fatyzzz/multicore): **Prizrak** (a mihomo build)
+carries the *portal network*, **Xray** carries the *simple portal*. The two modes are fully
+separate — their own servers, their own latency figures, their own settings — and switching between
+them hot takes under a second, without restarting the app. The interface is trimmed to two
+understandable states instead of a dozen screens.
+
+- **Portal network** — each individual service is tunnelled along its own route, as the rules in the
+  mihomo profile say: YouTube through the Netherlands, Telegram through Poland, Russian services
+  through Russia — for the holiday when you need your own bank. A rule decides, not the whole
+  traffic at once.
+- **Simple portal** — a classic Xray client: almost all traffic goes into one chosen server, plus a
+  set of static split tunnels written into the config for good.
+
+One subscription list feeds both cores; the app decides which core carries the traffic, not the
+subscription. A profile that supports only one type makes only one mode active for it.
 
 Next: Portal Duo for Windows, Linux, macOS and iOS, on the same two-core engine.
 
