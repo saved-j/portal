@@ -101,6 +101,8 @@
   "themeMode": "Appearance",
   "themeStyle": "Theme mode",
   "themeStyleOriginal": "Original",
+  "autoPingPeriod": "Auto-ping interval",
+  "autoPingPeriodNote": "The shorter the interval, the more battery it costs: every server is asked in every period.",
   "themeStyleEnhanced": "Portal",
   "themeStyleDesc": "Enhanced puts the service logo, plan, portal and a connect button on the home page in place of the widget grid.",
   "website": "Website",

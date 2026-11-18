@@ -815,6 +815,26 @@ class AppLocalizations {
     );
   }
 
+  /// `Auto-ping interval`
+  String get autoPingPeriod {
+    return Intl.message(
+      'Auto-ping interval',
+      name: 'autoPingPeriod',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The shorter the interval, the more battery it costs: every server is asked in every period.`
+  String get autoPingPeriodNote {
+    return Intl.message(
+      'The shorter the interval, the more battery it costs: every server is asked in every period.',
+      name: 'autoPingPeriodNote',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Enhanced`
   String get themeStyleEnhanced {
     return Intl.message(

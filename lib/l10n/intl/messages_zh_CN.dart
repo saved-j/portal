@@ -1547,7 +1547,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "themeStyleDesc": MessageLookupByLibrary.simpleMessage(
       "增强版在主页显示服务标志、套餐、服务器和连接按钮，取代小部件网格。",
     ),
-    "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("增强版"),
+"autoPingPeriod": MessageLookupByLibrary.simpleMessage("自动测试间隔"),
+    "autoPingPeriodNote": MessageLookupByLibrary.simpleMessage("间隔越短，耗电越多：每个周期都会询问每个服务器。"),
+        "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("增强版"),
     "themeStyleOriginal": MessageLookupByLibrary.simpleMessage("原版"),
     "tight": MessageLookupByLibrary.simpleMessage("紧凑"),
     "time": MessageLookupByLibrary.simpleMessage("时间"),

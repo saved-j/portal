@@ -2094,7 +2094,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "themeStyleDesc": MessageLookupByLibrary.simpleMessage(
       "Улучшенный показывает на главной логотип сервиса, тариф, портал и кнопку подключения вместо сетки виджетов.",
     ),
-    "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("Улучшенный"),
+"autoPingPeriod": MessageLookupByLibrary.simpleMessage("Интервал автопинга"),
+    "autoPingPeriodNote": MessageLookupByLibrary.simpleMessage("Чем короче интервал, тем больше расход батареи: каждый сервер опрашивается в каждом периоде."),
+        "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("Улучшенный"),
     "themeStyleOriginal": MessageLookupByLibrary.simpleMessage("Оригинальный"),
     "tight": MessageLookupByLibrary.simpleMessage("Плотный"),
     "time": MessageLookupByLibrary.simpleMessage("Время"),

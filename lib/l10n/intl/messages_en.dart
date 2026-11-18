@@ -1998,7 +1998,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "themeStyleDesc": MessageLookupByLibrary.simpleMessage(
       "Enhanced puts the service logo, plan, portal and a connect button on the home page in place of the widget grid.",
     ),
-    "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("Enhanced"),
+"autoPingPeriod": MessageLookupByLibrary.simpleMessage("Auto-ping interval"),
+    "autoPingPeriodNote": MessageLookupByLibrary.simpleMessage("The shorter the interval, the more battery it costs: every server is asked in every period."),
+        "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("Enhanced"),
     "themeStyleOriginal": MessageLookupByLibrary.simpleMessage("Original"),
     "tight": MessageLookupByLibrary.simpleMessage("Tight"),
     "time": MessageLookupByLibrary.simpleMessage("Time"),
