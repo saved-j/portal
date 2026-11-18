@@ -767,6 +767,12 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
             cachedTun = tun
             return tun
         }
+        // Not consumed, only read: a second start in the same switch (a reload, then the start
+        // itself) must still see the tunnel the service published once.
+        XrayTunHolder.peek()?.takeIf { it.live }?.let { tun ->
+            cachedTun = tun
+            return tun
+        }
         cachedTun?.let { cached ->
             if (cached.live) return cached
             cachedTun = null

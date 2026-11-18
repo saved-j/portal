@@ -96,6 +96,14 @@ object XrayTunHolder {
         Unit
     }
 
+    /// The tunnel in hand, without taking it.
+    ///
+    /// A switch can start the child twice — the document reload and the start that follows it —
+    /// and `take` empties the slot on the first call, so the second one found nothing and
+    /// reported "the VPN that owns it is not up" over a tunnel that was up and healthy. Reading
+    /// is not consuming: the descriptor stays until the service closes it.
+    fun peek(): XrayTun? = synchronized(lock) { pending }
+
     /// The tunnel in hand, cleared as it is taken; an [epoch] given must match.
     fun take(epoch: Long? = null): XrayTun? = synchronized(lock) {
         val held = pending ?: return null

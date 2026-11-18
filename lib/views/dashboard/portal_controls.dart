@@ -2864,6 +2864,15 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
           mode.cancelled ? 'the switch to the network was cancelled' : mode.reason,
         );
       }
+      // While the simple portal was open the engine carried no configuration at all — the
+      // child read the tunnel and nothing built the engine's document. A listener started on a
+      // core with no config answers nothing ("Core did not answer startListener"), which is what
+      // the switch hit the moment it stopped being the only path. Push the profile first; the
+      // start that follows then has something to open.
+      final applied = await setup.applyProfile(force: true, silence: true);
+      if (!applied) {
+        throw const _PortalSwitchFailure('the engine refused the profile');
+      }
     }
     if (wasRunning) {
       // In the simple portal there is no engine config to wait for: the mode is a setting
