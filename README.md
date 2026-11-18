@@ -1,157 +1,122 @@
-<div>
+<div align="center">
 
-[**English**](README_EN.md) · [**中文**](README_ZH.md)
+# Portal
+
+**Две сети в одном приложении: правила и портал.**
+**Two networks in one app: rules and the portal.**
+**一个应用里的两张网：规则路由与门户。**
+
+[![Скачать](https://img.shields.io/badge/download-latest-00F5A0?style=for-the-badge)](https://github.com/saved-j/portal/releases/latest)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platform-Android%20%C2%B7%20macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-lightgrey?style=for-the-badge)](#платформы)
 
 </div>
 
-## FlClashX
+---
 
-[![Downloads](https://img.shields.io/github/downloads/pluralplay/FlClashX/total?style=flat-square&logo=github)](https://github.com/pluralplay/FlClashX/releases/)
-[![Last Version](https://img.shields.io/github/release/pluralplay/FlClashX/all.svg?style=flat-square)](https://github.com/pluralplay/FlClashX/releases/)
-[![License](https://img.shields.io/github/license/pluralplay/FlClashX?style=flat-square)](LICENSE)
+## Зачем нужен Portal
 
-[![Channel](https://img.shields.io/badge/Telegram-Chat-blue?style=flat-square&logo=telegram)](https://t.me/FlClashX)
+**Clash-приложения на Mihomo хороши тем, что умеют динамические сплит-туннели: правило решает, что
+идёт напрямую, а что через портал. Xray-приложения хороши тем, что быстро подхватывают все обходы,
+нужные против блокировок.**
 
-Форк многоплатформенного прокси-клиента [FlClash](https://github.com/chen08209/FlClash) на основе Mihomo, простого и удобного в использовании, с открытым исходным кодом и без рекламы. Сделан для VPN-сервисов: подписка управляет видом и настройками приложения через заголовки ответа панели.
+Для серьёзной работы нужно и то, и другое: и новые протоколы, и сплит-туннели. А по уму — в одном
+приложении.
 
-Десктопный вид:
+Мы сделали **два ядра в одном приложении** на базе [FlClashX](https://github.com/pluralplay/FlClashX),
+вдохновившись multicore: **Prizrak** (сборка mihomo) несёт «Сеть порталов», **Xray** — «Простой
+портал». Режимы полностью раздельные: свои серверы, свои замеры, свои настройки. Переключение на
+горячую — меньше секунды, без перезапуска приложения. Интерфейс упрощён до двух понятных состояний
+вместо десятка экранов.
 
-<p style="text-align: center;">
-    <img alt="desktop" src="snapshots/desktop.gif">
-</p>
+## Два режима
 
-Мобильный вид:
+**Сеть порталов** — правила и сплит-туннели. Ядро Prizrak: группы, автоматический выбор, маршруты
+по доменам и приложениям. Решение принимает правило, а не весь трафик целиком.
 
-<p style="text-align: center;">
-    <img alt="mobile" src="snapshots/mobile.gif">
-</p>
+**Простой портал** — одно ядро Xray и ни одного лишнего процесса. Для подписок с новыми
+протоколами: то, что ещё не дошло до сборок mihomo, уже работает здесь.
 
-## Возможности
+Один список подписок питает оба ядра; какое из них несёт трафик — решает приложение, а не подписка.
 
-В основе FlClash v0.9.2 и ядро mihomo v1.19.34, поэтому всё, что умеет оригинал, работает и здесь: профили по ссылке и из файла, встроенный редактор, скрипты переопределения, свои правила, прокси и группы, просмотр соединений, запросов, DNS и логов, резервные копии через WebDAV или файл, плитка быстрых настроек и Android TV, трей и горячие клавиши на десктопе. Сверху форк добавляет:
+## Что уже есть
 
-### Для провайдера
+- Переключение режимов и серверов на горячую, без закрытия портала
+- Замер задержки по каждому серверу — из живого ядра, а не отдельным пингом
+- Плитка в шторке: включает портал без запущенного приложения
+- Автообновление подписки в фоне
+- Тёмная тема, анимация реальных соединений, тактильная отдача
+- Без рекламы, без аккаунтов, без телеметрии
 
-🧾 **Заголовки подписки `flclashx-*`:** вид приложения и вкладки прокси, набор и порядок карточек дашборда, фон, переключатели приложения, запасные адреса панели, название и логотип сервиса, кнопки продления и докупки трафика. Подробно на [flclashx.app](https://flclashx.app/#headers).
+## Платформы
 
-🔒 **Настройки из подписки закреплены за провайдером:** ключи конфига (порты, режим, TUN, стек, MTU, маршруты, geo и другие) и заголовки применяются при каждом обновлении подписки и при переключении на профиль. Большинство из них пользователь может забрать себе, а потом вернуть настройку провайдера; списки приложений Android и набор карточек дашборда всегда следуют подписке.
+| Платформа | Статус |
+|---|---|
+| Android | **готово** — `Portal.apk` (arm64), `Portal_legacy.apk` (arm32), `Portal_universal.apk` |
+| macOS | в работе |
+| Windows | в работе |
+| Linux | в работе |
+| iOS | в работе |
 
-🪪 **HWID:** приложение отправляет `x-hwid`, `x-device-os`, `x-ver-os` и `x-device-model` (Remnawave и совместимые панели) и показывает диалоги, когда превышен лимит устройств или HWID не поддерживается.
-
-🧭 **Расширенный дашборд:** логотип и название сервиса в одну строку, тариф, выбранный сервер с флагом и IP, объявление, кнопки продления подписки и докупки трафика.
-
-⏰ **Уведомления об окончании подписки** за 3, 2, 1 день, в день окончания и после истечения, на всех платформах. Тап ведёт на страницу продления.
-
-🌐 **Из YAML подписки:** `flclashx-override` у группы GLOBAL, подписи серверов и групп (`serverDescription`, `groupDescription`), внешний контроллер и Zashboard.
-
-### Android
-
-📱 **120 Гц:** пока приложение на экране, дисплей работает на самой высокой частоте (90/120/144 Гц); в фоне частота возвращается системе.
-
-🔔 **Уведомление VPN** показывает только название сервиса из подписки (без него имя профиля) и, если включено в «Настройки → Общие», кнопку остановки.
-
-🎯 **Контроль доступа:** «Умный выбор» отправляет установленные российские приложения мимо VPN, а остальные в VPN. `tun.include-package` и `tun.exclude-package` из профиля действуют всегда и стоят выше ручного выбора приложений.
-
-🔗 **Ссылки `flclashx://install-config`** добавляют профиль сразу, без подтверждения, и приложение сообщает об этом.
-
-📺 **Android TV:** кнопка «Добавить профиль из буфера», выбор профиля, передача профиля с телефона по QR-коду.
-
-### Десктоп
-
-💻 **macOS:** режим «Прикрепить к строке меню»: окно открывается по клику на иконку в строке меню, значка в Dock нет.
-
-🇷🇺🇨🇳 **Windows:** русский и китайский языки в установщике.
-
-### Интерфейс
-
-🪟 **Стекло** на карточках дашборда, шторках, карточках и группах настроек; степень задаётся в настройках темы или ключом `app.glass` в заголовке `flclashx-view`.
-
-📊 **Дашборд:** карточку статуса и объявление можно переставлять; среди проверок доступности сервисов есть Госуслуги, Сбербанк, VK, Яндекс и Кинопоиск; качество IP текущего выхода.
-
-🧭 **Вкладка прокси:** поиск, режим, проверка задержки и сворачивание групп собраны в одну группу кнопок, остальное в меню «Ещё».
-
-🛠️ **Настройки по умолчанию:** поиск процессов включён, TUN включён, системный прокси выключен, прокси показаны списком, китайских пресетов нет.
-
-🗑️ **«Сброс приложения»** в общих настройках удаляет все профили, настройки и рабочую папку и закрывает приложение. Логи можно писать в файл.
-
-🌍 **Локализация:** переработанный русский язык, всего 7 языков.
-
-## Заголовки и параметры подписки
-
-Какие HTTP-заголовки ответа панели и YAML-параметры понимает приложение, с примерами и шаблоном для панели, описано на [flclashx.app](https://flclashx.app/#headers).
-
-Настройку, которую задаёт подписка, приложение показывает приглушённой. Пользователь может забрать её себе, и тогда обновления подписки и смена профиля её не трогают. Вернуть настройку провайдера можно правым кликом или долгим нажатием по строке, а все сразу пунктом «Вернуть настройки провайдера» в «Общие → Логи и диагностика».
-
-## Использование
-
-**Импорт профиля по ссылке.** Ссылка такого вида добавляет подписку в FlClashX сразу, без подтверждения. Схемы `clash://`, `clashmeta://`, `flclash://` и `clashx://` работают так же.
-
-```text
-flclashx://install-config?url=<ссылка на подписку в URL-кодировке>
-```
-
-**Автоматизация на Android.** Tasker, MacroDroid и похожие приложения могут запускать, останавливать и переключать VPN, открывая activity с одним из действий:
-
-```text
-com.follow.clashx.action.START
-com.follow.clashx.action.STOP
-com.follow.clashx.action.TOGGLE
-```
-
-С компьютера то же самое через adb:
-
-```bash
-adb shell am start -a com.follow.clashx.action.TOGGLE
-```
-
-**Иконка в трее на Linux.** Пакет `.deb` ставит зависимости сам. Для AppImage и `.rpm` установите AyatanaAppIndicator:
-
-```bash
-sudo apt-get install libayatana-appindicator3-1   # Debian и Ubuntu
-sudo dnf install libayatana-appindicator-gtk3     # Fedora
-```
-
-**Десктоп без пользователя.** Ядро запускается только после принятия дисклеймера. Где нажать на него некому, например в контейнере, задайте переменную окружения `FLCLASH_ACCEPT_DISCLAIMER=1`, и он будет принят при первом запуске.
+Portal Duo для десктопа выйдет на том же двухъядерном движке, что и Android-версия.
 
 ## Скачать
 
-Сборки лежат в [GitHub Releases](https://github.com/pluralplay/FlClashX/releases).
+Все сборки — на странице [Releases](https://github.com/saved-j/portal/releases/latest).
+Каждая собирается из этого репозитория и подписана.
 
-| Платформа | Пакеты |
-| --- | --- |
-| Android | APK для `arm64-v8a`, `armeabi-v7a` и `x86_64`; большинству телефонов нужен `arm64-v8a` |
-| Windows 10 и новее | Установщик (`.exe`) или портативный `.zip`, для x64 и ARM64 |
-| macOS 12 и новее | DMG для Apple Silicon и Intel |
-| Linux | `.deb`, `.rpm` и AppImage, для x64 и ARM64; в AUR пакеты `flclashx-bin` и `flclashx-git` |
+- `Portal.apk` — arm64, для современных телефонов
+- `Portal_legacy.apk` — arm32, для старых устройств
+- `Portal_universal.apk` — универсальная, если не знаешь, какая нужна
 
-<a href="https://github.com/pluralplay/FlClashX/releases"><img alt="Get it on GitHub" src="snapshots/get-it-on-github.svg" width="200px"/></a>
+## Сборка
 
-## Сборка из исходников
+См. [BUILD.md](BUILD.md): там закреплены версии Flutter, JDK, Gradle, Android SDK/NDK, Go и Rust,
+приведены команды для APK, deb, rpm, AppImage, Windows и macOS и сказано, что в репозиторий не
+попадает (ключ подписи и бинарник Xray — он скачивается по закреплённому SHA-256).
 
-Нужны [Flutter](https://docs.flutter.dev/get-started/install) 3.47 (релизы собираются на 3.47.6), [Go](https://go.dev/dl/) 1.27 и [Rust](https://rustup.rs/), установленный через rustup. Каждая платформа собирается на своей системе, кроме Android, который собирается где угодно.
+## Структура
 
-```bash
-git clone https://github.com/pluralplay/FlClashX.git
-cd FlClashX
-flutter pub get
-dart setup.dart android   # или windows, macos, linux
-```
+- `lib/` — приложение на Flutter (Dart)
+- `core/` — обвязка Go-ядра
+- `services/helper/` — привилегированный хелпер для TUN на десктопе (Rust)
+- `plugins/` — локальные Flutter-пакеты (окно, трей, прокси, rust_api, wifi_ssid)
+- `android/`, `macos/`, `linux/`, `windows/` — платформенные оболочки
+- `pipeline/1.03/` — текущая серия патчей против апстрима FlClashX: один патч — одна тема,
+  каждый применяется к замороженному дереву отдельно
 
-Пакеты появятся в `dist/`. Ядро на Go и библиотеки на Rust собираются вместе с Flutter-сборкой.
+## English
 
-| Платформа | Дополнительно |
-| --- | --- |
-| Android | Android SDK с NDK. `--arch arm64` собирает один ABI |
-| Windows | [Inno Setup](https://jrsoftware.org/isinfo.php) 6 для установщика |
-| macOS | Xcode и Node.js; скрипт ставит `create-dmg` через npm |
-| Linux | Debian или Ubuntu; скрипт ставит пакеты для сборки через apt и скачивает `appimagetool` |
+**Clash clients built on Mihomo are good at dynamic split tunnels: a rule decides what goes direct
+and what goes through the portal. Xray clients are good at picking up the newest obfuscation
+quickly, because that is where it lands first.**
 
-Остальные параметры, например `--targets` для сборки только части форматов: `dart setup.dart --help`.
+Serious work needs both — new protocols *and* split tunnels — and, honestly, in one application.
 
-## Star
+Portal runs **two cores in one app**, built on [FlClashX](https://github.com/pluralplay/FlClashX)
+and inspired by multicore: **Prizrak** (a mihomo build) carries the *portal network*, **Xray**
+carries the *simple portal*. The two modes are fully separate — their own servers, their own
+latency figures, their own settings — and switching between them hot takes under a second, without
+restarting the app. The interface is trimmed to two understandable states instead of a dozen
+screens.
 
-<p style="text-align: center;">
-Самый простой способ поддержать разработчиков — нажать на звездочку (⭐) в верхней части страницы.<br>
-Если хотите поддержать копеечкой, то можно <a href="https://t.me/tribute/app?startapp=dtyh">сделать это тут.</a></p>
+Next: Portal Duo for Windows, Linux, macOS and iOS, on the same two-core engine.
 
-**TON USDT:** `UQDSfrJ_k1BdsknhdR_zj4T3Is3OdMylD8PnDJ9mxO35i-TE`
+| Platform | Status |
+|---|---|
+| Android | **shipped** — `Portal.apk` (arm64), `Portal_legacy.apk` (arm32), `Portal_universal.apk` |
+| macOS · Windows · Linux · iOS | in progress |
+
+## 中文
+
+Portal 基于 [FlClashX](https://github.com/pluralplay/FlClashX)，在一个应用里运行两个内核：
+**Prizrak**（mihomo 构建）负责「门户网络」的规则与分流，**Xray** 负责「简单门户」。两种模式
+完全独立——各自的服务器、各自的延迟、各自的设置——热切换不到一秒，无需重启应用。
+Windows、Linux、macOS 与 iOS 版本正在开发中。
+
+## License
+
+GPL-3.0. Portal is a fork of [FlClashX](https://github.com/pluralplay/FlClashX), which is a fork
+of [FlClash](https://github.com/chen08209/FlClash). The Prizrak core is a build of
+[mihomo](https://github.com/MetaCubeX/mihomo); the simple portal runs
+[Xray-core](https://github.com/XTLS/Xray-core). See [LICENSE](LICENSE).
