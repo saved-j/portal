@@ -56,6 +56,10 @@ import kotlinx.coroutines.launch
  * uid, exactly like `VpnService.protect`, and it needs no interface name at all.
  */
 class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGateway {
+    init {
+        // Nothing: the shared instance is created by [obtain] and adopted by the engine.
+    }
+
     private lateinit var channel: MethodChannel
     private lateinit var appContext: Context
     private val executor = Executors.newSingleThreadExecutor()
@@ -129,6 +133,13 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         appContext = binding.applicationContext
+        // The engine adopts the instance that may already own the tunnel: a core started from
+        // the shade before this app was open is the same core this channel now speaks to.
+        shared = this
+        if (this::channel.isInitialized) {
+            // Re-attached (a new engine after the old one went away): the handler is replaced
+            // below, and the old messenger is gone with the old engine.
+        }
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
         channel.setMethodCallHandler(this)
         // The service takes the core down with the tunnel, so a revoked VPN cannot leave a
@@ -202,7 +213,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
                 }
                 GlobalState.launch {
                     val outcome = PortalRuntimeCoordinator.startChild(config)
-                    channel.invokeMethodOnMainThread("state", status())
+                    pushStatus()
                     replyOnMain(result, outcome.toMap())
                 }
             }
@@ -210,7 +221,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
                 // Returns after `XrayStop` has returned: a stop that did not happen is not
                 // reported as one, which is what makes the next start's evidence meaningful.
                 val outcome = PortalRuntimeCoordinator.close("plugin-stop")
-                channel.invokeMethodOnMainThread("state", status())
+                pushStatus()
                 replyOnMain(
                 result,
                 mapOf(
@@ -223,6 +234,13 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
             }
             else -> result.notImplemented()
         }
+    }
+
+    /// Pushes the core's status to Dart, if there is a Dart: a headless instance has no channel
+    /// until an engine adopts it, and a push must never be the reason a start fails.
+    private fun pushStatus() {
+        if (!this::channel.isInitialized) return
+        runCatching { channel.invokeMethodOnMainThread("state", status()) }
     }
 
     private fun status(): Map<String, Any> = mapOf(
@@ -869,6 +887,18 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
     }
 
     /// Opens the core library once, and answers with what a start should say when it cannot.
+    /// Makes this instance usable without a Flutter engine.
+    ///
+    /// Nothing here touches the channel — it does not exist yet — and nothing here is a second
+    /// copy of the core: the same fields, the same executor and the same native handle the
+    /// engine will use later.
+    private fun attachHeadless() {
+        if (this::appContext.isInitialized) return
+        appContext = com.follow.clashx.common.GlobalState.application
+        PortalRuntimeCoordinator.attachChild(this)
+        GlobalState.log("$TAG core attached without an engine")
+    }
+
     private fun ensureLibrary(): String? {
         if (libraryLoaded) return null
         libraryProblem?.let { return it }
@@ -958,6 +988,29 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
 
     companion object {
         private const val TAG = "XrayCore"
+
+        /// The one instance of this class in the process.
+        ///
+        /// The core must be startable without Flutter: the shade's tile can arrive when no engine
+        /// exists, and a second copy of the core's state — its tunnel, its running flag, its
+        /// library handle — is exactly the duplication the portal must not have. So the process
+        /// keeps one instance, created headless by whoever asks first and adopted by the engine
+        /// when it appears: the tile starts the core, the app later finds the same core.
+        @Volatile
+        private var shared: XrayPlugin? = null
+
+        fun obtain(): XrayPlugin = shared ?: synchronized(this) {
+            shared ?: XrayPlugin().also { instance ->
+                instance.attachHeadless()
+                shared = instance
+            }
+        }
+
+        /// True when a core can exist at all in this build.
+        fun available(): Boolean = runCatching {
+            System.loadLibrary(LIB_NAME)
+            true
+        }.getOrDefault(false)
 
         /// The library as `System.loadLibrary` names it: it adds the `lib` prefix and `.so`.
         private const val LIB_NAME = "xray"

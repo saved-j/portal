@@ -165,6 +165,36 @@ class SetupAction extends _$SetupAction {
     }
   }
 
+  /// Takes the run state from the native record, for moves this side did not make.
+  ///
+  /// The tile, a shortcut, the notification's button and a system revoke all end in the same
+  /// coordinator, and the coordinator answers to the record — not to whoever tapped. Without
+  /// this the screen kept its own memory of the last tap it made itself, which is why a portal
+  /// started from the shade looked closed inside the app.
+  ///
+  /// Deliberately no `_start`/`_stop` calls: this is a read, and a read must never restart a
+  /// tunnel that is already up.
+  Future<void> syncFromNative() async {
+    if (isChangingRun) return;
+    final status = await portalRuntime.refresh();
+    // The service's own clock is what the timer counts from; asking it here keeps a portal
+    // started before this engine existed from showing 00:00.
+    final startedAt = await serviceStartTime();
+    if (startedAt != null && _startTime == null) {
+      _startTime = startedAt;
+    }
+    if (isChangingRun) return;
+    if (status.active || status.busy) {
+      if (_startTime == null) {
+        _setLocalRunning(true);
+      }
+      return;
+    }
+    if (status.phase == 'Off' || status.phase == 'Failed') {
+      if (_startTime != null) _setLocalRunning(false);
+    }
+  }
+
   void _setLocalRunning(bool running) {
     _stopRuntimeTicker();
     if (!running) {

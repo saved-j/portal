@@ -95,6 +95,10 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
     _updateVisible(state);
     if (state == AppLifecycleState.resumed) {
       unawaited(ref.read(locationPermissionsProvider.notifier).refresh());
+      // The portal can be moved while this app is in the background — the shade's tile is the
+      // ordinary way to do it. Coming back must show the tunnel that exists, not the one this
+      // screen last asked for.
+      unawaited(ref.read(setupActionProvider.notifier).syncFromNative());
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
           return;

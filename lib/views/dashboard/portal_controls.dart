@@ -542,26 +542,6 @@ List<Group> portalVisibleGroups(List<Group> all, Set<String> hidden, List<String
 /// The name of the one group the simple portal draws when no engine serves one.
 const portalSimpleGroupName = portalRowsGroupName;
 
-/// The portal's own record, as a provider: which core holds the tunnel, right now.
-///
-/// The list has to know that before it shows a core's rows: a group stays in memory after its
-/// core stopped, and a list that draws it anyway is showing the previous owner's servers under
-/// the current mode's heading. Only `Active` with the matching owner is a live answer.
-class PortalStatusNotifier extends Notifier<PortalRuntimeStatus> {
-  @override
-  PortalRuntimeStatus build() {
-    final source = portalRuntime.status;
-    void onChange() => state = source.value;
-    source.addListener(onChange);
-    ref.onDispose(() => source.removeListener(onChange));
-    return source.value;
-  }
-}
-
-final portalStatusProvider =
-    NotifierProvider<PortalStatusNotifier, PortalRuntimeStatus>(
-        PortalStatusNotifier.new);
-
 /// Both feeds' counts, as a provider, so a control redraws the moment one moves.
 ///
 /// The ledger itself is a plain [PortalFeeds] on purpose: the fetch path (a model, no widget,

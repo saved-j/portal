@@ -95,7 +95,7 @@ object PortalTelemetry {
         if (!started.compareAndSet(false, true)) return
         // The one line per transition comes from the record, which is what makes it true
         // for every entry instead of only for the ones that remembered to write it.
-        PortalRuntimeState.onPublish = ::noteTransition
+        PortalRuntimeState.addObserver { previous, next, why -> noteTransition(previous, next, why) }
         Thread({ loop() }, "portal-telemetry").apply {
             isDaemon = true
             start()

@@ -152,6 +152,16 @@ class PortalRuntime {
   void attach() {
     _channel.setMethodCallHandler((call) async {
       switch (call.method) {
+        // The one push from the native side: a state was accepted, whoever asked for it —
+        // the tile, a shortcut, a revoke, or the app's own button. Without this the screen
+        // only ever knew about the moves it made itself.
+        case 'state':
+          final arguments = call.arguments;
+          if (arguments is Map) {
+            status.value =
+                PortalRuntimeStatus.fromMap(arguments.cast<Object?, Object?>());
+          }
+          return null;
         case 'prepareChildConfig':
           final builder = childConfigBuilder;
           if (builder == null) return null;
@@ -168,6 +178,9 @@ class PortalRuntime {
           return null;
       }
     });
+    // The engine can be created after the tunnel exists (a tile tap on a dead process), and
+    // the push only describes the next change. One read on attach closes that gap.
+    unawaited(refresh());
   }
 
   Future<PortalRuntimeAnswer> open(

@@ -30,6 +30,9 @@ import kotlin.coroutines.resume
 class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var channel: MethodChannel
 
+    /// Removes this plugin's reader of the record; null when detached.
+    private var detachObserver: (() -> Unit)? = null
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
         channel.setMethodCallHandler(this)
@@ -38,12 +41,31 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         PortalRuntimeCoordinator.provideChildConfig {
             requestChildConfig()
         }
+        // Every accepted state reaches Dart, whoever caused it: a tile tap, a shortcut, a
+        // revoke, the app's own button. This is the one line that makes the screen belong to
+        // the tunnel instead of to the last tap the screen itself made.
+        detachObserver = PortalRuntimeState.addObserver { _, _, _ -> pushStatus() }
+        // The engine can be created *after* the tunnel exists (tile on a dead process), so
+        // the current record is sent once on attach, not only on the next change.
+        pushStatus()
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         attached = false
+        detachObserver?.invoke()
+        detachObserver = null
         channel.setMethodCallHandler(null)
         PortalRuntimeCoordinator.provideChildConfig(null)
+    }
+
+    /// Sends the record to Dart. Cheap: it is one map of enums and numbers, and it is sent on
+    /// a transition rather than on a clock.
+    private fun pushStatus() {
+        if (!attached) return
+        val payload = PortalRuntimeCoordinator.status()
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            runCatching { channel.invokeMethod("state", payload) }
+        }
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {

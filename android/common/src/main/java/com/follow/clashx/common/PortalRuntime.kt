@@ -1,5 +1,6 @@
 package com.follow.clashx.common
 
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
@@ -129,11 +130,24 @@ object PortalRuntimeState {
 
     /// Called for every state that is accepted, with the state it replaced.
     ///
-    /// The record does not know who reads it: the telemetry file is one reader, and it is
-    /// attached here rather than called by name so the record stays a record. A `null` hook
-    /// is a process that keeps no files — the log lines are written either way.
-    @Volatile
+    /// The record does not know who reads it, and it does not pick one reader: the telemetry
+    /// file, the Flutter bridge and anything else that must follow the tunnel all attach here.
+    /// A single slot used to hold this, so attaching the bridge silently displaced the file —
+    /// the transitions log would have gone quiet the moment the app was alive to listen.
+    private val observers = CopyOnWriteArrayList<(PortalRuntime, PortalRuntime, String) -> Unit>()
+
+    /// Adds a reader; returns the call that removes it again.
+    fun addObserver(observer: (PortalRuntime, PortalRuntime, String) -> Unit): () -> Unit {
+        observers.add(observer)
+        return { observers.remove(observer) }
+    }
+
+    /// Kept for the one caller that predates the list: it now adds a reader like any other.
     var onPublish: ((PortalRuntime, PortalRuntime, String) -> Unit)? = null
+        set(value) {
+            field = value
+            value?.let { observers.add(it) }
+        }
 
     fun current(): PortalRuntime = state.get()
 
@@ -167,7 +181,12 @@ object PortalRuntimeState {
             }
             if (state.compareAndSet(seen, next)) {
                 GlobalState.log("$TAG ${next.describe()}${if (why.isEmpty()) "" else " why=$why"}")
-                onPublish?.invoke(seen, next, why)
+                for (observer in observers) {
+                    // One reader failing must not cost the others their update, and it must
+                    // not unwind the publish that already happened.
+                    runCatching { observer(seen, next, why) }
+                        .onFailure { error -> GlobalState.log("$TAG observer failed: ${error.message}") }
+                }
                 return true
             }
         }

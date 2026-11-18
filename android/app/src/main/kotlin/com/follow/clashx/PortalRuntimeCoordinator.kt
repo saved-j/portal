@@ -1,6 +1,7 @@
 package com.follow.clashx
 
 import com.follow.clashx.common.GlobalState
+import com.follow.clashx.plugins.XrayPlugin
 import java.io.File
 import com.follow.clashx.common.PortalOwner
 import com.follow.clashx.common.PortalRuntime
@@ -277,7 +278,14 @@ object PortalRuntimeCoordinator {
         config: String?,
         why: String,
     ): PortalOutcome {
-        val gateway = child
+        // The core does not need Flutter to exist: the process keeps one instance, created
+        // headless by whoever asks first (the shade's tile can arrive before any engine) and
+        // adopted by the engine when the app opens. This is the same object either way, so the
+        // tile and the app's button hold the same tunnel, not two copies of one.
+        val gateway = child ?: runCatching {
+            if (!XrayPlugin.available()) return@runCatching null
+            XrayPlugin.obtain().also { attachChild(it) }
+        }.getOrNull()
             ?: return failed(generation, "this build has no portal core for the tunnel")
         // A caller that carries a document is the app itself; one that does not is the tile, and
         // the builder it would ask may be a Flutter engine that is not running. The last document
@@ -376,6 +384,13 @@ object PortalRuntimeCoordinator {
     }
 
     private suspend fun startService(generation: Long): Boolean {
+        // The service reads its options from the shared state that the app writes and the
+        // machine holds in memory. A start that did not come from Flutter — the shade's tile,
+        // a shortcut, a boot — has nothing in memory yet, and without this line the request is
+        // refused as if the app had no profile. The same state is what the 0.01a tile path
+        // loaded before asking; here it is loaded for every entry, once, before the ask.
+        runCatching { ServiceState.syncSharedState(AndroidServiceStateHost.loadSharedState()) }
+            .onFailure { GlobalState.log("$TAG cannot load the shared state: ${it.message}") }
         val answered = ServiceState.requestStart().await()
         GlobalState.log(
             "$TAG generation=$generation step=service start=$answered " +

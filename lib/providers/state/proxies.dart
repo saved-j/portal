@@ -52,7 +52,10 @@ bool _hasSelection(Proxy proxy) => proxy.now?.isNotEmpty ?? false;
 @riverpod
 ProxyState proxyState(Ref ref) {
   final suspend = ref.watch(suspendProvider);
-  final isStart = ref.watch(runTimeProvider.select((state) => state != null));
+  // The tunnel that exists, not the last tap this screen made: `runTime` is this side's own
+  // clock and is empty when the portal was started from the shade, while the record knows.
+  final isStart = ref.watch(runTimeProvider.select((s) => s != null)) ||
+      ref.watch(portalStatusProvider.select((s) => s.active || s.busy));
   // A crash keeps the run on, so a Core restart resumes it, but until then
   // nothing listens on the port the proxy would send traffic to.
   final coreAlive = ref.watch(
