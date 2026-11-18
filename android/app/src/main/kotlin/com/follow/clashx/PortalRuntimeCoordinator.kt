@@ -251,11 +251,28 @@ object PortalRuntimeCoordinator {
         // can paper over: nothing of the engine would be reading it, and calling that
         // `Active owner=Mihomo` is exactly the false record this patch exists to remove.
         if (owner == PortalOwner.Mihomo && XrayTunHolder.currentEpoch() > epochBefore) {
-            stopService()
-            return failed(
-                generation,
-                "the service published a child tunnel while the engine was asked for one",
+            // The service established the child's tunnel: the options it started from still named
+            // the child as the reader, left over from the simple portal. A start with the wrong
+            // reader is a start that can be redone — not a portal that has to close — so the
+            // service is stopped, the reader is pointed at the engine and the start is asked once
+            // more. A second mismatch is a real refusal and stays one.
+            GlobalState.log(
+                "$TAG generation=$generation the service built the child's tunnel, " +
+                    "restarting it for the engine",
             )
+            stopService()
+            ServiceState.pointTunnelAt(child = false)
+            val retryEpoch = PortalRuntimeState.currentFdEpoch()
+            if (!startService(generation, owner)) {
+                return failed(generation, "the service did not start for ${owner.label}")
+            }
+            if (XrayTunHolder.currentEpoch() > retryEpoch) {
+                stopService()
+                return failed(
+                    generation,
+                    "the service published a child tunnel while the engine was asked for one",
+                )
+            }
         }
         if (!stillCurrent(generation)) {
             runCatching { ServiceState.requestStop() }

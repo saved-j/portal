@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:collection/collection.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/service_probe.dart' show routedOutbound;
+import 'package:fl_clash/enum/enum.dart' show Mode;
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/outbound_ip.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -141,7 +142,14 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                             ),
                           ),
                         ),
-                        GestureDetector(
+                        // The connections list is the engine's answer, and in the simple
+                        // portal no engine runs: the page could only ever be empty. The
+                        // button exists exactly where its data exists — in the network.
+                        if (ref.watch(
+                              patchClashConfigProvider.select((s) => s.mode),
+                            ) !=
+                            Mode.global)
+                          GestureDetector(
                           onDoubleTap: () => ref
                               .read(portalConnectionsBadgeProvider.notifier)
                               .toggle(),
