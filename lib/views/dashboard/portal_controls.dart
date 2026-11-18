@@ -2246,9 +2246,10 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                     ),
                                   ),
                               ];
-                              final bottom = server == null || server == item.name
-                                  ? '—'
-                                  : server;
+                              // No placeholder: a chip with no server simply has no second
+                              // line. A dash would be a value the engine never gave.
+                              final bottom =
+                                  server == null || server == item.name ? null : server;
                               return Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -2260,20 +2261,22 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                         ? [mark]
                                         : top,
                                   ),
-                                  const SizedBox(height: 1),
-                                  Text(
-                                    bottom,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                  ),
+                                  if (bottom != null) ...[
+                                    const SizedBox(height: 1),
+                                    Text(
+                                      bottom,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ],
                                 ],
                               );
                             },
