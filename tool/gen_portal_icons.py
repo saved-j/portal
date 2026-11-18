@@ -95,6 +95,61 @@ NOTIFICATION_PX = {"mdpi": 24, "hdpi": 36, "xhdpi": 48, "xxhdpi": 72, "xxxhdpi":
 NOTIFICATION_PADDING_DP = 1.0
 
 
+def tray_glyph(
+    size_px: int,
+    *,
+    filled: bool = False,
+    dot: bool = False,
+    colour=(0, 0, 0, 255),
+) -> Image.Image:
+    """The portal mark as a menu-bar silhouette.
+
+    A status item is 18 points at most and lives on a bar that may be light or dark, so the
+    picture cannot be the app icon: it is drawn as one colour with transparency — a rounded
+    frame, the planet inside it and, when the portal is carrying traffic, the planet filled.
+    macOS reads the alpha as a template image and recolours it for the current appearance.
+    """
+    scale = 8
+    edge = size_px * scale
+    canvas = Image.new("RGBA", (edge, edge), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+    margin = int(edge * 0.08)
+    stroke = max(scale, int(edge * 0.11))
+    radius = int(edge * 0.24)
+    box = (margin, margin, edge - margin, edge - margin)
+    draw.rounded_rectangle(box, radius=radius, outline=colour, width=stroke)
+    planet = int(edge * 0.30)
+    centre = edge // 2
+    circle_box = (
+        centre - planet,
+        centre - planet,
+        centre + planet,
+        centre + planet,
+    )
+    if filled:
+        draw.ellipse(circle_box, fill=colour)
+    else:
+        draw.ellipse(circle_box, outline=colour, width=max(scale, int(edge * 0.07)))
+    if dot:
+        r = max(scale, int(edge * 0.05))
+        draw.ellipse(
+            (centre - r, centre - r, centre + r, centre + r),
+            fill=(255, 255, 255, 255) if filled else colour,
+        )
+    return canvas.resize((size_px, size_px), Image.LANCZOS)
+
+
+def save_tray_ico(path: str, *, filled: bool, dot: bool) -> None:
+    """A Windows tray .ico: white on transparency, several sizes in one file."""
+    sizes = [16, 20, 24, 32, 48, 64]
+    images = [
+        tray_glyph(size, filled=filled, dot=dot, colour=(255, 255, 255, 255))
+        for size in sizes
+    ]
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    images[-1].save(path, format="ICO", sizes=[(s, s) for s in sizes], append_images=images[:-1])
+
+
 def notification_p(size_px: int, dp: float, color=(255, 255, 255, 255)) -> Image.Image:
     """A П drawn to the notification spec: 24 dp canvas, 1 dp padding, alpha only."""
     scale = 8
@@ -213,6 +268,35 @@ def main() -> None:
     # Windows runner
     os.makedirs(WINDOWS, exist_ok=True)
     save_ico(os.path.join(WINDOWS, "app_icon.ico"))
+
+    # Tray / menu-bar icons. These were the last FlClashX leftovers: the status item still drew
+    # the old "X", which is what the owner saw in the macOS menu bar. A status icon is a
+    # silhouette a few pixels tall, so the picture is drawn as a mark, not resized: a rounded
+    # portal frame with the planet inside, in one colour on transparency (macOS treats it as a
+    # template and recolours it for light and dark menu bars).
+    for scale, size in {1: 18, 2: 36, 3: 54, 4: 72}.items():
+        folder = os.path.join(ASSETS, "tray/macos") if scale == 1 else os.path.join(
+            ASSETS, f"tray/macos/{scale}.0x"
+        )
+        save(tray_glyph(size, filled=False), os.path.join(folder, "status_1.png"))
+        save(tray_glyph(size, filled=True), os.path.join(folder, "status_4.png"))
+
+    for scale, size in {1: 22, 2: 44, 3: 66, 4: 88}.items():
+        folder = os.path.join(ASSETS, "tray/unix") if scale == 1 else os.path.join(
+            ASSETS, f"tray/unix/{scale}.0x"
+        )
+        for state, fill in ((1, False), (2, False), (3, True), (4, True)):
+            save(
+                tray_glyph(size, filled=fill, dot=state >= 2, colour=(0, 0, 0, 255)),
+                os.path.join(folder, f"status_{state}.png"),
+            )
+
+    for state, fill in ((1, False), (2, False), (3, True), (4, True)):
+        save_tray_ico(
+            os.path.join(ASSETS, f"tray/windows/status_{state}.ico"),
+            filled=fill,
+            dot=state >= 2,
+        )
 
     # A master for the site/tray to reuse
     save(square(2048), os.path.join(ROOT, "tool/branding/portal_icon_master.png"))
