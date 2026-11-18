@@ -145,6 +145,17 @@ android {
                 }
             }
 
+            // A test build must land on the app the owner already has. The signed release lives
+            // under its own id, so installing it during a test creates a second icon and leaves
+            // the one on screen untouched — which is how every "fix" of one night was measured on
+            // the previous build. PORTAL_DEV_ID=1 puts the same release build under the .dev id.
+            // …and it must carry the key the installed test build already has, or Android refuses
+            // the upgrade and the new build lands as a second app nobody opens.
+            if (System.getenv("PORTAL_DEV_ID") == "1") {
+                applicationIdSuffix = ".dev"
+                signingConfig = signingConfigs.getByName("debug")
+            }
+
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

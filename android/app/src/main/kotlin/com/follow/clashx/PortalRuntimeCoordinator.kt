@@ -243,9 +243,6 @@ object PortalRuntimeCoordinator {
         // 2. The service, in the mode Dart has already written into the shared state.
         GlobalState.log("$TAG phase=Starting owner=${owner.label} step=service")
         val epochBefore = PortalRuntimeState.currentFdEpoch()
-        // The tunnel's reader is decided by the owner being started, not by whichever options
-        // happened to be left in the machine from the other portal.
-        ServiceState.pointTunnelAt(child = owner != PortalOwner.Mihomo)
         if (!startService(generation, owner)) {
             return failed(generation, "the service did not start for ${owner.label}")
         }
@@ -421,6 +418,13 @@ object PortalRuntimeCoordinator {
             runCatching { ServiceState.syncSharedState(AndroidServiceStateHost.loadSharedState()) }
                 .onFailure { GlobalState.log("$TAG cannot load the shared state: ${it.message}") }
         }
+        // The tunnel's reader is the owner being started — after the load, never before it: the
+        // file may name the other core, and pointing first only to be overwritten by the load is
+        // how the service came to establish the child's tunnel under an engine start.
+        ServiceState.pointTunnelAt(child = owner != PortalOwner.Mihomo)
+        GlobalState.log(
+            "$TAG generation=$generation tunnel reader=${if (owner == PortalOwner.Mihomo) "engine" else "child"}",
+        )
         // The engine must be configured before a tunnel is handed to it: its config lives in
         // memory and is normally written by Dart, which a start from the shade does not have.
         // Without this the service comes up carrying nothing, and calling that `Active` is the
