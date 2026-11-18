@@ -14,6 +14,14 @@ val localProperties = Properties().apply {
     }
 }
 
+// Every build is numbered: `PATCH` is the one place that number is written, and the suffix the
+// owner and the shop see is that number. PORTAL_PATCH still overrides it for a one-off build.
+val patchNumber: Int = (
+    System.getenv("PORTAL_PATCH")
+        ?: rootProject.file("../PATCH").takeIf { it.exists() }?.readText()?.trim()
+        ?: ""
+    ).trim().toIntOrNull() ?: 0
+
 val releaseStoreFile = file("keystore.jks")
 val releaseStorePassword = localProperties.getProperty("storePassword")
 val releaseKeyAlias = localProperties.getProperty("keyAlias")
@@ -52,7 +60,9 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         // Releases up to 0.5.0-pre.8 gave split APKs Flutter's ABI offset of up to +4000, so the
         // code every variant now shares sits above it and any earlier APK upgrades to any variant.
-        versionCode = flutter.versionCode + 5000
+        // The code grows with the patch too, or two builds with the same number could not be
+        // installed over one another: the day counts, the patch ends it.
+        versionCode = (flutter.versionCode + 5000) / 100 * 100 + patchNumber
         // Flutter rewrites local.properties from pubspec.yaml on every build, and pubspec only
         // accepts a semver core, so the shop-facing name is set here where nothing overwrites
         // it. PORTAL_VERSION_NAME lets a build override it without touching this file.
@@ -64,7 +74,8 @@ android {
         // semver core does not accept, so the base comes from pubspec and the suffix is added
         // here. An explicit PORTAL_VERSION_NAME still wins for a one-off build.
         versionName =
-            System.getenv("PORTAL_VERSION_NAME") ?: "${baseVersion}_3a-portal-duo"
+            System.getenv("PORTAL_VERSION_NAME")
+                ?: "${baseVersion}_${patchNumber}a-portal-duo"
     }
 
     signingConfigs {

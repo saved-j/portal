@@ -2214,8 +2214,6 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                               // 3 icon+server · 4 icon
                               final showIcon = display >= 2;
                               final showName = display <= 2;
-                              final showServer =
-                                  display == 1 || display == 2 || display == 3;
                               final mark = SizedBox.square(
                                 dimension: 16,
                                 child: CommonTargetIcon(
@@ -2231,48 +2229,51 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                               // in the same frame as the tap.
                               final server =
                                   bypassed ? null : (picked ? pendingByGroup[item.name] : item.now);
-                              // Two lines inside the chip: the filter's name, and — under it —
-                              // the server it currently answers with. A separator between them
-                              // read as one long label and lost the server in the middle of it;
-                              // stacked, the eye finds the name first and the answer second.
-                              final lines = <String>[
-                                if (showName) item.name,
-                                if (showServer &&
-                                    server != null &&
-                                    server != item.name)
-                                  server,
+                              // Two storeys in every layout, all five of them: the filter on top,
+                              // the server it answers with underneath. The five layouts then
+                              // differ only in what the top storey carries — name, name+icon or the
+                              // icon alone — so a chip never changes its height when the owner
+                              // cycles the layout, and the answer is always in the same place.
+                              final top = <Widget>[
+                                if (showIcon) mark,
+                                if (showIcon && showName) const SizedBox(width: 6),
+                                if (showName)
+                                  Flexible(
+                                    child: Text(
+                                      item.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
                               ];
-                              if (lines.isEmpty) lines.add(item.name);
-                              final label = Column(
+                              final bottom = server == null || server == item.name
+                                  ? '—'
+                                  : server;
+                              return Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  for (var index = 0; index < lines.length; index++)
-                                    Text(
-                                      lines[index],
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: index == 0
-                                          ? null
-                                          : Theme.of(context)
-                                              .textTheme
-                                              .labelSmall
-                                              ?.copyWith(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .onSurfaceVariant,
-                                              ),
-                                    ),
-                                ],
-                              );
-                              if (!showIcon) return label;
-                              return Row(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  mark,
-                                  const SizedBox(width: 6),
-                                  Flexible(child: label),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: top.isEmpty
+                                        ? [mark]
+                                        : top,
+                                  ),
+                                  const SizedBox(height: 1),
+                                  Text(
+                                    bottom,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                  ),
                                 ],
                               );
                             },
@@ -2877,7 +2878,15 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
     if (wasRunning) {
       // In the simple portal there is no engine config to wait for: the mode is a setting
       // and the tunnel is the child's, so the start that follows is the whole answer.
-      if (!await setup.setRunning(true)) {
+      var started = await setup.setRunning(true);
+      if (!started && !toSimple) {
+        // The engine answered nothing: the listener was asked to open before the core had the
+        // profile it opens from. Pushing it once more and asking again is the difference between
+        // a switch that works on the second tap and one that never does.
+        await setup.applyProfile(force: true, silence: true);
+        started = await setup.setRunning(true);
+      }
+      if (!started) {
         final reason = setup.lastPortalFailure;
         throw _PortalSwitchFailure(
           reason.isEmpty ? 'the portal did not start again' : reason,
