@@ -39,7 +39,12 @@ class TileService : android.service.quicksettings.TileService() {
     // never a second mechanism.
     override fun onClick() {
         super.onClick()
-        val start = ServiceState.runState.value != RunState.STARTED
+        // The record decides, not the service machine's own last value: on a process started by
+        // the tap itself that value is STOPPED even when the tunnel is up, and a tap would then
+        // ask to start what is already running.
+        val phase = PortalRuntimeState.current().phase
+        val start = phase != "Active"
+        GlobalState.log("PortalTile tile tap: phase=$phase -> ${if (start) "start" else "stop"}")
         GlobalState.launch {
             if (start) {
                 PortalRuntimeCoordinator.openDesired()
@@ -58,11 +63,10 @@ class TileService : android.service.quicksettings.TileService() {
     /// The record's phase, mapped onto the tile's three states.
     private fun updateTileFromRecord() {
         val phase = PortalRuntimeState.current().phase
-        if (phase == "Active") {
-            setTileState(Tile.STATE_ACTIVE)
-        } else if (phase == "Starting" || phase == "Stopping") {
-            setTileState(Tile.STATE_UNAVAILABLE)
-        }
+        // Never UNAVAILABLE: SystemUI drops taps on an unavailable tile, and a tile that is
+        // busy for half a second must still accept the next tap. Active is the only state the
+        // owner reads as "on"; everything else reads as "off" and stays clickable.
+        setTileState(if (phase == "Active") Tile.STATE_ACTIVE else Tile.STATE_INACTIVE)
     }
 
     private fun setTileState(state: Int) {
@@ -76,8 +80,7 @@ class TileService : android.service.quicksettings.TileService() {
         qsTile?.apply {
             state = when (runState) {
                 RunState.STARTED -> Tile.STATE_ACTIVE
-                RunState.STARTING, RunState.STOPPING -> Tile.STATE_UNAVAILABLE
-                RunState.STOPPED -> Tile.STATE_INACTIVE
+                else -> Tile.STATE_INACTIVE
             }
             updateTile()
         }

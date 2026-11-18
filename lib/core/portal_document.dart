@@ -34,7 +34,9 @@ const portalSelectedTag = 'portal-selected';
 String portalChildDocument(
   List<XrayServerConfig> servers, {
   required String selected,
-  Duration probeInterval = const Duration(seconds: 60),
+  /// How often the core re-times every node. Null means no schedule at all: the document then
+  /// carries no observatory, because a placeholder period would be a schedule nobody asked for.
+  Duration? probeInterval = const Duration(seconds: 60),
   String probeUrl = 'https://www.gstatic.com/generate_204',
 }) {
   final outbounds = <Map<String, Object?>>[];
@@ -67,7 +69,7 @@ String portalChildDocument(
   outbounds.add({'tag': 'portal-direct', 'protocol': 'freedom'});
   outbounds.add({'tag': 'portal-blocked', 'protocol': 'blackhole'});
 
-  return const JsonEncoder.withIndent(' ').convert({
+  final document = <String, Object?>{
     'log': {'loglevel': 'warning'},
     'outbounds': outbounds,
     // The tunnel's traffic goes to the node the owner picked; the observatory does the rest.
@@ -81,9 +83,11 @@ String portalChildDocument(
         },
       ],
     },
+  };
+  if (probeInterval != null) {
     // The core times every node itself, on this period, and keeps the results. Nothing of the
     // app runs for this: no sweep, no second core, no map to fill.
-    'burstObservatory': {
+    document['burstObservatory'] = {
       'subjectSelector': [portalNodeTagPrefix],
       // Interval and timeout are Go duration strings, not numbers: Xray parses them with
       // time.ParseDuration and rejects anything else.
@@ -94,8 +98,9 @@ String portalChildDocument(
         'sampling': 3,
         'httpMethod': 'HEAD',
       },
-    },
-  });
+    };
+  }
+  return const JsonEncoder.withIndent(' ').convert(document);
 }
 
 /// The name [tag] belongs to in a document built by [portalChildDocument], or null.

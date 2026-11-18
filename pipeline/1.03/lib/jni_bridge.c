@@ -12,6 +12,7 @@ extern char *XrayStart(char *configJSON, int tunFd, char *assetDir);
 extern void XrayStop(void);
 extern char *XrayVersion(void);
 extern char *XrayMeasure(char *configJSON, char *tagsJSON, char *url, int timeoutMs, int limit);
+extern char *XrayObservatory(void);
 extern void XrayMeasureStop(void);
 
 // Every line the library logs goes through here: an app process has no console, and Android
@@ -95,6 +96,18 @@ Java_com_follow_clashx_plugins_XrayPlugin_XrayMeasure(JNIEnv *env, jobject thiz,
     (*env)->ReleaseStringUTFChars(env, tags, names);
     (*env)->ReleaseStringUTFChars(env, config, text);
     if (answer == NULL) return (*env)->NewStringUTF(env, "{\"error\":\"no answer\"}");
+    jstring out = (*env)->NewStringUTF(env, answer);
+    free(answer);
+    return out;
+}
+
+// The running core's own latency numbers. No arguments: the core already knows which nodes it
+// is watching, and the caller gets JSON.
+JNIEXPORT jstring JNICALL
+Java_com_follow_clashx_plugins_XrayPlugin_XrayObservatory(JNIEnv *env, jobject thiz) {
+    (void) thiz;
+    char *answer = XrayObservatory();
+    if (answer == NULL) return (*env)->NewStringUTF(env, "{\"rows\":[],\"running\":false}");
     jstring out = (*env)->NewStringUTF(env, answer);
     free(answer);
     return out;

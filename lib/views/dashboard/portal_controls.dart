@@ -11,7 +11,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
 import 'package:fl_clash/core/sweep_ledger.dart';
 import 'package:fl_clash/core/xray_measure.dart';
-import 'package:fl_clash/core/xray_ping.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
 import 'package:fl_clash/core/portal_document.dart';
 import 'package:fl_clash/core/portal_feed.dart';
@@ -282,94 +281,6 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
 
   /// The node the child is carrying traffic on, or null when no child holds the tunnel.
   ///
-  /// The pick is a commit — written only for a node the child acknowledged — so it names the
-  /// node the tunnel is actually running, which is the only node a request through the tunnel
-  /// can measure.
-  String? get _runningNode {
-    final status = portalRuntime.status.value;
-    if (!status.active || status.owner != PortalOwner.xray) return null;
-    return portalXrayPickFor(
-      ref.read(appSettingProvider),
-      ref.read(currentProfileIdProvider),
-    );
-  }
-
-  /// Times the nodes by carrying a real request through the portal, and puts the portal back.
-  ///
-  /// A test is a measurement, not a connection: if the portal is closed, the child is raised on
-  /// the same transactional path a switch uses, the sweep runs through the tunnel, and the child
-  /// is put down again — the owner asked for a number, and the portal ends exactly where it
-  /// started. If it was already open, it stays open and nothing is rebuilt. One line per test in
-  /// `portal-transitions.log` says which core was raised and whether it was stopped again.
-  Future<void> measureAll(List<(String, String, int)> targets) async {
-    if (targets.isEmpty) return;
-    // A newer sweep owns the state from here on; the older one stops at its next answer.
-    final generation = ++_generation;
-    state = {...state, for (final t in targets) t.$1: null};
-    final subject = ref.read(portalGroupProvider) ?? '';
-    final spinner = ref.read(delayTestingGroupsProvider.notifier);
-    final setup = ref.read(setupActionProvider.notifier);
-    final mode = ref.read(patchClashConfigProvider.select((s) => s.mode));
-    final modeName = mode == Mode.global ? 'global' : 'rule';
-    final wasRunning = _runningNode != null;
-    final watch = Stopwatch()..start();
-    if (!wasRunning) {
-      if (subject.isNotEmpty) spinner.start(subject);
-      final started = await setup.setRunning(true);
-      if (!started) {
-        watch.stop();
-        if (subject.isNotEmpty) spinner.stop(subject);
-        final reason = setup.lastPortalFailure;
-        commonPrint.log(
-          'portal test: the child did not start'
-          '${reason.isEmpty ? '' : ': $reason'}',
-          logLevel: LogLevel.warning,
-        );
-        unawaited(
-          portalRuntime.noteTest(
-            mode: modeName,
-            raised: 'child',
-            durationMs: watch.elapsedMilliseconds,
-            stoppedAfter: false,
-            detail: 'result=failed${reason.isEmpty ? '' : ' reason=$reason'}',
-          ),
-        );
-        return;
-      }
-    }
-    final running = _runningNode;
-    PortalDelay? probe;
-    if (running != null) {
-      probe = await probeThroughPortal(ref.read(appSettingProvider).testUrl);
-    }
-    var stopped = false;
-    if (!wasRunning) {
-      // Back to the state he was in: a closed portal is closed again, and the tunnel that
-      // existed only for this measurement is gone with it.
-      stopped = await setup.setRunning(false);
-    }
-    watch.stop();
-    if (subject.isNotEmpty) spinner.stop(subject);
-    commonPrint.log(
-      'portal test: ${wasRunning ? 'the portal was already open' : 'raised the child and '
-          'closed it again'} in ${watch.elapsedMilliseconds} ms'
-      '${running == null ? '' : ' on $running: ${probe?.describe() ?? ''}'}',
-    );
-    unawaited(
-      portalRuntime.noteTest(
-        mode: modeName,
-        raised: wasRunning ? 'none' : 'child',
-        durationMs: watch.elapsedMilliseconds,
-        stoppedAfter: stopped,
-        detail: running == null ? '' : 'node=$running ${probe?.describe() ?? ''}',
-      ),
-    );
-    if (generation != _generation) return;
-    // One tunnel runs one node: the number belongs to the row the child was on, and with the
-    // portal back to closed there is no other row that could honestly carry one.
-    if (running != null) state = {...state, running: probe?.ms};
-  }
-
   /// One answer, written from a sweep that measured the row itself.
   void record(String name, int? ms) {
     state = {...state, name: ms};
@@ -378,23 +289,6 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
     ledger.record(name, ms);
   }
 
-  Future<void> measureOne(String name, String host, int port) async {
-    final running = _runningNode;
-    final picked = portalXrayPickFor(
-      ref.read(appSettingProvider),
-      ref.read(currentProfileIdProvider),
-    );
-    if (running != null && running != name) {
-      commonPrint.log('portal delay $name: the tunnel is on $running, no number');
-      return;
-    }
-    if (running == null && picked != name) {
-      // Raising the portal would come up on another node, so this row has no measurement.
-      commonPrint.log('portal delay $name: the portal would come up on $picked, no number');
-      return;
-    }
-    await measureAll([(name, host, port)]);
-  }
 
   /// Revokes every sweep in flight, for a list that is gone or has been replaced.
   ///
@@ -732,16 +626,6 @@ PortalShown _portalShown(
 }
 
 String _portalListMark = '';
-
-/// Two lists are the same sweep when their names match, in order: the nodes behind them are
-/// the subscription's own and do not change under a rebuild.
-bool _sameNames(List<String> a, List<String> b) {
-  if (a.length != b.length) return false;
-  for (var index = 0; index < a.length; index++) {
-    if (a[index] != b[index]) return false;
-  }
-  return true;
-}
 
 /// The servers the second core offers.
 ///
@@ -1104,10 +988,21 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
               onPressed: () {
                 HapticFeedback.mediumImpact();
                 final auto = ref.read(autoPingProvider.notifier);
+                final turningOn = !auto.current.enabled;
                 auto.setEnabled(
-                  !auto.current.enabled,
+                  turningOn,
                   tick: () => measureAll(force: false),
                 );
+                // A document built while the switch was off carries no schedule at all, so a
+                // running core has to be restarted on one that does.
+                final live = ref.read(portalStatusProvider);
+                if (turningOn &&
+                    live.active &&
+                    live.owner == PortalOwner.xray) {
+                  unawaited(
+                    ref.read(setupActionProvider.notifier).reapplyPortalDocument(),
+                  );
+                }
               },
               icon: testing
                   ? SizedBox.square(
@@ -1305,10 +1200,6 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
     // mode the delay is the engine's own, taken through the tunnel it built — a TCP handshake
     // from this process to an engine node's name resolves through the running engine to its
     // fake-IP, and timing that measures the phone's own listener, not the node.
-    final targets = <(String, String, int)>[
-      for (final server in xrayServers)
-        if (server.port > 0) (server.name, server.address, server.port),
-    ];
     final xrayServerByName = {
       for (final server in xrayServers) server.name: server,
     };
@@ -1429,7 +1320,9 @@ Future<PortalRuntimeAnswer> _restartChildOn(
       ? portalChildDocument(
           servers,
           selected: server.name,
-          probeInterval: ref.read(autoPingProvider).interval,
+          probeInterval: ref.read(autoPingProvider).enabled
+              ? ref.read(autoPingProvider).interval
+              : null,
         )
       : jsonEncode(server.config);
   final started = await portalRuntime.startChild(document);
@@ -1496,19 +1389,6 @@ void _reportPortalFailure(String reason) {
     currentAppLocalizations.portalStartFailed(reason),
     level: MessageLevel.error,
   );
-}
-
-/// Same list, same question: records compare by value, so a rebuild that recomputes the
-/// targets does not throw away half-finished answers by looking like a new list.
-bool _sameTargets(
-  List<(String, String, int)> a,
-  List<(String, String, int)> b,
-) {
-  if (a.length != b.length) return false;
-  for (var index = 0; index < a.length; index++) {
-    if (a[index] != b[index]) return false;
-  }
-  return true;
 }
 
 /// Starts one delay sweep for the servers the list is showing — whichever core they belong to.
@@ -1964,7 +1844,15 @@ Future<void> _showAutoPingPeriod(BuildContext context, WidgetRef ref) async {
       ],
     ),
   );
-  if (picked != null) auto.setInterval(picked);
+  if (picked == null) return;
+  auto.setInterval(picked);
+  // The period lives in the document the child was started on, so a live core keeps the old
+  // one until it is restarted on the new. The tunnel is not rebuilt for this: the coordinator
+  // replaces the core that reads it, which is the same path a row tap takes.
+  final status = ref.read(portalStatusProvider);
+  if (status.active && status.owner == PortalOwner.xray) {
+    unawaited(ref.read(setupActionProvider.notifier).reapplyPortalDocument());
+  }
 }
 
 String _periodLabel(AppLocalizations l10n, Duration value) {
@@ -2472,13 +2360,20 @@ class _ServerRowState extends ConsumerState<_ServerRow>
         onLongPress: () {
           HapticFeedback.mediumImpact();
           if (measurable) {
-            unawaited(
-              ref.read(tcpDelayProvider.notifier).measureOne(
-                    widget.proxy.name,
-                    widget.tcpHost,
-                    widget.tcpPort,
-                  ),
-            );
+            // One row, timed by the core that already holds every node: the same call the sweep
+            // makes, narrowed to this tag. No portal is raised for it and the number cannot be
+            // the phone's own latency, because this app's uid is outside the tunnel.
+            final server = widget.xrayServer;
+            if (server != null) {
+              unawaited(
+                _testDelayWithChild(
+                  ref,
+                  [server],
+                  wasRunning: ref.read(runTimeProvider) != null,
+                  force: true,
+                ),
+              );
+            }
             return;
           }
           unawaited(

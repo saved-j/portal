@@ -233,6 +233,17 @@ func XrayMeasure(configJSON *C.char, tagsJSON *C.char, url *C.char, timeoutMs C.
 	return C.CString(answer)
 }
 
+// XrayObservatory answers the latency the running core keeps for its own outbounds.
+//
+// It measures nothing: the document the child was started on declares a observatory, the core
+// times every node on its own schedule, and this returns what it has. That is the same source
+// mihomo's dashboard reads, and it costs the app nothing per row.
+//
+//export XrayObservatory
+func XrayObservatory() *C.char {
+	return C.CString(readObservatory())
+}
+
 // XrayMeasureStop closes the measurement instance and leaves the tunnel's alone.
 //
 //export XrayMeasureStop

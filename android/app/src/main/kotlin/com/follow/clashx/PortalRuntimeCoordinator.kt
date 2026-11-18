@@ -243,7 +243,7 @@ object PortalRuntimeCoordinator {
         // 2. The service, in the mode Dart has already written into the shared state.
         GlobalState.log("$TAG phase=Starting owner=${owner.label} step=service")
         val epochBefore = PortalRuntimeState.currentFdEpoch()
-        if (!startService(generation)) {
+        if (!startService(generation, owner)) {
             return failed(generation, "the service did not start for ${owner.label}")
         }
         // The service chose its own reader when it established the tunnel, from the options
@@ -266,7 +266,14 @@ object PortalRuntimeCoordinator {
         if (owner == PortalOwner.Xray) {
             return startChildLocked(generation, config, why)
         }
-        // 4. The engine answered by taking the descriptor in `Core.startTun`; publish it.
+        // 4. The engine answered by taking the descriptor in `Core.startTun`; publish it —
+        // but only when there is a runtime to have taken it. A service that came up and then
+        // carried nothing is not `Active`, and a green tile over a dead tunnel is the one lie
+        // this record cannot afford.
+        if (ServiceController.runtime == null) {
+            stopService()
+            return failed(generation, "the engine did not take the tunnel")
+        }
         val epoch = PortalRuntimeState.currentFdEpoch()
         PortalRuntimeState.publish(PortalRuntime.Active(generation, PortalOwner.Mihomo, epoch), why)
         GlobalState.log("$TAG phase=Active owner=Mihomo generation=$generation fdEpoch=$epoch result=ok")
@@ -383,7 +390,7 @@ object PortalRuntimeCoordinator {
         return PortalOutcome(ok = true, runtime = PortalRuntimeState.current())
     }
 
-    private suspend fun startService(generation: Long): Boolean {
+    private suspend fun startService(generation: Long, owner: PortalOwner): Boolean {
         // The service reads its options from the shared state that the app writes and the
         // machine holds in memory. A start that did not come from Flutter — the shade's tile,
         // a shortcut, a boot — has nothing in memory yet, and without this line the request is
@@ -391,6 +398,15 @@ object PortalRuntimeCoordinator {
         // loaded before asking; here it is loaded for every entry, once, before the ask.
         runCatching { ServiceState.syncSharedState(AndroidServiceStateHost.loadSharedState()) }
             .onFailure { GlobalState.log("$TAG cannot load the shared state: ${it.message}") }
+        // The engine must be configured before a tunnel is handed to it: its config lives in
+        // memory and is normally written by Dart, which a start from the shade does not have.
+        // Without this the service comes up carrying nothing, and calling that `Active` is the
+        // false record this whole path exists to avoid.
+        if (owner == PortalOwner.Mihomo && ServiceController.runtime == null) {
+            val ready = runCatching { ServiceState.prepareCore() }.getOrDefault(false)
+            GlobalState.log("$TAG generation=$generation engine prepared=$ready")
+            if (!ready) return false
+        }
         val answered = ServiceState.requestStart().await()
         GlobalState.log(
             "$TAG generation=$generation step=service start=$answered " +

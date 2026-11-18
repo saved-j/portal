@@ -456,9 +456,10 @@ class SetupAction extends _$SetupAction {
     }
     // The document carries every node, not just the picked one: the core times them all itself
     // and the list reads its numbers, which is how mihomo has always worked.
-    final interval = ref.read(autoPingProvider).enabled
-        ? ref.read(autoPingProvider).interval
-        : const Duration(hours: 24);
+    // Off is no schedule at all, not a long one: a core told to check every 24 hours would be
+    // carrying a promise the switch never made.
+    final autoPing = ref.read(autoPingProvider);
+    final interval = autoPing.enabled ? autoPing.interval : null;
     return _PortalChildDocument(
       profileId: profile.id,
       name: server.name,

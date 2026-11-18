@@ -835,10 +835,40 @@ class AppLocalizations {
     );
   }
 
-  /// `Enhanced`
+  /// `Failed attempts in a row: {count}`
+  String portalStrikes(Object count) {
+    return Intl.message(
+      'Failed attempts in a row: $count',
+      name: 'portalStrikes',
+      desc: '',
+      args: [count],
+    );
+  }
+
+  /// `This mode is unavailable: {reason}`
+  String portalModeUnavailable(Object reason) {
+    return Intl.message(
+      'This mode is unavailable: $reason',
+      name: 'portalModeUnavailable',
+      desc: '',
+      args: [reason],
+    );
+  }
+
+  /// `Both modes are unavailable: {reason}`
+  String portalModesUnavailable(Object reason) {
+    return Intl.message(
+      'Both modes are unavailable: $reason',
+      name: 'portalModesUnavailable',
+      desc: '',
+      args: [reason],
+    );
+  }
+
+  /// `Portal`
   String get themeStyleEnhanced {
     return Intl.message(
-      'Enhanced',
+      'Portal',
       name: 'themeStyleEnhanced',
       desc: '',
       args: [],
@@ -9108,36 +9138,6 @@ class AppLocalizations {
       name: 'engineFormatUnusable',
       desc: '',
       args: [reason],
-    );
-  }
-
-  /// `This mode is unavailable: {reason}`
-  String portalModeUnavailable(Object reason) {
-    return Intl.message(
-      'This mode is unavailable: $reason',
-      name: 'portalModeUnavailable',
-      desc: '',
-      args: [reason],
-    );
-  }
-
-  /// `Both modes are unavailable: {reason}`
-  String portalModesUnavailable(Object reason) {
-    return Intl.message(
-      'Both modes are unavailable: $reason',
-      name: 'portalModesUnavailable',
-      desc: '',
-      args: [reason],
-    );
-  }
-
-  /// `failed attempts in a row: {attempts}`
-  String portalStrikes(Object attempts) {
-    return Intl.message(
-      'failed attempts in a row: $attempts',
-      name: 'portalStrikes',
-      desc: '',
-      args: [attempts],
     );
   }
 }

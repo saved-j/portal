@@ -23,6 +23,9 @@ object ServiceState {
         }
     }
 
+    /// The engine, configured and listening, for a start with no Flutter behind it.
+    suspend fun prepareCore(): Boolean = machine.prepareCore()
+
     suspend fun handleToggleAction() = machine.handleToggleAction()
 
     suspend fun handleStartAction() = machine.handleStartAction()

@@ -283,6 +283,18 @@ internal class ServiceStateMachine(private val host: ServiceStateHost) {
         host.updateNotificationParams(notificationParams(sharedState))
     }
 
+    /// Makes the engine ready to carry a tunnel, for a start that did not come from the app.
+    ///
+    /// The engine's configuration lives in memory and is written by the Flutter side. A start
+    /// from the shade (or from Always-on) has no such side, so the same setup the 0.01a tile
+    /// path used is run here from the shared state: without it the engine has no config, the
+    /// service comes up with a tunnel nothing reads, and the record would call that `Active`.
+    suspend fun prepareCore(): Boolean {
+        sharedState = host.loadSharedState()
+        if (sharedState.setupParams == null) return false
+        return setupCore()
+    }
+
     private suspend fun setupCore(): Boolean {
         applySharedState()
         host.showToast(sharedState.startTip)
