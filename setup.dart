@@ -593,6 +593,35 @@ List<String> macosSigningOrder(String app) {
   ];
 }
 
+/// Puts the Xray binary into a bundle directory under the name that platform uses.
+void _stageDesktopXrayBinary(String directory, String name) {
+  final env = Platform.environment['PORTAL_XRAY_BIN'] ?? '';
+  final candidates = <String>[
+    if (env.isNotEmpty) env,
+    p.join(
+      Directory.current.path,
+      'tool',
+      'cores',
+      Platform.isWindows ? 'xray-windows-amd64.exe' : 'xray-$name',
+    ),
+    p.join(Directory.current.path, 'tool', 'cores', name),
+  ];
+  final source = candidates.firstWhere(
+    (path) => File(path).existsSync(),
+    orElse: () => '',
+  );
+  if (source.isEmpty) {
+    stderr.writeln(
+      'xray: no desktop binary staged (set PORTAL_XRAY_BIN); '
+      'the simple portal will report it missing',
+    );
+    return;
+  }
+  final target = p.join(directory, name);
+  File(source).copySync(target);
+  stdout.writeln('xray: staged ${p.basename(source)} as $name');
+}
+
 /// Puts the Xray binary where the app looks for it: next to the main executable.
 void _stageDesktopXray(Object build, String app) {
   final env = Platform.environment['PORTAL_XRAY_BIN'] ?? '';
@@ -691,6 +720,7 @@ Future<void> _packageWindows(
     'runner',
     'Release',
   );
+  _stageDesktopXrayBinary(built, 'xray.exe');
   var bundle = built;
   if (identity.pre) {
     requireChannelMarker(p.join(built, '$_appName.exe'), utf16le('clashx.pre'));
@@ -853,6 +883,7 @@ Future<void> _packageLinux(
       utf8.encode(identity.bundleId),
     );
   }
+  _stageDesktopXrayBinary(bundle, 'xray');
   if (targets.contains('deb')) await _packageDeb(build, bundle, identity);
   if (targets.contains('rpm')) await _packageRpm(build, bundle, identity);
   if (targets.contains('appimage')) {

@@ -12,7 +12,33 @@ class PortalStatusNotifier extends Notifier<PortalRuntimeStatus> {
     void onChange() => state = source.value;
     source.addListener(onChange);
     ref.onDispose(() => source.removeListener(onChange));
-    return source.value;
+    if (system.isAndroid) return source.value;
+    // A desktop has no native coordinator writing that record: the same question is answered
+    // from what this side runs. Same rule as on the phone — only the owner's own live answer
+    // fills the list — and the same shape, so nothing downstream needs a second code path.
+    void follow() => state = _desktopStatus();
+    ref.listen(isStartProvider, (_, _) => follow());
+    ref.listen(patchClashConfigProvider.select((s) => s.mode), (_, _) => follow());
+    return _desktopStatus();
+  }
+
+  /// What a desktop is running, in the shape the Android coordinator publishes.
+  PortalRuntimeStatus _desktopStatus() {
+    if (!ref.read(isStartProvider)) {
+      return const PortalRuntimeStatus.unknown();
+    }
+    final simple =
+        ref.read(patchClashConfigProvider.select((s) => s.mode)) == Mode.global;
+    return PortalRuntimeStatus(
+      generation: 1,
+      phase: 'Active',
+      owner: simple ? PortalOwner.xray : PortalOwner.mihomo,
+      fdEpoch: 0,
+      reason: '',
+      engine: !simple,
+      child: simple,
+      childLine: '',
+    );
   }
 }
 
