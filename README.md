@@ -33,8 +33,8 @@
 
 **Сеть порталов** — это когда каждый отдельный сервис по правилам из mihomo-подписки уходит своим
 маршрутом. Ютуб через Нидерланды, Телеграм через Польшу, а российские сервисы — через Россию:
-вдруг вы уехали в отпуск и нужно зайти в свой банк. Решение принимает правило, а не весь трафик
-целиком.
+вдруг вы уехали в отпуск и нужно зайти в свой банк. У каждого сервиса свой маршрут, а не один
+сервер на всё сразу.
 
 **Простой портал** — классический клиент Xray: почти весь трафик заворачивается в один выбранный
 сервер, плюс ряд статических сплит-туннелей, намертво прописанных в конфиге.
@@ -105,8 +105,8 @@ understandable states instead of a dozen screens.
 
 - **Portal network** — each individual service is tunnelled along its own route, as the rules in the
   mihomo profile say: YouTube through the Netherlands, Telegram through Poland, Russian services
-  through Russia — for the holiday when you need your own bank. A rule decides, not the whole
-  traffic at once.
+  through Russia — for the holiday when you need your own bank. Every service gets its own route
+  instead of one server for everything.
 - **Simple portal** — a classic Xray client: almost all traffic goes into one chosen server, plus a
   set of static split tunnels written into the config for good.
 
