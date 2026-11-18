@@ -315,10 +315,17 @@ class _Build {
   final bool verbose;
 
   late final String version = _readPubspecVersion();
-  late final String appVersion = appVersionOf(
-    pubspecVersion: version,
-    environment: Platform.environment,
-  );
+  // The version the build carries is the version it says it is. `PORTAL_VERSION_NAME` is what
+  // the APK and the macOS bundle are stamped with, so the About page reads the same number
+  // instead of the pubspec's base version — two numbers in one build is the defect this line
+  // removes.
+  late final String appVersion =
+      (Platform.environment['PORTAL_VERSION_NAME'] ?? '').trim().isNotEmpty
+          ? Platform.environment['PORTAL_VERSION_NAME']!.trim()
+          : appVersionOf(
+              pubspecVersion: version,
+              environment: Platform.environment,
+            );
   late final String coreVersion = _readCoreVersion();
   late final String distPath = p.join(rootDir, _distDir);
 

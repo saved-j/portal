@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.6.84 (2026-11-19)
+
+**Features**
+
+- **portal** The desktop simple portal runs Xray as its own process: it listens on a loopback socks inlet and carries the transport, while the engine keeps the tunnel, the DNS and the rules and sends all traffic into it. Changing a server restarts only Xray.
+- **portal** The server list on a desktop answers by the phone's rule: the rows come from the owner of the tunnel, not from the subscription file.
+- **tray** The menu-bar icon is the portal mark instead of the old "X", drawn as a template image so it follows the light and dark bars.
+- **about** The About page shows the version the build really carries.
+
+**Bug Fixes**
+
+- **portal** A server picked while the portal was closed is stored for the next start instead of being asked of a core that is not running and then rolled back.
+- **portal** A pick made in one filter no longer lands in another: the list and the chip always name the same group.
+- **portal** The simple portal is offered on desktop builds, where it used to be refused.
+- **update** A release counts as an update only when it publishes a build for this platform, so a desktop-only release is not offered to a phone.
+- **portal** A start from the Quick Settings tile updates the screen that is already open.
+
 ## v0.5.3 (2026-11-14)
 
 **Features**

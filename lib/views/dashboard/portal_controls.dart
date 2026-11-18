@@ -551,10 +551,15 @@ PortalShown _portalShown(
       ? (ref.watch(portalChildRowsProvider)[profileKey] ?? const <PortalRow>[])
       : const <PortalRow>[];
   // Whose rows are on offer: only a core that is reading the tunnel now answers for itself.
+  // A live answer is the named group and nothing else. Substituting another group here is how
+  // a pick went to the wrong filter: the chip said one name while the rows belonged to
+  // another, and the tap carried that other name to the engine.
   final engineLive = !simple &&
       status.active &&
       status.owner == PortalOwner.mihomo
-      ? groups.where((g) => g.name == groupName).firstOrNull ?? groups.firstOrNull
+      ? (groupName == null
+          ? groups.firstOrNull
+          : groups.where((g) => g.name == groupName).firstOrNull)
       : null;
   final childLive = simple &&
       status.active &&
@@ -2526,30 +2531,36 @@ class _ServerRowState extends ConsumerState<_ServerRow>
             unawaited(_startFromList(ref, server));
             return;
           }
+          // The filter the owner has chosen is the one this pick belongs to. A list drawn
+          // from a fallback carries the rows of the subscription, not the name of a live
+          // group, so the row's own group can be another filter than the one on screen —
+          // and writing under it is how a server changed in a filter the owner never opened.
+          final chosenGroup =
+              ref.read(portalGroupProvider) ?? widget.group.name;
           // Picking a portal by hand is also the way out of a bypass: the filter stops
           // being grey, because it is no longer routed around the portal.
-          ref.read(portalBypassProvider.notifier).forget(widget.group.name);
+          ref.read(portalBypassProvider.notifier).forget(chosenGroup);
           ref
               .read(portalPendingProvider.notifier)
-              .pick(widget.group.name, widget.proxy.name);
+              .pick(chosenGroup, widget.proxy.name);
           // The engine answers for itself, and this is what the list shows when it has
           // nothing to say — a fresh start, or a return from the simple portal.
           ref
               .read(portalSelectionProvider.notifier)
-              .pickRule(widget.group.name, widget.proxy.name);
+              .pickRule(chosenGroup, widget.proxy.name);
           // A closed portal has no core to answer: the pick is stored for the start that
           // follows, which builds its document with this server already chosen. Asking the
           // engine now would fail and roll the pick back.
           final proxies = ref.read(proxiesActionProvider.notifier);
           if (ref.read(runTimeProvider) == null) {
             proxies.storeSelection(
-              groupName: widget.group.name,
+              groupName: chosenGroup,
               proxyName: widget.proxy.name,
             );
             return;
           }
           proxies.changeProxy(
-            groupName: widget.group.name,
+            groupName: chosenGroup,
             proxyName: widget.proxy.name,
           );
         },
