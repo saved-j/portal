@@ -431,6 +431,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "autoPingAsInSubscription": MessageLookupByLibrary.simpleMessage(
       "As in the subscription",
     ),
+    "autoPingDefault": MessageLookupByLibrary.simpleMessage("Default"),
     "autoPingHoldHint": MessageLookupByLibrary.simpleMessage(
       "Hold your finger on a server to test that one right now.",
     ),

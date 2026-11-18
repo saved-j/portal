@@ -1806,93 +1806,184 @@ Future<void> _testDelayWithChild(
 Future<void> _showAutoPingPeriod(BuildContext context, WidgetRef ref) async {
   final l10n = context.appLocalizations;
   final auto = ref.read(autoPingProvider.notifier);
-  final current = auto.current;
   final simple =
       ref.read(patchClashConfigProvider.select((s) => s.mode)) == Mode.global;
   // What "as in the subscription" would mean, read from the profile itself.
   final subscriptionInterval =
       simple ? null : ref.read(subscriptionPingIntervalProvider).value;
-  // The owner's own list. A minute is the shortest that does not turn a portal into a battery
-  // complaint, five minutes is where mihomo's own url-test groups sit.
-  final options = <Duration>[
-    const Duration(minutes: 1),
-    const Duration(seconds: 90),
-    const Duration(minutes: 2),
-    const Duration(minutes: 3),
-    const Duration(minutes: 4),
-    const Duration(minutes: 5),
-  ];
-  final meta = Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      );
-  final picked = await showDialog<Object>(
+  await showDialog<void>(
     context: context,
-    builder: (context) => SimpleDialog(
-      title: Text(l10n.autoPingPeriod),
-      children: [
-        // Off is its own choice, not "the smallest number": nothing is asked in the background.
-        _periodOption(
-          context,
-          label: l10n.autoPingOff,
-          selected: !current.enabled,
-          onTap: () => Navigator.of(context).pop(_AutoPingChoice.off),
-        ),
-        // "As in the subscription" exists only where a subscription carries such a value —
-        // mihomo's url-test groups. Xray has no interval in any subscription, so the switch
-        // there is the only owner of the number and this row would be a lie.
-        if (!simple)
-          _periodOption(
-            context,
-            // The row has to say which number "as in the subscription" means, or the owner
-            // chooses a word and cannot see what it does.
-            label: subscriptionInterval == null
-                ? l10n.autoPingAsInSubscription
-                : '${l10n.autoPingAsInSubscription} · '
-                    '${_periodLabel(l10n, subscriptionInterval)}',
-            selected: current.enabled && current.asInSubscription,
-            onTap: () => Navigator.of(context).pop(_AutoPingChoice.subscription),
-          ),
-        // While the subscription's own value stands, the numbers are shown as what they are:
-        // available, but not in force. They stay tappable — choosing one is how the override
-        // comes back — and they are dimmed only to say "not active now".
-        for (final option in options)
-          _periodOption(
-            context,
-            label: _periodLabel(l10n, option),
-            dimmed: !simple && current.enabled && current.asInSubscription,
-            selected: current.enabled &&
-                !current.asInSubscription &&
-                current.interval == option,
-            onTap: () => Navigator.of(context).pop(option),
-          ),
-        const SizedBox(height: 4),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 4, 24, 2),
-          child: Text(l10n.autoPingHoldHint, style: meta),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 2, 24, 8),
-          child: Text(l10n.autoPingPeriodNote, style: meta),
-        ),
-      ],
+    builder: (dialogContext) => _AutoPingPeriodDialog(
+      simple: simple,
+      subscriptionInterval: subscriptionInterval,
+      initial: auto.current,
+      onChanged: auto.apply,
+      hints: (hold: l10n.autoPingHoldHint, battery: l10n.autoPingPeriodNote),
+      onClose: () => Navigator.of(dialogContext).pop(),
     ),
   );
-  if (picked == null) return;
-  if (picked == _AutoPingChoice.off) {
-    auto.setEnabled(false);
-  } else if (picked == _AutoPingChoice.subscription) {
-    auto.setEnabled(true);
-    auto.setAsInSubscription();
-  } else if (picked is Duration) {
-    auto.setEnabled(true);
-    auto.setInterval(picked);
-  }
   // The period lives in the document the child was started on, so a live core keeps the old
   // one until it is restarted on the new. The tunnel is not rebuilt for this: the coordinator
   // replaces the core that reads it, which is the same path a row tap takes.
   final status = ref.read(portalStatusProvider);
   if (status.active && status.owner == PortalOwner.xray) {
     unawaited(ref.read(setupActionProvider.notifier).reapplyPortalDocument());
+  }
+}
+
+/// The stops of the period slider: off, then the owner's intervals.
+///
+/// Zero is not on this scale — "as often as never" is the off stop, not a number a core would be
+/// asked to check every zero seconds.
+const autoPingStops = <Duration>[
+  Duration(seconds: 60),
+  Duration(seconds: 90),
+  Duration(minutes: 2),
+  Duration(minutes: 3),
+  Duration(minutes: 4),
+  Duration(minutes: 5),
+];
+
+/// The period dialog: one slider with stops, one button for the subscription's own value.
+///
+/// A list of rows asked the owner to read seven lines to answer one question; the slider answers
+/// it where his thumb already is, and the value under it says what he chose. The network mode
+/// adds "По умолчанию": pressed, it hands the number back to the subscription and the slider goes
+/// grey, because then the number is not his to move until he moves it again.
+class _AutoPingPeriodDialog extends StatefulWidget {
+  const _AutoPingPeriodDialog({
+    required this.simple,
+    required this.subscriptionInterval,
+    required this.initial,
+    required this.onChanged,
+    required this.hints,
+    required this.onClose,
+  });
+
+  final bool simple;
+  final Duration? subscriptionInterval;
+  final AutoPingState initial;
+  final void Function({bool? enabled, Duration? interval, bool? asInSubscription})
+      onChanged;
+  final ({String hold, String battery}) hints;
+  final VoidCallback onClose;
+
+  @override
+  State<_AutoPingPeriodDialog> createState() => _AutoPingPeriodDialogState();
+}
+
+class _AutoPingPeriodDialogState extends State<_AutoPingPeriodDialog> {
+  late bool _enabled = widget.initial.enabled;
+  late bool _default = widget.initial.asInSubscription && !widget.simple;
+  late Duration _interval = widget.initial.interval;
+
+  int get _stopIndex {
+    final index = autoPingStops.indexOf(_interval);
+    return index < 0 ? 0 : index;
+  }
+
+  /// Off has its own stop to the left of the shortest interval.
+  double get _value => !_enabled ? 0.0 : 1.0 + _stopIndex;
+
+  double get _max => autoPingStops.length.toDouble();
+
+  String _labelFor(double value) {
+    if (value <= 0) return context.appLocalizations.autoPingOff;
+    final index = (value - 1).round().clamp(0, autoPingStops.length - 1);
+    return _periodLabel(context.appLocalizations, autoPingStops[index]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = context.appLocalizations;
+    final meta = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final value = _default ? 0.0 : _value;
+    return AlertDialog(
+      title: Text(l10n.autoPingPeriod),
+      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!widget.simple)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () {
+                    setState(() => _default = true);
+                    widget.onChanged(
+                      enabled: true,
+                      asInSubscription: true,
+                    );
+                  },
+                  child: Text(
+                    _default
+                        ? (widget.subscriptionInterval == null
+                            ? l10n.autoPingAsInSubscription
+                            : _periodLabel(
+                                l10n,
+                                widget.subscriptionInterval!,
+                              ))
+                        : l10n.autoPingDefault,
+                  ),
+                ),
+              ),
+            Slider(
+              value: value.clamp(0, _max).toDouble(),
+              max: _max,
+              divisions: _max.toInt(),
+              // Grey while the subscription's number stands: the slider is not the owner of the
+              // value then, and a control that looks alive but does nothing is worse than one
+              // that says so.
+              onChanged: _default
+                  ? null
+                  : (next) {
+                      setState(() {
+                        if (next <= 0) {
+                          _enabled = false;
+                          widget.onChanged(enabled: false);
+                          return;
+                        }
+                        final index =
+                            (next - 1).round().clamp(0, autoPingStops.length - 1);
+                        _enabled = true;
+                        _interval = autoPingStops[index];
+                        widget.onChanged(
+                          enabled: true,
+                          interval: _interval,
+                          asInSubscription: false,
+                        );
+                      });
+                    },
+            ),
+            Center(
+              child: Text(
+                _default
+                    ? (widget.subscriptionInterval == null
+                        ? l10n.autoPingAsInSubscription
+                        : _periodLabel(l10n, widget.subscriptionInterval!))
+                    : (_enabled
+                        ? _periodLabel(l10n, _interval)
+                        : l10n.autoPingOff),
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(widget.hints.hold, style: meta),
+            const SizedBox(height: 6),
+            Text(widget.hints.battery, style: meta),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: widget.onClose, child: Text(l10n.confirm)),
+      ],
+    );
   }
 }
 

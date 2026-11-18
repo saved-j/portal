@@ -356,6 +356,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "autoInclude": MessageLookupByLibrary.simpleMessage("自动包含"),
     "autoLaunch": MessageLookupByLibrary.simpleMessage("自启动"),
     "autoPingAsInSubscription": MessageLookupByLibrary.simpleMessage("与订阅一致"),
+    "autoPingDefault": MessageLookupByLibrary.simpleMessage("默认"),
     "autoPingHoldHint": MessageLookupByLibrary.simpleMessage(
       "长按某个服务器可立即测试它的延迟。",
     ),

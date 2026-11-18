@@ -895,6 +895,11 @@ class AppLocalizations {
     );
   }
 
+  /// `Default`
+  String get autoPingDefault {
+    return Intl.message('Default', name: 'autoPingDefault', desc: '', args: []);
+  }
+
   /// `Portal`
   String get themeStyleEnhanced {
     return Intl.message(

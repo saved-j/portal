@@ -53,6 +53,26 @@ class AutoPingNotifier extends Notifier<AutoPingState> {
     commonPrint.log('portal auto ping: interval ${clamped.inSeconds} s');
   }
 
+  /// One entry for the dialog's slider: the three fields it can move, applied together.
+  void apply({bool? enabled, Duration? interval, bool? asInSubscription}) {
+    final next = state.copyWith(
+      enabled: enabled,
+      interval: interval == null ? null : _clampInterval(interval),
+      asInSubscription: asInSubscription,
+    );
+    if (next.enabled == state.enabled &&
+        next.interval == state.interval &&
+        next.asInSubscription == state.asInSubscription) {
+      return;
+    }
+    state = next;
+    _restart();
+    commonPrint.log(
+      'portal auto ping: ${state.enabled ? 'on' : 'off'} '
+      '${state.asInSubscription ? 'as in the subscription' : '${state.interval.inSeconds} s'}',
+    );
+  }
+
   void _restart() {
     _timer?.cancel();
     _timer = null;

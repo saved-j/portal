@@ -443,6 +443,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "autoPingAsInSubscription": MessageLookupByLibrary.simpleMessage(
       "Как в подписке",
     ),
+    "autoPingDefault": MessageLookupByLibrary.simpleMessage("По умолчанию"),
     "autoPingHoldHint": MessageLookupByLibrary.simpleMessage(
       "Удерживайте палец на сервере, чтобы проверить пинг именно его, прямо сейчас.",
     ),

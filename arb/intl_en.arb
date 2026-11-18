@@ -110,6 +110,7 @@
   "autoPingOff": "Off",
   "autoPingAsInSubscription": "As in the subscription",
   "autoPingHoldHint": "Hold your finger on a server to test that one right now.",
+  "autoPingDefault": "Default",
   "themeStyleEnhanced": "Portal",
   "themeStyleDesc": "Enhanced puts the service logo, plan, portal and a connect button on the home page in place of the widget grid.",
   "website": "Website",
