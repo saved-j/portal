@@ -51,3 +51,13 @@ M4 (релиз без keystore падает, versionName из pubspec), JNI (`Ge
 override `interval` для url-test групп mihomo; живой тап по плитке при выгруженном приложении
 (adb не попадает в шторку — нужен палец); 4 теста `file_logger` про срок хранения (продукт
 держит файл ровно 10-дневной давности, тест ждёт удаления).
+
+## The screen does not follow a start that came from the tile
+
+If the app is open and the portal is started from the Quick Settings tile, the screen keeps showing
+the stopped state until the app is put in the background and brought back. The runtime record does
+move (`PortalRuntime` publishes `Starting`/`Active`), so the screen is watching a source that the
+tile's start never touches — the first suspect is the state the dashboard reads for `running`, which
+Dart writes only on its own start path.
+
+Severity: minor, reported by the owner on 2026-11-19.

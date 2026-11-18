@@ -104,6 +104,22 @@ class SetupAction extends _$SetupAction {
       portalRuntime.childConfigBuilder = () async => (await _portalChildDocument())?.config;
     }
     ref.onDispose(_stopRuntimeTicker);
+    // The screen follows the record, whoever started the portal. A start from the tile is made
+    // natively while this side is already running, and nothing here wrote a start time — so the
+    // open screen kept saying "stopped" until the app was backgrounded and brought back, because
+    // only that path re-read the service. Adopting the service's own start time makes the screen
+    // that is already open agree with the portal it is looking at.
+    final record = portalRuntime.status;
+    void followRecord() {
+      final status = record.value;
+      if (status.active && _startTime == null) {
+        unawaited(_adoptRunningPortal());
+      } else if (!status.active && !status.busy && _startTime != null) {
+        _setLocalRunning(false);
+      }
+    }
+    record.addListener(followRecord);
+    ref.onDispose(() => record.removeListener(followRecord));
     ref.listen(appVisibleProvider, (_, _) => _syncRuntimeTicker());
     ref.listen(
       appSettingProvider.select((state) => state.showTrayTitle),
@@ -206,6 +222,18 @@ class SetupAction extends _$SetupAction {
     }
 
     _startTime ??= DateTime.now();
+    _updateRunTime();
+    _syncRuntimeTicker();
+  }
+
+  /// Takes the running portal as this side's own, for a start that did not come from it.
+  ///
+  /// The service knows when it started; asking it is what keeps the timer and the animation from
+  /// being a guess. A service that cannot answer still counts as running — the portal is open, and
+  /// saying otherwise is the lie this line exists to avoid.
+  Future<void> _adoptRunningPortal() async {
+    final startTime = await serviceStartTime();
+    _startTime = startTime ?? DateTime.now();
     _updateRunTime();
     _syncRuntimeTicker();
   }

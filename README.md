@@ -2,103 +2,121 @@
 
 # Portal
 
-**Клиент подписок и сетей порталов, построенный на FlClashX.**
-**A subscription and portal-network client, built on FlClashX.**
-**基于 FlClashX 的订阅与门户网络客户端。**
+**Две сети в одном приложении: правила и портал.**
+**Two networks in one app: rules and the portal.**
+**一个应用里的两张网：规则路由与门户。**
+
+[![Скачать](https://img.shields.io/badge/download-latest-00F5A0?style=for-the-badge)](https://github.com/saved-j/portal/releases/latest)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platform-Android%20%C2%B7%20macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-lightgrey?style=for-the-badge)](#платформы)
 
 </div>
 
 ---
 
-## Русский
+## Зачем нужен Portal
 
-Portal — мультиплатформенный клиент для подписок и сетей порталов. Это форк
-[FlClashX](https://github.com/pluralplay/FlClashX), в котором работают два ядра:
-**Prizrak** (сборка mihomo) для маршрутизации по правилам и **Xray** для простого портала.
-Один список подписок питает оба ядра, а какое из них несёт трафик, решает приложение.
+**Clash-приложения на Mihomo хороши тем, что умеют динамические сплит-туннели: правило решает, что
+идёт напрямую, а что через портал. Xray-приложения хороши тем, что быстро подхватывают все обходы,
+нужные против блокировок.**
 
-- Платформы: Android, macOS, Windows, Linux
-- Без рекламы, без телеметрии, без аккаунтов
-- Лицензия: GPL-3.0
+Для серьёзной работы нужно и то, и другое: и новые протоколы, и сплит-туннели. А по уму — в одном
+приложении.
 
-### Сборка
+Мы сделали **два ядра в одном приложении** на базе [FlClashX](https://github.com/pluralplay/FlClashX),
+вдохновившись multicore: **Prizrak** (сборка mihomo) несёт «Сеть порталов», **Xray** — «Простой
+портал». Режимы полностью раздельные: свои серверы, свои замеры, свои настройки. Переключение на
+горячую — меньше секунды, без перезапуска приложения. Интерфейс упрощён до двух понятных состояний
+вместо десятка экранов.
 
-См. [BUILD.md](BUILD.md): там закреплены версии Flutter, JDK, Gradle, Android SDK/NDK, Go и
-Rust, приведены команды для APK, deb, rpm, AppImage, Windows и macOS и сказано, что в
-репозиторий не попадает (ключ подписи и бинарник Xray — он скачивается по закреплённому
-SHA-256).
+## Два режима
 
-### Структура
+**Сеть порталов** — правила и сплит-туннели. Ядро Prizrak: группы, автоматический выбор, маршруты
+по доменам и приложениям. Решение принимает правило, а не весь трафик целиком.
+
+**Простой портал** — одно ядро Xray и ни одного лишнего процесса. Для подписок с новыми
+протоколами: то, что ещё не дошло до сборок mihomo, уже работает здесь.
+
+Один список подписок питает оба ядра; какое из них несёт трафик — решает приложение, а не подписка.
+
+## Что уже есть
+
+- Переключение режимов и серверов на горячую, без закрытия портала
+- Замер задержки по каждому серверу — из живого ядра, а не отдельным пингом
+- Плитка в шторке: включает портал без запущенного приложения
+- Автообновление подписки в фоне
+- Тёмная тема, анимация реальных соединений, тактильная отдача
+- Без рекламы, без аккаунтов, без телеметрии
+
+## Платформы
+
+| Платформа | Статус |
+|---|---|
+| Android | **готово** — `Portal.apk` (arm64), `Portal_legacy.apk` (arm32), `Portal_universal.apk` |
+| macOS | в работе |
+| Windows | в работе |
+| Linux | в работе |
+| iOS | в работе |
+
+Portal Duo для десктопа выйдет на том же двухъядерном движке, что и Android-версия.
+
+## Скачать
+
+Все сборки — на странице [Releases](https://github.com/saved-j/portal/releases/latest).
+Каждая собирается из этого репозитория и подписана.
+
+- `Portal.apk` — arm64, для современных телефонов
+- `Portal_legacy.apk` — arm32, для старых устройств
+- `Portal_universal.apk` — универсальная, если не знаешь, какая нужна
+
+## Сборка
+
+См. [BUILD.md](BUILD.md): там закреплены версии Flutter, JDK, Gradle, Android SDK/NDK, Go и Rust,
+приведены команды для APK, deb, rpm, AppImage, Windows и macOS и сказано, что в репозиторий не
+попадает (ключ подписи и бинарник Xray — он скачивается по закреплённому SHA-256).
+
+## Структура
 
 - `lib/` — приложение на Flutter (Dart)
 - `core/` — обвязка Go-ядра
 - `services/helper/` — привилегированный хелпер для TUN на десктопе (Rust)
 - `plugins/` — локальные Flutter-пакеты (окно, трей, прокси, rust_api, wifi_ssid)
 - `android/`, `macos/`, `linux/`, `windows/` — платформенные оболочки
-- `pipeline/1.01a/` — одна замороженная серия патчей против апстрима FlClashX;
-  `./apply.sh 1.01a verify` доказывает деревом, что она воспроизводит продукт
-- `pipeline/1.02a/` — следующая серия: по одному патчу на тему, каждый применяется к
-  замороженному дереву отдельно
+- `pipeline/1.03/` — текущая серия патчей против апстрима FlClashX: один патч — одна тема,
+  каждый применяется к замороженному дереву отдельно
 
 ## English
 
-Portal is a multi-platform client for subscriptions and portal networks. It is a fork of
-[FlClashX](https://github.com/pluralplay/FlClashX) that runs two cores: **Prizrak** (a mihomo
-build) for rule-based routing, and **Xray** for the simple portal. One subscription list
-feeds both; the app decides which core carries the traffic.
+**Clash clients built on Mihomo are good at dynamic split tunnels: a rule decides what goes direct
+and what goes through the portal. Xray clients are good at picking up the newest obfuscation
+quickly, because that is where it lands first.**
 
-- Platforms: Android, macOS, Windows, Linux
-- No ads, no telemetry, no accounts
-- GPL-3.0
+Serious work needs both — new protocols *and* split tunnels — and, honestly, in one application.
 
-### Build
+Portal runs **two cores in one app**, built on [FlClashX](https://github.com/pluralplay/FlClashX)
+and inspired by multicore: **Prizrak** (a mihomo build) carries the *portal network*, **Xray**
+carries the *simple portal*. The two modes are fully separate — their own servers, their own
+latency figures, their own settings — and switching between them hot takes under a second, without
+restarting the app. The interface is trimmed to two understandable states instead of a dozen
+screens.
 
-See [BUILD.md](BUILD.md): it pins Flutter, JDK, Gradle, the Android SDK/NDK, Go and Rust,
-lists the commands for APK, deb, rpm, AppImage, Windows and macOS, and says what never enters
-the repository — the signing keystore, and the Xray binary, which is downloaded and checked
-against a pinned SHA-256.
+Next: Portal Duo for Windows, Linux, macOS and iOS, on the same two-core engine.
 
-### Layout
-
-- `lib/` — the Flutter application (Dart)
-- `core/` — the Go core glue
-- `services/helper/` — privileged helper for TUN on desktop (Rust)
-- `plugins/` — local Flutter packages (window, tray, proxy, rust_api, wifi_ssid)
-- `android/`, `macos/`, `linux/`, `windows/` — platform shells
-- `pipeline/1.01a/` — a single frozen patch series against upstream FlClashX;
-  `./apply.sh 1.01a verify` proves by tree that it reproduces the product
-- `pipeline/1.02a/` — the next series: one topic per patch, each applying to the frozen tree
-  on its own
+| Platform | Status |
+|---|---|
+| Android | **shipped** — `Portal.apk` (arm64), `Portal_legacy.apk` (arm32), `Portal_universal.apk` |
+| macOS · Windows · Linux · iOS | in progress |
 
 ## 中文
 
-Portal 是一个多平台订阅与门户网络客户端，基于
-[FlClashX](https://github.com/pluralplay/FlClashX) 分叉，内置两个内核：**Prizrak**（mihomo
-构建）负责规则路由，**Xray** 负责简单门户。同一份订阅列表同时供给两个内核，由应用决定谁来
-承载流量。
-
-- 平台：Android、macOS、Windows、Linux
-- 无广告、无遥测、无账号
-- 许可证：GPL-3.0
-
-### 构建
-
-见 [BUILD.md](BUILD.md)：其中固定了 Flutter、JDK、Gradle、Android SDK/NDK、Go 与 Rust 的
-版本，列出了 APK、deb、rpm、AppImage、Windows 与 macOS 的构建命令，并说明哪些内容不进
-仓库——签名密钥，以及按固定 SHA-256 校验后下载的 Xray 二进制。
-
-### 目录
-
-- `lib/` — Flutter 应用（Dart）
-- `core/` — Go 内核封装
-- `services/helper/` — 桌面端 TUN 的特权助手（Rust）
-- `plugins/` — 本地 Flutter 包（window、tray、proxy、rust_api、wifi_ssid）
-- `android/`、`macos/`、`linux/`、`windows/` — 平台外壳
-- `pipeline/1.01a/` — 针对上游 FlClashX 的一整套冻结补丁；`./apply.sh 1.01a verify`
-  用目录树证明它能复现产品
-- `pipeline/1.02a/` — 后续系列：每个补丁一个主题，均可单独应用到冻结的目录树
+Portal 基于 [FlClashX](https://github.com/pluralplay/FlClashX)，在一个应用里运行两个内核：
+**Prizrak**（mihomo 构建）负责「门户网络」的规则与分流，**Xray** 负责「简单门户」。两种模式
+完全独立——各自的服务器、各自的延迟、各自的设置——热切换不到一秒，无需重启应用。
+Windows、Linux、macOS 与 iOS 版本正在开发中。
 
 ## License
 
-GPL-3.0. Portal is a fork of [FlClashX](https://github.com/pluralplay/FlClashX), which is a
-fork of [FlClash](https://github.com/chen08209/FlClash). See [LICENSE](LICENSE).
+GPL-3.0. Portal is a fork of [FlClashX](https://github.com/pluralplay/FlClashX), which is a fork
+of [FlClash](https://github.com/chen08209/FlClash). The Prizrak core is a build of
+[mihomo](https://github.com/MetaCubeX/mihomo); the simple portal runs
+[Xray-core](https://github.com/XTLS/Xray-core). See [LICENSE](LICENSE).
