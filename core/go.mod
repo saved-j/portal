@@ -6,7 +6,7 @@ go 1.27.0
 replace github.com/metacubex/sing-tun => ./third_party/sing-tun
 
 // Portal: single core = Prizrak-Core (mihomo fork with finalmask, XHTTP, ML-DSA, prizrak-utls).
-replace github.com/metacubex/mihomo => github.com/legiz-ru/Prizrak-Core v1.19.34-r1
+replace github.com/metacubex/mihomo => github.com/legiz-ru/Prizrak-Core v1.19.34-r3
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
@@ -161,4 +161,8 @@ godebug (
 	x509negativeserial=1
 )
 
-replace github.com/metacubex/utls => github.com/legiz-ru/prizrak-utls v0.0.0-20261111074409-d32f4d9296cf
+// r3's own pins: the newer prizrak forks carry quic.Parrot* and RealityConfig.RequireMLKEM,
+// which Prizrak-Core v1.19.34-r3 uses and the previous forks did not have.
+replace github.com/metacubex/quic-go => github.com/legiz-ru/prizrak-quic-go v0.61.1-0.20261115185305-1bee6927e56b
+
+replace github.com/metacubex/utls => github.com/legiz-ru/prizrak-utls v0.0.0-20261115193325-827c5267ec58
