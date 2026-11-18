@@ -489,20 +489,14 @@ final portalAvailabilityProvider =
       strikes: engineStrikes,
       reason: engineStrikes.blocked ? engineStrikes.reason : fileProblem,
     ),
-    // The simple portal is the child core running inside this app's own process, and only the
-    // Android build ships it: on a desktop the portal runtime is absent, so the mode cannot be
-    // entered at all and offering it produced "the portal core did not stop: the portal runtime
-    // is not available in this build". A mode that cannot run is not offered.
     xray: (
-      available: system.isAndroid && !xrayStrikes.blocked && !noServers,
+      available: !xrayStrikes.blocked && !noServers,
       strikes: xrayStrikes,
-      reason: !system.isAndroid
-          ? 'the simple portal runs on Android only'
-          : xrayStrikes.blocked
-              ? xrayStrikes.reason
-              : (noServers
-                  ? 'this subscription carries no nodes for the portal'
-                  : ''),
+      reason: xrayStrikes.blocked
+          ? xrayStrikes.reason
+          : (noServers
+              ? 'this subscription carries no nodes for the portal'
+              : ''),
     ),
   );
 });
@@ -627,30 +621,7 @@ PortalShown _portalShown(
           ],
     remember: remember,
   );
-  final items0 = shown.group?.all ?? const <Proxy>[];
-  // A profile that is not a mihomo document has no network-mode rows of its own; if the list
-  // still carries names, they came from the simple portal's document. Those are dropped by
-  // name rather than shown under the wrong heading — the owner's rule is that the two lists
-  // never mix, and a genuine mihomo profile is never touched by this.
-  final engineIsMihomo =
-      ref.watch(engineFormatStatusProvider).value?.status == EngineFormatStatus.ok;
-  final xrayNames = simple || engineIsMihomo
-      ? const <String>{}
-      : {
-          for (final server
-              in (ref.watch(xrayServersProvider).value ??
-                  const <XrayServerConfig>[]))
-            '${server.label}',
-        };
-  final items = xrayNames.isEmpty
-      ? items0
-      : items0.where((item) => !xrayNames.contains('${item.name}')).toList();
-  if (items.length != items0.length) {
-    commonPrint.log(
-      'portal list: dropped ${items0.length - items.length} server(s) '
-      'that belong to the simple portal',
-    );
-  }
+  final items = shown.group?.all ?? const <Proxy>[];
   final mark = '${mode.name}|${shown.source}|${items.length}';
   if (mark != _portalListMark) {
     _portalListMark = mark;
@@ -2872,9 +2843,15 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
     // plugin's: a stop that did not happen cannot be treated as one that did.
     // The portal is down, and the child with it: `close` is the coordinator's own stop, so
     // the core has returned from `XrayStop` before the next owner is asked for.
-    final stopped = await portalRuntime.close(reason: 'switch');
-    if (!stopped.ok && !stopped.cancelled) {
-      throw _PortalSwitchFailure('the portal core did not stop: ${stopped.reason}');
+    // On a desktop there is no native coordinator to close: the child is a process this side
+    // started, and the stop below is what ends it.
+    if (system.isAndroid) {
+      final stopped = await portalRuntime.close(reason: 'switch');
+      if (!stopped.ok && !stopped.cancelled) {
+        throw _PortalSwitchFailure(
+          'the portal core did not stop: ${stopped.reason}',
+        );
+      }
     }
     // 3-5. The next core, then the mode, then the route — in that order, and only as far
     // as each step answers.

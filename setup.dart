@@ -527,6 +527,11 @@ Future<void> _packageMacos(_Build build, {required String env}) async {
     if (Directory(app).existsSync()) Directory(app).deleteSync(recursive: true);
     Directory(built).renameSync(app);
   }
+  // The desktop simple portal needs the Xray core beside the engine: on a desktop the child
+  // is a process, not a library, so the binary ships inside the bundle and is started from
+  // there. PORTAL_XRAY_BIN points at a build of it; without one the app still starts, and the
+  // simple portal says the core is missing instead of pretending it is there.
+  _stageDesktopXray(build, app);
   if (identity.isNotEmpty) {
     await _signMacosApp(build, app, identity);
   }
@@ -586,6 +591,31 @@ List<String> macosSigningOrder(String app) {
     ...entries('MacOS', (path) => p.basename(path) != _appName),
     app,
   ];
+}
+
+/// Puts the Xray binary where the app looks for it: next to the main executable.
+void _stageDesktopXray(Object build, String app) {
+  final env = Platform.environment['PORTAL_XRAY_BIN'] ?? '';
+  final candidates = <String>[
+    if (env.isNotEmpty) env,
+    p.join(Directory.current.path, 'tool', 'cores', 'xray-darwin-arm64'),
+    p.join(Directory.current.path, 'tool', 'cores', 'xray'),
+  ];
+  final source = candidates.firstWhere(
+    (path) => File(path).existsSync(),
+    orElse: () => '',
+  );
+  if (source.isEmpty) {
+    stderr.writeln(
+      'xray: no desktop binary staged (set PORTAL_XRAY_BIN); '
+      'the simple portal will report it missing',
+    );
+    return;
+  }
+  final target = p.join(app, 'Contents', 'MacOS', 'xray');
+  File(source).copySync(target);
+  Process.runSync('chmod', ['755', target]);
+  stdout.writeln('xray: staged ${p.basename(source)} into the bundle');
 }
 
 Future<void> _signMacosApp(_Build build, String app, String identity) async {

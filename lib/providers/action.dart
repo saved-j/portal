@@ -7,6 +7,7 @@ import 'package:fl_clash/common/boot_guard.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/system_dns.dart';
 import 'package:fl_clash/core/core.dart';
+import 'package:fl_clash/core/desktop/xray_child.dart';
 import 'package:fl_clash/core/auto_ping_interval.dart';
 import 'package:fl_clash/core/portal_document.dart';
 import 'package:fl_clash/core/portal_feed.dart';

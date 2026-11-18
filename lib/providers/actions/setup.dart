@@ -350,12 +350,13 @@ class SetupAction extends _$SetupAction {
     return running ? _start(request) : _stop(request);
   }
 
-  /// Whether the saved mode is the simple portal, where the tunnel is the child's.
+  /// Whether the saved mode is the simple portal, where the traffic is the child's.
   ///
-  /// Android only: in this fork `Mode.global` names the portal on the phone, while on the
-  /// desktop it is the engine's own global mode and keeps the engine exactly as it was.
+  /// On Android the child runs inside this app's process and the service hands it the tunnel.
+  /// On a desktop there is no such handover, so the child is a process of its own and the
+  /// engine keeps the tunnel, sending all of it into the child's loopback inlet — the same
+  /// division of labour, with the descriptor swapped for a local port.
   bool get _isSimplePortal =>
-      system.isAndroid &&
       ref.read(patchClashConfigProvider.select((state) => state.mode)) ==
           Mode.global;
 
@@ -410,6 +411,9 @@ class SetupAction extends _$SetupAction {
     if (_startingChild) {
       return true;
     }
+    if (!system.isAndroid) {
+      return _startDesktopSimplePortal(request);
+    }
     _startingChild = true;
     try {
       _lastPortalFailure = '';
@@ -450,6 +454,53 @@ class SetupAction extends _$SetupAction {
     } finally {
       _startingChild = false;
     }
+  }
+
+  /// The simple portal on a desktop: the child first, then the engine around it.
+  ///
+  /// The order is the point. The child has to be listening before the engine is handed a
+  /// document that names its inlet, or the engine's first connections go into a port nothing
+  /// answers. Once it is up, the engine starts exactly as in the network mode — same tunnel,
+  /// same helper — but its whole document is the bridge: one outbound, one rule.
+  Future<bool> _startDesktopSimplePortal(_RunRequest request) async {
+    _lastPortalFailure = '';
+    final document = await _portalChildDocument();
+    if (document == null) {
+      _rollbackRunning(request);
+      return false;
+    }
+    if (!await DesktopXrayChild.start(document.config)) {
+      _rollbackRunning(request);
+      _reportPortalFailureReason(
+        'the portal core could not start on ${document.name}',
+      );
+      return false;
+    }
+    _commitPortalPick(document);
+    bool applied;
+    try {
+      applied = await applyProfile(
+        force: true,
+        silence: true,
+        preloadInvoke: () => _startCoreRunning(request),
+      );
+    } catch (_) {
+      applied = false;
+    }
+    if (!applied) {
+      await DesktopXrayChild.stop();
+      _rollbackRunning(request);
+      _reportPortalFailureReason('the engine refused the document');
+      return false;
+    }
+    _reconcileTun();
+    ref.read(runningVpnOptionsProvider.notifier).value =
+        await ref.read(vpnOptionsProvider.future);
+    commonPrint.log(
+      'portal desktop: engine carries the tunnel, child on '
+      '127.0.0.1:${DesktopXrayChild.port} with ${document.name}',
+    );
+    return true;
   }
 
   /// The document the portal's child runs, and the node it belongs to.
@@ -561,11 +612,19 @@ class SetupAction extends _$SetupAction {
     // The simple portal's run is the service and the child it carries: stopping it is the
     // service's own stop on both sides, with no engine listener asked for either way.
     final simple = _isSimplePortal;
+    // On a desktop the simple portal is the engine plus the child process: the engine stops
+    // through its own path, and the child goes with it — a process nothing routes to any more
+    // would keep its node connected in the background.
     final bool answered;
     try {
-      answered = simple
-          ? await _setPortalServiceRunning(request)
-          : await _setCoreRunning(request);
+      answered = simple && !system.isAndroid
+          ? await _setCoreRunning(request)
+          : simple
+              ? await _setPortalServiceRunning(request)
+              : await _setCoreRunning(request);
+      if (simple && !system.isAndroid) {
+        await DesktopXrayChild.stop();
+      }
     } catch (_) {
       _rollbackRunning(request);
       rethrow;
@@ -1097,6 +1156,22 @@ class SetupAction extends _$SetupAction {
     final profileId = setupState.profileId;
     if (profileId == null) {
       return (yaml: '', md5: '', counts: configCountsOf(const {}), base: null);
+    }
+    // The desktop simple portal: the engine's whole document is the bridge into the child's
+    // inlet. Nothing of the profile reaches the engine here — the nodes live in the child's
+    // own document, and the engine is only the thing that owns the tunnel.
+    final inlet = DesktopXrayChild.port;
+    if (!system.isAndroid && _isSimplePortal && inlet != null) {
+      final yaml = DesktopXrayChild.bridgeProfile(
+        inlet,
+        mixedPort: patchConfig.mixedPort,
+      );
+      return (
+        yaml: yaml,
+        md5: yaml.toMd5(),
+        counts: configCountsOf(const {}),
+        base: null,
+      );
     }
     final defaultUA = globalState.ua;
     final networkSetting = ref.read(
