@@ -141,17 +141,86 @@ class Request {
 
   /// Null when this build is current; throws when GitHub cannot be asked.
   Future<Map<String, dynamic>?> checkForUpdate() async {
-    final release = globalState.isPre
-        ? await latestPrerelease()
-        : await latestRelease();
-    if (release == null) {
-      return null;
-    }
-    final remoteVersion = release['tag_name'] as String;
+    // "The latest release" answers for the repository, not for this app: a desktop-only
+    // release is the newest there, so a phone was offered an update whose release carries no
+    // APK at all. The newest release that carries this platform's build is the one that
+    // counts, and a release with nothing for us is not an update — it is a build for the
+    // other platforms.
+    final releases = await allReleases();
     final version = globalState.packageInfo.displayVersion;
-    final hasUpdate =
-        compareVersions(remoteVersion.replaceAll('v', ''), version) > 0;
-    return hasUpdate ? release : null;
+    for (final release in releases) {
+      final tag = release['tag_name'];
+      if (tag is! String) continue;
+      if (release['draft'] == true) continue;
+      final pre = release['prerelease'] == true;
+      if (pre != globalState.isPre) continue;
+      if (compareVersions(tag.replaceAll('v', ''), version) <= 0) continue;
+      if (!_servesThisPlatform(release)) continue;
+      return release;
+    }
+    return null;
+  }
+
+  /// Every published release, newest first, or an empty list when the API cannot be read.
+  Future<List<Map<String, dynamic>>> allReleases() async {
+    final releases = <Map<String, dynamic>>[];
+    try {
+      String? next =
+          'https://api.github.com/repos/$repository/releases?per_page=100';
+      for (var page = 0; next != null && page < _releasePages; page++) {
+        final response = await dio.get<List<dynamic>>(
+          next,
+          options: Options(responseType: ResponseType.json),
+        );
+        for (final item in response.data ?? const []) {
+          if (item is Map<String, dynamic>) releases.add(item);
+        }
+        next = nextPageOf(response.headers.value('link'));
+      }
+    } on DioException catch (error) {
+      commonPrint.log(
+        'releases API failed: ${compactError(error)}',
+        logLevel: LogLevel.warning,
+      );
+    }
+    return releases;
+  }
+
+  /// Whether [release] publishes a build this platform can install.
+  ///
+  /// The names are the downloader's own: a release that does not carry one of them would be
+  /// offered and then fail at the first byte, which is worse than no offer.
+  bool _servesThisPlatform(Map<String, dynamic> release) {
+    final assets = release['assets'];
+    if (assets is! List) return false;
+    final names = <String>{
+      for (final asset in assets)
+        if (asset is Map && asset['name'] is String) asset['name'] as String,
+    };
+    if (names.isEmpty) return false;
+    if (Platform.isAndroid) {
+      return const {
+        'Portal.apk',
+        'Portal_legacy.apk',
+        'Portal_universal.apk',
+        'Portal_x86-64.apk',
+      }.any(names.contains);
+    }
+    if (Platform.isMacOS) return names.contains('Portal.dmg');
+    if (Platform.isWindows) {
+      return names.contains('Portal.exe') ||
+          names.any((name) => name.endsWith('.zip') && name.contains('windows'));
+    }
+    if (Platform.isLinux) {
+      return names.any(
+        (name) =>
+            name.endsWith('.AppImage') ||
+            name.endsWith('.deb') ||
+            name.endsWith('.rpm') ||
+            name.endsWith('.tar.gz'),
+      );
+    }
+    return true;
   }
 
   /// A pre-release installs as its own app, which a stable release would not
