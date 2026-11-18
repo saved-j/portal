@@ -1103,6 +1103,22 @@ class SetupAction extends _$SetupAction {
             ),
           }
         : profileBase?.base.config ?? await _core.getConfig(profileId);
+    // The owner's period, applied to the engine's own groups — in a copy, so a subscription
+    // update never loses it: the file on disk stays the provider's, and only the document that
+    // goes to the core carries our number.
+    final autoPing = ref.read(autoPingProvider);
+    final written = applyAutoPingInterval(
+      rawConfig,
+      autoPing.enabled && !autoPing.asInSubscription
+          ? autoPing.interval.inSeconds
+          : null,
+    );
+    if (written > 0) {
+      commonPrint.log(
+        'engine groups: interval=${autoPing.interval.inSeconds} s '
+        'written to $written group(s)',
+      );
+    }
     final proxyGroups = isCustom ? setupState.proxyGroups : <ProxyGroup>[];
     final rules = isCustom ? setupState.rules : <Rule>[];
     if (hasScript) {

@@ -1806,46 +1806,75 @@ Future<void> _testDelayWithChild(
 Future<void> _showAutoPingPeriod(BuildContext context, WidgetRef ref) async {
   final l10n = context.appLocalizations;
   final auto = ref.read(autoPingProvider.notifier);
-  // The owner's list, in the order he asked for it: half a minute is the shortest that does
-  // not turn a VPN app into a battery complaint, five minutes is where mihomo's own url-test
-  // groups sit.
+  final current = auto.current;
+  final simple =
+      ref.read(patchClashConfigProvider.select((s) => s.mode)) == Mode.global;
+  // The owner's own list. A minute is the shortest that does not turn a portal into a battery
+  // complaint, five minutes is where mihomo's own url-test groups sit.
   final options = <Duration>[
-    const Duration(seconds: 30),
-    const Duration(seconds: 60),
+    const Duration(minutes: 1),
     const Duration(seconds: 90),
-    const Duration(seconds: 120),
-    const Duration(seconds: 180),
-    const Duration(seconds: 240),
-    const Duration(seconds: 300),
+    const Duration(minutes: 2),
+    const Duration(minutes: 3),
+    const Duration(minutes: 4),
+    const Duration(minutes: 5),
   ];
-  final picked = await showDialog<Duration>(
+  final meta = Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      );
+  final picked = await showDialog<Object>(
     context: context,
     builder: (context) => SimpleDialog(
       title: Text(l10n.autoPingPeriod),
       children: [
+        // Off is its own choice, not "the smallest number": nothing is asked in the background.
+        _periodOption(
+          context,
+          label: l10n.autoPingOff,
+          selected: !current.enabled,
+          onTap: () => Navigator.of(context).pop(_AutoPingChoice.off),
+        ),
+        // "As in the subscription" exists only where a subscription carries such a value —
+        // mihomo's url-test groups. Xray has no interval in any subscription, so the switch
+        // there is the only owner of the number and this row would be a lie.
+        if (!simple)
+          _periodOption(
+            context,
+            label: l10n.autoPingAsInSubscription,
+            selected: current.enabled && current.asInSubscription,
+            onTap: () => Navigator.of(context).pop(_AutoPingChoice.subscription),
+          ),
         for (final option in options)
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(context).pop(option),
-            child: Row(
-              children: [
-                Expanded(child: Text(_periodLabel(l10n, option))),
-                if (option == auto.current.interval)
-                  const Icon(Icons.check, size: 18),
-              ],
-            ),
+          _periodOption(
+            context,
+            label: _periodLabel(l10n, option),
+            selected: current.enabled &&
+                !current.asInSubscription &&
+                current.interval == option,
+            onTap: () => Navigator.of(context).pop(option),
           ),
+        const SizedBox(height: 4),
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
-          child: Text(
-            l10n.autoPingPeriodNote,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 2),
+          child: Text(l10n.autoPingHoldHint, style: meta),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 2, 24, 8),
+          child: Text(l10n.autoPingPeriodNote, style: meta),
         ),
       ],
     ),
   );
   if (picked == null) return;
-  auto.setInterval(picked);
+  if (picked == _AutoPingChoice.off) {
+    auto.setEnabled(false);
+  } else if (picked == _AutoPingChoice.subscription) {
+    auto.setEnabled(true);
+    auto.setAsInSubscription();
+  } else if (picked is Duration) {
+    auto.setEnabled(true);
+    auto.setInterval(picked);
+  }
   // The period lives in the document the child was started on, so a live core keeps the old
   // one until it is restarted on the new. The tunnel is not rebuilt for this: the coordinator
   // replaces the core that reads it, which is the same path a row tap takes.
@@ -1853,6 +1882,26 @@ Future<void> _showAutoPingPeriod(BuildContext context, WidgetRef ref) async {
   if (status.active && status.owner == PortalOwner.xray) {
     unawaited(ref.read(setupActionProvider.notifier).reapplyPortalDocument());
   }
+}
+
+/// What the period dialog answered when it was not a period.
+enum _AutoPingChoice { off, subscription }
+
+Widget _periodOption(
+  BuildContext context, {
+  required String label,
+  required bool selected,
+  required VoidCallback onTap,
+}) {
+  return SimpleDialogOption(
+    onPressed: onTap,
+    child: Row(
+      children: [
+        Expanded(child: Text(label)),
+        if (selected) const Icon(Icons.check, size: 18),
+      ],
+    ),
+  );
 }
 
 String _periodLabel(AppLocalizations l10n, Duration value) {

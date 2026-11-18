@@ -428,6 +428,13 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "autoInclude": MessageLookupByLibrary.simpleMessage("Auto-include"),
     "autoLaunch": MessageLookupByLibrary.simpleMessage("Auto launch"),
+    "autoPingAsInSubscription": MessageLookupByLibrary.simpleMessage(
+      "As in the subscription",
+    ),
+    "autoPingHoldHint": MessageLookupByLibrary.simpleMessage(
+      "Hold your finger on a server to test that one right now.",
+    ),
+    "autoPingOff": MessageLookupByLibrary.simpleMessage("Off"),
     "autoPingPeriod": MessageLookupByLibrary.simpleMessage(
       "Auto-ping interval",
     ),

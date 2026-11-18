@@ -355,6 +355,11 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "autoInclude": MessageLookupByLibrary.simpleMessage("自动包含"),
     "autoLaunch": MessageLookupByLibrary.simpleMessage("自启动"),
+    "autoPingAsInSubscription": MessageLookupByLibrary.simpleMessage("与订阅一致"),
+    "autoPingHoldHint": MessageLookupByLibrary.simpleMessage(
+      "长按某个服务器可立即测试它的延迟。",
+    ),
+    "autoPingOff": MessageLookupByLibrary.simpleMessage("关闭"),
     "autoPingPeriod": MessageLookupByLibrary.simpleMessage("自动测试间隔"),
     "autoPingPeriodNote": MessageLookupByLibrary.simpleMessage(
       "间隔越短，耗电越多：每个周期都会询问每个服务器。",

@@ -870,6 +870,31 @@ class AppLocalizations {
     return Intl.message('Portal', name: 'tilePortal', desc: '', args: []);
   }
 
+  /// `Off`
+  String get autoPingOff {
+    return Intl.message('Off', name: 'autoPingOff', desc: '', args: []);
+  }
+
+  /// `As in the subscription`
+  String get autoPingAsInSubscription {
+    return Intl.message(
+      'As in the subscription',
+      name: 'autoPingAsInSubscription',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Hold your finger on a server to test that one right now.`
+  String get autoPingHoldHint {
+    return Intl.message(
+      'Hold your finger on a server to test that one right now.',
+      name: 'autoPingHoldHint',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Portal`
   String get themeStyleEnhanced {
     return Intl.message(

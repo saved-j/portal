@@ -34,12 +34,21 @@ class AutoPingNotifier extends Notifier<AutoPingState> {
     );
   }
 
-  /// Changes the period and keeps the switch as it is.
+  /// The provider's own value stands; nothing is overridden. Network mode only.
+  void setAsInSubscription({VoidCallback? tick}) {
+    if (tick != null) _tick = tick;
+    if (state.asInSubscription) return;
+    state = state.copyWith(asInSubscription: true);
+    _restart();
+    commonPrint.log('portal auto ping: as in the subscription');
+  }
+
+  /// A period of our own: this is what turns an override on.
   void setInterval(Duration interval, {VoidCallback? tick}) {
     if (tick != null) _tick = tick;
     final clamped = _clampInterval(interval);
-    if (clamped == state.interval) return;
-    state = state.copyWith(interval: clamped);
+    if (clamped == state.interval && !state.asInSubscription) return;
+    state = state.copyWith(interval: clamped, asInSubscription: false);
     if (state.enabled) _restart();
     commonPrint.log('portal auto ping: interval ${clamped.inSeconds} s');
   }
@@ -52,16 +61,33 @@ class AutoPingNotifier extends Notifier<AutoPingState> {
   }
 }
 
-/// Whether the list re-measures itself, and how often.
+/// Whether the list re-measures itself, how often, and who owns that number.
 class AutoPingState {
-  const AutoPingState({required this.enabled, required this.interval});
+  const AutoPingState({
+    required this.enabled,
+    required this.interval,
+    this.asInSubscription = false,
+  });
 
   final bool enabled;
   final Duration interval;
 
-  AutoPingState copyWith({bool? enabled, Duration? interval}) => AutoPingState(
+  /// "Как в подписке": the engine's own value stands and nothing is overridden.
+  ///
+  /// Only the network mode has such a value — a subscription carries no interval for Xray, so
+  /// the switch there is the only owner of the number. Off is not the same thing as this: off
+  /// means no background checks at all, this means the provider decides.
+  final bool asInSubscription;
+
+  AutoPingState copyWith({
+    bool? enabled,
+    Duration? interval,
+    bool? asInSubscription,
+  }) =>
+      AutoPingState(
         enabled: enabled ?? this.enabled,
         interval: interval ?? this.interval,
+        asInSubscription: asInSubscription ?? this.asInSubscription,
       );
 }
 

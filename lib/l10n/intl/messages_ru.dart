@@ -440,6 +440,13 @@ class MessageLookup extends MessageLookupByLibrary {
       "Автоматическое включение",
     ),
     "autoLaunch": MessageLookupByLibrary.simpleMessage("Автозапуск"),
+    "autoPingAsInSubscription": MessageLookupByLibrary.simpleMessage(
+      "Как в подписке",
+    ),
+    "autoPingHoldHint": MessageLookupByLibrary.simpleMessage(
+      "Удерживайте палец на сервере, чтобы проверить пинг именно его, прямо сейчас.",
+    ),
+    "autoPingOff": MessageLookupByLibrary.simpleMessage("Выключен"),
     "autoPingPeriod": MessageLookupByLibrary.simpleMessage(
       "Интервал автопинга",
     ),
