@@ -243,6 +243,9 @@ object PortalRuntimeCoordinator {
         // 2. The service, in the mode Dart has already written into the shared state.
         GlobalState.log("$TAG phase=Starting owner=${owner.label} step=service")
         val epochBefore = PortalRuntimeState.currentFdEpoch()
+        // The tunnel's reader is decided by the owner being started, not by whichever options
+        // happened to be left in the machine from the other portal.
+        ServiceState.pointTunnelAt(child = owner != PortalOwner.Mihomo)
         if (!startService(generation, owner)) {
             return failed(generation, "the service did not start for ${owner.label}")
         }
@@ -307,6 +310,20 @@ object PortalRuntimeCoordinator {
         if (!stillCurrent(generation)) {
             closeServiceAfterFailure()
             return stale(generation, "child start")
+        }
+        // The service publishes the child's tunnel when it establishes, and a service already
+        // running for the engine never establishes a second one — the switch then found an empty
+        // slot and reported "the portal has no open tunnel" over a VPN that was perfectly up.
+        // With nothing in hand the service is restarted with the child as its reader, which is
+        // what publishes a tunnel at all.
+        ServiceState.pointTunnelAt(child = true)
+        if (XrayTunHolder.peek() == null) {
+            runCatching { ServiceState.requestStop().await() }
+                .onFailure { GlobalState.log("$TAG the service did not stop: ${it.message}") }
+            if (!startService(generation, PortalOwner.Xray)) {
+                closeServiceAfterFailure()
+                return failed(generation, "the service did not start for the portal core")
+            }
         }
         GlobalState.log("$TAG phase=Starting owner=Xray step=child generation=$generation")
         // Remembered before the start, not after: a core that refuses still names the document a

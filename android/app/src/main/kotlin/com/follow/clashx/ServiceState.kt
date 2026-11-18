@@ -26,6 +26,9 @@ object ServiceState {
     /// Whether the machine already has options in hand.
     val hasSharedState: Boolean get() = machine.hasSharedState
 
+    /// Points the tunnel at the core that is about to carry it.
+    fun pointTunnelAt(child: Boolean) = machine.pointTunnelAt(child)
+
     /// The engine, configured and listening, for a start with no Flutter behind it.
     suspend fun prepareCore(): Boolean = machine.prepareCore()
 

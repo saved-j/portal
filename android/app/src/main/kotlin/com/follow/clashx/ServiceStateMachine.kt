@@ -290,6 +290,20 @@ internal class ServiceStateMachine(private val host: ServiceStateHost) {
     /// service would then establish the other core's tunnel.
     val hasSharedState: Boolean get() = sharedState.vpnOptions != null
 
+    /// Points the tunnel at the core that is about to carry it.
+    ///
+    /// The options here are the last push, and a switch between the two portals starts the
+    /// service from the coordinator without a push of its own. If those options still name the
+    /// other core as the reader, the service establishes that core's tunnel — and the engine
+    /// start is then refused as a mismatch ("the service published a child tunnel while the
+    /// engine was asked for one"), with `startListener` left unanswered behind it. Whoever
+    /// starts the service knows which core carries it, so it says so here first.
+    fun pointTunnelAt(child: Boolean) {
+        val options = sharedState.vpnOptions ?: return
+        if (options.xrayTun == child) return
+        sharedState = sharedState.copy(vpnOptions = options.copy(xrayTun = child))
+    }
+
     /// Makes the engine ready to carry a tunnel, for a start that did not come from the app.
     ///
     /// The engine's configuration lives in memory and is written by the Flutter side. A start
