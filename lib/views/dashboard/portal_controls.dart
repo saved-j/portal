@@ -1118,14 +1118,9 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
     });
     ref.listen(groupsProvider, (previous, next) {
       if (next.isEmpty) return;
-      // Only an engine that is actually carrying this mode may teach the cache. In the simple
-      // portal the engine is stopped, and whatever groups survive in memory are the previous
-      // mode's answer — remembering those is how the network mode later drew a list that was
-      // never its own. A cache that shows servers instantly is worth having; a cache fed by the
-      // other core is not a cache, it is a leak.
-      final status = ref.read(portalStatusProvider);
-      if (mode == Mode.global) return;
-      if (!status.active || status.owner != PortalOwner.mihomo) return;
+      // This listener is the engine's own feed (`groupsProvider` answers only from the engine),
+      // so what it writes is engine rows by construction — no conditions needed, and none that
+      // could delay a cache a mode switch wants to draw from immediately.
       final group =
           next.where((g) => g.name == groupName).firstOrNull ?? next.first;
       ref
