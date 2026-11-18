@@ -34,4 +34,5 @@ part 'state/managed.dart';
 part 'state/profile.dart';
 part 'state/custom.dart';
 part 'state/custom_import.dart';
+part 'state/auto_ping.dart';
 part 'state/portal_rows.dart';

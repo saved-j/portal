@@ -351,6 +351,26 @@ class PortalRuntime {
     }
   }
 
+  /// The tunnel's own core latency numbers — read, never measured here.
+  ///
+  /// The document the child runs declares a burst observatory, so the core times every node on
+  /// its own period and keeps the results. This asks for them; the answer is the core's JSON:
+  /// `{"rows":[{"tag":"node-3","delay":214,"alive":true,"all":5,"fail":0}]}`.
+  Future<({bool ok, String message, String rows})> observatory() async {
+    try {
+      final result = await _channel.invokeMethod<Map<Object?, Object?>>('observatory');
+      return (
+        ok: result?['ok'] == true,
+        message: '${result?['message'] ?? ''}',
+        rows: '${result?['rows'] ?? ''}',
+      );
+    } on PlatformException catch (error) {
+      return (ok: false, message: error.message ?? '$error', rows: '');
+    } on MissingPluginException {
+      return (ok: false, message: 'no child on this platform', rows: '');
+    }
+  }
+
   /// Closes the measurement instance. A failure is reported, not hidden: a core left behind
   /// would keep its listeners and its memory for the rest of the process.
   Future<bool> stopMeasure() async {

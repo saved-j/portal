@@ -122,6 +122,11 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
     /// Closes the measurement instance and leaves the tunnel's alone.
     private external fun XrayMeasureStop()
 
+    /// The running core's own latency numbers. It measures nothing here: the document declares a
+    /// burst observatory, the core times every node on its own period, and this reads what the
+    /// core already knows — the same way a mihomo panel reads url-test history.
+    private external fun XrayObservatory(): String?
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         appContext = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
@@ -171,6 +176,8 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "status" -> result.success(status())
+            // The core's own numbers, read not measured: cheap enough to ask every few seconds.
+            "observatory" -> result.success(observatory())
             // The channel is not a second way into the core: it is the same entry the mode
             // switch and Quick Settings take, so the same mutex and the same generation
             // decide the order. The plugin still answers with its own words.
@@ -396,6 +403,20 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         val answer = runCatching { XrayMeasure(config, tags, url, timeoutMs, limit) }
             .getOrElse { error ->
                 Log.e(TAG, "measurement raised", error)
+                return mapOf("ok" to false, "message" to (error.message ?: "$error"))
+            }
+            ?: return mapOf("ok" to false, "message" to "no answer from the core")
+        return mapOf("ok" to true, "message" to "", "rows" to answer)
+    }
+
+    /// What the tunnel's own core has timed so far, as JSON, without measuring anything.
+    private fun observatory(): Map<String, Any> {
+        ensureLibrary()?.let { problem ->
+            return mapOf("ok" to false, "message" to problem)
+        }
+        val answer = runCatching { XrayObservatory() }
+            .getOrElse { error ->
+                Log.e(TAG, "observatory raised", error)
                 return mapOf("ok" to false, "message" to (error.message ?: "$error"))
             }
             ?: return mapOf("ok" to false, "message" to "no answer from the core")

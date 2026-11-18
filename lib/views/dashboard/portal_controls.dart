@@ -13,6 +13,7 @@ import 'package:fl_clash/core/sweep_ledger.dart';
 import 'package:fl_clash/core/xray_measure.dart';
 import 'package:fl_clash/core/xray_ping.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
+import 'package:fl_clash/core/portal_document.dart';
 import 'package:fl_clash/core/portal_feed.dart';
 import 'package:fl_clash/l10n/l10n.dart';
 import '../profiles/subscription_facts.dart';
@@ -196,87 +197,7 @@ final engineDelayProvider =
 /// every [_autoPingInterval], which is what makes "auto" of a panel's own selector mean
 /// something. It starts off in every session: a timer that survives a restart is a timer the
 /// owner has forgotten about.
-/// The auto-ping switch of the list in front of the owner.
-///
-/// One control, two cores behind it — the same shape the whole dashboard has: what the owner
-/// sees is one bolt, and what it drives is whatever core the list belongs to.
-///
-/// The number it shows is never measured by the app. mihomo keeps its own URLTEST results and
-/// Xray keeps its own observatory; all this does is ask, on the owner's schedule, for them to be
-/// refreshed, and hold the period he chose.
-class AutoPingNotifier extends Notifier<AutoPingState> {
-  Timer? _timer;
-  VoidCallback? _tick;
 
-  @override
-  AutoPingState build() {
-    ref.onDispose(() => _timer?.cancel());
-    return const AutoPingState(enabled: true, interval: defaultAutoPingInterval);
-  }
-
-  AutoPingState get current => state;
-
-  /// Turns the switch on or off; [tick] is the work one period does.
-  void setEnabled(bool value, {VoidCallback? tick}) {
-    if (tick != null) _tick = tick;
-    if (state.enabled == value) return;
-    state = state.copyWith(enabled: value);
-    _restart();
-    commonPrint.log(
-      'portal auto ping: ${value ? 'on' : 'off'} every ${state.interval.inSeconds} s',
-    );
-  }
-
-  /// Changes the period and keeps the switch as it is.
-  void setInterval(Duration interval, {VoidCallback? tick}) {
-    if (tick != null) _tick = tick;
-    final clamped = _clampInterval(interval);
-    if (clamped == state.interval) return;
-    state = state.copyWith(interval: clamped);
-    if (state.enabled) _restart();
-    commonPrint.log('portal auto ping: interval ${clamped.inSeconds} s');
-  }
-
-  void _restart() {
-    _timer?.cancel();
-    _timer = null;
-    if (!state.enabled) return;
-    _timer = Timer.periodic(state.interval, (_) => _tick?.call());
-  }
-}
-
-/// Whether the list re-measures itself, and how often.
-class AutoPingState {
-  const AutoPingState({required this.enabled, required this.interval});
-
-  final bool enabled;
-  final Duration interval;
-
-  AutoPingState copyWith({bool? enabled, Duration? interval}) => AutoPingState(
-        enabled: enabled ?? this.enabled,
-        interval: interval ?? this.interval,
-      );
-}
-
-final autoPingProvider =
-    NotifierProvider<AutoPingNotifier, AutoPingState>(AutoPingNotifier.new);
-
-/// Default period. The same order as mihomo's own url-test clock, but chosen for what the
-/// owner reads, not for what a balancer needs: a minute is short enough that a dead node is
-/// noticed while he is still looking at it.
-const defaultAutoPingInterval = Duration(seconds: 60);
-
-/// The period is the owner's, within reason: below [minAutoPingInterval] it is the phone's
-/// battery paying for a number nobody can read faster than it changes, above
-/// [maxAutoPingInterval] the figure is stale before it is drawn.
-const minAutoPingInterval = Duration(seconds: 15);
-const maxAutoPingInterval = Duration(minutes: 10);
-
-Duration _clampInterval(Duration value) {
-  if (value < minAutoPingInterval) return minAutoPingInterval;
-  if (value > maxAutoPingInterval) return maxAutoPingInterval;
-  return value;
-}
 
 class EngineDelayNotifier extends Notifier<Map<String, int?>> {
   final SweepLedger ledger = SweepLedger();
@@ -1509,11 +1430,29 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
 /// The answer is the child's: `ok` only when it acknowledged the tunnel, and its own last
 /// line otherwise. A refused node leaves nothing of the previous one alive, so the caller
 /// must put the previous pick back — this function only reports what happened.
-Future<PortalRuntimeAnswer> _restartChildOn(XrayServerConfig server) async {
+Future<PortalRuntimeAnswer> _restartChildOn(
+  WidgetRef ref,
+  XrayServerConfig server,
+) async {
   // The tap is one entry of the same transaction the mode switch takes: the coordinator
   // keeps the tunnel, replaces the core that reads it, and moves the generation so an
   // acknowledgement from the core it just replaced cannot be mistaken for this one's.
-  final started = await portalRuntime.startChild(jsonEncode(server.config));
+  //
+  // The document is the whole list with this node selected, never this node alone: the core
+  // must keep timing the others for the list to have numbers at all.
+  final servers = [
+    for (final item in ref.read(xrayServersProvider).value ??
+        const <XrayServerConfig>[])
+      if (item.port > 0) item,
+  ];
+  final document = servers.any((item) => item.name == server.name)
+      ? portalChildDocument(
+          servers,
+          selected: server.name,
+          probeInterval: ref.read(autoPingProvider).interval,
+        )
+      : jsonEncode(server.config);
+  final started = await portalRuntime.startChild(document);
   if (started.ok) {
     commonPrint.log('xray is reading the tunnel on ${server.name}');
     return started;
@@ -1545,7 +1484,7 @@ Future<void> _startFromList(WidgetRef ref, XrayServerConfig server) async {
     commonPrint.log('portal will open on ${server.name}');
     return;
   }
-  final started = await _restartChildOn(server);
+  final started = await _restartChildOn(ref, server);
   if (started.ok) {
     ref
         .read(portalSelectionProvider.notifier)
@@ -1566,7 +1505,7 @@ Future<bool> _restoreXrayNode(WidgetRef ref, String name) async {
   final servers = ref.read(xrayServersProvider).value ?? const <XrayServerConfig>[];
   final server = xrayServerFor(servers, name);
   if (server == null) return false;
-  final restored = await _restartChildOn(server);
+  final restored = await _restartChildOn(ref, server);
   return restored.ok;
 }
 
@@ -1623,16 +1562,78 @@ class _TcpDelaySweep extends ConsumerStatefulWidget {
 }
 
 class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
+  /// The clock that reads the child core's own numbers. Reading is free, measuring is not: the
+  /// core times every node itself on the owner's period, and this only asks what it has.
+  Timer? _reading;
+
   @override
   void initState() {
     super.initState();
     _start();
+    _reading = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      unawaited(_readObservatory());
+    });
+  }
+
+  @override
+  void dispose() {
+    _reading?.cancel();
+    super.dispose();
   }
 
   @override
   void didUpdateWidget(covariant _TcpDelaySweep oldWidget) {
     super.didUpdateWidget(oldWidget);
     _start();
+  }
+
+  /// Reads the child core's numbers, and falls back to a sweep only when no core is running.
+  ///
+  /// A portal that is up has already timed every node; a portal that is down has nothing to
+  /// time with, and then the sweep — its own short-lived core — is the only source left.
+  Future<void> _readOrSweep() async {
+    await _readObservatory();
+    final answered = ref
+        .read(tcpDelayProvider)
+        .keys
+        .any((name) => widget.servers.any((server) => server.name == name));
+    if (answered) return;
+    await _testDelayWithChild(ref, widget.servers, wasRunning: widget.wasRunning);
+  }
+
+  /// Writes what the child core has already timed into the Xray map.
+  ///
+  /// A row with no delay yet is skipped, not written as a dash: the core says "not measured
+  /// yet" for a node it has not reached, and blanking a number it did produce would be a lie
+  /// about the node, not about the clock.
+  Future<void> _readObservatory() async {
+    if (!widget.simple) return;
+    if (!ref.read(autoPingProvider).enabled) return;
+    final answer = await PortalRuntime.instance.observatory();
+    if (!answer.ok || answer.rows.isEmpty) return;
+    List<Map<Object?, Object?>> rows;
+    try {
+      final decoded = jsonDecode(answer.rows);
+      if (decoded is! Map) return;
+      final list = decoded['rows'];
+      if (list is! List) return;
+      rows = [
+        for (final item in list)
+          if (item is Map) item.cast<Object?, Object?>(),
+      ];
+    } catch (_) {
+      return;
+    }
+    final notifier = ref.read(tcpDelayProvider.notifier);
+    for (final row in rows) {
+      final tag = '${row['tag'] ?? ''}';
+      final delay = row['delay'];
+      if (delay is! num || delay < 0) continue;
+      final name = portalNameForTag(widget.servers, tag);
+      if (name == null) continue;
+      notifier.record(name, delay.round());
+    }
   }
 
   void _start() {
@@ -1654,7 +1655,9 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
     if (!ledger.shouldStart(mode, key)) return;
     ledger.markStarted(mode, key);
     if (widget.simple) {
-      unawaited(_testDelayWithChild(ref, widget.servers, wasRunning: widget.wasRunning));
+      // The child core times its own nodes while the portal is up, so there is nothing to sweep
+      // for: read first, and only lift a measurement core when there is no portal to read from.
+      unawaited(_readOrSweep());
     } else {
       unawaited(
         _testDelayWithEngine(ref, widget.engineProxies, wasRunning: widget.wasRunning),

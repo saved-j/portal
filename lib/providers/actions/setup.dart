@@ -413,8 +413,9 @@ class SetupAction extends _$SetupAction {
     // The stored pick is the node the child ran last for this profile, which is the one the
     // owner chose; an empty or stale name falls back to the panel's first server.
     final settings = ref.read(appSettingProvider);
+    final servers = parseXraySubscription(body);
     final server = xrayServerFor(
-      parseXraySubscription(body),
+      servers,
       portalXrayPickFor(settings, profile.id),
     );
     if (server == null) {
@@ -423,10 +424,20 @@ class SetupAction extends _$SetupAction {
       );
       return null;
     }
+    // The document carries every node, not just the picked one: the core times them all itself
+    // and the list reads its numbers, which is how mihomo has always worked.
+    final interval = ref.read(autoPingProvider).enabled
+        ? ref.read(autoPingProvider).interval
+        : const Duration(hours: 24);
     return _PortalChildDocument(
       profileId: profile.id,
       name: server.name,
-      config: jsonEncode(server.config),
+      config: portalChildDocument(
+        servers,
+        selected: server.name,
+        probeInterval: interval,
+        probeUrl: settings.testUrl,
+      ),
     );
   }
 
