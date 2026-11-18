@@ -610,9 +610,35 @@ PortalShown _portalShown(
           ],
     remember: remember,
   );
-  // What the owner actually sees, and where it came from: two cores, two caches, and the log
-  // must name which one answered. Throttled to changes, so a rebuild storm stays readable.
-  final items = shown.group?.all ?? const <Proxy>[];
+  // The network mode never shows the simple portal's servers, whatever a cache or a held group
+  // still remembers: the two lists are different subscriptions, and a name from the other core is
+  // a bug the owner sees as a flash of the wrong servers.
+  var result = shown;
+  var items = shown.group?.all ?? const <Proxy>[];
+  if (!simple) {
+    final xrayNames = {
+      for (final server
+          in ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[])
+        server.name,
+    };
+    if (xrayNames.isNotEmpty && items.any((item) => xrayNames.contains(item.name))) {
+      items = [
+        for (final item in items)
+          if (!xrayNames.contains(item.name)) item,
+      ];
+      // Rebuild the answer, not just the log line: the rows the screen draws come from here.
+      result = (
+        group: shown.group!.copyWith(all: items),
+        source: shown.source,
+        owner: shown.owner,
+      );
+      commonPrint.log(
+        'portal list: dropped ${shown.group!.all.length - items.length} '
+        'server(s) that belong to the simple portal',
+        logLevel: LogLevel.warning,
+      );
+    }
+  }
   final mark = '${mode.name}|${shown.source}|${items.length}';
   if (mark != _portalListMark) {
     _portalListMark = mark;
@@ -622,7 +648,7 @@ PortalShown _portalShown(
       'source=${shown.source} rows=${items.length} names=$names',
     );
   }
-  return shown;
+  return result;
 }
 
 String _portalListMark = '';
@@ -977,10 +1003,15 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                   // minute is a decision about the phone's battery, so it is the owner's to make.
                   onLongPress: () {
                     HapticFeedback.heavyImpact();
-                    _showAutoPingPeriod(context, ref);
+                    unawaited(_showAutoPingPeriod(context, ref));
                   },
+                  // Long and short presses are both owned here; the button inside only paints.
+                  behavior: HitTestBehavior.opaque,
                   child: IconButton(
-              tooltip: context.appLocalizations.delayTest,
+              // No tooltip: a Tooltip opens on long press by default, which swallowed the
+              // gesture this button exists for — the period menu answered nothing because the
+              // tooltip took the press first. The label stays for screen readers.
+              tooltip: null,
               // A delay test says which servers answer, so it must not depend on the portal
               // being open: the test wakes the engine for its duration and closes it again.
               // A tap is the switch: on, the list keeps refreshing itself; off, the numbers

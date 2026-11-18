@@ -846,12 +846,11 @@ class SetupAction extends _$SetupAction {
       );
       return PortalCoreResult.unavailable(denial);
     }
-    final managed = ref.read(managedSettingsActionProvider.notifier);
-    if (!ask) {
-      managed.takeOverIfLocked('clash.mode');
-    } else if (!await managed.confirmTakeOver('clash.mode')) {
-      return const PortalCoreResult.cancelled('the panel setting was left in place');
-    }
+    // The two modes are this product's own idea, not a setting the panel owns: "Портал" and
+    // "Простой портал" do not exist in a subscription's vocabulary, so asking the owner to take
+    // the mode back from the provider is a question with no meaning — and answering it with a
+    // dialog about the provider is exactly the confusion this line removes.
+    ref.read(managedSettingsActionProvider.notifier).takeOverIfLocked('clash.mode');
     changeMode(mode);
     return const PortalCoreResult.ok();
   }

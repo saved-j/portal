@@ -64,7 +64,7 @@ android {
         // semver core does not accept, so the base comes from pubspec and the suffix is added
         // here. An explicit PORTAL_VERSION_NAME still wins for a one-off build.
         versionName =
-            System.getenv("PORTAL_VERSION_NAME") ?: "${baseVersion}_1a-portal-duo"
+            System.getenv("PORTAL_VERSION_NAME") ?: "${baseVersion}_3a-portal-duo"
     }
 
     signingConfigs {
