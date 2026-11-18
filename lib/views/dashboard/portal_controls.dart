@@ -1809,6 +1809,9 @@ Future<void> _showAutoPingPeriod(BuildContext context, WidgetRef ref) async {
   final current = auto.current;
   final simple =
       ref.read(patchClashConfigProvider.select((s) => s.mode)) == Mode.global;
+  // What "as in the subscription" would mean, read from the profile itself.
+  final subscriptionInterval =
+      simple ? null : ref.read(subscriptionPingIntervalProvider).value;
   // The owner's own list. A minute is the shortest that does not turn a portal into a battery
   // complaint, five minutes is where mihomo's own url-test groups sit.
   final options = <Duration>[
@@ -1840,14 +1843,23 @@ Future<void> _showAutoPingPeriod(BuildContext context, WidgetRef ref) async {
         if (!simple)
           _periodOption(
             context,
-            label: l10n.autoPingAsInSubscription,
+            // The row has to say which number "as in the subscription" means, or the owner
+            // chooses a word and cannot see what it does.
+            label: subscriptionInterval == null
+                ? l10n.autoPingAsInSubscription
+                : '${l10n.autoPingAsInSubscription} · '
+                    '${_periodLabel(l10n, subscriptionInterval)}',
             selected: current.enabled && current.asInSubscription,
             onTap: () => Navigator.of(context).pop(_AutoPingChoice.subscription),
           ),
+        // While the subscription's own value stands, the numbers are shown as what they are:
+        // available, but not in force. They stay tappable — choosing one is how the override
+        // comes back — and they are dimmed only to say "not active now".
         for (final option in options)
           _periodOption(
             context,
             label: _periodLabel(l10n, option),
+            dimmed: !simple && current.enabled && current.asInSubscription,
             selected: current.enabled &&
                 !current.asInSubscription &&
                 current.interval == option,
@@ -1892,12 +1904,25 @@ Widget _periodOption(
   required String label,
   required bool selected,
   required VoidCallback onTap,
+  bool dimmed = false,
 }) {
+  final scheme = Theme.of(context).colorScheme;
   return SimpleDialogOption(
     onPressed: onTap,
     child: Row(
       children: [
-        Expanded(child: Text(label)),
+        Expanded(
+          child: Text(
+            label,
+            style: dimmed
+                // Dim, not invisible: the number is still a choice the owner can make, it just
+                // is not the one in force.
+                ? TextStyle(
+                    color: scheme.onSurface.withValues(alpha: 0.45),
+                  )
+                : null,
+          ),
+        ),
         if (selected) const Icon(Icons.check, size: 18),
       ],
     ),
