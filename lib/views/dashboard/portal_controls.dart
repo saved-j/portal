@@ -2537,10 +2537,21 @@ class _ServerRowState extends ConsumerState<_ServerRow>
           ref
               .read(portalSelectionProvider.notifier)
               .pickRule(widget.group.name, widget.proxy.name);
-          ref.read(proxiesActionProvider.notifier).changeProxy(
-                groupName: widget.group.name,
-                proxyName: widget.proxy.name,
-              );
+          // A closed portal has no core to answer: the pick is stored for the start that
+          // follows, which builds its document with this server already chosen. Asking the
+          // engine now would fail and roll the pick back.
+          final proxies = ref.read(proxiesActionProvider.notifier);
+          if (ref.read(runTimeProvider) == null) {
+            proxies.storeSelection(
+              groupName: widget.group.name,
+              proxyName: widget.proxy.name,
+            );
+            return;
+          }
+          proxies.changeProxy(
+            groupName: widget.group.name,
+            proxyName: widget.proxy.name,
+          );
         },
         // A long press answers the question a person actually has about one server: does
         // this one respond, and how fast — not what protocol it speaks, which is on the row

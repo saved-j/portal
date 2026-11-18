@@ -144,6 +144,20 @@ class ProxiesAction extends _$ProxiesAction {
     }, args: [groupName, proxyName]);
   }
 
+  /// Stores a server pick without asking the engine.
+  ///
+  /// A closed portal has no core to answer `changeProxy`, and asking it anyway fails and rolls
+  /// the pick back — which is why a pick made while the portal was off looked like it did
+  /// nothing. The pick belongs to the profile: it is what the next start builds the document
+  /// from, so storing it is the whole job.
+  void storeSelection({required String groupName, required String proxyName}) {
+    final profileId = ref.read(currentProfileIdProvider);
+    ref
+        .read(profilesActionProvider.notifier)
+        .updateCurrentSelectedMap(groupName, proxyName);
+    _storeSelection(profileId, groupName, proxyName);
+  }
+
   void _storeSelection(int? profileId, String groupName, String proxyName) {
     if (profileId == null) return;
     ref
