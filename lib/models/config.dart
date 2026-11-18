@@ -266,6 +266,15 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default('') String portalSortRules,
     @Default('') String portalSortXray,
 
+    /// Auto-ping, per mode: two switches and two periods, stored apart. The owner sees one
+    /// control per list, and each list remembers its own number — a period chosen for the
+    /// engine must not become the child's, and vice versa.
+    @Default(true) bool portalPingRulesEnabled,
+    @Default(60) int portalPingRulesInterval,
+    @Default(false) bool portalPingRulesAsInSubscription,
+    @Default(true) bool portalPingXrayEnabled,
+    @Default(60) int portalPingXrayInterval,
+
     /// The server picked in each mode, kept apart for the same reason the order is: the
     /// rules list names the engine's servers, the simple portal names the child's, and a
     /// name picked in one means nothing in the other.

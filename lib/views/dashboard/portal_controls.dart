@@ -591,13 +591,19 @@ PortalShown _portalShown(
             // portal has no groups, and the cached rows may belong to the other core or to
             // an older profile. Only when the document has nothing to show does the last
             // engine answer stand in — never before it.
+            // Only a file that really is a mihomo config may feed the network list. An Xray
+            // subscription sitting in the same profile is a different document entirely, and
+            // reading it here is how the wrong config reached the wrong mode.
             (
               'profile',
-              portalFallbackGroup(
-                simple: false,
-                servers: const [],
-                engineRows: profileRows,
-              ),
+              ref.watch(engineFormatStatusProvider).value?.status ==
+                      EngineFormatStatus.ok
+                  ? portalFallbackGroup(
+                      simple: false,
+                      servers: const [],
+                      engineRows: profileRows,
+                    )
+                  : null,
             ),
             // The engine's own last answer for this profile: switching modes must show servers
             // immediately, and the profile file is not always the list the engine had. Only the
@@ -1896,6 +1902,14 @@ class _AutoPingPeriodDialogState extends State<_AutoPingPeriodDialog> {
 
   double get _max => autoPingStops.length.toDouble();
 
+  /// The period that is actually in effect while "По умолчанию" stands.
+  ///
+  /// A subscription that names no interval does not leave the list untimed: mihomo's own default
+  /// for a timed group is five minutes. The button must show that number — the owner cannot judge
+  /// a word.
+  Duration get _effectiveSubscriptionPeriod =>
+      widget.subscriptionInterval ?? const Duration(minutes: 5);
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1903,7 +1917,14 @@ class _AutoPingPeriodDialogState extends State<_AutoPingPeriodDialog> {
     final meta = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
-    final value = _default ? 0.0 : _value;
+    // While "По умолчанию" stands the thumb sits on the subscription's period, so the control
+    // shows the number that is really in effect.
+    final value = _default
+        ? 1.0 +
+            (autoPingStops.indexOf(_effectiveSubscriptionPeriod) < 0
+                ? 0
+                : autoPingStops.indexOf(_effectiveSubscriptionPeriod))
+        : _value;
     return AlertDialog(
       title: Text(l10n.autoPingPeriod),
       contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
@@ -1925,13 +1946,12 @@ class _AutoPingPeriodDialogState extends State<_AutoPingPeriodDialog> {
                     );
                   },
                   child: Text(
+                    // The button names what is in force, not a mode: after it is pressed it
+                    // shows the subscription's own period. A subscription without a number
+                    // still has one in effect — mihomo's own default is five minutes — and the
+                    // owner needs to see the number, not a phrase.
                     _default
-                        ? (widget.subscriptionInterval == null
-                            ? l10n.autoPingAsInSubscription
-                            : _periodLabel(
-                                l10n,
-                                widget.subscriptionInterval!,
-                              ))
+                        ? _periodLabel(l10n, _effectiveSubscriptionPeriod)
                         : l10n.autoPingDefault,
                   ),
                 ),
@@ -1940,29 +1960,31 @@ class _AutoPingPeriodDialogState extends State<_AutoPingPeriodDialog> {
               value: value.clamp(0, _max).toDouble(),
               max: _max,
               divisions: _max.toInt(),
-              // Grey while the subscription's number stands: the slider is not the owner of the
-              // value then, and a control that looks alive but does nothing is worse than one
-              // that says so.
-              onChanged: _default
-                  ? null
-                  : (next) {
-                      setState(() {
-                        if (next <= 0) {
-                          _enabled = false;
-                          widget.onChanged(enabled: false);
-                          return;
-                        }
-                        final index =
-                            (next - 1).round().clamp(0, autoPingStops.length - 1);
-                        _enabled = true;
-                        _interval = autoPingStops[index];
-                        widget.onChanged(
-                          enabled: true,
-                          interval: _interval,
-                          asInSubscription: false,
-                        );
-                      });
-                    },
+              // Always movable: touching it is how the owner takes the number back. While
+              // "По умолчанию" stands the thumb sits on the subscription's own period, so the
+              // control is never dead — and moving it is the whole act of overriding.
+              onChanged: (next) {
+                if (next <= 0) {
+                  setState(() {
+                    _default = false;
+                    _enabled = false;
+                  });
+                  widget.onChanged(enabled: false, asInSubscription: false);
+                  return;
+                }
+                final index =
+                    (next - 1).round().clamp(0, autoPingStops.length - 1);
+                setState(() {
+                  _default = false;
+                  _enabled = true;
+                  _interval = autoPingStops[index];
+                });
+                widget.onChanged(
+                  enabled: true,
+                  interval: autoPingStops[index],
+                  asInSubscription: false,
+                );
+              },
             ),
             Center(
               child: Text(
@@ -2209,24 +2231,48 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                               // in the same frame as the tap.
                               final server =
                                   bypassed ? null : (picked ? pendingByGroup[item.name] : item.now);
-                              final text = [
+                              // Two lines inside the chip: the filter's name, and — under it —
+                              // the server it currently answers with. A separator between them
+                              // read as one long label and lost the server in the middle of it;
+                              // stacked, the eye finds the name first and the answer second.
+                              final lines = <String>[
                                 if (showName) item.name,
                                 if (showServer &&
                                     server != null &&
                                     server != item.name)
                                   server,
-                              ].join(' · ');
-                              if (!showIcon) {
-                                return Text(text.isEmpty ? item.name : text);
-                              }
-                              if (text.isEmpty) return mark;
+                              ];
+                              if (lines.isEmpty) lines.add(item.name);
+                              final label = Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  for (var index = 0; index < lines.length; index++)
+                                    Text(
+                                      lines[index],
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: index == 0
+                                          ? null
+                                          : Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                    ),
+                                ],
+                              );
+                              if (!showIcon) return label;
                               return Row(
                                 mainAxisSize: MainAxisSize.min,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   mark,
                                   const SizedBox(width: 6),
-                                  Text(text),
+                                  Flexible(child: label),
                                 ],
                               );
                             },

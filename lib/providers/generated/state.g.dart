@@ -2130,7 +2130,7 @@ final class ProxyStateProvider
   }
 }
 
-String _$proxyStateHash() => r'cc5539f122cd5fec2f9b094310e519f11c1682ae';
+String _$proxyStateHash() => r'eb113246396da625dd933f47071c4e8532a9c570';
 
 /// Watching the delay map instead would drop nodes one probe at a time, and
 /// reading it on any other rebuild would drop them whenever something
@@ -3863,7 +3863,7 @@ final class PanelBackdropImageProvider
 }
 
 String _$panelBackdropImageHash() =>
-    r'66282a66d54b6194107b8f0c3a8bae50d59d50da';
+    r'98c59de8e9e53cbeb661970e96f7b69ed36b060a';
 
 /// Where the panel's logo lies on disk, kept as its backdrop is so it shows
 /// at launch without the network.
@@ -3922,7 +3922,7 @@ final class PanelLogoPathProvider
   }
 }
 
-String _$panelLogoPathHash() => r'cdaa6f7459c2ee355372e2a82918d1f2a232b243';
+String _$panelLogoPathHash() => r'209e12e75c7af89f2ebe29a8e27940ec37aaaa29';
 
 /// Where the panel's logo lies on disk, kept as its backdrop is so it shows
 /// at launch without the network.
