@@ -2007,6 +2007,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("Portal"),
     "themeStyleOriginal": MessageLookupByLibrary.simpleMessage("Original"),
     "tight": MessageLookupByLibrary.simpleMessage("Tight"),
+    "tilePortal": MessageLookupByLibrary.simpleMessage("Portal"),
     "time": MessageLookupByLibrary.simpleMessage("Time"),
     "timeout": MessageLookupByLibrary.simpleMessage("Timeout"),
     "timeoutLabel": MessageLookupByLibrary.simpleMessage("timeout"),

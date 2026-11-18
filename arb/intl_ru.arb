@@ -106,6 +106,7 @@
   "portalStrikes": "Неудачных попыток подряд: {count}",
   "portalModeUnavailable": "Этот режим недоступен: {reason}",
   "portalModesUnavailable": "Оба режима недоступны: {reason}",
+  "tilePortal": "Портал",
   "themeStyleEnhanced": "Портал",
   "themeStyleDesc": "Улучшенный показывает на главной логотип сервиса, тариф, портал и кнопку подключения вместо сетки виджетов.",
   "website": "Сайт",

@@ -2427,24 +2427,36 @@ class PortalPlanCard extends ConsumerWidget {
                   final expiry = facts.expiry == '—'
                       ? '—'
                       : context.appLocalizations.expiresUntil(facts.expiry);
-                  return Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: '$name ${facts.mark}',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: theme.colorScheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                          ),
+                  // Three lines, always three: name with its mark, then the traffic, then the
+                  // expiry. One line put three different facts behind one ellipsis, and a
+                  // missing field hid the rest; a dash says "the panel sent nothing" instead of
+                  // letting the line collapse.
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$name ${facts.mark}'.trim(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
                         ),
-                        TextSpan(text: '  ·  ', style: meta),
-                        TextSpan(text: facts.traffic, style: meta),
-                        TextSpan(text: '  ·  ', style: meta),
-                        TextSpan(text: expiry, style: meta),
-                      ],
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        facts.traffic,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: meta,
+                      ),
+                      Text(
+                        expiry,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: meta,
+                      ),
+                    ],
                   );
                 },
               )

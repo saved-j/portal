@@ -2103,6 +2103,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("Портал"),
     "themeStyleOriginal": MessageLookupByLibrary.simpleMessage("Оригинальный"),
     "tight": MessageLookupByLibrary.simpleMessage("Плотный"),
+    "tilePortal": MessageLookupByLibrary.simpleMessage("Портал"),
     "time": MessageLookupByLibrary.simpleMessage("Время"),
     "timeout": MessageLookupByLibrary.simpleMessage("Тайм-аут"),
     "timeoutLabel": MessageLookupByLibrary.simpleMessage("таймаут"),

@@ -42,7 +42,9 @@ extension DashboardWidgetView on DashboardWidget {
       DashboardWidget.announcement => appLocalizations.announcement,
       DashboardWidget.networkSpeed => appLocalizations.networkSpeed,
       DashboardWidget.outboundMode => appLocalizations.outboundMode,
-      DashboardWidget.vpnButton => 'VPN',
+      // The product's own word: "VPN" is not one of its own terms, and the button starts the
+      // portal — the same thing the switch on the dashboard calls.
+      DashboardWidget.vpnButton => 'Portal',
       DashboardWidget.networkTakeover => appLocalizations.networkTakeover,
       DashboardWidget.serviceStatus => appLocalizations.serviceStatus,
       DashboardWidget.profiles => appLocalizations.profile,

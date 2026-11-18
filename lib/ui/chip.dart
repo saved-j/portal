@@ -1,5 +1,6 @@
 import 'package:fl_clash/ui/color.dart';
 import 'package:fl_clash/ui/context.dart';
+import 'package:fl_clash/ui/haptics.dart';
 import 'package:fl_clash/ui/cursor.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/ui/measure.dart';
@@ -108,7 +109,12 @@ class TonalChip extends StatelessWidget {
           ? content
           : InkWell(
               mouseCursor: clickableCursor,
-              onTap: onPressed,
+              // Every press answers: a list where some controls vibrate and others do not
+              // reads as a broken app, not as a restrained one.
+              onTap: () {
+                AppHaptics.tap();
+                onPressed!();
+              },
               child: content,
             ),
     );

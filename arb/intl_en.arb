@@ -106,6 +106,7 @@
   "portalStrikes": "Failed attempts in a row: {count}",
   "portalModeUnavailable": "This mode is unavailable: {reason}",
   "portalModesUnavailable": "Both modes are unavailable: {reason}",
+  "tilePortal": "Portal",
   "themeStyleEnhanced": "Portal",
   "themeStyleDesc": "Enhanced puts the service logo, plan, portal and a connect button on the home page in place of the widget grid.",
   "website": "Website",

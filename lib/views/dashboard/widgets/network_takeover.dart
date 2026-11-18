@@ -230,7 +230,7 @@ class VpnTile extends ConsumerWidget {
       padding: EdgeInsets.zero,
       child: DashboardSwitchRow(
         glyph: AppGlyphs.vpn,
-        title: 'VPN',
+        title: appLocalizations.tilePortal,
         subtitle: metrics.subtitle
             ? enabled
                   ? appLocalizations.enabled
@@ -263,7 +263,7 @@ class VpnCard extends ConsumerWidget {
     );
     void change(bool value) => _setVpn(ref, value);
     return DashboardCard(
-      semanticLabel: 'VPN',
+      semanticLabel: appLocalizations.tilePortal,
       padding: dashboardCardPadding(
         DashboardDensityScope.of(context),
       ).copyWith(top: 16, bottom: 16),
@@ -290,7 +290,7 @@ class VpnCard extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'VPN',
+                  appLocalizations.tilePortal,
                   style: AppTextStyle.callout.of(context, emphasized: true),
                 ),
                 Text(
@@ -308,7 +308,7 @@ class VpnCard extends ConsumerWidget {
           ),
           DashboardSwitch(
             value: enabled,
-            semanticLabel: 'VPN',
+            semanticLabel: appLocalizations.tilePortal,
             onChanged: change,
           ),
         ],

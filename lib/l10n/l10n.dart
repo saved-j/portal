@@ -866,6 +866,11 @@ class AppLocalizations {
   }
 
   /// `Portal`
+  String get tilePortal {
+    return Intl.message('Portal', name: 'tilePortal', desc: '', args: []);
+  }
+
+  /// `Portal`
   String get themeStyleEnhanced {
     return Intl.message(
       'Portal',

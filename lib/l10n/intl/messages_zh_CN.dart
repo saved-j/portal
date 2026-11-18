@@ -1558,6 +1558,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "themeStyleEnhanced": MessageLookupByLibrary.simpleMessage("门户"),
     "themeStyleOriginal": MessageLookupByLibrary.simpleMessage("原版"),
     "tight": MessageLookupByLibrary.simpleMessage("紧凑"),
+    "tilePortal": MessageLookupByLibrary.simpleMessage("门户"),
     "time": MessageLookupByLibrary.simpleMessage("时间"),
     "timeout": MessageLookupByLibrary.simpleMessage("超时"),
     "timeoutLabel": MessageLookupByLibrary.simpleMessage("超时"),

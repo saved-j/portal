@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' show ImageFilter, lerpDouble;
 
 import 'package:fl_clash/state.dart';
+import 'package:fl_clash/ui/haptics.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/views/dashboard/layout.dart';
 import 'package:fl_clash/views/dashboard/style.dart';
@@ -75,7 +76,11 @@ class DashboardCard extends StatelessWidget {
                   child: InkWell(
                     mouseCursor: clickableCursor,
                     customBorder: shape,
-                    onTap: onTap,
+                    // The card answers like every other control: one press, one tick.
+                    onTap: () {
+                      AppHaptics.tap();
+                      onTap!();
+                    },
                     child: content,
                   ),
                 ),

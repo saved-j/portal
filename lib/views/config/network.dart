@@ -67,7 +67,7 @@ class VPNItem extends ConsumerWidget {
   @override
   Widget build(BuildContext context, ref) {
     return _vpnToggle(
-      title: (l) => 'VPN',
+      title: (l) => appName,
       select: (state) => state.enable,
       update: (state, value) => state.copyWith(enable: value),
     );
@@ -535,7 +535,7 @@ class VpnSections extends ConsumerWidget {
           footer: appLocalizations.vpnEnableDesc,
         ),
         generateSection(
-          title: 'VPN',
+          title: appLocalizations.tilePortal,
           items: const [
             VpnSystemProxyItem(),
             BypassDomainItem(),
