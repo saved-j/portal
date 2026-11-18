@@ -2487,16 +2487,52 @@ class _ServerRowState extends ConsumerState<_ServerRow>
           size: 20,
           color: color,
         ),
-        title: Text(
-          node == null || node == widget.proxy.name
-              ? widget.proxy.name
-              : '${widget.proxy.name} · $node',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: widget.selected ? scheme.onPrimaryContainer : null,
-            fontWeight: widget.selected ? FontWeight.w600 : null,
-          ),
+        // The title, then the panel's own note about the server — «только Gemini»,
+        // «для ИИ» — under it, when the panel wrote one. A note is a fact about the node,
+        // not part of its name: it is drawn small and muted, drops out when it would not
+        // fit, and never joins the name the engine is asked to select.
+        title: Builder(
+          builder: (context) {
+            final head = node == null || node == widget.proxy.name
+                ? widget.proxy.name
+                : '${widget.proxy.name} · $node';
+            final note = _serverNote(widget.proxy);
+            final base = theme.textTheme.bodyLarge?.copyWith(
+              color: widget.selected ? scheme.onPrimaryContainer : null,
+              fontWeight: widget.selected ? FontWeight.w600 : null,
+            );
+            if (note.isEmpty) {
+              return Text(
+                head,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: base,
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  head,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: base,
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  note,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: widget.selected
+                        ? scheme.onPrimaryContainer.withValues(alpha: 0.75)
+                        : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -2597,6 +2633,21 @@ class _ServerRowState extends ConsumerState<_ServerRow>
       ),
     );
   }
+}
+
+/// The panel's note about one server, or an empty string when it wrote none.
+///
+/// Two sources, and both are the panel's own words: the engine document keeps it in
+/// `serverDescription`, the Xray document in `meta.serverDescription`. A note that merely
+/// repeats the server's name is not a note — the endpoint string the parser falls back to
+/// (`host:port · vless`) is a fact about the transport, not a description of the server, and
+/// showing it under every row would be noise dressed as information.
+String _serverNote(Proxy proxy) {
+  final note = (proxy.serverDescription ?? '').trim();
+  if (note.isEmpty || note == proxy.name) return '';
+  // `1.2.3.4:443 · vless` and `example.com:443 · trojan`: a host, a port and a protocol.
+  if (RegExp(r'^[^\s·]+:\d+ · \S+$').hasMatch(note)) return '';
+  return note;
 }
 
 /// Plan status and the provider's announcement in one card.

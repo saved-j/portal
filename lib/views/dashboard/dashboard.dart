@@ -133,7 +133,16 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
       body: LayoutBuilder(
         builder: (context, constraints) {
           final room = constraints.biggest / scale;
-          final layout = DashboardDensity.of(room);
+          // A phone turned on its side is still a phone: the shorter side of the *layout*
+          // grows in landscape, which is what used to fool this into the wide layout. The
+          // density is decided by the physical shorter side instead, so the stacked cards
+          // stay stacked and fill the wide window — and a tablet or a desktop window, whose
+          // shorter side is already large, gets the columns it has room for.
+          // `MediaQuery.size` is already in logical points — dividing by the device pixel
+          // ratio again turned a phone's 389 pt into 250 and nothing was ever wide.
+          final view = MediaQuery.sizeOf(context);
+          final shortestSide = math.min(view.width, view.height);
+          final layout = DashboardDensity.of(room, shortest: shortestSide);
           if (hero) {
             return DashboardDensityScope(
               density: DashboardDensity.mobile,

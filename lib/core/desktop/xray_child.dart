@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../../common/constant.dart';
 import '../../common/path.dart';
 import '../../common/print.dart';
 

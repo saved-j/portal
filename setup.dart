@@ -534,6 +534,10 @@ Future<void> _packageMacos(_Build build, {required String env}) async {
     if (Directory(app).existsSync()) Directory(app).deleteSync(recursive: true);
     Directory(built).renameSync(app);
   }
+  // The bundle's own version is the version it reports: a DMG whose Info.plist says 0.5.6 while
+  // the app says 0.6.84 is two numbers for one build, and that is what the About page and the
+  // update check read before the dart define was fixed.
+  _applyMacosVersion(app);
   // The desktop simple portal needs the Xray core beside the engine: on a desktop the child
   // is a process, not a library, so the binary ships inside the bundle and is started from
   // there. PORTAL_XRAY_BIN points at a build of it; without one the app still starts, and the
@@ -598,6 +602,17 @@ List<String> macosSigningOrder(String app) {
     ...entries('MacOS', (path) => p.basename(path) != _appName),
     app,
   ];
+}
+
+/// Stamps the bundle's Info.plist with the version the build carries.
+void _applyMacosVersion(String app) {
+  final name = (Platform.environment['PORTAL_VERSION_NAME'] ?? '').trim();
+  if (name.isEmpty) return;
+  final plist = p.join(app, 'Contents', 'Info.plist');
+  for (final key in ['CFBundleShortVersionString', 'CFBundleVersion']) {
+    Process.runSync('plutil', ['-replace', key, '-string', name, plist]);
+  }
+  stdout.writeln('macos: bundle version set to $name');
 }
 
 /// Puts the Xray binary into a bundle directory under the name that platform uses.
