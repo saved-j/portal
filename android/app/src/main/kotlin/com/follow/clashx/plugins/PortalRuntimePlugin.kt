@@ -110,6 +110,17 @@ class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
             }
 
+            // Reading the core's own latency numbers is cheap — the core already has them —
+            // so this answers inline instead of going through the measure slot's thread.
+            "observatory" -> {
+                val bridge = PortalMeasureBridge.observatory
+                if (bridge == null) {
+                    result.success(mapOf("ok" to false, "message" to "no child on this platform"))
+                    return
+                }
+                result.success(bridge())
+            }
+
             "status" -> result.success(PortalRuntimeCoordinator.status())
 
             // The switch's own clock: the tap starts it here, and the record's hook writes

@@ -76,8 +76,8 @@ const defaultAutoPingInterval = Duration(seconds: 60);
 /// The period is the owner's, within reason: below [minAutoPingInterval] it is the phone's
 /// battery paying for a number nobody can read faster than it changes, above
 /// [maxAutoPingInterval] the figure is stale before it is drawn.
-const minAutoPingInterval = Duration(seconds: 15);
-const maxAutoPingInterval = Duration(minutes: 10);
+const minAutoPingInterval = Duration(seconds: 30);
+const maxAutoPingInterval = Duration(minutes: 5);
 
 Duration _clampInterval(Duration value) {
   if (value < minAutoPingInterval) return minAutoPingInterval;

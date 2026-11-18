@@ -1562,6 +1562,9 @@ class _TcpDelaySweep extends ConsumerStatefulWidget {
 }
 
 class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
+  /// What the last read said, so the log carries changes instead of a pulse.
+  String _lastObservatoryNote = '';
+
   /// The clock that reads the child core's own numbers. Reading is free, measuring is not: the
   /// core times every node itself on the owner's period, and this only asks what it has.
   Timer? _reading;
@@ -1626,13 +1629,27 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
       return;
     }
     final notifier = ref.read(tcpDelayProvider.notifier);
+    var written = 0;
+    var alive = 0;
     for (final row in rows) {
       final tag = '${row['tag'] ?? ''}';
       final delay = row['delay'];
+      final isAlive = row['alive'] == true;
+      if (isAlive) alive++;
+      // A node the core has not reached yet has no delay; writing a dash for it would report
+      // the clock as if it were the node's.
       if (delay is! num || delay < 0) continue;
       final name = portalNameForTag(widget.servers, tag);
       if (name == null) continue;
       notifier.record(name, delay.round());
+      written++;
+    }
+    // One line per change, not one per read: the read runs every five seconds and would
+    // drown the log it is meant to explain.
+    final note = 'rows=${rows.length} alive=$alive written=$written';
+    if (note != _lastObservatoryNote) {
+      _lastObservatoryNote = note;
+      commonPrint.log('portal observatory: $note');
     }
   }
 
@@ -1915,12 +1932,17 @@ Future<void> _testDelayWithChild(
 Future<void> _showAutoPingPeriod(BuildContext context, WidgetRef ref) async {
   final l10n = context.appLocalizations;
   final auto = ref.read(autoPingProvider.notifier);
+  // The owner's list, in the order he asked for it: half a minute is the shortest that does
+  // not turn a VPN app into a battery complaint, five minutes is where mihomo's own url-test
+  // groups sit.
   final options = <Duration>[
-    const Duration(seconds: 15),
     const Duration(seconds: 30),
     const Duration(seconds: 60),
-    const Duration(minutes: 2),
-    const Duration(minutes: 5),
+    const Duration(seconds: 90),
+    const Duration(seconds: 120),
+    const Duration(seconds: 180),
+    const Duration(seconds: 240),
+    const Duration(seconds: 300),
   ];
   final picked = await showDialog<Duration>(
     context: context,
@@ -1932,7 +1954,7 @@ Future<void> _showAutoPingPeriod(BuildContext context, WidgetRef ref) async {
             onPressed: () => Navigator.of(context).pop(option),
             child: Row(
               children: [
-                Expanded(child: Text(_periodLabel(option))),
+                Expanded(child: Text(_periodLabel(l10n, option))),
                 if (option == auto.current.interval)
                   const Icon(Icons.check, size: 18),
               ],
@@ -1951,9 +1973,14 @@ Future<void> _showAutoPingPeriod(BuildContext context, WidgetRef ref) async {
   if (picked != null) auto.setInterval(picked);
 }
 
-String _periodLabel(Duration value) {
-  if (value.inSeconds < 60) return '${value.inSeconds} ${'s'}';
-  return '${value.inMinutes} ${value.inMinutes == 1 ? 'min' : 'min'}';
+String _periodLabel(AppLocalizations l10n, Duration value) {
+  if (value.inSeconds < 60) return '${value.inSeconds} ${l10n.seconds}';
+  if (value.inSeconds % 60 == 0) {
+    return '${value.inMinutes} ${l10n.minutes}';
+  }
+  // 90 s and 150 s are the halves: written as «1.5 min» rather than a mixed unit nobody reads.
+  final half = value.inSeconds / 60;
+  return '$half ${l10n.minutes}';
 }
 
 /// How long a measurement stays good enough to skip.

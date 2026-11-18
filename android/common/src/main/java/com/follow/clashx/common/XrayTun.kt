@@ -162,4 +162,10 @@ object PortalMeasureBridge {
 
     @Volatile
     var stop: (() -> Boolean)? = null
+
+    /// What the tunnel's own core has timed so far, without measuring anything. Set by the
+    /// xray plugin; the dashboard reads it through this bridge because it speaks to the
+    /// portal channel, not to the core's.
+    @Volatile
+    var observatory: (() -> Map<String, Any>)? = null
 }

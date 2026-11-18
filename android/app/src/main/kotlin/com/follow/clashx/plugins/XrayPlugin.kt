@@ -149,6 +149,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
             val task = executor.submit(Callable { stopMeasure() })
             runCatching { task.get(STOP_WAIT_MS, TimeUnit.MILLISECONDS) }.getOrDefault(false)
         }
+        PortalMeasureBridge.observatory = { observatory() }
         XrayChildControl.stop = {
             nextOperation()
             // The service is closing the descriptor it owns: the tunnel in hand is gone with
@@ -168,6 +169,7 @@ class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGa
         XrayChildControl.stop = null
         PortalMeasureBridge.start = null
         PortalMeasureBridge.stop = null
+        PortalMeasureBridge.observatory = null
         nextOperation()
         takeCore()
         requestNativeStop()
