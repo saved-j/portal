@@ -1843,7 +1843,12 @@ Future<void> _testDelayWithEngine(
   // tunnel now", which is true for a portal that was already up — and a sweep that believes it
   // raised someone else's tunnel puts it down when it finishes. That is a connection closing on
   // its own a few seconds after it opened, with the screen still showing it as live.
-  final raisedBySweep = ownerBefore == null;
+  // The clock is the other half of the same question: an owner who just pressed the button has
+  // already asked for a tunnel, even though the record still says Off until the core answers.
+  // Without this the sweep sees "nobody owns it", takes the credit for the tunnel the owner
+  // asked for, and puts it down when the measurement ends.
+  final raisedBySweep =
+      ownerBefore == null && ref.read(runTimeProvider) == null;
   final started = await ref.read(setupActionProvider.notifier).setRunning(true);
   var stopped = false;
   try {
