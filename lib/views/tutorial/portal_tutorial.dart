@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/haptics.dart';
 import 'package:material_ui/material_ui.dart';
@@ -22,24 +23,49 @@ final tutorialKeys = {
 };
 
 /// One page of the tour.
+///
+/// The words are not here: a step is a number, and the number is looked up in the app's own
+/// translations. A tour written in one language on a phone set to another is a bug the owner
+/// has to notice; there is nothing to notice when the strings live where every other string
+/// lives.
 class TutorialStep {
   const TutorialStep({
     required this.target,
-    required this.title,
-    required this.body,
+    required this.number,
     this.pictures = const [],
     this.androidOnly = false,
   });
 
   final TutorialTarget? target;
-  final String title;
-  final String body;
+
+  /// 1-based, and the name of the translation pair: `tutorialTitle$number`/`tutorialBody$number`.
+  final int number;
 
   /// Screenshots that show this step where words are not enough.
   final List<String> pictures;
 
   /// A step that exists on the phone only: a desktop has no notification shade.
   final bool androidOnly;
+
+  String title(AppLocalizations l) => switch (number) {
+    1 => l.tutorialTitle1,
+    2 => l.tutorialTitle2,
+    3 => l.tutorialTitle3,
+    4 => l.tutorialTitle4,
+    5 => l.tutorialTitle5,
+    6 => l.tutorialTitle6,
+    _ => l.tutorialTitle7,
+  };
+
+  String body(AppLocalizations l) => switch (number) {
+    1 => l.tutorialBody1,
+    2 => l.tutorialBody2,
+    3 => l.tutorialBody3,
+    4 => l.tutorialBody4,
+    5 => l.tutorialBody5,
+    6 => l.tutorialBody6,
+    _ => l.tutorialBody7,
+  };
 }
 
 /// The tour, in the order the owner walks it.
@@ -52,61 +78,17 @@ class TutorialStep {
 const tutorialVersion = 3;
 
 const tutorialSteps = <TutorialStep>[
-  // The switch, not the row: the tour asks for a tap on the control that moves, and the row
-  // around it is a label, not a control.
-  TutorialStep(
-    target: TutorialTarget.modeSwitch,
-    title: 'Сеть порталов',
-    body:
-        'Сеть порталов позволяет делить трафик, подключая разные приложения через разные '
-        'страны. Это называется динамическое сплит-туннелирование.\n\n'
-        'Если вам оно не нужно, приложением можно пользоваться в «простом режиме», когда '
-        'почти весь трафик заворачивается через одну страну.\n\n'
-        'Переключите режим здесь.',
-  ),
-  TutorialStep(
-    target: TutorialTarget.filters,
-    title: 'Список фильтров',
-    body:
-        'Кнопка слева от строки плиток открывает список фильтров. Здесь можно отключить '
-        'ненужные фильтры, убрав их из списка.',
-  ),
-  TutorialStep(
-    target: TutorialTarget.chip,
-    title: 'Фильтр на палец',
-    body:
-        'Удержанием пальца на плитке фильтр включается и выключается — так туннелирование '
-        'настраивается для отдельных сервисов.\n\n'
-        'Например, можно включить туннель ТОЛЬКО для Телеграма, Ютуба и Инстаграма.',
-  ),
-  TutorialStep(
-    target: TutorialTarget.chip,
-    title: 'Вид плиток',
-    body: 'Двойным тапом на плитку переключается внешний вид плиток.',
-  ),
-  // The word, not the row: the dashboard opens on the name and nothing else, so that is the
-  // spot the tour points at.
-  TutorialStep(
-    target: TutorialTarget.modeLabel,
-    title: 'Все фильтры сразу',
-    body:
-        'Нажатие на «Сеть порталов» открывает экран, где все фильтры настраиваются сразу — '
-        'на одном экране.',
-  ),
-  TutorialStep(
-    target: null,
-    androidOnly: true,
-    title: 'Плитка в шторке',
-    body:
-        'Плитка запускает портал из любого экрана: откройте шторку, нажмите карандаш, '
-        'пролистайте до пользовательских приложений и добавьте «Портал».',
-  ),
-  TutorialStep(
-    target: TutorialTarget.start,
-    title: 'Запуск',
-    body: 'И наконец — запуск.',
-  ),
+  // The switch, not the row: the tour asks for a tap on the control that moves.
+  TutorialStep(target: TutorialTarget.modeSwitch, number: 1),
+  TutorialStep(target: TutorialTarget.filters, number: 2),
+  TutorialStep(target: TutorialTarget.chip, number: 3),
+  TutorialStep(target: TutorialTarget.chip, number: 4),
+  // The word, not the row: the dashboard opens on the name and nothing else.
+  TutorialStep(target: TutorialTarget.modeLabel, number: 5),
+  TutorialStep(target: null, number: 6, androidOnly: true),
+  TutorialStep(target: TutorialTarget.start, number: 7),
 ];
+
 
 /// The tour itself: a dimmed screen, a hole over the thing it is talking about, and a card.
 ///
@@ -220,7 +202,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
                 child: TextButton(
                   onPressed: _next,
                   child: Text(
-                    'Далее',
+                    context.appLocalizations.tutorialNext,
                     style: TextStyle(color: theme.colorScheme.primary),
                   ),
                 ),
@@ -264,16 +246,19 @@ class _TutorialCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${index + 1} из $total',
+            context.appLocalizations.tutorialStepOf(index + 1, total),
             style: theme.textTheme.labelSmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 6),
-          Text(step.title, style: theme.textTheme.titleMedium),
+          Text(
+            step.title(context.appLocalizations),
+            style: theme.textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           Text(
-            step.body,
+            step.body(context.appLocalizations),
             style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
           ),
           if (step.pictures.isNotEmpty) ...[
@@ -302,11 +287,14 @@ class _TutorialCard extends StatelessWidget {
               TextButton(
                 onPressed: onSkip,
                 child: Text(
-                  'Пропустить',
+                  context.appLocalizations.tutorialSkip,
                   style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ),
-              FilledButton(onPressed: onNext, child: const Text('Далее')),
+              FilledButton(
+                onPressed: onNext,
+                child: Text(context.appLocalizations.tutorialNext),
+              ),
             ],
           ),
         ],

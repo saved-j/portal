@@ -240,13 +240,15 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m103(transport) => "${transport} 请求头";
 
-  static String m104(label) => "${label}必须为URL";
+  static String m104(index, total) => "第 ${index} 步，共 ${total} 步";
 
-  static String m105(appName) => "你没有允许 ${appName} 建立 VPN 连接";
+  static String m105(label) => "${label}必须为URL";
 
-  static String m106(count) => "${count} 年前";
+  static String m106(appName) => "你没有允许 ${appName} 建立 VPN 连接";
 
   static String m107(count) => "${count} 年前";
+
+  static String m108(count) => "${count} 年前";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -1604,6 +1606,33 @@ class MessageLookup extends MessageLookupByLibrary {
     "tunStartFailed": MessageLookupByLibrary.simpleMessage("虚拟网卡启动失败，已关闭。"),
     "turnOff": MessageLookupByLibrary.simpleMessage("关闭"),
     "turnOn": MessageLookupByLibrary.simpleMessage("开启"),
+    "tutorialBody1": MessageLookupByLibrary.simpleMessage(
+      "门户网络可以拆分流量，让不同应用走不同国家。这就是动态分流（split tunnelling）。\n\n如果不需要，可以使用「简单模式」：几乎所有流量都经由一个国家。\n\n在此切换模式。",
+    ),
+    "tutorialBody2": MessageLookupByLibrary.simpleMessage(
+      "磁贴行左侧的按钮打开筛选器列表。在这里可以关闭不需要的筛选器，把它们从列表中移除。",
+    ),
+    "tutorialBody3": MessageLookupByLibrary.simpleMessage(
+      "长按磁贴可以开启或关闭该筛选器——这样就能只为某些服务设置隧道。\n\n例如，只让 Telegram、YouTube 和 Instagram 走隧道。",
+    ),
+    "tutorialBody4": MessageLookupByLibrary.simpleMessage("双击磁贴可以切换磁贴的外观。"),
+    "tutorialBody5": MessageLookupByLibrary.simpleMessage(
+      "点击「门户网络」会打开一个页面，在那里可以一次性设置全部筛选器。",
+    ),
+    "tutorialBody6": MessageLookupByLibrary.simpleMessage(
+      "磁贴可以从任何界面启动门户：打开通知栏，点铅笔，滚动到自己的应用，添加「Portal」。",
+    ),
+    "tutorialBody7": MessageLookupByLibrary.simpleMessage("最后——启动。"),
+    "tutorialNext": MessageLookupByLibrary.simpleMessage("下一步"),
+    "tutorialSkip": MessageLookupByLibrary.simpleMessage("跳过"),
+    "tutorialStepOf": m104,
+    "tutorialTitle1": MessageLookupByLibrary.simpleMessage("门户网络"),
+    "tutorialTitle2": MessageLookupByLibrary.simpleMessage("筛选器列表"),
+    "tutorialTitle3": MessageLookupByLibrary.simpleMessage("长按磁贴"),
+    "tutorialTitle4": MessageLookupByLibrary.simpleMessage("磁贴样式"),
+    "tutorialTitle5": MessageLookupByLibrary.simpleMessage("一次设置全部筛选器"),
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("通知栏磁贴"),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("启动"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage("UDP 中继模式"),
     "udpTimeout": MessageLookupByLibrary.simpleMessage("UDP 超时"),
     "udpTimeoutDesc": MessageLookupByLibrary.simpleMessage(
@@ -1668,7 +1697,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("上传"),
     "uploadBandwidth": MessageLookupByLibrary.simpleMessage("上行带宽"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m104,
+    "urlTip": m105,
     "useHosts": MessageLookupByLibrary.simpleMessage("使用Hosts"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage("使用系统Hosts"),
     "usedTraffic": MessageLookupByLibrary.simpleMessage("已用流量"),
@@ -1691,7 +1720,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "VPN 通过 VpnService 自动路由系统所有流量。",
     ),
-    "vpnPermissionNotGranted": m105,
+    "vpnPermissionNotGranted": m106,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "此设备的管理员限制了 VPN",
     ),
@@ -1702,8 +1731,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "写入系统会同时设置系统时钟，Android 上不生效。",
     ),
-    "yearsAgo": m106,
-    "yearsAgoShort": m107,
+    "yearsAgo": m107,
+    "yearsAgoShort": m108,
     "yes": MessageLookupByLibrary.simpleMessage("是"),
     "zhCN": MessageLookupByLibrary.simpleMessage("中文简体"),
   };

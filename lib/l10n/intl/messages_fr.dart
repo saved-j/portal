@@ -265,15 +265,17 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m103(transport) => "En-têtes ${transport}";
 
-  static String m104(label) => "${label} doit être une URL";
+  static String m104(index, total) => "${index} sur ${total}";
 
-  static String m105(appName) =>
+  static String m105(label) => "${label} doit être une URL";
+
+  static String m106(appName) =>
       "Vous n\'avez pas autorisé ${appName} à se connecter en VPN";
 
-  static String m106(count) =>
+  static String m107(count) =>
       "${Intl.plural(count, one: 'il y a 1 an', other: 'il y a ${count} ans')}";
 
-  static String m107(count) =>
+  static String m108(count) =>
       "${Intl.plural(count, other: 'il y a ${count} a')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
@@ -2108,6 +2110,47 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "turnOff": MessageLookupByLibrary.simpleMessage("Désactiver"),
     "turnOn": MessageLookupByLibrary.simpleMessage("Activer"),
+    "tutorialBody1": MessageLookupByLibrary.simpleMessage(
+      "Le réseau des portails répartit le trafic et fait sortir chaque application par un pays différent. C\'est le tunnel divisé dynamique.\n\nSi vous n\'en avez pas besoin, l\'application fonctionne en « mode simple », où presque tout le trafic passe par un seul pays.\n\nChangez de mode ici.",
+    ),
+    "tutorialBody2": MessageLookupByLibrary.simpleMessage(
+      "Le bouton à gauche de la rangée de tuiles ouvre la liste des filtres. Vous pouvez y désactiver les filtres inutiles en les retirant de la liste.",
+    ),
+    "tutorialBody3": MessageLookupByLibrary.simpleMessage(
+      "Un appui long sur une tuile active ou désactive ce filtre : c\'est ainsi que le tunnel se règle service par service.\n\nPar exemple, on peut garder le tunnel UNIQUEMENT pour Telegram, YouTube et Instagram.",
+    ),
+    "tutorialBody4": MessageLookupByLibrary.simpleMessage(
+      "Un double appui sur une tuile change l\'aspect des tuiles.",
+    ),
+    "tutorialBody5": MessageLookupByLibrary.simpleMessage(
+      "Un appui sur « Réseau des portails » ouvre l\'écran où tous les filtres se règlent d\'un coup, sur une seule page.",
+    ),
+    "tutorialBody6": MessageLookupByLibrary.simpleMessage(
+      "La tuile lance le portail depuis n\'importe quel écran : ouvrez le volet, touchez le crayon, faites défiler jusqu\'à vos applications et ajoutez « Portal ».",
+    ),
+    "tutorialBody7": MessageLookupByLibrary.simpleMessage(
+      "Et enfin — le lancement.",
+    ),
+    "tutorialNext": MessageLookupByLibrary.simpleMessage("Suivant"),
+    "tutorialSkip": MessageLookupByLibrary.simpleMessage("Passer"),
+    "tutorialStepOf": m104,
+    "tutorialTitle1": MessageLookupByLibrary.simpleMessage(
+      "Réseau des portails",
+    ),
+    "tutorialTitle2": MessageLookupByLibrary.simpleMessage(
+      "La liste des filtres",
+    ),
+    "tutorialTitle3": MessageLookupByLibrary.simpleMessage(
+      "Un filtre au doigt",
+    ),
+    "tutorialTitle4": MessageLookupByLibrary.simpleMessage("Aspect des tuiles"),
+    "tutorialTitle5": MessageLookupByLibrary.simpleMessage(
+      "Tous les filtres d\'un coup",
+    ),
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage(
+      "Tuile dans le volet",
+    ),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("Lancement"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage("Mode de relais UDP"),
     "udpTimeout": MessageLookupByLibrary.simpleMessage("Délai UDP"),
     "udpTimeoutDesc": MessageLookupByLibrary.simpleMessage(
@@ -2202,7 +2245,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Bande passante d’envoi",
     ),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m104,
+    "urlTip": m105,
     "useHosts": MessageLookupByLibrary.simpleMessage("Utiliser hosts"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage(
       "Utiliser les hosts du système",
@@ -2229,7 +2272,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "Le VPN fait passer automatiquement tout le trafic du système par VpnService.",
     ),
-    "vpnPermissionNotGranted": m105,
+    "vpnPermissionNotGranted": m106,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "L\'administrateur de cet appareil restreint le VPN",
     ),
@@ -2244,8 +2287,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "Écrire dans le système règle aussi l’horloge système ; Android l’ignore.",
     ),
-    "yearsAgo": m106,
-    "yearsAgoShort": m107,
+    "yearsAgo": m107,
+    "yearsAgoShort": m108,
     "yes": MessageLookupByLibrary.simpleMessage("Oui"),
     "zhCN": MessageLookupByLibrary.simpleMessage("Chinois simplifié"),
   };

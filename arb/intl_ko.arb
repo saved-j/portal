@@ -1037,5 +1037,33 @@
   "updateErrorBusy": "연결이 시작되거나 중지될 때까지 기다리세요.",
   "updateErrorSafeMode": "안전 모드에서는 업데이트를 설치하지 않습니다.",
   "updateErrorPermission": "이 출처의 앱 설치를 허용한 다음 설치를 다시 탭하세요.",
-  "updateErrorInstall": "업데이트를 설치하지 못했습니다."
+  "updateErrorInstall": "업데이트를 설치하지 못했습니다.",
+  "tutorialTitle1": "포털 네트워크",
+  "tutorialBody1": "포털 네트워크는 트래픽을 나누어 앱마다 다른 국가를 거치게 합니다. 이를 동적 분할 터널링이라고 합니다.\n\n필요 없다면 '간단 모드'로 사용할 수 있으며, 거의 모든 트래픽이 한 국가를 거칩니다.\n\n여기에서 모드를 전환하세요.",
+  "tutorialTitle2": "필터 목록",
+  "tutorialBody2": "타일 줄 왼쪽의 버튼으로 필터 목록이 열립니다. 필요 없는 필터는 여기에서 목록에서 빼서 끌 수 있습니다.",
+  "tutorialTitle3": "타일 길게 누르기",
+  "tutorialBody3": "타일을 길게 누르면 해당 필터가 켜지고 꺼집니다. 이렇게 서비스별로 터널을 설정합니다.\n\n예를 들어 Telegram, YouTube, Instagram에만 터널을 켤 수 있습니다.",
+  "tutorialTitle4": "타일 보기",
+  "tutorialBody4": "타일을 두 번 탭하면 타일 모양이 바뀝니다.",
+  "tutorialTitle5": "모든 필터 한 번에",
+  "tutorialBody5": "'포털 네트워크'를 누르면 모든 필터를 한 화면에서 설정하는 페이지가 열립니다.",
+  "tutorialTitle6": "알림창 타일",
+  "tutorialBody6": "타일로 어느 화면에서든 포털을 시작할 수 있습니다. 알림창을 열고 연필을 누른 뒤 내 앱까지 스크롤하여 'Portal'을 추가하세요.",
+  "tutorialTitle7": "시작",
+  "tutorialBody7": "그리고 마지막으로 — 시작입니다.",
+  "tutorialNext": "다음",
+  "tutorialSkip": "건너뛰기",
+  "tutorialStepOf": "{index} / {total}",
+  "@tutorialStepOf": {
+    "description": "Position in the first-run tour.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

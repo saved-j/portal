@@ -277,15 +277,17 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m103(transport) => "${transport} Headers";
 
-  static String m104(label) => "${label} must be a URL";
+  static String m104(index, total) => "${index} of ${total}";
 
-  static String m105(appName) =>
+  static String m105(label) => "${label} must be a URL";
+
+  static String m106(appName) =>
       "You did not allow ${appName} to connect as a VPN";
 
-  static String m106(count) =>
+  static String m107(count) =>
       "${Intl.plural(count, one: '1 year ago', other: '${count} years ago')}";
 
-  static String m107(count) => "${Intl.plural(count, other: '${count}y ago')}";
+  static String m108(count) => "${Intl.plural(count, other: '${count}y ago')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -2061,6 +2063,41 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "turnOff": MessageLookupByLibrary.simpleMessage("Turn off"),
     "turnOn": MessageLookupByLibrary.simpleMessage("Turn on"),
+    "tutorialBody1": MessageLookupByLibrary.simpleMessage(
+      "The portal network splits traffic, sending different apps through different countries. That is dynamic split tunnelling.\n\nIf you do not need it, the app works in the “simple mode”, where almost all traffic goes through one country.\n\nSwitch the mode here.",
+    ),
+    "tutorialBody2": MessageLookupByLibrary.simpleMessage(
+      "The button to the left of the tiles opens the filter list. Here you can turn off the filters you do not need by removing them from the list.",
+    ),
+    "tutorialBody3": MessageLookupByLibrary.simpleMessage(
+      "Holding a finger on a tile switches that filter on and off — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.",
+    ),
+    "tutorialBody4": MessageLookupByLibrary.simpleMessage(
+      "A double tap on a tile changes the way the tiles look.",
+    ),
+    "tutorialBody5": MessageLookupByLibrary.simpleMessage(
+      "Tapping “Portal network” opens the screen where every filter is set at once — on one page.",
+    ),
+    "tutorialBody6": MessageLookupByLibrary.simpleMessage(
+      "The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.",
+    ),
+    "tutorialBody7": MessageLookupByLibrary.simpleMessage(
+      "And finally — start.",
+    ),
+    "tutorialNext": MessageLookupByLibrary.simpleMessage("Next"),
+    "tutorialSkip": MessageLookupByLibrary.simpleMessage("Skip"),
+    "tutorialStepOf": m104,
+    "tutorialTitle1": MessageLookupByLibrary.simpleMessage("Portal network"),
+    "tutorialTitle2": MessageLookupByLibrary.simpleMessage("The filter list"),
+    "tutorialTitle3": MessageLookupByLibrary.simpleMessage(
+      "A filter on the finger",
+    ),
+    "tutorialTitle4": MessageLookupByLibrary.simpleMessage("Tile view"),
+    "tutorialTitle5": MessageLookupByLibrary.simpleMessage(
+      "All filters at once",
+    ),
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("Tile in the shade"),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("Start"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage("UDP relay mode"),
     "udpTimeout": MessageLookupByLibrary.simpleMessage("UDP timeout"),
     "udpTimeoutDesc": MessageLookupByLibrary.simpleMessage(
@@ -2151,7 +2188,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("Upload"),
     "uploadBandwidth": MessageLookupByLibrary.simpleMessage("Upload bandwidth"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m104,
+    "urlTip": m105,
     "useHosts": MessageLookupByLibrary.simpleMessage("Use hosts"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage("Use system hosts"),
     "usedTraffic": MessageLookupByLibrary.simpleMessage("Used traffic"),
@@ -2176,7 +2213,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "VPN routes all system traffic through VpnService automatically.",
     ),
-    "vpnPermissionNotGranted": m105,
+    "vpnPermissionNotGranted": m106,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "VPN is restricted on this device by its administrator",
     ),
@@ -2189,8 +2226,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "Write to system also sets the system clock; Android ignores it.",
     ),
-    "yearsAgo": m106,
-    "yearsAgoShort": m107,
+    "yearsAgo": m107,
+    "yearsAgoShort": m108,
     "yes": MessageLookupByLibrary.simpleMessage("Yes"),
     "zhCN": MessageLookupByLibrary.simpleMessage("Simplified Chinese"),
   };

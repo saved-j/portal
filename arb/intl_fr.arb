@@ -1037,5 +1037,33 @@
   "updateErrorBusy": "Attendez que la connexion ait fini de démarrer ou de s'arrêter.",
   "updateErrorSafeMode": "Le mode sans échec n'installe pas les mises à jour.",
   "updateErrorPermission": "Autorisez l'installation d'apps depuis cette source, puis touchez à nouveau Installer.",
-  "updateErrorInstall": "La mise à jour n'a pas pu être installée."
+  "updateErrorInstall": "La mise à jour n'a pas pu être installée.",
+  "tutorialTitle1": "Réseau des portails",
+  "tutorialBody1": "Le réseau des portails répartit le trafic et fait sortir chaque application par un pays différent. C'est le tunnel divisé dynamique.\n\nSi vous n'en avez pas besoin, l'application fonctionne en « mode simple », où presque tout le trafic passe par un seul pays.\n\nChangez de mode ici.",
+  "tutorialTitle2": "La liste des filtres",
+  "tutorialBody2": "Le bouton à gauche de la rangée de tuiles ouvre la liste des filtres. Vous pouvez y désactiver les filtres inutiles en les retirant de la liste.",
+  "tutorialTitle3": "Un filtre au doigt",
+  "tutorialBody3": "Un appui long sur une tuile active ou désactive ce filtre : c'est ainsi que le tunnel se règle service par service.\n\nPar exemple, on peut garder le tunnel UNIQUEMENT pour Telegram, YouTube et Instagram.",
+  "tutorialTitle4": "Aspect des tuiles",
+  "tutorialBody4": "Un double appui sur une tuile change l'aspect des tuiles.",
+  "tutorialTitle5": "Tous les filtres d'un coup",
+  "tutorialBody5": "Un appui sur « Réseau des portails » ouvre l'écran où tous les filtres se règlent d'un coup, sur une seule page.",
+  "tutorialTitle6": "Tuile dans le volet",
+  "tutorialBody6": "La tuile lance le portail depuis n'importe quel écran : ouvrez le volet, touchez le crayon, faites défiler jusqu'à vos applications et ajoutez « Portal ».",
+  "tutorialTitle7": "Lancement",
+  "tutorialBody7": "Et enfin — le lancement.",
+  "tutorialNext": "Suivant",
+  "tutorialSkip": "Passer",
+  "tutorialStepOf": "{index} sur {total}",
+  "@tutorialStepOf": {
+    "description": "Position in the first-run tour.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

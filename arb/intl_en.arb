@@ -103,7 +103,7 @@
   "themeStyleOriginal": "Original",
   "autoPingPeriod": "Auto-ping interval",
   "autoPingPeriodNote": "The shorter the interval, the more battery it costs: every server is asked in every period.",
-"portalBypassFilter": "Straight out, past the portal",
+  "portalBypassFilter": "Straight out, past the portal",
   "portalRestoreFilter": "Back into the portal",
   "portalStrikes": "Failed attempts in a row: {count}",
   "portalModeUnavailable": "This mode is unavailable: {reason}",
@@ -1088,9 +1088,36 @@
   "aboutBuiltOn": "Built on",
   "insertSubscriptionLink": "Paste your subscription link",
   "getSubscriptionHere": "Get a subscription here",
-  "portalSwitchFailed": "Could not switch the portal: {reason}"
-,
+  "portalSwitchFailed": "Could not switch the portal: {reason}",
   "portalStartFailed": "Could not open the portal: {reason}",
   "engineFormatUnusable": "The subscription could not be downloaded: {reason}",
-    "engineFormatStale": "The subscription did not update; the portal keeps running on the rules it already has."
+  "engineFormatStale": "The subscription did not update; the portal keeps running on the rules it already has.",
+  "tutorialTitle1": "Portal network",
+  "tutorialBody1": "The portal network splits traffic, sending different apps through different countries. That is dynamic split tunnelling.\n\nIf you do not need it, the app works in the “simple mode”, where almost all traffic goes through one country.\n\nSwitch the mode here.",
+  "tutorialTitle2": "The filter list",
+  "tutorialBody2": "The button to the left of the tiles opens the filter list. Here you can turn off the filters you do not need by removing them from the list.",
+  "tutorialTitle3": "A filter on the finger",
+  "tutorialBody3": "Holding a finger on a tile switches that filter on and off — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.",
+  "tutorialTitle4": "Tile view",
+  "tutorialBody4": "A double tap on a tile changes the way the tiles look.",
+  "tutorialTitle5": "All filters at once",
+  "tutorialBody5": "Tapping “Portal network” opens the screen where every filter is set at once — on one page.",
+  "tutorialTitle6": "Tile in the shade",
+  "tutorialBody6": "The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.",
+  "tutorialTitle7": "Start",
+  "tutorialBody7": "And finally — start.",
+  "tutorialNext": "Next",
+  "tutorialSkip": "Skip",
+  "tutorialStepOf": "{index} of {total}",
+  "@tutorialStepOf": {
+    "description": "Position in the first-run tour.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

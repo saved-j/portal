@@ -276,15 +276,17 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m103(transport) => "Заголовки ${transport}";
 
-  static String m104(label) => "Значение «${label}» должно быть URL";
+  static String m104(index, total) => "${index} из ${total}";
 
-  static String m105(appName) =>
+  static String m105(label) => "Значение «${label}» должно быть URL";
+
+  static String m106(appName) =>
       "Вы не дали ${appName} разрешение на подключение VPN";
 
-  static String m106(count) =>
+  static String m107(count) =>
       "${Intl.plural(count, one: '${count} год назад', few: '${count} года назад', many: '${count} лет назад', other: '${count} года назад')}";
 
-  static String m107(count) =>
+  static String m108(count) =>
       "${Intl.plural(count, one: '${count} г. назад', few: '${count} г. назад', many: '${count} лет назад', other: '${count} г. назад')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
@@ -2157,6 +2159,37 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "turnOff": MessageLookupByLibrary.simpleMessage("Выключить"),
     "turnOn": MessageLookupByLibrary.simpleMessage("Включить"),
+    "tutorialBody1": MessageLookupByLibrary.simpleMessage(
+      "Сеть порталов позволяет делить трафик, подключая разные приложения через разные страны. Это называется динамическое сплит-туннелирование.\n\nЕсли вам оно не нужно, приложением можно пользоваться в «простом режиме», когда почти весь трафик заворачивается через одну страну.\n\nПереключите режим здесь.",
+    ),
+    "tutorialBody2": MessageLookupByLibrary.simpleMessage(
+      "Кнопка слева от строки плиток открывает список фильтров. Здесь можно отключить ненужные фильтры, убрав их из списка.",
+    ),
+    "tutorialBody3": MessageLookupByLibrary.simpleMessage(
+      "Удержанием пальца на плитке фильтр включается и выключается — так туннелирование настраивается для отдельных сервисов.\n\nНапример, можно включить туннель ТОЛЬКО для Телеграма, Ютуба и Инстаграма.",
+    ),
+    "tutorialBody4": MessageLookupByLibrary.simpleMessage(
+      "Двойным тапом на плитку переключается внешний вид плиток.",
+    ),
+    "tutorialBody5": MessageLookupByLibrary.simpleMessage(
+      "Нажатие на «Сеть порталов» открывает экран, где все фильтры настраиваются сразу — на одном экране.",
+    ),
+    "tutorialBody6": MessageLookupByLibrary.simpleMessage(
+      "Плитка запускает портал из любого экрана: откройте шторку, нажмите карандаш, пролистайте до пользовательских приложений и добавьте «Портал».",
+    ),
+    "tutorialBody7": MessageLookupByLibrary.simpleMessage(
+      "И наконец — запуск.",
+    ),
+    "tutorialNext": MessageLookupByLibrary.simpleMessage("Далее"),
+    "tutorialSkip": MessageLookupByLibrary.simpleMessage("Пропустить"),
+    "tutorialStepOf": m104,
+    "tutorialTitle1": MessageLookupByLibrary.simpleMessage("Сеть порталов"),
+    "tutorialTitle2": MessageLookupByLibrary.simpleMessage("Список фильтров"),
+    "tutorialTitle3": MessageLookupByLibrary.simpleMessage("Фильтр на палец"),
+    "tutorialTitle4": MessageLookupByLibrary.simpleMessage("Вид плиток"),
+    "tutorialTitle5": MessageLookupByLibrary.simpleMessage("Все фильтры сразу"),
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("Плитка в шторке"),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("Запуск"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage(
       "Режим ретрансляции UDP",
     ),
@@ -2249,7 +2282,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("Отдача"),
     "uploadBandwidth": MessageLookupByLibrary.simpleMessage("Скорость отдачи"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m104,
+    "urlTip": m105,
     "useHosts": MessageLookupByLibrary.simpleMessage("Использовать hosts"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage(
       "Использовать системный hosts",
@@ -2278,7 +2311,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "VPN автоматически направляет весь системный трафик через VpnService.",
     ),
-    "vpnPermissionNotGranted": m105,
+    "vpnPermissionNotGranted": m106,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "VPN на этом устройстве ограничен администратором",
     ),
@@ -2295,8 +2328,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "«Записывать в систему» также устанавливает системные часы; Android это игнорирует.",
     ),
-    "yearsAgo": m106,
-    "yearsAgoShort": m107,
+    "yearsAgo": m107,
+    "yearsAgoShort": m108,
     "yes": MessageLookupByLibrary.simpleMessage("Да"),
     "zhCN": MessageLookupByLibrary.simpleMessage("Упрощённый китайский"),
   };

@@ -1037,5 +1037,33 @@
   "updateErrorBusy": "接続の開始または停止が終わるまでお待ちください。",
   "updateErrorSafeMode": "セーフモードではアップデートをインストールしません。",
   "updateErrorPermission": "このソースからのアプリのインストールを許可してから、もう一度「インストール」をタップしてください。",
-  "updateErrorInstall": "アップデートをインストールできませんでした。"
+  "updateErrorInstall": "アップデートをインストールできませんでした。",
+  "tutorialTitle1": "ポータルネットワーク",
+  "tutorialBody1": "ポータルネットワークは通信を分割し、アプリごとに別の国を通します。これを動的スプリットトンネリングと呼びます。\n\n必要なければ「シンプルモード」で使えます。ほぼすべての通信が 1 つの国を通ります。\n\nここでモードを切り替えます。",
+  "tutorialTitle2": "フィルター一覧",
+  "tutorialBody2": "タイル行の左にあるボタンでフィルター一覧が開きます。不要なフィルターはここで一覧から外してオフにできます。",
+  "tutorialTitle3": "タイルを長押し",
+  "tutorialBody3": "タイルを長押しするとそのフィルターのオン／オフが切り替わり、サービスごとにトンネルを設定できます。\n\nたとえば Telegram・YouTube・Instagram だけをトンネルに通せます。",
+  "tutorialTitle4": "タイルの表示",
+  "tutorialBody4": "タイルをダブルタップすると見た目が切り替わります。",
+  "tutorialTitle5": "フィルターをまとめて設定",
+  "tutorialBody5": "「ポータルネットワーク」を押すと、すべてのフィルターを 1 画面で設定できます。",
+  "tutorialTitle6": "通知シェードのタイル",
+  "tutorialBody6": "タイルを使えばどの画面からでも起動できます。シェードを開き、鉛筆を押し、自分のアプリまでスクロールして「Portal」を追加します。",
+  "tutorialTitle7": "起動",
+  "tutorialBody7": "最後に——起動です。",
+  "tutorialNext": "次へ",
+  "tutorialSkip": "スキップ",
+  "tutorialStepOf": "{index} / {total}",
+  "@tutorialStepOf": {
+    "description": "Position in the first-run tour.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

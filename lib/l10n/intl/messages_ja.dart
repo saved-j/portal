@@ -223,13 +223,15 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m103(transport) => "${transport} リクエストヘッダー";
 
-  static String m104(label) => "${label}はURLである必要があります";
+  static String m104(index, total) => "${index} / ${total}";
 
-  static String m105(appName) => "${appName} の VPN 接続が許可されませんでした";
+  static String m105(label) => "${label}はURLである必要があります";
 
-  static String m106(count) => "${count} 年前";
+  static String m106(appName) => "${appName} の VPN 接続が許可されませんでした";
 
   static String m107(count) => "${count} 年前";
+
+  static String m108(count) => "${count} 年前";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -1681,6 +1683,35 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "turnOff": MessageLookupByLibrary.simpleMessage("オフにする"),
     "turnOn": MessageLookupByLibrary.simpleMessage("オンにする"),
+    "tutorialBody1": MessageLookupByLibrary.simpleMessage(
+      "ポータルネットワークは通信を分割し、アプリごとに別の国を通します。これを動的スプリットトンネリングと呼びます。\n\n必要なければ「シンプルモード」で使えます。ほぼすべての通信が 1 つの国を通ります。\n\nここでモードを切り替えます。",
+    ),
+    "tutorialBody2": MessageLookupByLibrary.simpleMessage(
+      "タイル行の左にあるボタンでフィルター一覧が開きます。不要なフィルターはここで一覧から外してオフにできます。",
+    ),
+    "tutorialBody3": MessageLookupByLibrary.simpleMessage(
+      "タイルを長押しするとそのフィルターのオン／オフが切り替わり、サービスごとにトンネルを設定できます。\n\nたとえば Telegram・YouTube・Instagram だけをトンネルに通せます。",
+    ),
+    "tutorialBody4": MessageLookupByLibrary.simpleMessage(
+      "タイルをダブルタップすると見た目が切り替わります。",
+    ),
+    "tutorialBody5": MessageLookupByLibrary.simpleMessage(
+      "「ポータルネットワーク」を押すと、すべてのフィルターを 1 画面で設定できます。",
+    ),
+    "tutorialBody6": MessageLookupByLibrary.simpleMessage(
+      "タイルを使えばどの画面からでも起動できます。シェードを開き、鉛筆を押し、自分のアプリまでスクロールして「Portal」を追加します。",
+    ),
+    "tutorialBody7": MessageLookupByLibrary.simpleMessage("最後に——起動です。"),
+    "tutorialNext": MessageLookupByLibrary.simpleMessage("次へ"),
+    "tutorialSkip": MessageLookupByLibrary.simpleMessage("スキップ"),
+    "tutorialStepOf": m104,
+    "tutorialTitle1": MessageLookupByLibrary.simpleMessage("ポータルネットワーク"),
+    "tutorialTitle2": MessageLookupByLibrary.simpleMessage("フィルター一覧"),
+    "tutorialTitle3": MessageLookupByLibrary.simpleMessage("タイルを長押し"),
+    "tutorialTitle4": MessageLookupByLibrary.simpleMessage("タイルの表示"),
+    "tutorialTitle5": MessageLookupByLibrary.simpleMessage("フィルターをまとめて設定"),
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("通知シェードのタイル"),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("起動"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage("UDP リレーモード"),
     "udpTimeout": MessageLookupByLibrary.simpleMessage("UDP タイムアウト"),
     "udpTimeoutDesc": MessageLookupByLibrary.simpleMessage(
@@ -1759,7 +1790,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("アップロード"),
     "uploadBandwidth": MessageLookupByLibrary.simpleMessage("アップロード帯域幅"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m104,
+    "urlTip": m105,
     "useHosts": MessageLookupByLibrary.simpleMessage("Hostsを使用"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage("システムのHostsを使用"),
     "usedTraffic": MessageLookupByLibrary.simpleMessage("使用済みトラフィック"),
@@ -1784,7 +1815,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "VPN は VpnService でシステムの全トラフィックを自動的にルーティングします。",
     ),
-    "vpnPermissionNotGranted": m105,
+    "vpnPermissionNotGranted": m106,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "このデバイスでは管理者によって VPN が制限されています",
     ),
@@ -1795,8 +1826,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "システムに書き込むを有効にするとシステムクロックも設定します。Android では無視されます。",
     ),
-    "yearsAgo": m106,
-    "yearsAgoShort": m107,
+    "yearsAgo": m107,
+    "yearsAgoShort": m108,
     "yes": MessageLookupByLibrary.simpleMessage("はい"),
     "zhCN": MessageLookupByLibrary.simpleMessage("簡体字中国語"),
   };

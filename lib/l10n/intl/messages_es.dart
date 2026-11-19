@@ -261,15 +261,17 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m103(transport) => "Encabezados ${transport}";
 
-  static String m104(label) => "${label} debe ser una URL";
+  static String m104(index, total) => "${index} de ${total}";
 
-  static String m105(appName) =>
+  static String m105(label) => "${label} debe ser una URL";
+
+  static String m106(appName) =>
       "No permitiste que ${appName} se conectara como VPN";
 
-  static String m106(count) =>
+  static String m107(count) =>
       "${Intl.plural(count, one: 'hace 1 año', other: 'hace ${count} años')}";
 
-  static String m107(count) =>
+  static String m108(count) =>
       "${Intl.plural(count, other: 'hace ${count} a')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
@@ -2106,6 +2108,47 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "turnOff": MessageLookupByLibrary.simpleMessage("Desactivar"),
     "turnOn": MessageLookupByLibrary.simpleMessage("Activar"),
+    "tutorialBody1": MessageLookupByLibrary.simpleMessage(
+      "La red de portales reparte el tráfico y hace que distintas aplicaciones salgan por distintos países. Eso se llama túnel dividido dinámico.\n\nSi no lo necesitas, la aplicación funciona en el «modo simple», cuando casi todo el tráfico sale por un solo país.\n\nCambia el modo aquí.",
+    ),
+    "tutorialBody2": MessageLookupByLibrary.simpleMessage(
+      "El botón a la izquierda de la fila de mosaicos abre la lista de filtros. Aquí puedes apagar los filtros que no necesitas quitándolos de la lista.",
+    ),
+    "tutorialBody3": MessageLookupByLibrary.simpleMessage(
+      "Manteniendo el dedo sobre un mosaico se enciende y se apaga ese filtro: así se ajusta el túnel para servicios concretos.\n\nPor ejemplo, puedes dejar el túnel SOLO para Telegram, YouTube e Instagram.",
+    ),
+    "tutorialBody4": MessageLookupByLibrary.simpleMessage(
+      "Un doble toque en un mosaico cambia el aspecto de los mosaicos.",
+    ),
+    "tutorialBody5": MessageLookupByLibrary.simpleMessage(
+      "Al tocar «Red de portales» se abre la pantalla donde todos los filtros se ajustan a la vez, en una sola página.",
+    ),
+    "tutorialBody6": MessageLookupByLibrary.simpleMessage(
+      "El mosaico inicia el portal desde cualquier pantalla: abre la cortina, toca el lápiz, desplázate hasta tus aplicaciones y añade «Portal».",
+    ),
+    "tutorialBody7": MessageLookupByLibrary.simpleMessage(
+      "Y por último: el inicio.",
+    ),
+    "tutorialNext": MessageLookupByLibrary.simpleMessage("Siguiente"),
+    "tutorialSkip": MessageLookupByLibrary.simpleMessage("Omitir"),
+    "tutorialStepOf": m104,
+    "tutorialTitle1": MessageLookupByLibrary.simpleMessage("Red de portales"),
+    "tutorialTitle2": MessageLookupByLibrary.simpleMessage(
+      "La lista de filtros",
+    ),
+    "tutorialTitle3": MessageLookupByLibrary.simpleMessage(
+      "Un filtro con el dedo",
+    ),
+    "tutorialTitle4": MessageLookupByLibrary.simpleMessage(
+      "Aspecto de los mosaicos",
+    ),
+    "tutorialTitle5": MessageLookupByLibrary.simpleMessage(
+      "Todos los filtros a la vez",
+    ),
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage(
+      "Mosaico en la cortina",
+    ),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("Inicio"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage(
       "Modo de retransmisión UDP",
     ),
@@ -2198,7 +2241,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Ancho de banda de subida",
     ),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m104,
+    "urlTip": m105,
     "useHosts": MessageLookupByLibrary.simpleMessage("Usar hosts"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage(
       "Usar hosts del sistema",
@@ -2225,7 +2268,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "La VPN enruta automáticamente todo el tráfico del sistema a través de VpnService.",
     ),
-    "vpnPermissionNotGranted": m105,
+    "vpnPermissionNotGranted": m106,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "El administrador de este dispositivo restringe la VPN",
     ),
@@ -2240,8 +2283,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "Escribir en el sistema también ajusta el reloj del sistema; Android lo ignora.",
     ),
-    "yearsAgo": m106,
-    "yearsAgoShort": m107,
+    "yearsAgo": m107,
+    "yearsAgoShort": m108,
     "yes": MessageLookupByLibrary.simpleMessage("Sí"),
     "zhCN": MessageLookupByLibrary.simpleMessage("Chino simplificado"),
   };

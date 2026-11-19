@@ -9205,6 +9205,161 @@ class AppLocalizations {
       args: [],
     );
   }
+
+  /// `Portal network`
+  String get tutorialTitle1 {
+    return Intl.message(
+      'Portal network',
+      name: 'tutorialTitle1',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The portal network splits traffic, sending different apps through different countries. That is dynamic split tunnelling.\n\nIf you do not need it, the app works in the “simple mode”, where almost all traffic goes through one country.\n\nSwitch the mode here.`
+  String get tutorialBody1 {
+    return Intl.message(
+      'The portal network splits traffic, sending different apps through different countries. That is dynamic split tunnelling.\n\nIf you do not need it, the app works in the “simple mode”, where almost all traffic goes through one country.\n\nSwitch the mode here.',
+      name: 'tutorialBody1',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The filter list`
+  String get tutorialTitle2 {
+    return Intl.message(
+      'The filter list',
+      name: 'tutorialTitle2',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The button to the left of the tiles opens the filter list. Here you can turn off the filters you do not need by removing them from the list.`
+  String get tutorialBody2 {
+    return Intl.message(
+      'The button to the left of the tiles opens the filter list. Here you can turn off the filters you do not need by removing them from the list.',
+      name: 'tutorialBody2',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `A filter on the finger`
+  String get tutorialTitle3 {
+    return Intl.message(
+      'A filter on the finger',
+      name: 'tutorialTitle3',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Holding a finger on a tile switches that filter on and off — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.`
+  String get tutorialBody3 {
+    return Intl.message(
+      'Holding a finger on a tile switches that filter on and off — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.',
+      name: 'tutorialBody3',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Tile view`
+  String get tutorialTitle4 {
+    return Intl.message(
+      'Tile view',
+      name: 'tutorialTitle4',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `A double tap on a tile changes the way the tiles look.`
+  String get tutorialBody4 {
+    return Intl.message(
+      'A double tap on a tile changes the way the tiles look.',
+      name: 'tutorialBody4',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `All filters at once`
+  String get tutorialTitle5 {
+    return Intl.message(
+      'All filters at once',
+      name: 'tutorialTitle5',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Tapping “Portal network” opens the screen where every filter is set at once — on one page.`
+  String get tutorialBody5 {
+    return Intl.message(
+      'Tapping “Portal network” opens the screen where every filter is set at once — on one page.',
+      name: 'tutorialBody5',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Tile in the shade`
+  String get tutorialTitle6 {
+    return Intl.message(
+      'Tile in the shade',
+      name: 'tutorialTitle6',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.`
+  String get tutorialBody6 {
+    return Intl.message(
+      'The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.',
+      name: 'tutorialBody6',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Start`
+  String get tutorialTitle7 {
+    return Intl.message('Start', name: 'tutorialTitle7', desc: '', args: []);
+  }
+
+  /// `And finally — start.`
+  String get tutorialBody7 {
+    return Intl.message(
+      'And finally — start.',
+      name: 'tutorialBody7',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Next`
+  String get tutorialNext {
+    return Intl.message('Next', name: 'tutorialNext', desc: '', args: []);
+  }
+
+  /// `Skip`
+  String get tutorialSkip {
+    return Intl.message('Skip', name: 'tutorialSkip', desc: '', args: []);
+  }
+
+  /// `{index} of {total}`
+  String tutorialStepOf(int index, int total) {
+    return Intl.message(
+      '$index of $total',
+      name: 'tutorialStepOf',
+      desc: 'Position in the first-run tour.',
+      args: [index, total],
+    );
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<AppLocalizations> {

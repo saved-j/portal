@@ -226,13 +226,15 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m103(transport) => "${transport} 요청 헤더";
 
-  static String m104(label) => "${label}은(는) URL이어야 합니다";
+  static String m104(index, total) => "${index} / ${total}";
 
-  static String m105(appName) => "${appName}의 VPN 연결을 허용하지 않았습니다";
+  static String m105(label) => "${label}은(는) URL이어야 합니다";
 
-  static String m106(count) => "${Intl.plural(count, other: '${count}년 전')}";
+  static String m106(appName) => "${appName}의 VPN 연결을 허용하지 않았습니다";
 
   static String m107(count) => "${Intl.plural(count, other: '${count}년 전')}";
+
+  static String m108(count) => "${Intl.plural(count, other: '${count}년 전')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -1650,6 +1652,35 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "turnOff": MessageLookupByLibrary.simpleMessage("끄기"),
     "turnOn": MessageLookupByLibrary.simpleMessage("켜기"),
+    "tutorialBody1": MessageLookupByLibrary.simpleMessage(
+      "포털 네트워크는 트래픽을 나누어 앱마다 다른 국가를 거치게 합니다. 이를 동적 분할 터널링이라고 합니다.\n\n필요 없다면 \'간단 모드\'로 사용할 수 있으며, 거의 모든 트래픽이 한 국가를 거칩니다.\n\n여기에서 모드를 전환하세요.",
+    ),
+    "tutorialBody2": MessageLookupByLibrary.simpleMessage(
+      "타일 줄 왼쪽의 버튼으로 필터 목록이 열립니다. 필요 없는 필터는 여기에서 목록에서 빼서 끌 수 있습니다.",
+    ),
+    "tutorialBody3": MessageLookupByLibrary.simpleMessage(
+      "타일을 길게 누르면 해당 필터가 켜지고 꺼집니다. 이렇게 서비스별로 터널을 설정합니다.\n\n예를 들어 Telegram, YouTube, Instagram에만 터널을 켤 수 있습니다.",
+    ),
+    "tutorialBody4": MessageLookupByLibrary.simpleMessage(
+      "타일을 두 번 탭하면 타일 모양이 바뀝니다.",
+    ),
+    "tutorialBody5": MessageLookupByLibrary.simpleMessage(
+      "\'포털 네트워크\'를 누르면 모든 필터를 한 화면에서 설정하는 페이지가 열립니다.",
+    ),
+    "tutorialBody6": MessageLookupByLibrary.simpleMessage(
+      "타일로 어느 화면에서든 포털을 시작할 수 있습니다. 알림창을 열고 연필을 누른 뒤 내 앱까지 스크롤하여 \'Portal\'을 추가하세요.",
+    ),
+    "tutorialBody7": MessageLookupByLibrary.simpleMessage("그리고 마지막으로 — 시작입니다."),
+    "tutorialNext": MessageLookupByLibrary.simpleMessage("다음"),
+    "tutorialSkip": MessageLookupByLibrary.simpleMessage("건너뛰기"),
+    "tutorialStepOf": m104,
+    "tutorialTitle1": MessageLookupByLibrary.simpleMessage("포털 네트워크"),
+    "tutorialTitle2": MessageLookupByLibrary.simpleMessage("필터 목록"),
+    "tutorialTitle3": MessageLookupByLibrary.simpleMessage("타일 길게 누르기"),
+    "tutorialTitle4": MessageLookupByLibrary.simpleMessage("타일 보기"),
+    "tutorialTitle5": MessageLookupByLibrary.simpleMessage("모든 필터 한 번에"),
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("알림창 타일"),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("시작"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage("UDP 릴레이 모드"),
     "udpTimeout": MessageLookupByLibrary.simpleMessage("UDP 시간 제한"),
     "udpTimeoutDesc": MessageLookupByLibrary.simpleMessage(
@@ -1732,7 +1763,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("업로드"),
     "uploadBandwidth": MessageLookupByLibrary.simpleMessage("업로드 대역폭"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m104,
+    "urlTip": m105,
     "useHosts": MessageLookupByLibrary.simpleMessage("hosts 사용"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage("시스템 hosts 사용"),
     "usedTraffic": MessageLookupByLibrary.simpleMessage("사용한 트래픽"),
@@ -1757,7 +1788,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "VPN은 VpnService를 통해 모든 시스템 트래픽을 자동으로 라우팅합니다.",
     ),
-    "vpnPermissionNotGranted": m105,
+    "vpnPermissionNotGranted": m106,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "이 기기에서는 관리자가 VPN을 제한했습니다",
     ),
@@ -1768,8 +1799,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "시스템에 기록하면 시스템 시계도 설정합니다. Android에서는 무시됩니다.",
     ),
-    "yearsAgo": m106,
-    "yearsAgoShort": m107,
+    "yearsAgo": m107,
+    "yearsAgoShort": m108,
     "yes": MessageLookupByLibrary.simpleMessage("예"),
     "zhCN": MessageLookupByLibrary.simpleMessage("중국어 간체"),
   };

@@ -1037,5 +1037,33 @@
   "updateErrorBusy": "Espera a que la conexión termine de iniciarse o detenerse.",
   "updateErrorSafeMode": "El modo seguro no instala actualizaciones.",
   "updateErrorPermission": "Permite instalar apps de este origen y vuelve a tocar Instalar.",
-  "updateErrorInstall": "No se pudo instalar la actualización."
+  "updateErrorInstall": "No se pudo instalar la actualización.",
+  "tutorialTitle1": "Red de portales",
+  "tutorialBody1": "La red de portales reparte el tráfico y hace que distintas aplicaciones salgan por distintos países. Eso se llama túnel dividido dinámico.\n\nSi no lo necesitas, la aplicación funciona en el «modo simple», cuando casi todo el tráfico sale por un solo país.\n\nCambia el modo aquí.",
+  "tutorialTitle2": "La lista de filtros",
+  "tutorialBody2": "El botón a la izquierda de la fila de mosaicos abre la lista de filtros. Aquí puedes apagar los filtros que no necesitas quitándolos de la lista.",
+  "tutorialTitle3": "Un filtro con el dedo",
+  "tutorialBody3": "Manteniendo el dedo sobre un mosaico se enciende y se apaga ese filtro: así se ajusta el túnel para servicios concretos.\n\nPor ejemplo, puedes dejar el túnel SOLO para Telegram, YouTube e Instagram.",
+  "tutorialTitle4": "Aspecto de los mosaicos",
+  "tutorialBody4": "Un doble toque en un mosaico cambia el aspecto de los mosaicos.",
+  "tutorialTitle5": "Todos los filtros a la vez",
+  "tutorialBody5": "Al tocar «Red de portales» se abre la pantalla donde todos los filtros se ajustan a la vez, en una sola página.",
+  "tutorialTitle6": "Mosaico en la cortina",
+  "tutorialBody6": "El mosaico inicia el portal desde cualquier pantalla: abre la cortina, toca el lápiz, desplázate hasta tus aplicaciones y añade «Portal».",
+  "tutorialTitle7": "Inicio",
+  "tutorialBody7": "Y por último: el inicio.",
+  "tutorialNext": "Siguiente",
+  "tutorialSkip": "Omitir",
+  "tutorialStepOf": "{index} de {total}",
+  "@tutorialStepOf": {
+    "description": "Position in the first-run tour.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

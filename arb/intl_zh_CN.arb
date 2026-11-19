@@ -103,7 +103,7 @@
   "themeStyleOriginal": "原版",
   "autoPingPeriod": "自动测试间隔",
   "autoPingPeriodNote": "间隔越短，耗电越多：每个周期都会询问每个服务器。",
-"portalBypassFilter": "直接连接，不经门户",
+  "portalBypassFilter": "直接连接，不经门户",
   "portalRestoreFilter": "恢复经由门户",
   "portalStrikes": "连续失败次数：{count}",
   "portalModeUnavailable": "此模式不可用：{reason}",
@@ -1088,9 +1088,36 @@
   "aboutBuiltOn": "基于",
   "insertSubscriptionLink": "粘贴您的订阅链接",
   "getSubscriptionHere": "在此获取订阅",
-  "portalSwitchFailed": "无法切换门户：{reason}"
-,
+  "portalSwitchFailed": "无法切换门户：{reason}",
   "portalStartFailed": "无法打开门户：{reason}",
   "engineFormatUnusable": "无法下载订阅：{reason}",
-    "engineFormatStale": "订阅未更新，门户将继续使用已保存的规则运行。"
+  "engineFormatStale": "订阅未更新，门户将继续使用已保存的规则运行。",
+  "tutorialTitle1": "门户网络",
+  "tutorialBody1": "门户网络可以拆分流量，让不同应用走不同国家。这就是动态分流（split tunnelling）。\n\n如果不需要，可以使用「简单模式」：几乎所有流量都经由一个国家。\n\n在此切换模式。",
+  "tutorialTitle2": "筛选器列表",
+  "tutorialBody2": "磁贴行左侧的按钮打开筛选器列表。在这里可以关闭不需要的筛选器，把它们从列表中移除。",
+  "tutorialTitle3": "长按磁贴",
+  "tutorialBody3": "长按磁贴可以开启或关闭该筛选器——这样就能只为某些服务设置隧道。\n\n例如，只让 Telegram、YouTube 和 Instagram 走隧道。",
+  "tutorialTitle4": "磁贴样式",
+  "tutorialBody4": "双击磁贴可以切换磁贴的外观。",
+  "tutorialTitle5": "一次设置全部筛选器",
+  "tutorialBody5": "点击「门户网络」会打开一个页面，在那里可以一次性设置全部筛选器。",
+  "tutorialTitle6": "通知栏磁贴",
+  "tutorialBody6": "磁贴可以从任何界面启动门户：打开通知栏，点铅笔，滚动到自己的应用，添加「Portal」。",
+  "tutorialTitle7": "启动",
+  "tutorialBody7": "最后——启动。",
+  "tutorialNext": "下一步",
+  "tutorialSkip": "跳过",
+  "tutorialStepOf": "第 {index} 步，共 {total} 步",
+  "@tutorialStepOf": {
+    "description": "Position in the first-run tour.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }
