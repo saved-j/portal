@@ -4,7 +4,6 @@ import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
-import 'package:fl_clash/views/dashboard/hero.dart';
 import 'package:fl_clash/views/proxies/proxies.dart';
 import 'package:fl_clash/views/tutorial/portal_tutorial.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
@@ -948,7 +947,6 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
     final theme = Theme.of(context);
     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
     final modes = ref.watch(availableModesProvider);
-    final running = ref.watch(runTimeProvider) != null;
     final filters = ref.watch(portalFiltersProvider);
     final groups = portalVisibleGroups(
       ref.watch(groupsProvider),
@@ -1108,54 +1106,9 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
             ),
             Builder(
               builder: (context) {
-                // The same work serves a tap and the timer: measure the whole list in front of
-                // the owner, whichever core it belongs to.
-                void measureAll({required bool force}) {
-                  final simple =
-                      ref.read(patchClashConfigProvider).mode == Mode.global;
-                  if (simple) {
-                    final servers = <XrayServerConfig>[
-                      for (final server
-                          in ref.read(xrayServersProvider).value ??
-                              const <XrayServerConfig>[])
-                        if (server.port > 0) server,
-                    ];
-                    if (servers.isEmpty) return;
-                    unawaited(
-                      _testDelayWithChild(
-                        ref,
-                        servers,
-                        wasRunning: running,
-                        force: force,
-                      ),
-                    );
-                    return;
-                  }
-                  if (group == null) return;
-                  unawaited(
-                    _testDelayWithEngine(
-                      ref,
-                      [
-                        for (final proxy in group.all)
-                          if (!_isBuiltinOutbound(proxy.name)) proxy,
-                      ],
-                      testUrl: group.testUrl,
-                      wasRunning: running,
-                      force: force,
-                    ),
-                  );
-                }
-
-                // The timer runs the same sweep without forcing: what it re-measures is what
-                // has gone stale, which inside one period is the whole list anyway.
-                ref.listen(autoPingProvider.select((s) => s.enabled), (
-                  previous,
-                  next,
-                ) {
-                  if (next) {
-                    measureAll(force: false);
-                  }
-                });
+                // Turning auto-ping on is a request for the core to time its own nodes, not a
+                // request for this screen to do it: the period is written into the document and
+                // the core measures by itself. Nothing here raises or lowers a tunnel.
 
                 return GestureDetector(
                   // A long press sets the period, in this mode only: the number of requests a
@@ -1179,10 +1132,7 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                       HapticFeedback.mediumImpact();
                       final auto = ref.read(autoPingProvider.notifier);
                       final turningOn = !auto.current.enabled;
-                      auto.setEnabled(
-                        turningOn,
-                        tick: () => measureAll(force: false),
-                      );
+                      auto.setEnabled(turningOn);
                       // A document built while the switch was off carries no schedule at all, so a
                       // running core has to be restarted on one that does.
                       final live = ref.read(portalStatusProvider);
@@ -1782,12 +1732,6 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
 
 /// Waits until the engine reports a running proxy, so the first test is not queued into a
 /// core that has not applied its config yet.
-Future<void> _waitForEngine(WidgetRef ref) async {
-  for (var attempt = 0; attempt < 40; attempt++) {
-    if (ref.read(runTimeProvider) != null) return;
-    await Future<void>.delayed(const Duration(milliseconds: 150));
-  }
-}
 
 /// Runs a delay test, opening the engine for it when the portal is closed.
 ///
@@ -1831,108 +1775,16 @@ Future<void> _testDelayWithEngine(
     );
     return;
   }
-  final testing = ref.read(delayTestingGroupsProvider.notifier);
-  final subject = ref.read(portalGroupProvider) ?? '';
-  if (subject.isNotEmpty) testing.start(subject);
-  final watch = Stopwatch()..start();
-  // This sweep owns the engine it raises, and only for as long as it is still the newest one:
-  // the engine is put down in `finally`, so a sweep that has been superseded — a mode switch,
-  // an open portal — must not put down the tunnel somebody else is using by then.
-  final sweep = delay.beginSweep(Mode.rule);
-  final ownerBefore = portalRuntime.status.value.owner;
-  // The gateway stamps every press. A sweep that is running when the owner presses the button
-  // is sharing the tunnel from that moment, and must not put it down when the measurement ends
-  // — the tunnel the owner asked for is not the sweep's to close.
-  final pressedBefore = portalOpenedAtMs.value;
-  // Whether this sweep is the reason the tunnel exists. `setRunning(true)` answers "there is a
-  // tunnel now", which is true for a portal that was already up — and a sweep that believes it
-  // raised someone else's tunnel puts it down when it finishes. That is a connection closing on
-  // its own a few seconds after it opened, with the screen still showing it as live.
-  // The clock is the other half of the same question: an owner who just pressed the button has
-  // already asked for a tunnel, even though the record still says Off until the core answers.
-  // Without this the sweep sees "nobody owns it", takes the credit for the tunnel the owner
-  // asked for, and puts it down when the measurement ends.
-  // "Was anything already coming up when I asked?" is the only question that separates a
-  // sweep that raised a tunnel from a sweep that shares the owner's. The record lags the
-  // request — the core answers seconds later — so the three cheap signs are read together, and
-  // one of them is enough to mean the tunnel is not the sweep's to put down.
-  final wasUp =
-      ref.read(runTimeProvider) != null ||
-      ownerBefore != null ||
-      portalRuntime.status.value.busy;
-  final started = await ref.read(setupActionProvider.notifier).setRunning(true);
-  final raisedBySweep = started && !wasUp;
-  var stopped = false;
-  try {
-    if (!started) {
-      final reason = ref.read(setupActionProvider.notifier).lastPortalFailure;
-      commonPrint.log(
-        'portal test: could not raise the engine${reason.isEmpty ? '' : ': $reason'}',
-        logLevel: LogLevel.warning,
-      );
-      unawaited(
-        portalRuntime.noteTest(
-          mode: 'rule',
-          raised: 'engine',
-          durationMs: watch.elapsedMilliseconds,
-          stoppedAfter: false,
-          detail: 'result=failed${reason.isEmpty ? '' : ' reason=$reason'}',
-        ),
-      );
-      return;
-    }
-    await _waitForEngine(ref);
-    await ref.read(proxiesActionProvider.notifier).delayTest(proxies, testUrl);
-  } finally {
-    // Only a sweep that still owns what it raised puts it down. Two proofs, because the two
-    // ways of being superseded look different: the sweep's own id and mode (a newer sweep, a
-    // mode switch), and the owner the runtime reports (something else took the tunnel — the
-    // portal, the service, a start the owner asked for). `ownerBefore` is null for a sweep that
-    // raised the engine itself, so a runtime that now reports an owner is another owner, and
-    // one that reports none is the engine this sweep started.
-    final ownerNow = portalRuntime.status.value.owner;
-    final pressedDuring = portalOpenedAtMs.value != pressedBefore;
-    final stillMine =
-        started &&
-        raisedBySweep &&
-        !pressedDuring &&
-        delay.isCurrentSweep(sweep, Mode.rule) &&
-        ownerNow == PortalOwner.mihomo;
-    if (stillMine) {
-      stopped = await ref.read(setupActionProvider.notifier).setRunning(false);
-    } else if (started) {
-      commonPrint.log(
-        'portal test: engine not stopped, the sweep was superseded '
-        '(mode=${ref.read(patchClashConfigProvider).mode.name} '
-        'owner=${portalRuntime.status.value.owner?.name})',
-      );
-    }
-    watch.stop();
-    if (subject.isNotEmpty) testing.stop(subject);
-    if (started) {
-      unawaited(
-        portalRuntime.noteTest(
-          mode: 'rule',
-          raised: 'engine',
-          durationMs: watch.elapsedMilliseconds,
-          stoppedAfter: stopped,
-          detail: 'result=tests',
-        ),
-      );
-    }
-  }
+  // The core is not running, so there is nothing to time: the engine times its own nodes while
+  // it runs, and auto-ping is what keeps it running. This function never raises a tunnel — a
+  // measurement that opens and closes the portal is a measurement the owner did not ask for,
+  // and the portal closing under a working connection is what that looks like from outside.
+  commonPrint.log(
+    'portal test: the engine is not running, nothing to measure',
+  );
+  return;
 }
 
-/// Times every node of the subscription at once, the way the engine does it.
-///
-/// One core holds all the nodes and each request is dialled through the node's own tag, so the
-/// whole list is measured side by side instead of one restart per node. The sweep runs in the
-/// measurement's own core slot, so an open portal keeps carrying traffic while the numbers
-/// arrive.
-///
-/// Rows land in batches as they finish, not all at the end: a sweep of a long subscription is
-/// read while it runs, and the figures that are already known should not wait for the slowest
-/// node. The whole sweep is bounded by one deadline — past it the remaining rows keep a dash
 /// and the core is told to stop.
 Future<void> _testDelayWithChild(
   WidgetRef ref,
