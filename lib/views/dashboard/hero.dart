@@ -26,6 +26,15 @@ import 'package:flutter/services.dart';
 
 const heroMaxWidth = 520.0;
 
+/// From this width a window gets two columns instead of one.
+const _wideBreakpoint = 900.0;
+
+/// How wide the whole page may grow on a big screen; past this the eye loses the rows.
+const _wideMaxWidth = 1280.0;
+
+/// The controls keep the width they have on a phone; the list takes the rest.
+const _wideControlsWidth = 420.0;
+
 const _gap = 12.0;
 
 /// The hero home page: the service's logo and name over the plan, the
@@ -73,182 +82,231 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
       );
     }
     final headers = profile.headers;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: heroMaxWidth),
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: padding.copyWith(bottom: _gap),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Stack(
-                      alignment: Alignment.center,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // A window wide enough for two columns is a window to use: the controls on the left,
+        // the list on the right, and the name over both. Everything narrower keeps the one
+        // column the phone has always had.
+        final wide = constraints.maxWidth >= _wideBreakpoint;
+        final maxWidth = wide
+            ? (_wideMaxWidth.clamp(0.0, constraints.maxWidth))
+            : heroMaxWidth;
+        return Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: padding.copyWith(bottom: _gap),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // The name is centred on the screen itself, not on the space the
-                        // buttons leave: two entry points on the left and up to two on the
-                        // right made it drift every time one of them appeared or went away.
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 112),
-                          child: Consumer(
-                            // The working screen says the same two facts the list does:
-                            // name, then traffic, then expiry, in one column.
-                            builder: (context, ref, _) {
-                              // Only the name lives in the header. Traffic, expiry and the
-                              // state mark belong to the subscription card, which is where a
-                              // person looks for them.
-                              return EmojiText(
-                                headers.displayName ??
-                                    headers.serviceName ??
-                                    'portal-connect',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTextStyle.title3.of(
-                                  context,
-                                  emphasized: true,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        Row(
+                        Stack(
+                          alignment: Alignment.center,
                           children: [
-                            SizedBox(
-                              width: 96,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    tooltip: context.appLocalizations.tools,
-                                    // Pushed, not page-switched: a page index has no history, so
-                                    // Back walked out of the app instead of returning here.
-                                    onPressed: () => Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => const ToolsView(),
-                                      ),
+                            // The name is centred on the screen itself, not on the space the
+                            // buttons leave: two entry points on the left and up to two on the
+                            // right made it drift every time one of them appeared or went away.
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 112,
+                              ),
+                              child: Consumer(
+                                // The working screen says the same two facts the list does:
+                                // name, then traffic, then expiry, in one column.
+                                builder: (context, ref, _) {
+                                  // Only the name lives in the header. Traffic, expiry and the
+                                  // state mark belong to the subscription card, which is where a
+                                  // person looks for them.
+                                  return EmojiText(
+                                    headers.displayName ??
+                                        headers.serviceName ??
+                                        'portal-connect',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyle.title3.of(
+                                      context,
+                                      emphasized: true,
                                     ),
-                                    icon: const GlyphIcon(
-                                      AppGlyphs.settings,
-                                      size: 22,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    // Shortcut to the per-app bypass list: the one setting a
-                                    // user reaches for while looking at the server list.
-                                    tooltip:
-                                        context.appLocalizations.accessControl,
-                                    onPressed: () => Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => const AccessView(),
-                                      ),
-                                    ),
-                                    icon: const GlyphIcon(
-                                      AppGlyphs.appsList,
-                                      size: 22,
-                                    ),
-                                  ),
-                                ],
+                                  );
+                                },
                               ),
                             ),
-                            const Spacer(),
-                            // The connections list is the engine's answer, and in the simple
-                            // portal no engine runs: the page could only ever be empty. The
-                            // button exists exactly where its data exists — in the network.
-                            if (ref.watch(
-                                  patchClashConfigProvider.select(
-                                    (s) => s.mode,
+                            Row(
+                              children: [
+                                SizedBox(
+                                  width: 96,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        tooltip: context.appLocalizations.tools,
+                                        // Pushed, not page-switched: a page index has no history, so
+                                        // Back walked out of the app instead of returning here.
+                                        onPressed: () =>
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    const ToolsView(),
+                                              ),
+                                            ),
+                                        icon: const GlyphIcon(
+                                          AppGlyphs.settings,
+                                          size: 22,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        // Shortcut to the per-app bypass list: the one setting a
+                                        // user reaches for while looking at the server list.
+                                        tooltip: context
+                                            .appLocalizations
+                                            .accessControl,
+                                        onPressed: () =>
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    const AccessView(),
+                                              ),
+                                            ),
+                                        icon: const GlyphIcon(
+                                          AppGlyphs.appsList,
+                                          size: 22,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ) !=
-                                Mode.global)
-                              GestureDetector(
-                                onDoubleTap: () => ref
-                                    .read(
-                                      portalConnectionsBadgeProvider.notifier,
-                                    )
-                                    .toggle(),
-                                child: IconButton(
-                                  tooltip: context.appLocalizations.connections,
-                                  // The connections page is not in the phone navigation any
-                                  // more, so switching the page index did nothing: push it.
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const ConnectionFeedsView(),
+                                ),
+                                const Spacer(),
+                                // The connections list is the engine's answer, and in the simple
+                                // portal no engine runs: the page could only ever be empty. The
+                                // button exists exactly where its data exists — in the network.
+                                if (ref.watch(
+                                      patchClashConfigProvider.select(
+                                        (s) => s.mode,
+                                      ),
+                                    ) !=
+                                    Mode.global)
+                                  GestureDetector(
+                                    onDoubleTap: () => ref
+                                        .read(
+                                          portalConnectionsBadgeProvider
+                                              .notifier,
+                                        )
+                                        .toggle(),
+                                    child: IconButton(
+                                      tooltip:
+                                          context.appLocalizations.connections,
+                                      // The connections page is not in the phone navigation any
+                                      // more, so switching the page index did nothing: push it.
+                                      onPressed: () =>
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const ConnectionFeedsView(),
+                                            ),
+                                          ),
+                                      icon: Badge(
+                                        // Fixed colours: the hero is dark in both themes, so a
+                                        // theme-derived label turned black-on-black on white.
+                                        backgroundColor: const Color(
+                                          0xFF00F5A0,
+                                        ),
+                                        textColor: const Color(0xFF07110C),
+                                        isLabelVisible: ref.watch(
+                                          portalConnectionsBadgeProvider,
+                                        ),
+                                        label: Text(
+                                          '${ref.watch(requestsProvider).list.length}',
+                                        ),
+                                        child: const GlyphIcon(
+                                          AppGlyphs.connections,
+                                          size: 22,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                  icon: Badge(
-                                    // Fixed colours: the hero is dark in both themes, so a
-                                    // theme-derived label turned black-on-black on white.
-                                    backgroundColor: const Color(0xFF00F5A0),
-                                    textColor: const Color(0xFF07110C),
-                                    isLabelVisible: ref.watch(
-                                      portalConnectionsBadgeProvider,
+                                GestureDetector(
+                                  onDoubleTap: () => ref
+                                      .read(
+                                        portalProfilesBadgeProvider.notifier,
+                                      )
+                                      .toggle(),
+                                  child: IconButton(
+                                    tooltip: context.appLocalizations.profiles,
+                                    onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const ProfilesView(),
+                                      ),
                                     ),
-                                    label: Text(
-                                      '${ref.watch(requestsProvider).list.length}',
-                                    ),
-                                    child: const GlyphIcon(
-                                      AppGlyphs.connections,
-                                      size: 22,
+                                    icon: Badge(
+                                      backgroundColor: const Color(0xFF00F5A0),
+                                      textColor: const Color(0xFF07110C),
+                                      isLabelVisible: ref.watch(
+                                        portalProfilesBadgeProvider,
+                                      ),
+                                      label: Text(
+                                        '${ref.watch(profilesProvider).length}',
+                                      ),
+                                      child: const GlyphIcon(
+                                        AppGlyphs.profiles,
+                                        size: 22,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            GestureDetector(
-                              onDoubleTap: () => ref
-                                  .read(portalProfilesBadgeProvider.notifier)
-                                  .toggle(),
-                              child: IconButton(
-                                tooltip: context.appLocalizations.profiles,
-                                onPressed: () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const ProfilesView(),
-                                  ),
-                                ),
-                                icon: Badge(
-                                  backgroundColor: const Color(0xFF00F5A0),
-                                  textColor: const Color(0xFF07110C),
-                                  isLabelVisible: ref.watch(
-                                    portalProfilesBadgeProvider,
-                                  ),
-                                  label: Text(
-                                    '${ref.watch(profilesProvider).length}',
-                                  ),
-                                  child: const GlyphIcon(
-                                    AppGlyphs.profiles,
-                                    size: 22,
-                                  ),
-                                ),
-                              ),
+                              ],
                             ),
                           ],
                         ),
+                        const SizedBox(height: 8),
+                        if (wide)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              SizedBox(
+                                width: _wideControlsWidth,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _ConnectButton(),
+                                    SizedBox(height: 12),
+                                    PortalPlanCard(),
+                                    SizedBox(height: _gap),
+                                    PortalModeSwitch(),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(width: 20),
+                              Expanded(child: PortalServerList()),
+                            ],
+                          )
+                        else ...[
+                          // The portal comes first and the choice comes after it, the
+                          // order Happ and Incy taught people: the button you press
+                          // before the list you read.
+                          const _ConnectButton(),
+                          const SizedBox(height: 12),
+                          // Announcement and subscription sit together right under the
+                          // button, the way Happ and Incy put plan status next to the
+                          // switch: visible, but out of the way of choosing a server.
+                          const PortalPlanCard(),
+                          const SizedBox(height: _gap),
+                          const PortalModeSwitch(),
+                          const SizedBox(height: 4),
+                          const PortalServerList(),
+                        ],
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    // The portal comes first and the choice comes after it, the
-                    // order Happ and Incy taught people: the button you press
-                    // before the list you read.
-                    const _ConnectButton(),
-                    const SizedBox(height: 12),
-                    // Announcement and subscription sit together right under the
-                    // button, the way Happ and Incy put plan status next to the
-                    // switch: visible, but out of the way of choosing a server.
-                    const PortalPlanCard(),
-                    const SizedBox(height: _gap),
-                    const PortalModeSwitch(),
-                    const SizedBox(height: 4),
-                    const PortalServerList(),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
