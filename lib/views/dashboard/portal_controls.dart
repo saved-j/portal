@@ -2839,11 +2839,23 @@ class _ServerRowState extends ConsumerState<_ServerRow>
               }
               return;
             }
-            unawaited(
-              _testDelayWithEngine(ref, [
+            // One server, timed by the engine's own API. A closed portal is opened for the
+            // measurement and closed again — the owner asked for one number, not for a tunnel.
+            unawaited(() async {
+              final wasRunning = ref.read(runTimeProvider) != null;
+              if (!wasRunning) {
+                final raised = await ref
+                    .read(setupActionProvider.notifier)
+                    .setRunning(true);
+                if (!raised) return;
+              }
+              await _testDelayWithEngine(ref, [
                 widget.proxy,
-              ], wasRunning: ref.read(runTimeProvider) != null),
-            );
+              ], wasRunning: true, force: true);
+              if (!wasRunning) {
+                await ref.read(setupActionProvider.notifier).setRunning(false);
+              }
+            }());
           },
         ),
       ),

@@ -192,6 +192,12 @@ class Bootstrap {
     }
     await _showCrashRecoveryTip();
     await _showPreChannelTip();
+    // Windows asks for its rights once, at the first launch: the Helper service is what makes a
+    // TUN possible, and asking at the moment the owner presses the portal turns a startup
+    // question into a failed connection with two red lines under it.
+    if (system.isWindows && !system.hasHelperService) {
+      await system.authorizeCore();
+    }
     await _container.read(coreActionProvider.notifier).startCore();
     if (!_bootDecision.isDegraded) {
       await _container.read(setupActionProvider.notifier).initStatus();
