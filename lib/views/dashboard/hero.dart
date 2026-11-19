@@ -59,7 +59,12 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
         return;
       }
       if (ref.read(profilesProvider).isEmpty) return;
-      showPortalTutorial(context, fromStep: setting.tutorialStep);
+      // A tour whose text changed starts from its first page: the stored step belongs to the
+      // previous one and would drop the owner into the middle of a story he has not begun.
+      final resume = setting.tutorialVersion >= tutorialVersion
+          ? setting.tutorialStep
+          : 0;
+      showPortalTutorial(context, fromStep: resume);
     });
   }
 
