@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/l10n/l10n.dart';
-import 'package:fl_clash/views/dashboard/hero.dart';
 
 import 'tutorial_bus.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -15,7 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// The keys live here, not in the dashboard: a widget attaches its own key, so the tour can
 /// find it wherever the layout put it — one column on a phone, two on a wide window — without
 /// the dashboard knowing that a tour exists.
-enum TutorialTarget { modeSwitch, modeLabel, filters, chip, start, autoPing }
+enum TutorialTarget { modeSwitch, modeLabel, filters, chip, start, autoPing, autoPingColumn }
 
 final tutorialKeys = {
   TutorialTarget.modeSwitch: GlobalKey(debugLabel: 'tutorial-mode-switch'),
@@ -24,6 +23,7 @@ final tutorialKeys = {
   TutorialTarget.chip: GlobalKey(debugLabel: 'tutorial-chip'),
   TutorialTarget.start: GlobalKey(debugLabel: 'tutorial-start'),
   TutorialTarget.autoPing: GlobalKey(debugLabel: 'tutorial-autoping'),
+  TutorialTarget.autoPingColumn: GlobalKey(debugLabel: 'tutorial-autoping-column'),
 };
 
 /// One page of the tour.
@@ -91,7 +91,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 11;
+const tutorialVersion = 12;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -127,8 +127,9 @@ const tutorialSteps = <TutorialStep>[
     number: 6,
     done: TutorialEvent.started,
   ),
-  // The sentence about the numbers, said when the first figures are on screen.
-  TutorialStep(target: TutorialTarget.autoPing, number: 7, wait: Duration(seconds: 6)),
+  // The whole column — the bolt and every row under it — because the sentence is about the
+  // figures that appear in it the moment the portal opens. No wait: they are there at once.
+  TutorialStep(target: TutorialTarget.autoPingColumn, number: 7),
   TutorialStep(target: null, number: 8, androidOnly: true),
 ];
 
@@ -183,25 +184,6 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     super.dispose();
   }
 
-  /// Scrolls the working screen so the delay column is on it, when the list is longer than the
-  /// screen. A third of a screen is enough to bring the rows above into view without losing the
-  /// context of what is being pointed at.
-  void _revealNumbers(TutorialStep step) {
-    if (step.number != 7) return;
-    final scroll = heroScroll;
-    if (!scroll.hasClients) return;
-    final target = (scroll.offset + scroll.position.viewportDimension * 0.35)
-        .clamp(0.0, scroll.position.maxScrollExtent);
-    if (target <= scroll.offset + 8) return;
-    unawaited(
-      scroll.animateTo(
-        target,
-        duration: const Duration(milliseconds: 480),
-        curve: Curves.easeOutCubic,
-      ),
-    );
-  }
-
   /// The owner has just done the thing this page asks for: the page closes itself.
   void _onAction() {
     if (!mounted || _waiting) return;
@@ -227,9 +209,6 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     _waitTimer = Timer(step.wait, () {
       if (!mounted) return;
       setState(() => _waiting = false);
-      // A subscription longer than the screen hides the numbers the page is about: the tour
-      // scrolls the working screen a little, so the figures are in the open when it speaks.
-      _revealNumbers(step);
     });
   }
 
@@ -268,9 +247,11 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   List<Widget> _frameAround(Rect? hole, Size screen) {
     Widget band(Rect rect) => Positioned.fromRect(
       rect: rect,
+      // The bands swallow the tap so it cannot reach a control the page is not about, but they
+      // do not advance: a tour that moves on when the owner misses the target teaches nothing.
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: _next,
+        onTap: () {},
         child: const SizedBox.expand(),
       ),
     );

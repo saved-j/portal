@@ -302,7 +302,12 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                                 ),
                               ),
                               SizedBox(width: 20),
-                              Expanded(child: PortalServerList()),
+                              Expanded(
+                                child: PortalServerList(
+                                  key: tutorialKeys[TutorialTarget
+                                      .autoPingColumn],
+                                ),
+                              ),
                             ],
                           )
                         else ...[
@@ -318,7 +323,9 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                           const SizedBox(height: _gap),
                           PortalModeSwitch(key: tutorialKeys[TutorialTarget.modeSwitch]),
                           const SizedBox(height: 4),
-                          const PortalServerList(),
+                          PortalServerList(
+                            key: tutorialKeys[TutorialTarget.autoPingColumn],
+                          ),
                         ],
                       ],
                     ),
