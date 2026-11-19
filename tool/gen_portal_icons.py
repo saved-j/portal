@@ -143,8 +143,7 @@ def save_tray_ico(path: str, *, filled: bool, dot: bool) -> None:
     """A Windows tray .ico: white on transparency, several sizes in one file."""
     sizes = [16, 20, 24, 32, 48, 64]
     images = [
-        tray_glyph(size, filled=filled, dot=dot, colour=(255, 255, 255, 255))
-        for size in sizes
+        tray_letter_p(size, bold=filled, color=(255, 255, 255, 255)) for size in sizes
     ]
     os.makedirs(os.path.dirname(path), exist_ok=True)
     images[-1].save(path, format="ICO", sizes=[(s, s) for s in sizes], append_images=images[:-1])
@@ -171,6 +170,32 @@ def notification_p(size_px: int, dp: float, color=(255, 255, 255, 255)) -> Image
     draw.rounded_rectangle((left, top, left + stroke, bottom), radius=radius, fill=color)
     draw.rounded_rectangle((right - stroke, top, right, bottom), radius=radius, fill=color)
     return canvas.resize((size_px, size_px), Image.LANCZOS)
+
+
+def tray_letter_p(size: int, *, bold: bool = False, color=(0, 0, 0, 255)) -> Image.Image:
+    """The П for a menu bar or a tray: the same glyph the tile carries.
+
+    A status item is 18 points at most. The owner's picture — a portal frame with a planet
+    inside — turns into a square at that size, which is what he reported seeing. The letter
+    reads at 18 px where the picture cannot, and it is the mark the tiles already use, so the
+    app looks like itself in the one place people look most often.
+    """
+    scale = 8
+    canvas = Image.new("RGBA", (size * scale, size * scale), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+    s = size * scale
+    stroke = int(s * (0.18 if bold else 0.14))
+    # Letters sit slightly wider than the notification glyph: a menu bar has no circular mask,
+    # so the only thing to avoid is touching the edges.
+    left = int(s * 0.14)
+    right = int(s * 0.86)
+    top = int(s * 0.16)
+    bottom = int(s * 0.84)
+    radius = int(stroke * 0.45)
+    draw.rounded_rectangle((left, top, right, top + stroke), radius=radius, fill=color)
+    draw.rounded_rectangle((left, top, left + stroke, bottom), radius=radius, fill=color)
+    draw.rounded_rectangle((right - stroke, top, right, bottom), radius=radius, fill=color)
+    return canvas.resize((size, size), Image.LANCZOS)
 
 
 def letter_p(size: int, color=(255, 255, 255, 255)) -> Image.Image:
@@ -278,16 +303,16 @@ def main() -> None:
         folder = os.path.join(ASSETS, "tray/macos") if scale == 1 else os.path.join(
             ASSETS, f"tray/macos/{scale}.0x"
         )
-        save(tray_glyph(size, filled=False), os.path.join(folder, "status_1.png"))
-        save(tray_glyph(size, filled=True), os.path.join(folder, "status_4.png"))
+        save(tray_letter_p(size), os.path.join(folder, "status_1.png"))
+        save(tray_letter_p(size, bold=True), os.path.join(folder, "status_4.png"))
 
     for scale, size in {1: 22, 2: 44, 3: 66, 4: 88}.items():
         folder = os.path.join(ASSETS, "tray/unix") if scale == 1 else os.path.join(
             ASSETS, f"tray/unix/{scale}.0x"
         )
-        for state, fill in ((1, False), (2, False), (3, True), (4, True)):
+        for state, bold in ((1, False), (2, False), (3, True), (4, True)):
             save(
-                tray_glyph(size, filled=fill, dot=state >= 2, colour=(0, 0, 0, 255)),
+                tray_letter_p(size, bold=bold),
                 os.path.join(folder, f"status_{state}.png"),
             )
 
