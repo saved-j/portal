@@ -545,6 +545,12 @@ Future<void> _packageMacos(_Build build, {required String env}) async {
   _stageDesktopXray(build, app);
   if (identity.isNotEmpty) {
     await _signMacosApp(build, app, identity);
+  } else {
+    // A bundle with no signature at all is not "unsigned" to macOS when it arrives by
+    // download — it is "damaged", and the owner's only way out is a command in Terminal.
+    // An ad-hoc signature (identity `-`) turns that into the ordinary "unidentified
+    // developer" question, which Finder can answer.
+    await _adhocSignMacosApp(build, app);
   }
   final staging = Directory(p.join(build.rootDir, 'build', 'dmg'));
   if (staging.existsSync()) staging.deleteSync(recursive: true);
@@ -687,6 +693,24 @@ Future<void> _signMacosApp(_Build build, String app, String identity) async {
         '--preserve-metadata=entitlements',
     ]);
   }
+  await build.mustRun('codesign', [
+    '--verify',
+    '--deep',
+    '--strict',
+    '--verbose=2',
+    app,
+  ]);
+}
+
+/// Signs the bundle with the ad-hoc identity, inside out.
+///
+/// The order matters for the same reason it does with a real identity: a nested binary signed
+/// after its bundle invalidates the bundle's seal.
+Future<void> _adhocSignMacosApp(_Build build, String app) async {
+  for (final code in macosSigningOrder(app)) {
+    await build.mustRun('codesign', ['--force', '--sign', '-', code]);
+  }
+  await build.mustRun('codesign', ['--force', '--sign', '-', app]);
   await build.mustRun('codesign', [
     '--verify',
     '--deep',
