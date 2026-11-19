@@ -92,7 +92,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 17;
+const tutorialVersion = 18;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -529,6 +529,29 @@ class _HolePainter extends CustomPainter {
         ..strokeWidth = 2
         ..color = const Color(0xFF00F5A0),
     );
+    _arrow(canvas, size, hole!);
+  }
+
+  /// A fat yellow arrow from the card's side of the screen to the hole — the one sign that
+  /// needs no reading.
+  void _arrow(Canvas canvas, Size size, Rect hole) {
+    final yellow = Paint()
+      ..color = const Color(0xFFFFD400)
+      ..strokeWidth = 10
+      ..strokeCap = StrokeCap.round;
+    // The arrow comes from whichever side has room: above the hole when the card sits below it.
+    final fromBelow = hole.center.dy < size.height / 2;
+    final startY = fromBelow ? hole.bottom + 120 : hole.top - 120;
+    final endY = fromBelow ? hole.bottom + 26 : hole.top - 26;
+    final x = hole.center.dx;
+    canvas.drawLine(Offset(x, startY), Offset(x, endY), yellow);
+    final tip = fromBelow ? 1.0 : -1.0;
+    final head = Path()
+      ..moveTo(x, endY)
+      ..lineTo(x - 20, endY + tip * 26)
+      ..lineTo(x + 20, endY + tip * 26)
+      ..close();
+    canvas.drawPath(head, Paint()..color = const Color(0xFFFFD400));
   }
 
   @override
