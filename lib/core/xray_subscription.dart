@@ -15,6 +15,7 @@ class XrayServerConfig {
     required this.config,
     required this.protocol,
     this.description = '',
+    this.described = false,
     this.flag = '',
     this.address = '',
     this.port = 0,
@@ -22,6 +23,15 @@ class XrayServerConfig {
 
   final String name;
   final String description;
+
+  /// True when [description] is the panel's own note for this server rather than the fallback
+  /// the app derived from the transport.
+  ///
+  /// The panel puts that note in `meta.serverDescription`, which is the field the clients that
+  /// show a comment under the name read. The distinction matters when a body is chosen between
+  /// candidates: a list of servers without notes is a poorer answer than the same list with
+  /// them, even though it parses the same.
+  final bool described;
   final String flag;
 
   /// Where the server listens. The row pings this address directly: the engine never holds
@@ -146,15 +156,22 @@ XraySubscriptionResult parseXraySubscriptionResult(String body) {
     final parts = remarks.split(RegExp(r'\s*[·|]\s*'));
     final remarkName = parts.isEmpty ? '' : parts.first.trim();
     final remarkNote = parts.length > 1 ? parts.skip(1).join('·').trim() : '';
-    final transport = _transportOf(config);
+    // The panel's own note, in the field the clients that show a comment under the name read:
+    // `meta.serverDescription` («Максимальная скорость», «Для мобильного интернета»). A
+    // separator inside `remarks` is the other way the same note arrives, so it is the second
+    // source rather than the only one.
+    final metaNote = '${map['serverDescription'] ?? ''}'.trim();
+    final note = metaNote.isNotEmpty ? metaNote : remarkNote;
     final endpoint = _endpointOf(config);
     servers.add(
       XrayServerConfig(
         protocol: _protocolOf(config),
         name: remarkName.isNotEmpty ? remarkName : (_firstProxyTag(config) ?? '${index + 1}'),
-        description: remarkNote.isNotEmpty
-            ? remarkNote
-            : _describeTransport(transport, map),
+        // No invention: a server the panel did not describe has no note, and the row shows
+        // its protocol there instead. A transport label is a fact about the connection, not
+        // the panel's words about the server.
+        description: note,
+        described: note.isNotEmpty,
         flag: '${map['serverFlag'] ?? ''}'.trim(),
         address: endpoint.$1,
         port: endpoint.$2,
@@ -252,24 +269,4 @@ String _protocolOf(Map<String, dynamic> config) {
   return 'xray';
 }
 
-/// The transport, which is what distinguishes two servers of the same protocol.
-String? _transportOf(Map<String, dynamic> config) {
-  final outbounds = config['outbounds'];
-  if (outbounds is! List) return null;
-  for (final item in outbounds) {
-    if (item is! Map) continue;
-    final stream = item['streamSettings'];
-    if (stream is! Map) continue;
-    final network = '${stream['network'] ?? ''}'.trim();
-    if (network.isNotEmpty && network != 'tcp') return network;
-    return null;
-  }
-  return null;
-}
 
-/// The description when the panel gave none: the transport, else nothing.
-String _describeTransport(String? transport, Map meta) {
-  final stated = '${meta['serverDescription'] ?? ''}'.trim();
-  if (stated.isNotEmpty) return stated;
-  return transport == null ? '' : transport.toUpperCase();
-}

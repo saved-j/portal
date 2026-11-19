@@ -323,6 +323,48 @@ class ProxiesAction extends _$ProxiesAction {
     _scheduleDelayFlush();
   }
 
+  /// Re-applies what the owner picked in the rules list.
+  ///
+  /// The engine starts on the selection its own document carries, and that document is built
+  /// from the subscription, not from the list the owner arranged — so after every start (a
+  /// launch, a mode switch, a subscription update) the picks are sent again. Without this a
+  /// filter's server comes back as the panel's first one and the owner's choice looks lost.
+  ///
+  /// Nothing is drawn here: a group that already runs the pick answers with the same name, and
+  /// a group that is gone from the new config answers null. Neither is an error, so none of it
+  /// is reported to the owner.
+  Future<void> restorePicks() async {
+    final profileId = ref.read(currentProfileIdProvider);
+    final picks = ref.read(selectedMapProvider);
+    await Future.wait([
+      for (final MapEntry(key: groupName, value: proxyName) in picks.entries)
+        if (proxyName.isNotEmpty) _restorePick(profileId, groupName, proxyName),
+    ]);
+  }
+
+  Future<void> _restorePick(
+    int? profileId,
+    String groupName,
+    String proxyName,
+  ) async {
+    final String? running;
+    try {
+      running = await _core.groupPick(groupName);
+    } catch (error) {
+      commonPrint.log(
+        'restore $groupName -> $proxyName skipped: $error',
+        logLevel: coreFailureLogLevel(error),
+      );
+      return;
+    }
+    if (running == null ||
+        running == proxyName ||
+        profileId != ref.read(currentProfileIdProvider)) {
+      return;
+    }
+    await changeProxy(groupName: groupName, proxyName: proxyName);
+  }
+
   /// A pick made while an apply ran may have reached the groups it replaced,
   /// or been overwritten by the [applied] selection it carried.
   Future<void> resendPicksSince(Map<String, String> applied) async {

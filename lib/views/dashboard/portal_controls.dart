@@ -174,11 +174,39 @@ final portalSelectionProvider =
 
 /// Which group the strip shows. Null means "the first one the panel offers",
 /// which survives subscription updates that reorder groups.
+///
+/// The highlighted chip is part of what the owner last looked at, so it is stored with the
+/// picker itself (one name per mode, beside that mode's list order) and comes back after a
+/// restart. It is not a pick: a group whose server was never chosen keeps the one the panel
+/// arranged, and only this strip's own tap moves the highlight.
 class PortalGroupNotifier extends Notifier<String?> {
-  @override
-  String? build() => null;
+  bool get _simple =>
+      ref.read(patchClashConfigProvider.select((s) => s.mode)) == Mode.global;
 
-  void pick(String? name) => state = name;
+  @override
+  String? build() {
+    final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
+    final settings = ref.watch(appSettingProvider);
+    final profileId = ref.watch(currentProfileIdProvider);
+    return portalGroupFor(settings, profileId, mode == Mode.global);
+  }
+
+  void pick(String? name) {
+    state = name;
+    final profileId = ref.read(currentProfileIdProvider);
+    ref
+        .read(appSettingProvider.notifier)
+        .update(
+          (settings) => withPortalGroup(settings, profileId, _simple, name),
+        );
+    // The porthole's mark and the strip read the profile's current group; a chip that only
+    // moved its own state left the two disagreeing.
+    if (name != null) {
+      ref
+          .read(proxiesActionProvider.notifier)
+          .updateCurrentGroupName(name);
+    }
+  }
 }
 
 final portalGroupProvider = NotifierProvider<PortalGroupNotifier, String?>(
@@ -1343,7 +1371,9 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
                 // The row shows this as the protocol badge: it comes from the server's own
                 // configuration, not from the fact that Xray is the core running it.
                 type: server.protocol,
-                serverDescription: server.label,
+                // The panel's note, not the line built for a label: that one repeats the
+                // name and falls back to the transport, neither of which is a comment.
+                serverDescription: server.description,
               ),
           ]
         : [
@@ -2437,11 +2467,6 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                     ref
                                         .read(portalGroupProvider.notifier)
                                         .pick(item.name);
-                                    // The porthole's mark reads the profile's current group; a
-                                    // chip that only moved its own state left the two disagreeing.
-                                    ref
-                                        .read(proxiesActionProvider.notifier)
-                                        .updateCurrentGroupName(item.name);
                                   },
                                 ),
                               ),

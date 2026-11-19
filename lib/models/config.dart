@@ -266,6 +266,17 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default('') String portalSortRules,
     @Default('') String portalSortXray,
 
+    /// The filter chip the strip had open, per mode. Its own key for the same reason the
+    /// order has one: the two lists are different builds of a subscription, and a group
+    /// highlighted in one says nothing about the other.
+    @Default('') String portalGroupRules,
+    @Default('') String portalGroupXray,
+
+    /// Which profile each of those names belongs to. A group named in one subscription does
+    /// not exist in another, so a name read under the wrong profile would empty the strip.
+    @Default('') String portalGroupRulesProfile,
+    @Default('') String portalGroupXrayProfile,
+
     /// How the filter chips are drawn (name only, name + server, and so on). Stored because
     /// a view the owner chose is a choice, not a session: it comes back after a restart
     /// instead of falling back to the default while nobody is looking.

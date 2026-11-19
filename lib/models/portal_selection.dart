@@ -64,6 +64,43 @@ Map<String, String> portalRulePicksFor(AppSettingProps settings, int? profileId)
   return const {};
 }
 
+/// The filter whose chip the strip had open, for [profileId], or null.
+///
+/// It is not a pick: no server is chosen by it. It lives here so that the chip the owner
+/// last looked at and the servers chosen inside it are read from one place and restored by
+/// the same rules — and so that a filtered list never comes back empty because the group it
+/// remembered is the other mode's.
+String? portalGroupFor(AppSettingProps settings, int? profileId, bool simple) {
+  final stored = simple ? settings.portalGroupXray : settings.portalGroupRules;
+  if (stored.isEmpty) return null;
+  final profile = portalProfileKey(profileId);
+  final forThisProfile =
+      simple ? settings.portalGroupXrayProfile : settings.portalGroupRulesProfile;
+  // A group remembered under another profile is a name from another subscription.
+  if (forThisProfile.isEmpty || forThisProfile == profile) return stored;
+  return null;
+}
+
+/// [settings] with the open chip written for [profileId] and this mode.
+AppSettingProps withPortalGroup(
+  AppSettingProps settings,
+  int? profileId,
+  bool simple,
+  String? name,
+) {
+  final profile = portalProfileKey(profileId);
+  final value = name ?? '';
+  return simple
+      ? settings.copyWith(
+          portalGroupXray: value,
+          portalGroupXrayProfile: profile,
+        )
+      : settings.copyWith(
+          portalGroupRules: value,
+          portalGroupRulesProfile: profile,
+        );
+}
+
 /// [settings] with one filter's pick written for [profileId], and the legacy map retired.
 AppSettingProps withPortalRulePick(
   AppSettingProps settings,

@@ -514,7 +514,20 @@ extension ProfileExtension on Profile {
     Duration timeout,
   ) async {
     var note = 'no client name was answered';
-    for (final agent in xrayUserAgentCandidates) {
+    // A body that parses is not yet the best body: the panel writes its note for a server
+    // («Максимальная скорость») only for some client names, and the same list without notes
+    // parses exactly as well. The first parsable answer is kept, and the search continues
+    // while it carries no notes, so the list the owner sees is the one with the panel's own
+    // words under the names.
+    Uint8List? withoutNotes;
+    // The name that carried the notes last time is asked first: a panel answers the same way
+    // for the same client, and this saves the extra requests on every update.
+    final agents = [
+      if (_agentWithNotes(url) case final remembered?)
+        remembered,
+      ...xrayUserAgentCandidates.where((agent) => agent != _agentWithNotes(url)),
+    ];
+    for (final agent in agents) {
       try {
         final response = await fetch(
           url,
@@ -537,13 +550,23 @@ extension ProfileExtension on Profile {
         // The right shape is not yet an answer: a config with nothing to run is the "zero
         // servers" case, and the simple portal has nothing to start with it.
         if (body != null && format == SubscriptionFormat.xray && servers > 0) {
-          portalFeeds.note(PortalFeed.xray, ok: true);
-          return body;
+          if (_hasDescriptions(text)) {
+            _rememberAgentWithNotes(url, agent);
+            portalFeeds.note(PortalFeed.xray, ok: true);
+            return body;
+          }
+          withoutNotes ??= body;
         }
       } catch (error) {
         note = _attemptReason(error);
         commonPrint.log('xray probe [$agent]: ${compactError(error)}');
       }
+    }
+    if (withoutNotes != null) {
+      // Notes were not served to any client name that answered: the list is still the panel's
+      // list, so it is used, and the rows simply have no comment under the name.
+      portalFeeds.note(PortalFeed.xray, ok: true);
+      return withoutNotes;
     }
     // Every client name was asked and none answered with nodes: that is one failed attempt
     // at this feed, and the second core's mode keeps its own count of them.
@@ -556,6 +579,20 @@ extension ProfileExtension on Profile {
   /// Two shapes are accepted and they parse differently: a list of share links, and a panel's
   /// ready client config (one, or an array of them). Counting both here is what makes "zero
   /// servers" a fact rather than a guess.
+  /// The client name that answered this host with the panel's notes, if one did before.
+  static final _notesAgents = <String, String>{};
+
+  static String? _agentWithNotes(String url) =>
+      _notesAgents[Uri.tryParse(url)?.host ?? ''];
+
+  static void _rememberAgentWithNotes(String url, String agent) {
+    _notesAgents[Uri.tryParse(url)?.host ?? ''] = agent;
+  }
+
+  /// True when the panel wrote its own note for at least one server of this body.
+  static bool _hasDescriptions(String body) =>
+      parseXraySubscription(body).any((server) => server.described);
+
   static int _serverCountOf(String body) =>
       parseShareLinks(body).length + parseXraySubscription(body).length;
 }

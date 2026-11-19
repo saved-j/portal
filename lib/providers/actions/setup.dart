@@ -1570,9 +1570,12 @@ class SetupAction extends _$SetupAction {
           await preferences.saveAppliedConfigMd5(yamlMd5);
         }
         if (profile?.id == ref.read(currentProfileIdProvider)) {
-          await ref
-              .read(proxiesActionProvider.notifier)
-              .resendPicksSince(setupParams.selectedMap);
+          final proxies = ref.read(proxiesActionProvider.notifier);
+          // The engine runs what its document says, and the document comes from the
+          // subscription: every start, mode switch and update needs the owner's picks sent
+          // again, or the list comes back on the panel's first server.
+          await proxies.restorePicks();
+          await proxies.resendPicksSince(setupParams.selectedMap);
         }
         await onUpdated?.call();
       },
