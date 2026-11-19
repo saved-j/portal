@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/l10n/l10n.dart';
+import 'package:fl_clash/views/dashboard/hero.dart';
 
 import 'tutorial_bus.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -91,7 +92,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 13;
+const tutorialVersion = 14;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -166,9 +167,17 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       if (!step.androidOnly || system.isAndroid) step,
   ];
 
+  /// A frame clock while the tour is up: the hole is measured from a widget that can move
+  /// under it — the list scrolls, and a mask that stayed where the row used to be points at
+  /// nothing. Sixty rebuilds a second of one CustomPaint is cheaper than a wrong frame.
+  Timer? _follow;
+
   @override
   void initState() {
     super.initState();
+    _follow = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (mounted) setState(() {});
+    });
     TutorialBus.last.addListener(_onAction);
     if (_steps[_index].wait == Duration.zero) {
       _waiting = false;
@@ -180,8 +189,28 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   @override
   void dispose() {
     TutorialBus.last.removeListener(_onAction);
+    _follow?.cancel();
     _waitTimer?.cancel();
     super.dispose();
+  }
+
+  /// Scrolls the working screen so the delay column is on it, when the list is longer than the
+  /// screen. The mask is measured every frame, so it travels with the rows instead of staying
+  /// where they were.
+  void _revealNumbers(TutorialStep step) {
+    if (step.number != 7) return;
+    final scroll = heroScroll;
+    if (!scroll.hasClients) return;
+    final target = (scroll.offset + scroll.position.viewportDimension * 0.35)
+        .clamp(0.0, scroll.position.maxScrollExtent);
+    if (target <= scroll.offset + 8) return;
+    unawaited(
+      scroll.animateTo(
+        target,
+        duration: const Duration(milliseconds: 480),
+        curve: Curves.easeOutCubic,
+      ),
+    );
   }
 
   /// The owner has just done the thing this page asks for: the page closes itself.
@@ -209,6 +238,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     _waitTimer = Timer(step.wait, () {
       if (!mounted) return;
       setState(() => _waiting = false);
+      _revealNumbers(step);
     });
   }
 
@@ -497,28 +527,4 @@ Future<void> showPortalTutorial(BuildContext context, {int fromStep = 0}) async 
   return;
 }
 
-Future<void> _unusedRouteTour(BuildContext context, {int fromStep = 0}) async {
-  final done = Completer<void>();
-  final navigator = Navigator.of(context, rootNavigator: true);
-  navigator.push(
-    PageRouteBuilder<void>(
-      opaque: false,
-      barrierDismissible: false,
-      transitionDuration: const Duration(milliseconds: 180),
-      pageBuilder: (context, _, _) => PortalTutorial(
-        fromStep: fromStep,
-        onDone: () {
-          tourIsShowing = false;
-          if (!done.isCompleted) done.complete();
-          // The route was pushed by this function, so it is popped by this function: a
-          // `maybePop` that decided not to would leave a transparent barrier over the screen,
-          // and every tap after the tour would be swallowed by a tour that looks finished.
-          if (navigator.canPop()) navigator.pop();
-        },
-      ),
-      transitionsBuilder: (context, animation, _, child) =>
-          FadeTransition(opacity: animation, child: child),
-    ),
-  );
-  await done.future;
-}
+
