@@ -11,7 +11,7 @@ import 'package:fl_clash/core/desktop/xray_child.dart';
 import 'package:fl_clash/core/auto_ping_interval.dart';
 import 'package:fl_clash/core/portal_document.dart';
 import 'package:fl_clash/core/portal_feed.dart';
-import 'package:dio/dio.dart' show Response;
+import 'package:dio/dio.dart' show Headers, RequestOptions, Response;
 import 'package:fl_clash/core/subscription_formats.dart';
 import 'package:fl_clash/core/update_backoff.dart';
 import 'package:fl_clash/core/xray_subscription.dart';

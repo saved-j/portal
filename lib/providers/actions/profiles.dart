@@ -686,8 +686,59 @@ class ProfilesAction extends _$ProfilesAction {
     return profile.update(
       validate: (path, key) => _core.validateProfile(path, key),
       fetch: _engineFetch,
+      // The probe sees what the panel sent; the engine gets what it can run.
+      probeFetch: _probeFetch,
       isCurrent: isCurrent,
     );
+  }
+
+  /// The raw answer: the core's request, or the app's own if the core cannot reach it.
+  Future<Response<Uint8List>> _probeFetch(
+    String url, {
+    Duration timeout = downloadTimeoutDuration,
+    Map<String, String> headers = const {},
+  }) async {
+    final core = await _coreFetch(url, headers: headers);
+    if (core != null) return core;
+    return (fetch ?? request.getFileResponseForUrl)(
+      url,
+      timeout: timeout,
+      headers: headers,
+    );
+  }
+
+  /// The same request, made by the core, with the headers the panel sent back.
+  Future<Response<Uint8List>?> _coreFetch(
+    String url, {
+    Map<String, String> headers = const {},
+  }) async {
+    try {
+      Map<String, List<String>> sent = const {};
+      final body = await _core.fetchSubscription(
+        url,
+        userAgent: headers['User-Agent'] ?? '',
+        onHeaders: (value) => sent = value,
+      );
+      if (body == null) return null;
+      commonPrint.log(
+        'subscription fetched by the core: ${body.length} bytes '
+        'ua=${headers['User-Agent'] ?? 'default'}',
+      );
+      return Response<Uint8List>(
+        requestOptions: RequestOptions(path: url),
+        statusCode: 200,
+        data: body,
+        headers: Headers.fromMap({
+          for (final entry in sent.entries) entry.key: entry.value,
+        }),
+      );
+    } catch (error) {
+      commonPrint.log(
+        'core fetch failed, asking from the app: ${compactError(error)}',
+        logLevel: LogLevel.warning,
+      );
+      return null;
+    }
   }
 
   /// The body the engine is handed, in the shape the engine reads.
@@ -703,11 +754,16 @@ class ProfilesAction extends _$ProfilesAction {
     Duration timeout = downloadTimeoutDuration,
     Map<String, String> headers = const {},
   }) async {
-    final response = await (fetch ?? request.getFileResponseForUrl)(
-      url,
-      timeout: timeout,
-      headers: headers,
-    );
+    // The core asks first: a panel decides what to serve per client, and the client it was
+    // written for is the engine's. The app's own HTTP stack is the fallback for a build whose
+    // core cannot reach the network.
+    final core = await _coreFetch(url, headers: headers);
+    final response = core ??
+        await (fetch ?? request.getFileResponseForUrl)(
+          url,
+          timeout: timeout,
+          headers: headers,
+        );
     final body = response.data;
     if (body == null || body.isEmpty) return response;
     final text = utf8.decode(body, allowMalformed: true);

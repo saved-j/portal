@@ -155,6 +155,18 @@ class CoreController {
     return _interface.encodeShareLinks(proxies);
   }
 
+  Future<Uint8List?> fetchSubscription(
+    String url, {
+    String userAgent = '',
+    void Function(Map<String, List<String>> headers)? onHeaders,
+  }) {
+    return _interface.fetchSubscription(
+      url,
+      userAgent: userAgent,
+      onHeaders: onHeaders,
+    );
+  }
+
   Future<List<List<Map<String, dynamic>>>> decodeShareLinks(
     List<String> lines,
   ) {

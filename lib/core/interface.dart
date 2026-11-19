@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -38,6 +40,16 @@ mixin CoreInterface {
   Future<List<String>> encodeShareLinks(List<Map<String, dynamic>> proxies);
 
   Future<List<List<Map<String, dynamic>>>> decodeShareLinks(List<String> lines);
+
+  /// The subscription body, fetched by the core's own HTTP client.
+  ///
+  /// A panel may answer the same client name differently depending on who asks, and the
+  /// engine's client is the one it was written for.
+  Future<Uint8List?> fetchSubscription(
+    String url, {
+    String userAgent,
+    void Function(Map<String, List<String>> headers)? onHeaders,
+  });
 
   Future<Map<String, dynamic>> getConfig(String path);
 
@@ -320,6 +332,32 @@ abstract class CoreHandlerInterface with CoreInterface {
             if (item is Map) Map<String, dynamic>.from(item),
         ],
     ];
+  }
+
+  @override
+  Future<Uint8List?> fetchSubscription(
+    String url, {
+    String userAgent = '',
+    void Function(Map<String, List<String>> headers)? onHeaders,
+  }) async {
+    final data = await _invokeMethod<Map<String, dynamic>>(
+      method: CoreMethod.fetchSubscription,
+      arguments: {'url': url, 'userAgent': userAgent},
+    );
+    if (data == null) return null;
+    final headers = data['headers'];
+    if (headers is Map && onHeaders != null) {
+      onHeaders({
+        for (final entry in headers.entries)
+          '${entry.key}': [
+            for (final value in (entry.value is List ? entry.value as List : [entry.value]))
+              '$value',
+          ],
+      });
+    }
+    final body = '${data['body'] ?? ''}';
+    if (body.isEmpty) return Uint8List(0);
+    return Uint8List.fromList(base64Decode(body));
   }
 
   @override

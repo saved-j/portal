@@ -15,6 +15,7 @@ enum CoreMethod {
   convertProxies,
   encodeShareLinks,
   decodeShareLinks,
+  fetchSubscription,
   updateConfig,
   getConfig,
   getProfileBase,

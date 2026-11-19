@@ -231,6 +231,9 @@ extension ProfileExtension on Profile {
   Future<Profile> update({
     required ValidateConfig validate,
     SubscriptionFetch? fetch,
+    /// The same link, asked without any conversion on the way: the second core's probe has
+    /// to see the body the panel sent, not the body the engine was handed.
+    SubscriptionFetch? probeFetch,
     DeviceHeaders? deviceHeaders,
     bool Function()? isCurrent,
   }) async {
@@ -248,6 +251,7 @@ extension ProfileExtension on Profile {
         sent,
         downloadTimeoutDuration,
         isCurrent,
+        probeFetch ?? fetch,
       );
     } on ProfileUpdateSupersededException {
       rethrow;
@@ -273,6 +277,7 @@ extension ProfileExtension on Profile {
           sent,
           fallbackTimeoutDuration,
           isCurrent,
+          probeFetch ?? fetch,
         );
         commonPrint.log(
           'subscription served by ${fallback.host}'
@@ -300,6 +305,7 @@ extension ProfileExtension on Profile {
     Map<String, String> headers,
     Duration timeout,
     bool Function()? isCurrent,
+    SubscriptionFetch probeFetch,
   ) async {
     final Response<Uint8List> response;
     try {
@@ -317,7 +323,7 @@ extension ProfileExtension on Profile {
     // The same link answers differently per client, so the second format is asked for
     // separately. A failure here must not fail the profile: the panel may simply not
     // serve one, and that is a red light, not an error.
-    final xray = await _fetchXrayBody(url, fetch, timeout);
+    final xray = await _fetchXrayBody(url, probeFetch, timeout);
     final disposition = response.headers.value('content-disposition');
     final userinfo = response.headers.value('subscription-userinfo');
     final providerHeaders = providerHeadersOf(response.headers.map);
