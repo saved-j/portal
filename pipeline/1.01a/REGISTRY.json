@@ -1,0 +1,59 @@
+{
+  "state": "live",
+  "series": "1.01a",
+  "base": {
+    "sha": "5b4d0669cd0105a7eb41078b17c36944bde7f044",
+    "name": "FlClashX upstream"
+  },
+  "head": "b4d60750b1e5a25f32aea715c4f708acaf638ea3",
+  "tree": "963193fb6b4ab9ff12dcd129fd7a3bdec9cf0650",
+  "apply": "git-apply",
+  "compare": "product",
+  "groups": [
+    {
+      "file": "patches/01-android-shell.patch",
+      "sha256": "93d12348e77bf76ac74145f0c6ffc987203c0cd903a56444b266f1463ac22c11",
+      "bytes": 1578416
+    },
+    {
+      "file": "patches/02-core-xray.patch",
+      "sha256": "3ed4475092befd3209d528bc0924c1617b727339899d2439a82cc655a1caa673",
+      "bytes": 8887531
+    },
+    {
+      "file": "patches/03-ui-dashboard.patch",
+      "sha256": "3f9abd0d193258b645052156d652f613249b47f1897ff7255f74635fde5a7848",
+      "bytes": 117042
+    },
+    {
+      "file": "patches/04-ui-profiles.patch",
+      "sha256": "a0ba7a09777bed930f67885e2732376786ebda36bbfe5223f6413ab1bcfce55b",
+      "bytes": 119879
+    },
+    {
+      "file": "patches/05-l10n.patch",
+      "sha256": "da2f2aad6012880dc1f5883f9ac10c0803fd43299333a3a7878ea90a3b865c6f",
+      "bytes": 344951
+    },
+    {
+      "file": "patches/06-branding-icons.patch",
+      "sha256": "5e744292bb929cb5a50e41449be593d0e8901666c21d880253fafe5896e7c867",
+      "bytes": 6587537
+    },
+    {
+      "file": "patches/07-desktop-product-name.patch",
+      "sha256": "5b14681fba334e29e80b7ae18cbb5544181449696464c80166e9815c2af556bf",
+      "bytes": 3016
+    },
+    {
+      "file": "patches/08-docs.patch",
+      "sha256": "63953b9b426a7d183e89411622a9c6eab32a18b8781b613b1dd7b8f8ca694982",
+      "bytes": 57229
+    },
+    {
+      "file": "patches/09-misc.patch",
+      "sha256": "8c6bb8302fa31eb7e5f18d9cab9f8f8c1b6608e8522a567b9719728380d8960f",
+      "bytes": 37108
+    }
+  ]
+}

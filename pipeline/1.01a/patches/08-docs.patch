@@ -1,0 +1,1422 @@
+diff --git a/apply.sh b/apply.sh
+new file mode 100755
+index 00000000..6a9d5240
+--- /dev/null
++++ b/apply.sh
+@@ -0,0 +1,189 @@
++#!/bin/bash
++# Portal patch dispatcher.
++#
++#   ./apply.sh list                 what series exist
++#   ./apply.sh 0.02 verify          apply the groups to pristine FlClashX and prove the result
++#   ./apply.sh 0.02 apply [dir]     materialise a working copy (default ~/.work/portal-0.02)
++#
++# 0.02 is a grouped series: each group is a binary diff of the product tree against the pinned
++# base and the groups are path-disjoint, so plain `git am` applies them in any order with no
++# --3way. 0.01a is the frozen 48-patch history: kept for audit, NOT replayable (its icon
++# patches conflict with each other), so the dispatcher refuses to apply it and says why.
++set -euo pipefail
++
++REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++PIPELINE="$REPO/pipeline"
++CURRENT="$(cat "$PIPELINE/CURRENT" 2>/dev/null || echo 0.02)"
++die() { printf 'error: %s\n' "$*" >&2; exit 1; }
++
++list_series() {
++  echo "current: $CURRENT"
++  for d in "$PIPELINE"/*/; do
++    [[ -f "$d/REGISTRY.json" ]] || continue
++    python3 - "$d" <<'PY'
++import json, os, sys
++d = sys.argv[1]
++r = json.load(open(os.path.join(d, 'REGISTRY.json')))
++base = (r.get('base') or {}).get('sha', '-')[:8]
++items = r.get('groups') or r.get('patches') or []
++state = r.get('state', 'live')
++print(f"  {os.path.basename(d.rstrip('/')):8s} base {base}  items {len(items):3d}  {state}")
++PY
++  done
++}
++
++series_dir() {
++  local v=$1
++  [[ -d "$PIPELINE/$v" ]] || die "no such series: $v (see ./apply.sh list)"
++  echo "$PIPELINE/$v"
++}
++
++gate() {
++  local dir=$1
++  [[ -f "$dir/REGISTRY.json" ]] || die "missing REGISTRY.json in $dir"
++  python3 - "$dir" <<'PY'
++import hashlib, json, os, sys
++d = sys.argv[1]
++r = json.load(open(os.path.join(d, 'REGISTRY.json')))
++items = r.get('groups') or r.get('patches') or []
++if not items:
++    raise SystemExit('registry lists no items')
++for it in items:
++    p = os.path.join(d, it['file'])
++    if not os.path.isfile(p):
++        raise SystemExit(f"missing patch: {p}")
++    if os.path.getsize(p) == 0:
++        raise SystemExit(f"empty patch: {p}")
++    want = it.get('sha256')
++    got = hashlib.sha256(open(p, 'rb').read()).hexdigest()
++    if want and got != want:
++        raise SystemExit(f"sha256 mismatch for {p}\n  registry {want}\n  on disk  {got}")
++    head = open(p, 'rb').read(4)
++    mode = r.get('apply', 'git-am')
++    # A series is either an mbox series (git am) or a plain diff series (git apply).
++    if mode == 'git-apply':
++        if not head.startswith(b'diff'):
++            raise SystemExit(f"not a git diff: {p}")
++    elif not head.startswith(b'From'):
++        raise SystemExit(f"not an mbox: {p}")
++print(f"gate ok: {len(items)} item(s), checksums match")
++PY
++}
++
++group_patches() { # prints full paths, in registry order
++  local dir=$1
++  python3 - "$dir" <<'PY'
++import json, os, sys
++d = sys.argv[1]
++r = json.load(open(os.path.join(d, 'REGISTRY.json')))
++for it in r.get('groups') or r.get('patches') or []:
++    print(os.path.join(d, it['file']))
++PY
++}
++
++verify() {
++  local v=$1 dir; dir=$(series_dir "$v")
++  local mode; mode=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('apply','git-am'))")
++  [[ "$mode" == "git-apply" || "$v" == "0.02" ]] || die "$v is an archive; it is not replayable"
++
++  gate "$dir"
++  local sha base
++  sha=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json'))['base']['sha'])")
++  base=$(git -C "$REPO" rev-parse --verify --quiet "${sha}^{commit}") || die "base $sha is not in this repo — git fetch upstream"
++  # A global, not a local: the EXIT trap runs after the function's scope is gone, and
++  # `set -u` then fails on an unbound local.
++  VERIFY_TMP=$(mktemp -d "${TMPDIR:-/tmp}/portal-verify.XXXXXX")
++  trap 'rm -rf "${VERIFY_TMP:-}"' EXIT
++  local tmp=$VERIFY_TMP
++  git clone -q --no-hardlinks "$REPO" "$tmp/w"
++  git -C "$tmp/w" checkout -q -B verify-0.02 "$base"
++  local applied=0
++  while IFS= read -r patch; do
++    if [[ "$mode" == "git-apply" ]]; then
++      if git -C "$tmp/w" apply --whitespace=nowarn "$patch"; then
++        echo "  apply ok: $(basename "$patch")"
++        applied=$((applied + 1))
++        continue
++      fi
++      die "does not apply to pristine FlClashX: $patch"
++    fi
++    if git -C "$tmp/w" am --quiet "$patch"; then
++      echo "  am ok: $(basename "$patch")"
++      applied=$((applied + 1))
++    else
++      git -C "$tmp/w" am --abort 2>/dev/null || true
++      die "does not apply to pristine FlClashX: $patch"
++    fi
++  done < <(group_patches "$dir")
++  [[ $applied -gt 0 ]] || die "no groups applied"
++  # A diff series leaves a dirty worktree; committing it is what makes the tree hash real.
++  if [[ "$mode" == "git-apply" ]]; then
++    git -C "$tmp/w" add -A >/dev/null
++    git -C "$tmp/w" -c user.name=verify -c user.email=verify@local \
++      commit -q -m "series $v" >/dev/null
++  fi
++
++  # Exact equality, not a file walk: hash the committed product tree of this repo with the
++  # pipeline directory removed, and compare it with the tree the groups produced. Build
++  # artefacts (build/, dist/, gradlew, local.properties, .DS_Store) never enter a commit,
++  # so they cannot make this comparison lie.
++  local wt idx
++  local compare; compare=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('compare','product'))")
++  # The series states the tree it must reproduce; that is the authority. HEAD may differ
++  # because the series itself lives in a later commit, and a snapshot cannot contain itself.
++  local declared; declared=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('tree',''))")
++  if [[ -n "$declared" ]]; then
++    wt=$declared
++  elif [[ "$compare" == "full" ]]; then
++    wt=$(git -C "$REPO" rev-parse 'HEAD^{tree}')
++  else
++    idx="$tmp/index"
++    GIT_INDEX_FILE="$idx" git -C "$REPO" read-tree HEAD
++    GIT_INDEX_FILE="$idx" git -C "$REPO" rm -r --cached --ignore-unmatch pipeline apply.sh >/dev/null
++    wt=$(GIT_INDEX_FILE="$idx" git -C "$REPO" write-tree)
++  fi
++
++
++  local got; got=$(git -C "$tmp/w" rev-parse 'HEAD^{tree}')
++  if [[ "$wt" == "$got" ]]; then
++    echo "OK: $applied group(s) reproduce the committed product tree ($wt)"
++  else
++    echo "MISMATCH: groups produced $got, the repository has $wt" >&2
++    git -C "$tmp/w" diff --stat "$wt" "$got" 2>/dev/null | head -20 >&2 || true
++    exit 1
++  fi
++}
++
++apply_series() {
++  local v=$1 dest=${2:-} dir; dir=$(series_dir "$v")
++  local mode; mode=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json')).get('apply','git-am'))")
++  [[ "$mode" == "git-apply" || "$v" == "0.02" ]] || die "$v is an archive and cannot be applied"
++  gate "$dir"
++  dest=${dest:-$HOME/.work/portal-$v}
++  local sha; sha=$(python3 -c "import json;print(json.load(open('$dir/REGISTRY.json'))['base']['sha'])")
++  [[ -e "$dest" ]] && die "destination exists: $dest (move it away first)"
++  git clone -q --no-hardlinks "$REPO" "$dest"
++  git -C "$dest" checkout -q -B "portal-$v" "$sha"
++  while IFS= read -r patch; do
++    if [[ "$mode" == "git-apply" ]]; then
++      git -C "$dest" apply --whitespace=nowarn "$patch" || die "does not apply: $patch"
++    else
++      git -C "$dest" am --quiet "$patch" || die "does not apply: $patch"
++    fi
++  done < <(group_patches "$dir")
++  echo "ready: $dest (branch portal-$v, base ${sha:0:8})"
++}
++
++
++case "${1:-}" in
++  list|'') list_series ;;
++  -h|--help|help) sed -n '2,12p' "$0" ;;
++  *)
++    v=$1; cmd=${2:-verify}
++    case "$cmd" in
++      verify) verify "$v" ;;
++      apply)  apply_series "$v" "${3:-}" ;;
++      *) die "unknown command: $cmd (verify|apply)" ;;
++    esac
++    ;;
++esac
+diff --git a/docs/DPI.md b/docs/DPI.md
+new file mode 100644
+index 00000000..4f8efcba
+--- /dev/null
++++ b/docs/DPI.md
+@@ -0,0 +1,90 @@
++# DPI evasion: design and platform matrix
++
++Portal client must work in two hostile networks at once: Russia (TSPU) and China (GFW).
++Both filter TLS by SNI/ClientHello, so three independent mechanisms are in scope, and they
++must not be confused with each other.
++
++Status: design. Facts marked **[verified]** were checked against the repos/releases listed at
++the end; everything marked **[check]** must be confirmed before it ships.
++
++## 1. Three layers, three different mechanics
++
++| Layer | What it does | Where it sits | Privileges |
++|---|---|---|---|
++| `finalmask` (in Prizrak-Core) | fragments / reshapes the TLS ClientHello (tlshello fragment, `xmc`, `sudoku`, `noise`, `udhop`, `quicParams`) | inside the core, all platforms | none |
++| ByeDPI (`hufrea/byedpi`) | userspace SOCKS proxy that opens the connection to the node itself with desync / OOB / fake-TLS strategies | local `socks5` outbound, chained through `dialer-proxy` | none for most strategies |
++| zapret (`bol-van/zapret`) | packet-level mangling of outgoing TCP/UDP (nfqws on nftables, winws on WinDivert) | transparent, no proxy; kernel/packet filter | root / administrator |
++
++Consequence: ByeDPI is applied **to the node connection**, not to the payload inside the tunnel.
++The core therefore needs `dialer-proxy` on the proxies (or on a group), pointing at the local
++ByeDPI SOCKS. zapret needs nothing in the config — it mangles the packets the core sends anyway.
++
++## 2. Platform matrix
++
++| Platform | finalmask | ByeDPI | zapret | Notes |
++|---|---|---|---|---|
++| Android | yes | yes — `libbyedpi.so`, no root | only with root (Magisk) | ship ByeDPI by default, hide zapret unless root detected |
++| Windows | yes | yes — releases `x86_64-w64`, `i686-w64` **[verified]** | yes — `winws` + WinDivert, needs admin | two options; see §4 |
++| Linux | yes | yes — `x86_64`, `aarch64`, `armv7`, `mips` **[verified]** | yes — `nfqws`, root | router and desktop share the same binaries |
++| macOS | yes | **no release binary** **[verified]** — build from source, C, `[check]` privileges per strategy | **not supported upstream** **[verified]** — `[check]` whether a maintained pf/divert fork exists | only finalmask + ByeDPI-from-source |
++| OpenWrt / Merlin (routers) | yes (core) | yes | yes — `openwrt-embedded` tarball **[verified]** | zapret is the natural router choice |
++| iOS | yes | no (no raw sockets, no background process) | no | finalmask only |
++
++`zapret` upstream releases ship `zapret-*.tar.gz`, `zapret-*.zip` and a separate
++`openwrt-embedded` archive; there is no macOS asset **[verified]**.
++
++## 3. What the app must own
++
++```
++DPI Engine (one service per platform)
++├─ detect capabilities: root/admin?, engine binaries present?, core supports finalmask?
++├─ start/stop engine, health-check by port (ByeDPI) or process (zapret)
++├─ inject into the core config:
++│    ByeDPI  -> proxies: [{name: "dpi-<strategy>", type: socks5, server: 127.0.0.1, port: N}]
++│                and dialer-proxy: "dpi-<strategy>" on the selected proxies/group
++│    zapret   -> nothing (transparent), only report status
++└─ publish state upward: OFF / STARTING / RUNNING(strategy) / FAILED(reason)
++```
++
++Strategies are **data, not code**: `assets/dpi/strategies/*.json` (one entry per preset with
++engine, argv, port, target platforms, notes). Presets RU and CN ship in the repo; users can add
++their own the way zapret users already share lists.
++
++UI: one switch "Обход DPI" + strategy list; the switch reads its state from the running engine,
++never from a saved flag. If the engine is not available for the platform, the switch is hidden
++rather than shown as broken.
++
++## 4. Windows: two engines, different trade-offs
++
++- `zapret/winws` — best coverage, needs administrator once per session (UAC), no proxy chaining.
++- ByeDPI `x86_64-w64` — no admin, but only covers connections that go through its SOCKS, so the
++  core must be pointed at it with `dialer-proxy`.
++
++Both should be offered: zapret as "рекомендуется", ByeDPI as "без прав администратора".
++
++## 5. macOS caveat
++
++There is no upstream zapret for macOS, and ByeDPI ships no darwin binary. So on macOS the honest
++default is `finalmask`; ByeDPI has to be compiled in CI and its strategies verified one by one.
++**[check]** Whether desync strategies rely on raw sockets that need root on Darwin.
++
++## 6. Interaction with the panel config
++
++The panel profile already contains groups and rules. DPI must not rewrite them: it only adds
++proxies and `dialer-proxy` fields. The injection layer must therefore be a structured YAML edit
++(parse → modify → serialize), not the string surgery used by the old Android client.
++
++## 7. Open questions
++
++1. Which ByeDPI strategies actually pass TSPU today, and which pass GFW today? Needs a measured
++   matrix per region, not a list from a blog.
++2. Does Prizrak-Core's `finalmask` cover the same cases as `--split-pos`/`--oob` desync, or only
++   fragmentation? Needs a test against the same hosts.
++3. zapret on Android: root-only means we need a clear "почему недоступно" explanation, not a
++   silent absence.
++
++## Sources checked
++
++- `hufrea/byedpi` releases v0.17.3 — asset list (linux + windows, no darwin) **[verified]**
++- `bol-van/zapret` releases v72.13 — `tar.gz`, `zip`, `openwrt-embedded`; no macOS **[verified]**
++- Prizrak-Core `README` / outbound list for finalmask family **[verified]**
+diff --git a/docs/PIPELINE.md b/docs/PIPELINE.md
+new file mode 100644
+index 00000000..4e4bc7cf
+--- /dev/null
++++ b/docs/PIPELINE.md
+@@ -0,0 +1,87 @@
++# Portal pipeline: patches in, installers out
++
++Portal is **FlClashX upstream + a numbered patch set**. Patches are public; users are not
++expected to build anything — CI produces installers and attaches them to the GitHub release.
++
++## Why patches, not a drifting fork
++
++FlClashX moves. A fork that accumulates its own commits has to be merged by hand every time
++upstream changes. A numbered patch set gives:
++
++- one-command upstream update (`fetch upstream` → `./apply.sh` → build);
++- a reviewable diff: every difference from stock FlClashX is a file you can read;
++- a hard failure when a patch no longer applies, instead of a silently wrong merge.
++
++`patches/*.patch` is the source of truth. Never edit the working tree and forget the patch.
++
++## Layout
++
++```
++portal/                    working tree (fork remote: saved-j/portal)
++├── apply.sh               apply / check / verify / upstream-log
++├── release.sh             tag → push → CI builds installers
++├── patches/               the whole difference from upstream
++│   └── 0001-core-*.patch
++└── docs/
++    ├── PIPELINE.md        this file
++    └── DPI.md             DPI evasion design
++```
++
++## Daily loop
++
++```bash
++cd ~/.work/portal
++./apply.sh check          # do the patches still apply to the current tree?
++./apply.sh                # clean upstream checkout + every patch → ~/.work/portal-work
++./apply.sh verify         # prove patches reproduce this tree (ignores pipeline files)
++./build.sh get && ./build.sh macos
++```
++
++Updating from upstream:
++
++```bash
++git fetch upstream
++git checkout -B portal upstream/main
++./apply.sh check          # if a patch conflicts, rebase it here — not in the tree
++```
++
++## Building per platform
++
++| Target | Command | Where it can run |
++|---|---|---|
++| macOS | `./build.sh macos` | any Mac with Xcode |
++| Android | `./build.sh apk` | any Mac with SDK + NDK (NDK is only needed by the gomobile core) |
++| Linux | `flutter build linux --release` | **Linux host only** — Flutter desktop builds are host-native |
++| Windows | `flutter build windows --release` | **Windows host only** |
++| iOS | — | no `ios/` target exists in the tree yet; needs `flutter create --platforms=ios` plus signing |
++
++Cross-building Linux from macOS or Windows from macOS is not supported by Flutter. That is why
++the release matrix runs on CI runners (`ubuntu-24.04`, `windows-2022`, `macos-26`), not on one Mac.
++
++## Release
++
++```bash
++./release.sh v0.1.0        # tags, pushes, CI builds linux/windows/macos/android
++```
++
++CI (`build.yaml`) runs `dart`, `plugins`, `go`, `rust`, `android`, `desktop` (linux/windows/macos)
++and `upload`. The `upload` job has `contents: write` and attaches every artifact to the release,
++then `publish.yaml` can re-run AUR/announcement steps without rebuilding.
++
++Result for a user: open Releases, download the file for their OS, run it. No toolchain, no patches,
++no build steps. The patch set stays public for review and for anyone who prefers to rebuild.
++
++## iOS
++
++There is no `ios/` directory: FlClashX ships android/macos/linux/windows only. Adding iOS means
++creating the platform target, checking every plugin for an iOS implementation (the Rust helper and
++the gomobile core are the risky ones), and an Apple Developer account for signing. Unsigned builds
++cannot be installed on a non-jailbroken device, so "download and run" is not possible for iOS —
++TestFlight is the realistic distribution path.
++
++## Rules that keep this reproducible
++
++1. Do not commit `pubspec.lock` churn caused by the China mirror (`pub.flutter-io.cn`). It rewrites
++   hosted URLs and would break upstream CI. Revert it before committing.
++2. `core/go.sum` must carry the checksums of the replaced modules; a build without them fails.
++3. Machine-level mirrors (rustup, crates.io) belong in tool config, not in the repo.
+diff --git a/test/panel_config_test.dart b/test/panel_config_test.dart
+new file mode 100644
+index 00000000..3dcc9c6a
+--- /dev/null
++++ b/test/panel_config_test.dart
+@@ -0,0 +1,55 @@
++import 'dart:convert';
++
++import 'package:fl_clash/core/subscription_formats.dart';
++import 'package:fl_clash/core/xray_config.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++/// Happ and Incy are served a ready Xray document instead of a link list, so the app must
++/// recognise it and put its socks inbound where the engine expects it.
++void main() {
++  const panelConfig = '''
++{
++  "log": {"loglevel": "warning"},
++  "inbounds": [{"tag": "old", "listen": "127.0.0.1", "port": 2080, "protocol": "socks"}],
++  "outbounds": [{"tag": "proxy", "protocol": "vless", "settings": {}}]
++}
++''';
++
++  test('a json config is recognised as the xray format', () {
++    expect(detectFormat(panelConfig), SubscriptionFormat.xray);
++  });
++
++  test('a config wrapped in a one-element array is still a config', () {
++    final wrapped = '[$panelConfig]';
++    expect(detectFormat(wrapped), SubscriptionFormat.xray);
++    final config = jsonDecode(withSocksInbound(wrapped)) as Map<String, dynamic>;
++    expect((config['inbounds'] as List).first['port'], 10808);
++    expect(config['inbounds'], isA<List>());
++    expect(jsonDecode(withSocksInbound(wrapped)), isA<Map>(),
++        reason: 'the wrapper is unwrapped for the core');
++  });
++
++  test('a json document without inbounds or outbounds is not', () {
++    expect(detectFormat('{"hasMihomo": true}'), isNull);
++  });
++
++  test('the socks inbound is moved to the port the engine forwards to', () {
++    final result = withSocksInbound(panelConfig, port: 10808);
++    final config = jsonDecode(result) as Map<String, dynamic>;
++    final inbounds = config['inbounds'] as List;
++    expect(inbounds, hasLength(1), reason: 'the old socks inbound is replaced');
++    expect((inbounds.first as Map)['port'], 10808);
++    expect((inbounds.first as Map)['listen'], '127.0.0.1');
++    // everything else survives, which is the point of passing the document through
++    expect((config['outbounds'] as List), hasLength(1));
++  });
++
++  test('a config with no socks inbound gets one, in front of the others', () {
++    const noSocks = '{"inbounds": [{"port": 9000, "protocol": "http"}], "outbounds": []}';
++    final config = jsonDecode(withSocksInbound(noSocks)) as Map<String, dynamic>;
++    final inbounds = config['inbounds'] as List;
++    expect(inbounds, hasLength(2));
++    expect((inbounds.first as Map)['protocol'], 'socks');
++    expect((inbounds.last as Map)['protocol'], 'http');
++  });
++}
+diff --git a/test/proxy_endpoints_test.dart b/test/proxy_endpoints_test.dart
+new file mode 100644
+index 00000000..6c0e48ec
+--- /dev/null
++++ b/test/proxy_endpoints_test.dart
+@@ -0,0 +1,31 @@
++import 'package:fl_clash/core/proxy_endpoints.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++void main() {
++  test('endpoints come from the proxies list, name by name', () {
++    const body = '''
++proxies:
++  - name: EE-1
++    type: vless
++    server: ee.example.com
++    port: 443
++  - name: FI-1
++    type: trojan
++    server: fi.example.net
++    port: "8443"
++  - name: no-server
++    type: ss
++''';
++    final endpoints = parseProxyEndpoints(body);
++    expect(endpoints['EE-1']!.host, 'ee.example.com');
++    expect(endpoints['EE-1']!.port, 443);
++    expect(endpoints['FI-1']!.port, 8443, reason: 'a quoted port still parses');
++    expect(endpoints.containsKey('no-server'), isFalse);
++  });
++
++  test('a body that is not a config yields nothing instead of guessing', () {
++    expect(parseProxyEndpoints('Subscription is unavailable'), isEmpty);
++    expect(parseProxyEndpoints(''), isEmpty);
++    expect(parseProxyEndpoints('{"not":"yaml proxies"}'), isEmpty);
++  });
++}
+diff --git a/test/setup_test.dart b/test/setup_test.dart
+index a07f74ad..059212ec 100644
+--- a/test/setup_test.dart
++++ b/test/setup_test.dart
+@@ -12,16 +12,16 @@ void main() {
+ 
+       expect(
+         config,
+-        contains('PRODUCT_BUNDLE_IDENTIFIER = com.follow.clashx.pre'),
++        contains('PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.pre'),
+       );
+-      expect(config, contains('APP_DISPLAY_NAME = FlClashX Pre'));
+-      expect(setup.macosBundleName('pre'), 'FlClashX Pre.app');
++      expect(config, contains('APP_DISPLAY_NAME = Portal Pre'));
++      expect(setup.macosBundleName('pre'), 'Portal Pre.app');
+     });
+ 
+     test('stable and dev builds of macOS keep the stable identity', () {
+       for (final env in ['stable', 'dev']) {
+         expect(setup.macosChannelConfig(env), isNull);
+-        expect(setup.macosBundleName(env), 'FlClashX.app');
++        expect(setup.macosBundleName(env), 'Portal.app');
+       }
+     });
+ 
+@@ -48,7 +48,7 @@ void main() {
+ 
+       expect(check, isNonNegative);
+       expect(check, lessThan(sources));
+-      expect(project, contains(r'expected=com.follow.clashx.pre'));
++      expect(project, contains(r'expected=io.portal.xfc.pre'));
+       expect(
+         project,
+         contains(r'[ \"$CONFIGURATION\" = \"Debug\" ] && exit 0'),
+@@ -131,18 +131,18 @@ hooks:
+     test('names artifacts by platform and architecture', () {
+       expect(
+         setup.artifactName('windows', 'amd64', '-setup.exe'),
+-        'FlClashX-windows-amd64-setup.exe',
++        'Portal-windows-amd64-setup.exe',
+       );
+       expect(
+         setup.artifactName('android', 'arm64-v8a', '.apk'),
+-        'FlClashX-android-arm64-v8a.apk',
++        'Portal-android-arm64-v8a.apk',
+       );
+     });
+ 
+     test('signs the code inside the macOS app before the app', () {
+       final root = Directory.systemTemp.createTempSync('setup_sign');
+       addTearDown(() => root.deleteSync(recursive: true));
+-      final app = p.join(root.path, 'FlClashX.app');
++      final app = p.join(root.path, 'Portal.app');
+       String at(String path) => p.joinAll([app, ...path.split('/')]);
+       for (final dir in [
+         'Contents/Frameworks/FlutterMacOS.framework',
+@@ -153,7 +153,7 @@ hooks:
+         Directory(at(dir)).createSync(recursive: true);
+       }
+       for (final file in [
+-        'Contents/MacOS/FlClashX',
++        'Contents/MacOS/Portal',
+         'Contents/MacOS/FlClashCore',
+         'Contents/Frameworks/Info.plist',
+       ]) {
+@@ -208,7 +208,7 @@ hooks:
+         template,
+         config: {
+           'app_id': 'ABC',
+-          'display_name': 'FlClashX',
++          'display_name': 'Portal',
+           'publisher': 'pluralplay',
+           'locales': [
+             {'lang': 'ru'},
+@@ -222,7 +222,7 @@ hooks:
+         arch: 'amd64',
+         sourceDir: r'C:\build',
+         outputDir: r'C:\dist',
+-        outputBaseName: 'FlClashX-windows-amd64-setup',
++        outputBaseName: 'Portal-windows-amd64-setup',
+         rootDir: r'C:\repo',
+       );
+       expect(script, contains('AppId=ABC'));
+@@ -320,7 +320,7 @@ hooks:
+       );
+     });
+ 
+-    test('the installer takes over a 0.4 FlClashX registration in place', () {
++    test('the installer takes over the previous FlClashX registration in place', () {
+       final script = File(
+         'windows/packaging/exe/inno_setup.iss',
+       ).readAsStringSync();
+@@ -344,8 +344,8 @@ hooks:
+       ).readAsStringSync();
+       final config = {
+         'app_id': 'D915C0D1-2F5B-4676-97D5-6D55F3EF45A4',
+-        'display_name': 'FlClashX',
+-        'executable_name': 'FlClashX.exe',
++        'display_name': 'Portal',
++        'executable_name': 'Portal.exe',
+       };
+ 
+       String render(setup.DesktopIdentity identity) => setup.renderInnoSetup(
+@@ -355,7 +355,7 @@ hooks:
+         arch: 'amd64',
+         sourceDir: r'C:\build',
+         outputDir: r'C:\dist',
+-        outputBaseName: 'FlClashX-windows-amd64-setup',
++        outputBaseName: 'Portal-windows-amd64-setup',
+         rootDir: r'C:\repo',
+         identity: identity,
+       );
+@@ -363,11 +363,11 @@ hooks:
+       test('installs under its own id, name, Helper and data', () {
+         final pre = render(setup.preDesktop);
+         expect(pre, isNot(contains('D915C0D1-2F5B-4676-97D5-6D55F3EF45A4')));
+-        expect(pre, contains(r'DefaultDirName={autopf}\FlClashX Pre'));
+-        expect(pre, contains("HelperService = 'FlClashXPreHelperService';"));
++        expect(pre, contains(r'DefaultDirName={autopf}\Portal Pre'));
++        expect(pre, contains("HelperService = 'PortalPreHelperService';"));
+         expect(pre, contains('AdoptLegacy = False;'));
+-        expect(pre, contains("KillProcess('FlClashXPre.exe');"));
+-        expect(pre, contains(r'{userappdata}\com.follow\clashx.pre'));
++        expect(pre, contains("KillProcess('PortalPre.exe');"));
++        expect(pre, contains(r'{userappdata}\io.portal\xfc.pre'));
+         expect(
+           RegExp(r'\{\{([A-Z_]+)\}\}').allMatches(pre).map((m) => m[1]),
+           everyElement('NAME'),
+@@ -377,11 +377,11 @@ hooks:
+       test('leaves the stable installer as it was', () {
+         final stable = render(setup.stableDesktop);
+         expect(stable, contains('AppId=D915C0D1-2F5B-4676-97D5-6D55F3EF45A4'));
+-        expect(stable, contains(r'DefaultDirName={autopf}\FlClashX'));
+-        expect(stable, contains("HelperService = 'FlClashXHelperService';"));
++        expect(stable, contains(r'DefaultDirName={autopf}\Portal'));
++        expect(stable, contains("HelperService = 'PortalHelperService';"));
+         expect(stable, contains('AdoptLegacy = True;'));
+-        expect(stable, contains("KillProcess('FlClashX.exe');"));
+-        expect(stable, contains(r"{userappdata}\com.follow\clashx')"));
++        expect(stable, contains("KillProcess('Portal.exe');"));
++        expect(stable, contains(r"{userappdata}\io.portal\xfc')"));
+       });
+ 
+       test('stops only the Core started from its own install', () {
+@@ -392,8 +392,8 @@ hooks:
+ 
+       test('packages for Linux under its own names', () {
+         final linuxConfig = {
+-          'display_name': 'FlClashX',
+-          'startup_wm_class': 'com.follow.clashx',
++          'display_name': 'Portal',
++          'startup_wm_class': 'io.portal.xfc',
+           'maintainer': {'name': 'pluralplay', 'email': 'x@example.com'},
+           'postuninstall_scripts': [
+             'rm -f /etc/systemd/system/flclashx-helper.service',
+@@ -406,19 +406,19 @@ hooks:
+           arch: 'amd64',
+         );
+         expect(control, contains('Package: flclashx-pre'));
+-        expect(control, contains('Description: FlClashX Pre'));
++        expect(control, contains('Description: Portal Pre'));
+         final spec = setup.rpmSpecOf(
+           linuxConfig,
+           setup.preDesktop,
+           version: '0.5.1',
+         );
+         expect(spec, contains('Name: flclashx-pre'));
+-        expect(spec, contains('/opt/FlClashXPre/*'));
++        expect(spec, contains('/opt/PortalPre/*'));
+         expect(
+           spec,
+-          contains('/usr/share/applications/com.follow.clashx.pre.desktop'),
++          contains('/usr/share/applications/io.portal.xfc.pre.desktop'),
+         );
+-        expect(spec, contains('apps/FlClashXPre.png'));
++        expect(spec, contains('apps/PortalPre.png'));
+         expect(spec, contains('flclashx-pre-helper.service'));
+         expect(spec, isNot(contains('/flclashx-helper.service')));
+         final entry = setup.desktopEntry(
+@@ -426,10 +426,10 @@ hooks:
+           exec: setup.linuxExecOf(setup.preDesktop),
+           identity: setup.preDesktop,
+         );
+-        expect(entry, contains('Name=FlClashX Pre'));
+-        expect(entry, contains('Exec=/opt/FlClashXPre/FlClashXPre %u'));
+-        expect(entry, contains('Icon=FlClashXPre'));
+-        expect(entry, contains('StartupWMClass=com.follow.clashx.pre'));
++        expect(entry, contains('Name=Portal Pre'));
++        expect(entry, contains('Exec=/opt/PortalPre/PortalPre %u'));
++        expect(entry, contains('Icon=PortalPre'));
++        expect(entry, contains('StartupWMClass=io.portal.xfc.pre'));
+         expect(
+           setup.debControlOf(
+             linuxConfig,
+@@ -440,10 +440,10 @@ hooks:
+           contains('Package: flclashx\n'),
+         );
+         expect(
+-          setup.desktopEntry(linuxConfig, exec: '/opt/FlClashX/FlClashX'),
++          setup.desktopEntry(linuxConfig, exec: '/opt/Portal/Portal'),
+           allOf(
+-            contains('Icon=FlClashX\n'),
+-            contains('StartupWMClass=com.follow.clashx\n'),
++            contains('Icon=Portal\n'),
++            contains('StartupWMClass=io.portal.xfc\n'),
+           ),
+         );
+       });
+@@ -451,24 +451,24 @@ hooks:
+       test('renames the app and Helper in the staged bundle only for pre', () {
+         final dir = Directory.systemTemp.createTempSync('channel_bundle');
+         addTearDown(() => dir.deleteSync(recursive: true));
+-        for (final name in ['FlClashX.exe', 'FlClashXHelperService.exe']) {
++        for (final name in ['Portal.exe', 'PortalHelperService.exe']) {
+           File('${dir.path}/$name').writeAsStringSync('x');
+         }
+         setup.renameForChannel(dir.path, setup.stableDesktop, ext: '.exe');
+-        expect(File('${dir.path}/FlClashX.exe').existsSync(), isTrue);
++        expect(File('${dir.path}/Portal.exe').existsSync(), isTrue);
+         setup.renameForChannel(dir.path, setup.preDesktop, ext: '.exe');
+-        expect(File('${dir.path}/FlClashXPre.exe').existsSync(), isTrue);
++        expect(File('${dir.path}/PortalPre.exe').existsSync(), isTrue);
+         expect(
+-          File('${dir.path}/FlClashXPreHelperService.exe').existsSync(),
++          File('${dir.path}/PortalPreHelperService.exe').existsSync(),
+           isTrue,
+         );
+-        expect(File('${dir.path}/FlClashX.exe').existsSync(), isFalse);
++        expect(File('${dir.path}/Portal.exe').existsSync(), isFalse);
+       });
+ 
+       test('refuses a pre build the channel never reached', () {
+         final dir = Directory.systemTemp.createTempSync('channel_marker');
+         addTearDown(() => dir.deleteSync(recursive: true));
+-        final binary = File('${dir.path}/FlClashX.exe')
++        final binary = File('${dir.path}/Portal.exe')
+           ..writeAsBytesSync([0, ...setup.utf16le('clashx.pre'), 0]);
+         setup.requireChannelMarker(binary.path, setup.utf16le('clashx.pre'));
+         binary.writeAsBytesSync(setup.utf16le('clashx'));
+diff --git a/test/subscription_availability_test.dart b/test/subscription_availability_test.dart
+new file mode 100644
+index 00000000..718f3943
+--- /dev/null
++++ b/test/subscription_availability_test.dart
+@@ -0,0 +1,88 @@
++import 'dart:convert';
++import 'dart:typed_data';
++
++import 'package:fl_clash/core/subscription_availability.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++void main() {
++  test('a vless reality link becomes a node the engine could run', () {
++    final nodes = parseShareLinks(
++      'vless://11111111-2222-3333-4444-555555555555@a.example.net:443'
++      '?type=tcp&security=reality&pbk=PUB&sid=ab12&sni=www.microsoft.com&fp=chrome'
++      '#EE-1',
++    );
++    expect(nodes, hasLength(1));
++    final node = nodes.first;
++    expect(node['name'], 'EE-1');
++    expect(node['server'], 'a.example.net');
++    expect(node['port'], 443);
++    expect(node['uuid'], '11111111-2222-3333-4444-555555555555');
++    expect(node['reality-opts'], {'public-key': 'PUB', 'short-id': 'ab12'});
++    expect(node['servername'], 'www.microsoft.com');
++  });
++
++  test('a vless ws link keeps its path and host header', () {
++    final nodes = parseShareLinks(
++      'vless://uuid@b.example.net:443?type=ws&security=tls&path=%2Fray&host=cdn.example.net#WS',
++    );
++    final node = nodes.single;
++    expect(node['network'], 'ws');
++    expect(node['ws-path'], '/ray');
++    expect(node['ws-headers'], {'Host': 'cdn.example.net'});
++    expect(node['tls'], true);
++  });
++
++  test('a base64-wrapped list is unwrapped before parsing', () {
++    final inner = 'trojan://pass@c.example.net:443?sni=c.example.net#T1\n';
++    final wrapped = base64Encode(utf8.encode(inner));
++    final nodes = parseShareLinks(wrapped);
++    expect(nodes, hasLength(1));
++    expect(nodes.first['type'], 'trojan');
++    expect(nodes.first['password'], 'pass');
++  });
++
++  test('a vmess link is read from its base64 json', () {
++    final payload = base64Encode(utf8.encode(jsonEncode({
++      'ps': 'VM',
++      'add': 'd.example.net',
++      'port': '443',
++      'id': 'uuid-1',
++      'aid': '0',
++      'net': 'ws',
++      'tls': 'tls',
++      'sni': 'd.example.net',
++      'path': '/v',
++      'host': 'd.example.net',
++    })));
++    final nodes = parseShareLinks('vmess://$payload');
++    expect(nodes, hasLength(1));
++    expect(nodes.first['name'], 'VM');
++    expect(nodes.first['network'], 'ws');
++    expect(nodes.first['tls'], true);
++  });
++
++  test('garbage in the body yields no nodes rather than a broken one', () {
++    expect(parseShareLinks('<html>502</html>'), isEmpty);
++    expect(parseShareLinks('vless://'), isEmpty);
++    expect(parseShareLinks(''), isEmpty);
++  });
++
++  test('the selection falls back to the first node when the name is unknown', () {
++    final nodes = parseShareLinks(
++      'vless://u@a:443#Node-A\nvless://u@b:443#Node-B\n',
++    );
++    expect(xrayNodeFor(nodes, 'Node-B')?['name'], 'Node-B');
++    expect(xrayNodeFor(nodes, 'Missing')?['name'], 'Node-A');
++    expect(xrayNodeFor(const [], 'x'), isNull);
++  });
++
++  test('availability reports each format separately', () {
++    final onlyXray = SubscriptionAvailability(
++      xray: Uint8List.fromList(utf8.encode('vless://u@a:443#n')),
++    );
++    expect(onlyXray.hasXray, isTrue);
++    expect(onlyXray.hasMihomo, isFalse);
++    expect(usableForXray(onlyXray), isTrue);
++    expect(usableForEngine(onlyXray), isFalse);
++  });
++}
+diff --git a/test/subscription_formats_test.dart b/test/subscription_formats_test.dart
+new file mode 100644
+index 00000000..a9005c28
+--- /dev/null
++++ b/test/subscription_formats_test.dart
+@@ -0,0 +1,42 @@
++import 'dart:convert';
++
++import 'package:fl_clash/core/subscription_formats.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++void main() {
++  test('clash yaml is recognised by its proxies list', () {
++    expect(
++      detectFormat('proxies:\n  - name: a\n    type: vless\nproxy-groups: []\nrules: []\n'),
++      SubscriptionFormat.mihomo,
++    );
++  });
++
++  test('plain share links are recognised as the xray format', () {
++    expect(
++      detectFormat('vless://uuid@host:443?type=ws#node\nvmess://abc\n'),
++      SubscriptionFormat.xray,
++    );
++  });
++
++  test('base64 share links are decoded before deciding', () {
++    final inner = 'vless://uuid@host:443?type=ws#node\ntrojan://pass@host:443#n2\n';
++    final encoded = base64Encode(utf8.encode(inner));
++    expect(detectFormat(encoded), SubscriptionFormat.xray);
++  });
++
++  test('an error page is not a subscription, however green the light would look', () {
++    expect(detectFormat('Подписка временно недоступна'), isNull);
++    expect(detectFormat('<html><body>502 Bad Gateway</body></html>'), isNull);
++    expect(detectFormat('{"error":"not found"}'), isNull);
++    expect(detectFormat(''), isNull);
++  });
++
++  test('a port-only clash config still counts as the engine format', () {
++    expect(detectFormat('port: 7890\nmode: rule\n'), SubscriptionFormat.mihomo);
++  });
++
++  test('each format asks with its own user-agent', () {
++    expect(subscriptionUserAgents[SubscriptionFormat.mihomo], contains('mihomo'));
++    expect(subscriptionUserAgents[SubscriptionFormat.xray], isNot(contains('mihomo')));
++  });
++}
+diff --git a/test/subscription_guard_test.dart b/test/subscription_guard_test.dart
+new file mode 100644
+index 00000000..dc4cc593
+--- /dev/null
++++ b/test/subscription_guard_test.dart
+@@ -0,0 +1,41 @@
++import 'dart:convert';
++import 'dart:typed_data';
++
++import 'package:fl_clash/core/subscription_availability.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++/// A subscription that worked five minutes ago must survive a bad answer from the panel.
++/// These tests describe what counts as "usable" before anything on disk is replaced.
++void main() {
++  Uint8List bytes(String text) => Uint8List.fromList(utf8.encode(text));
++
++  test('an error page is not a usable body', () {
++    expect(parseShareLinks('Подписка временно недоступна'), isEmpty);
++    expect(parseShareLinks('<html>502 Bad Gateway</html>'), isEmpty);
++  });
++
++  test('an empty body is not usable', () {
++    expect(parseShareLinks(''), isEmpty);
++    expect(parseShareLinks('   \n\t '), isEmpty);
++  });
++
++  test('a real node list is usable', () {
++    final body = bytes('vless://uuid@host:443?security=reality&pbk=K&sid=1#Node');
++    expect(parseShareLinks(utf8.decode(body)), isNotEmpty);
++  });
++
++  test('a partial list with one broken line still keeps the good node', () {
++    final nodes = parseShareLinks(
++      'vless://\n'
++      'vless://uuid@good.example.net:443#Good\n'
++      'not-a-link\n',
++    );
++    expect(nodes, hasLength(1));
++    expect(nodes.single['name'], 'Good');
++  });
++
++  test('a clash yaml body is never mistaken for a node list', () {
++    const yaml = 'proxies:\n  - name: a\n    type: vless\n';
++    expect(parseShareLinks(yaml), isEmpty);
++  });
++}
+diff --git a/test/xray_bridge_config_test.dart b/test/xray_bridge_config_test.dart
+new file mode 100644
+index 00000000..d3d6fe6f
+--- /dev/null
++++ b/test/xray_bridge_config_test.dart
+@@ -0,0 +1,69 @@
++import 'package:fl_clash/core/xray_bridge_config.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++void main() {
++  Map<String, dynamic> base() => {
++        'mode': 'rule',
++        'proxies': [
++          {'name': 'node-a', 'type': 'vless', 'server': 'a', 'port': 443},
++        ],
++        'proxy-groups': [
++          {'name': 'Auto', 'type': 'url-test', 'proxies': ['node-a']},
++        ],
++        'rules': ['DOMAIN-SUFFIX,vk.com,Auto'],
++      };
++
++  test('the bridge adds one socks proxy and one group, and forces global mode', () {
++    final wrapped = withXrayBridge(base());
++    final proxies = wrapped['proxies'] as List;
++    final groups = wrapped['proxy-groups'] as List;
++
++    expect(proxies.length, 2);
++    final bridge = proxies.last as Map;
++    expect(bridge['name'], xrayBridgeTag);
++    expect(bridge['type'], 'socks5');
++    expect(bridge['server'], '127.0.0.1');
++    expect(bridge['port'], 10808);
++
++    expect(groups.length, 2);
++    expect((groups.last as Map)['proxies'], [xrayBridgeTag]);
++    expect(wrapped['mode'], 'global');
++    expect(wrapped['GLOBAL'], xrayBridgeGroup);
++
++    // the subscription's own entries are still there, just unused in global mode
++    expect((proxies.first as Map)['name'], 'node-a');
++  });
++
++  test('the original config is left untouched', () {
++    final original = base();
++    withXrayBridge(original);
++    expect((original['proxies'] as List).length, 1);
++    expect(original['mode'], 'rule');
++    expect(original.containsKey('GLOBAL'), isFalse);
++  });
++
++  test('wrapping twice does not stack a second bridge', () {
++    final once = withXrayBridge(base());
++    final twice = withXrayBridge(once);
++    final names = (twice['proxies'] as List).map((p) => (p as Map)['name']);
++    expect(names.where((n) => n == xrayBridgeTag).length, 1);
++    final groups = (twice['proxy-groups'] as List).map((g) => (g as Map)['name']);
++    expect(groups.where((n) => n == xrayBridgeGroup).length, 1);
++  });
++
++  test('removing the bridge restores the previous mode and drops only its entries', () {
++    final wrapped = withXrayBridge(base());
++    final restored = withoutXrayBridge(wrapped, restoreMode: 'rule');
++
++    expect(restored['mode'], 'rule');
++    expect(restored.containsKey('GLOBAL'), isFalse);
++    expect((restored['proxies'] as List).length, 1);
++    expect((restored['proxy-groups'] as List).length, 1);
++    expect((restored['rules'] as List).length, 1);
++  });
++
++  test('a custom port is honoured', () {
++    final wrapped = withXrayBridge(base(), port: 2080);
++    expect(((wrapped['proxies'] as List).last as Map)['port'], 2080);
++  });
++}
+diff --git a/test/xray_config_test.dart b/test/xray_config_test.dart
+new file mode 100644
+index 00000000..cddf7bc6
+--- /dev/null
++++ b/test/xray_config_test.dart
+@@ -0,0 +1,100 @@
++import 'dart:convert';
++
++import 'package:fl_clash/core/xray_config.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++/// These tests describe the mapping the app relies on: a Clash proxy entry in, an Xray
++/// outbound out. They run without a phone, a tunnel or a panel.
++void main() {
++  test('vless over ws with tls keeps every field the server needs', () {
++    final json = xrayConfigJson({
++      'name': 'EE-1',
++      'type': 'vless',
++      'server': 'ee1.example.net',
++      'port': 443,
++      'uuid': '11111111-2222-3333-4444-555555555555',
++      'network': 'ws',
++      'tls': true,
++      'servername': 'cdn.example.net',
++      'ws-path': '/ray',
++      'ws-headers': {'Host': 'cdn.example.net'},
++      'client-fingerprint': 'chrome',
++    });
++    final config = jsonDecode(json) as Map<String, dynamic>;
++    final outbound = (config['outbounds'] as List).first as Map<String, dynamic>;
++
++    expect(outbound['protocol'], 'vless');
++    final vnext = (outbound['settings'] as Map)['vnext'] as List;
++    expect((vnext.first as Map)['address'], 'ee1.example.net');
++    expect((vnext.first as Map)['port'], 443);
++    expect(((vnext.first as Map)['users'] as List).first['id'],
++        '11111111-2222-3333-4444-555555555555');
++
++    final stream = outbound['streamSettings'] as Map;
++    expect(stream['network'], 'ws');
++    expect((stream['wsSettings'] as Map)['path'], '/ray');
++    expect(stream['security'], 'tls');
++    expect((stream['tlsSettings'] as Map)['serverName'], 'cdn.example.net');
++  });
++
++  test('reality keeps its public key and short id', () {
++    final config = xrayConfigFor({
++      'type': 'vless',
++      'server': 'r.example.net',
++      'port': 443,
++      'uuid': 'u',
++      'network': 'tcp',
++      'tls': true,
++      'servername': 'www.microsoft.com',
++      'client-fingerprint': 'firefox',
++      'reality-opts': {'public-key': 'PUBKEY', 'short-id': 'ab12'},
++    });
++    final stream = ((config['outbounds'] as List).first
++        as Map<String, dynamic>)['streamSettings'] as Map;
++    expect(stream['security'], 'reality');
++    final reality = stream['realitySettings'] as Map;
++    expect(reality['publicKey'], 'PUBKEY');
++    expect(reality['shortId'], 'ab12');
++    expect(reality['serverName'], 'www.microsoft.com');
++    expect(reality['fingerprint'], 'firefox');
++  });
++
++  test('trojan carries a password and a grpc transport', () {
++    final config = xrayConfigFor({
++      'type': 'trojan',
++      'server': 't.example.net',
++      'port': '8443',
++      'password': 'secret',
++      'network': 'grpc',
++      'grpc-service-name': 'svc',
++    });
++    final outbound = (config['outbounds'] as List).first as Map;
++    expect(outbound['protocol'], 'trojan');
++    final server = ((outbound['settings'] as Map)['servers'] as List).first as Map;
++    expect(server['port'], 8443); // a string port is accepted and normalised
++    expect(server['password'], 'secret');
++    expect((outbound['streamSettings'] as Map)['network'], 'grpc');
++    expect(((outbound['streamSettings'] as Map)['grpcSettings'] as Map)['serviceName'],
++        'svc');
++  });
++
++  test('the socks inbound is always present and bound to localhost', () {
++    final config = xrayConfigFor({
++      'type': 'vless',
++      'server': 's',
++      'port': 1,
++      'uuid': 'u',
++    }, socksPort: 10808);
++    final inbound = (config['inbounds'] as List).first as Map;
++    expect(inbound['protocol'], 'socks');
++    expect(inbound['listen'], '127.0.0.1');
++    expect(inbound['port'], 10808);
++  });
++
++  test('an unknown protocol is refused instead of silently producing nothing', () {
++    expect(
++      () => xrayConfigFor({'type': 'ss', 'server': 's', 'port': 1}),
++      throwsA(isA<UnsupportedProxyType>()),
++    );
++  });
++}
+diff --git a/test/xray_servers_test.dart b/test/xray_servers_test.dart
+new file mode 100644
+index 00000000..52d5e7a7
+--- /dev/null
++++ b/test/xray_servers_test.dart
+@@ -0,0 +1,94 @@
++import 'dart:convert';
++
++import 'package:fl_clash/core/subscription_availability.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++/// The panel's Xray config carries its own servers and selectors. The owner's server list
++/// must be rebuilt from it, otherwise the list keeps showing the engine's nodes after the
++/// switch has already moved the traffic to the other core.
++void main() {
++  Map<String, dynamic> config() => jsonDecode('''
++{
++  "outbounds": [
++    {"tag": "direct", "protocol": "freedom"},
++    {"tag": "block", "protocol": "blackhole"},
++    {"tag": "Auto Asia", "protocol": "selector", "settings": {"servers": ["KR-1", "JP-2"]}},
++    {"tag": "KR-1", "protocol": "vless",
++     "settings": {"vnext": [{"address": "kr.example.net", "port": 443}]},
++     "streamSettings": {"network": "tcp"}},
++    {"tag": "JP-2", "protocol": "trojan",
++     "settings": {"servers": [{"address": "jp.example.net", "port": 8443}]},
++     "streamSettings": {"network": "ws"}}
++  ]
++}
++''') as Map<String, dynamic>;
++
++  test('traffic-carrying outbounds become servers, routers do not', () {
++    final servers = xrayConfigServers(config());
++    final names = servers.map((s) => s['name']).toList();
++    expect(names, ['KR-1', 'JP-2']);
++    expect(names, isNot(contains('direct')));
++    expect(names, isNot(contains('Auto Asia')), reason: 'a selector is a group, not a server');
++  });
++
++  test('each server carries the address the row shows', () {
++    final servers = xrayConfigServers(config());
++    expect(servers.first['serverDescription'], 'kr.example.net:443 · tcp');
++    expect(servers.last['serverDescription'], 'jp.example.net:8443 · ws');
++  });
++
++  test('a selector becomes a group with its members', () {
++    final groups = xrayConfigGroups(config());
++    expect(groups, hasLength(1));
++    expect(groups.single['name'], 'Auto Asia');
++    expect(groups.single['type'], 'select');
++    expect((groups.single['proxies'] as List), ['KR-1', 'JP-2']);
++  });
++
++  test('the servers a panel compiled are not the engine ones', () {
++    // This is the whole point: a subscription that answers both formats can still name
++    // different nodes in each, and extra ones only in the xray build.
++    final servers = xrayConfigServers(config());
++    expect(servers.map((s) => s['name']), isNot(contains('Auto Europa')));
++  });
++
++  test('a panel tag like auto-2 is replaced by its hostname', () {
++    final servers = xrayConfigServers({
++      'outbounds': [
++        {
++          'tag': 'auto-3',
++          'protocol': 'vless',
++          'settings': {
++            'vnext': [
++              {'address': 'de-3.bb800.info', 'port': 443},
++            ],
++          },
++        },
++      ],
++    });
++    expect(servers.single['name'], 'DE-3');
++    expect(servers.single['server'], 'de-3.bb800.info');
++  });
++
++  test('a tag that already reads like a name stays', () {
++    final servers = xrayConfigServers({
++      'outbounds': [
++        {
++          'tag': 'Австралия',
++          'protocol': 'vless',
++          'settings': {
++            'vnext': [
++              {'address': 'au-1.example.net', 'port': 443},
++            ],
++          },
++        },
++      ],
++    });
++    expect(servers.single['name'], 'Австралия');
++  });
++
++  test('a config without outbounds yields nothing instead of throwing', () {
++    expect(xrayConfigServers(const {}), isEmpty);
++    expect(xrayConfigGroups(const {'outbounds': 'nonsense'}), isEmpty);
++  });
++}
+diff --git a/test/xray_subscription_test.dart b/test/xray_subscription_test.dart
+new file mode 100644
+index 00000000..622354a6
+--- /dev/null
++++ b/test/xray_subscription_test.dart
+@@ -0,0 +1,157 @@
++import 'dart:convert';
++
++import 'package:fl_clash/core/xray_subscription.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++/// The rules here come from the Incy developer docs: an array of full xray configurations,
++/// where each element is a separate server, named after its first proxy outbound.
++void main() {
++  group('endpoint', _endpointCases);
++  Map<String, dynamic> config(String tag, {String description = '', String remarks = ''}) => {
++        if (remarks.isNotEmpty) 'remarks': remarks,
++        'meta': {'serverDescription': description},
++        'inbounds': [
++          {'tag': 'socks-in', 'protocol': 'socks', 'port': 10808},
++        ],
++        'outbounds': [
++          {'tag': 'direct', 'protocol': 'freedom'},
++          {'tag': tag, 'protocol': 'vless', 'settings': {}},
++          {'tag': 'block', 'protocol': 'blackhole'},
++        ],
++      };
++
++  test('each element of the array is a server', () {
++    final body = jsonEncode([config('Эстония'), config('Финляндия')]);
++    final servers = parseXraySubscription(body);
++    expect(servers, hasLength(2));
++    expect(servers.first.name, 'Эстония');
++    expect(servers.last.name, 'Финляндия');
++  });
++
++  test('the name is the first proxy outbound, not direct', () {
++    final servers = parseXraySubscription(jsonEncode(config('Германия')));
++    expect(servers.single.name, 'Германия');
++  });
++
++  test('the description comes from meta.serverDescription', () {
++    final servers = parseXraySubscription(
++      jsonEncode(config('Нидерланды', description: 'Работает Gemini')),
++    );
++    expect(servers.single.description, 'Работает Gemini');
++    expect(servers.single.label, 'Нидерланды · Работает Gemini');
++  });
++
++  test('a flag from meta is shown in front of the name', () {
++    final item = config('Эстония');
++    (item['meta'] as Map)['serverFlag'] = '🇪🇪';
++    final server = parseXraySubscription(jsonEncode(item)).single;
++    expect(server.label, '🇪🇪 Эстония');
++  });
++
++  test('the whole element is kept, since it is what the core runs', () {
++    final body = jsonEncode([config('KR')]);
++    final server = parseXraySubscription(body).single;
++    expect((server.config['outbounds'] as List), hasLength(3));
++    expect((server.config['inbounds'] as List), hasLength(1));
++  });
++
++  test('the panel name comes from remarks, split at the middle dot', () {
++    final server = parseXraySubscription(
++      jsonEncode(config('proxy', remarks: '🇪🇪 Эстония · Максимальная скорость')),
++    ).single;
++    expect(server.name, '🇪🇪 Эстония');
++    expect(server.description, 'Максимальная скорость');
++  });
++
++  test('the pipe separator the docs show is understood too', () {
++    final server = parseXraySubscription(
++      jsonEncode(config('proxy', remarks: '🇵🇱 Poland | TCP')),
++    ).single;
++    expect(server.name, '🇵🇱 Poland');
++    expect(server.description, 'TCP');
++  });
++
++  test('without remarks the first proxy outbound still names the server', () {
++    expect(parseXraySubscription(jsonEncode(config('KR-1'))).single.name, 'KR-1');
++  });
++
++  test('the protocol comes from the config, not from the core', () {
++    final vless = parseXraySubscription(jsonEncode(config('EE'))).single;
++    expect(vless.protocol, 'vless');
++
++    final hy2 = {
++      'remarks': '🇫🇮 Финляндия',
++      'outbounds': [
++        {'tag': 'direct', 'protocol': 'freedom'},
++        {'tag': 'hy', 'protocol': 'hysteria2', 'settings': {}},
++      ],
++    };
++    expect(parseXraySubscription(jsonEncode(hy2)).single.protocol, 'hysteria2');
++  });
++
++  test('without meta a transport still describes the server', () {
++    final item = config('DE');
++    (item['outbounds'] as List)[1] = {
++      'tag': 'de',
++      'protocol': 'vless',
++      'settings': {},
++      'streamSettings': {'network': 'xhttp'},
++    };
++    expect(parseXraySubscription(jsonEncode(item)).single.description, 'XHTTP');
++  });
++
++  test('a body that is not a configuration yields nothing', () {
++    expect(parseXraySubscription(''), isEmpty);
++    expect(parseXraySubscription('<html>502</html>'), isEmpty);
++    expect(parseXraySubscription('{"hasMihomo":true}'), isEmpty);
++    expect(parseXraySubscription('[]'), isEmpty);
++  });
++}
++
++void _endpointCases() {
++  test('endpoint comes from the transport outbound, not the routers', () {
++    final servers = parseXraySubscription(jsonEncode([
++      {
++        'remarks': '🇪🇪 Эстония · Максимальная скорость',
++        'outbounds': [
++          {'tag': 'direct', 'protocol': 'freedom'},
++          {
++            'tag': 'proxy',
++            'protocol': 'vless',
++            'settings': {
++              'vnext': [
++                {'address': 'ee1.example.com', 'port': 443},
++              ],
++            },
++          },
++        ],
++      },
++      {
++        'remarks': '🇫🇮 Финляндия',
++        'outbounds': [
++          {
++            'tag': 'proxy',
++            'protocol': 'trojan',
++            'settings': {
++              'servers': [
++                {'address': 'fi.example.net', 'port': '8443'},
++              ],
++            },
++          },
++        ],
++      },
++      {
++        'remarks': 'пустой',
++        'outbounds': [
++          {'tag': 'direct', 'protocol': 'freedom'},
++        ],
++      },
++    ]));
++    expect(servers[0].address, 'ee1.example.com');
++    expect(servers[0].port, 443);
++    expect(servers[1].address, 'fi.example.net');
++    expect(servers[1].port, 8443, reason: 'a port written as text still parses');
++    expect(servers[2].address, isEmpty);
++    expect(servers[2].port, 0);
++  });
++}
+diff --git a/test/xray_switch_test.dart b/test/xray_switch_test.dart
+new file mode 100644
+index 00000000..03576853
+--- /dev/null
++++ b/test/xray_switch_test.dart
+@@ -0,0 +1,62 @@
++import 'dart:io';
++
++import 'package:fl_clash/core/xray_switch.dart';
++import 'package:flutter_test/flutter_test.dart';
++
++const _config = '''
++proxies:
++  - name: node-a
++    type: vless
++    server: a.example.net
++    port: 443
++    uuid: u1
++  - name: node-b
++    type: trojan
++    server: b.example.net
++    port: 443
++    password: p
++proxy-groups:
++  - name: Auto
++    type: url-test
++    proxies: [DIRECT, node-b, node-a]
++  - name: Deep
++    type: select
++    proxies: [Auto]
++''';
++
++void main() {
++  late File file;
++
++  setUp(() async {
++    final dir = await Directory.systemTemp.createTemp('xray-switch');
++    file = File('${dir.path}/config.yaml');
++    await file.writeAsString(_config);
++  });
++
++  test('a node is read with every key the engine had', () async {
++    final node = await nodeDefinitionFor(file.path, 'node-a');
++    expect(node, isNotNull);
++    expect(node!['type'], 'vless');
++    expect(node['server'], 'a.example.net');
++    expect(node['uuid'], 'u1');
++  });
++
++  test('a group resolves to its first real member, skipping DIRECT', () async {
++    final node = await nodeDefinitionFor(file.path, 'Auto');
++    expect(node?['name'], 'node-b');
++  });
++
++  test('a group inside a group is opened too', () async {
++    final node = await nodeDefinitionFor(file.path, 'Deep');
++    expect(node?['name'], 'node-b');
++  });
++
++  test('a builtin or an unknown name yields nothing instead of a broken child', () async {
++    expect(await nodeDefinitionFor(file.path, 'DIRECT'), isNull);
++    expect(await nodeDefinitionFor(file.path, 'nope'), isNull);
++  });
++
++  test('a missing config is not an exception', () async {
++    expect(await nodeDefinitionFor('${file.parent.path}/absent.yaml', 'node-a'), isNull);
++  });
++}

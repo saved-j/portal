@@ -1,0 +1,892 @@
+diff --git a/build.sh b/build.sh
+new file mode 100755
+index 00000000..65da1832
+--- /dev/null
++++ b/build.sh
+@@ -0,0 +1,86 @@
++#!/bin/bash
++# Portal build driver. One place for the environment; nothing lands in $HOME.
++#
++#   ./build.sh get        flutter pub get
++#   ./build.sh macos      macOS .app (host: macOS + Xcode)
++#   ./build.sh apk        Android .apk (host: any OS with SDK+NDK)
++#   ./build.sh linux      Linux bundle (host: Linux only)
++#   ./build.sh windows    Windows bundle (host: Windows only)
++#   ./build.sh ios        iOS — not available, see below
++#   ./build.sh run-macos  open the built .app
++#
++# Toolchain used on Mark's Mac: Flutter in /opt/homebrew/opt/flutter, JDK 17 keg-only,
++# Xcode via DEVELOPER_DIR, Rust toolchain 1.99.0 pinned by plugins/rust_api/rust/rust-toolchain.toml.
++# China mirrors: pub/flutter engine (flutter-io.cn), rustup (USTC), crates.io (USTC via ~/.cargo/config.toml).
++set -euo pipefail
++
++REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++cd "$REPO"
++
++export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
++export ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
++export ANDROID_SDK_ROOT="$ANDROID_HOME"
++export ANDROID_USER_HOME="${ANDROID_USER_HOME:-$HOME/.work/.android}"
++export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.work/.gradle}"
++export PUB_CACHE="${PUB_CACHE:-$HOME/.work/.pub-cache}"
++# Do NOT point PUB_HOSTED_URL at pub.flutter-io.cn: a different hosted URL invalidates
++# pubspec.lock and re-resolves packages upward (material_ui 1.5.0 -> 1.11.0 breaks the
++# build with "MaterialShapes is imported from both"). pub.dev answers from here; only the
++# Flutter engine artifacts need the mirror.
++export FLUTTER_STORAGE_BASE_URL="${FLUTTER_STORAGE_BASE_URL:-https://storage.flutter-io.cn}"
++export RUSTUP_DIST_SERVER="${RUSTUP_DIST_SERVER:-https://mirrors.ustc.edu.cn/rust-static}"
++export RUSTUP_UPDATE_ROOT="${RUSTUP_UPDATE_ROOT:-https://mirrors.ustc.edu.cn/rust-static/rustup}"
++export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
++# ~/.work/toolchain/bin first: create-dmg shim maps the npm --dmg-title onto --volname
++export PATH="$HOME/.work/toolchain/bin:/opt/homebrew/opt/flutter/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
++
++mkdir -p "$ANDROID_USER_HOME" "$GRADLE_USER_HOME" "$PUB_CACHE"
++
++host_guard() {
++  # Flutter desktop builds are host-native: no cross-compiling for linux/windows.
++  local want="$1" os
++  os=$(uname -s)
++  case "$want:$os" in
++    linux:Linux|windows:*MINGW*|windows:*MSYS*|windows:CYGWIN*) ;;
++    linux:*)   echo "error: Linux bundles must be built on Linux (Flutter has no cross-compile). Use CI." >&2; exit 1 ;;
++    windows:*) echo "error: Windows bundles must be built on Windows. Use CI." >&2; exit 1 ;;
++  esac
++}
++
++# The child process is not stored in the repository: 33 MB of binary per ABI would bloat
++# every diff. It is fetched once into jniLibs, where nothing but the app build reads it.
++ensure_xray_android() {
++  local dest="android/app/src/main/jniLibs/arm64-v8a/libxray.so"
++  if [ -f "$dest" ]; then return 0; fi
++  local work
++  work=$(mktemp -d "${TMPDIR:-/tmp}/xray-fetch.XXXXXX")
++  echo "fetching Xray 26.11.9 for android/arm64"
++  curl -fL --retry 2 -o "$work/x.zip" \
++    https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-android-arm64-v8a.zip || return 1
++  mkdir -p "$work/out" "$(dirname "$dest")"
++  unzip -q -o "$work/x.zip" -d "$work/out" || return 1
++  cp -f "$work/out/xray" "$dest" && chmod 755 "$dest"
++}
++
++case "${1:-get}" in
++  get)        flutter --version; flutter pub get ;;
++  macos)      APP_ENV=stable; dart setup.dart macos --env "$APP_ENV"
++              ls -lh build/macos/Build/Products/Release/*.dmg 2>/dev/null || true ;;
++  apk)        ensure_xray_android || exit 1
++              dart setup.dart android --env stable
++              ls -lh build/app/outputs/flutter-apk/*.apk 2>/dev/null || true ;;
++  linux)      host_guard linux;   dart setup.dart linux --env stable ;;
++  windows)    host_guard windows; dart setup.dart windows --env stable ;;
++  ios)        cat >&2 <<'EOF'
++error: this tree has no ios/ target — FlClashX ships android/macos/linux/windows only.
++
++To enable iOS:
++  1. flutter create --platforms=ios .
++  2. verify every plugin has an iOS implementation (rust_api helper and the gomobile core are the risk)
++  3. build on macOS:  flutter build ios --release   (needs an Apple Developer account for signing)
++Unsigned builds do not install on non-jailbroken devices; TestFlight is the realistic distribution.
++EOF
++              exit 1 ;;
++  run-macos)  APP=$(ls -d build/macos/Build/Products/Release/*.app | head -1); open "$APP" ;;
++  *) echo "usage: $0 {get|macos|apk|linux|windows|ios|run-macos}" >&2; exit 2 ;;
++esac
+diff --git a/core/go.mod b/core/go.mod
+index 29634b98..11510f8e 100644
+--- a/core/go.mod
++++ b/core/go.mod
+@@ -5,6 +5,9 @@ go 1.27.0
+ // v0.4.29 plus the darwin dscacheutil reap, see third_party/README.md.
+ replace github.com/metacubex/sing-tun => ./third_party/sing-tun
+ 
++// Portal: single core = Prizrak-Core (mihomo fork with finalmask, XHTTP, ML-DSA, prizrak-utls).
++replace github.com/metacubex/mihomo => github.com/legiz-ru/Prizrak-Core v1.19.34-r1
++
+ require (
+ 	github.com/Microsoft/go-winio v0.6.2
+ 	github.com/dlclark/regexp2 v1.12.0
+@@ -124,6 +127,7 @@ require (
+ 	github.com/tailscale/peercred v0.0.0-20250107143737-35a0c7bd7edc // indirect
+ 	github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923 // indirect
+ 	github.com/ulikunitz/xz v0.5.15 // indirect
++	github.com/vernesong/leaves v0.0.0-20260629081247-2a1c022f37d0 // indirect
+ 	github.com/vishvananda/netns v0.0.5 // indirect
+ 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
+ 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
+@@ -156,3 +160,5 @@ godebug (
+ 	rsa1024min=0
+ 	x509negativeserial=1
+ )
++
++replace github.com/metacubex/utls => github.com/legiz-ru/prizrak-utls v0.0.0-20261111074409-d32f4d9296cf
+diff --git a/core/go.sum b/core/go.sum
+index 7646903d..be098bdd 100644
+--- a/core/go.sum
++++ b/core/go.sum
+@@ -97,6 +97,10 @@ github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
+ github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
+ github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
+ github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
++github.com/legiz-ru/Prizrak-Core v1.19.34-r1 h1:PDO5o6aakNsgkiGitgh4MAD0/t9bHiMIpxDZ32hb6Ys=
++github.com/legiz-ru/Prizrak-Core v1.19.34-r1/go.mod h1:6w5Hdl3gkwjfNBLkvJXNYxaYvvZ3UCveYNAroxwt6A4=
++github.com/legiz-ru/prizrak-utls v0.0.0-20261111074409-d32f4d9296cf h1:LybR2wpXjiRLZUTu5N9J3CG1UTjU8l/0+sb/zH2s48c=
++github.com/legiz-ru/prizrak-utls v0.0.0-20261111074409-d32f4d9296cf/go.mod h1:fCleWyTleu20o1ixVRIesy+fZjG14LmO7YwwSMPe560=
+ github.com/mdlayher/netlink v1.7.2 h1:/UtM3ofJap7Vl4QWCPDGXY8d3GIY2UGSDbK+QWmY8/g=
+ github.com/mdlayher/netlink v1.7.2/go.mod h1:xraEF7uJbxLhc5fpHL4cPe221LI2bdttWlU+ZGLfQSw=
+ github.com/mdlayher/socket v0.5.1 h1:VZaqt6RkGkt2OE9l3GcC6nZkqD3xKeQLyfleW/uBcos=
+@@ -266,6 +270,8 @@ github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923 h1:tHNk7XK9GkmKUR6Gh8gV
+ github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923/go.mod h1:eLL9Nub3yfAho7qB0MzZizFhTU2QkLeoVsWdHtDW264=
+ github.com/ulikunitz/xz v0.5.15 h1:9DNdB5s+SgV3bQ2ApL10xRc35ck0DuIX/isZvIk+ubY=
+ github.com/ulikunitz/xz v0.5.15/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
++github.com/vernesong/leaves v0.0.0-20260629081247-2a1c022f37d0 h1:nUA4Mk3K64DfnpHfhJHrbDf5j0R7mYgPJ3W81vFopAg=
++github.com/vernesong/leaves v0.0.0-20260629081247-2a1c022f37d0/go.mod h1:Ndptw/K8n2twzGNEgCBSaEdTjT3EWU5YvJ476KwDKGw=
+ github.com/vishvananda/netlink v1.1.0/go.mod h1:cTgwzPIzzgDAYoQrMm0EdrjRUBkTqKYppBueQtXaqoE=
+ github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df/go.mod h1:JP3t17pCcGlemwknint6hfoeCVQrEMVwxRLRjXpq+BU=
+ github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f/go.mod h1:DD4vA1DwXk04H54A1oHXtwZmA0grkVMdPxx/VGLCah0=
+diff --git a/core/profile_base.go b/core/profile_base.go
+index 1f9eacbf..12e44ad2 100644
+--- a/core/profile_base.go
++++ b/core/profile_base.go
+@@ -234,11 +234,26 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	// The host contributes an outbound of its own (the local Xray) and a group that selects
++	// it. A profile carries its own proxies and groups, and the loop below replaces both, so
++	// they are captured here and appended afterwards instead of being lost.
++	addedProxies := mappingValue(root, "proxies")
++	addedGroups := mappingValue(root, "proxy-groups")
+ 	for _, key := range profileBaseSections {
+ 		if value := mappingValue(profile, key); value != nil {
+ 			setMappingValue(root, key, value)
+ 		}
+ 	}
++	if merged, err := appendByName(addedProxies, mappingValue(root, "proxies")); err != nil {
++		return nil, err
++	} else if merged != nil {
++		setMappingValue(root, "proxies", merged)
++	}
++	if merged, err := appendByName(addedGroups, mappingValue(root, "proxy-groups")); err != nil {
++		return nil, err
++	} else if merged != nil {
++		setMappingValue(root, "proxy-groups", merged)
++	}
+ 	rules, err := appendRules(mappingValue(root, "rules"), mappingValue(profile, "rules"))
+ 	if err != nil {
+ 		return nil, err
+@@ -328,6 +343,50 @@ func appendRules(added, profile *yaml.Node) (*yaml.Node, error) {
+ 	return &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: content}, nil
+ }
+ 
++// The host's own entries go in front of the profile's and are matched by name, because
++// mihomo refuses a config where two proxies or two groups share a name.
++func appendByName(added, profile *yaml.Node) (*yaml.Node, error) {
++	added, profile = resolveAlias(added), resolveAlias(profile)
++	if added == nil || isNull(added) || (added.Kind == yaml.SequenceNode && len(added.Content) == 0) {
++		return nil, nil
++	}
++	if added.Kind != yaml.SequenceNode {
++		return nil, fmt.Errorf("line %d: expected a list", added.Line)
++	}
++	if profile == nil || isNull(profile) {
++		return added, nil
++	}
++	if profile.Kind != yaml.SequenceNode {
++		return nil, fmt.Errorf("line %d: expected a list", profile.Line)
++	}
++	taken := make(map[string]bool, len(added.Content))
++	for _, item := range added.Content {
++		if name := nameOf(item); name != "" {
++			taken[name] = true
++		}
++	}
++	content := append([]*yaml.Node{}, added.Content...)
++	for _, item := range profile.Content {
++		if name := nameOf(item); name != "" && taken[name] {
++			continue
++		}
++		content = append(content, item)
++	}
++	return &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: content}, nil
++}
++
++// nameOf reads the `name:` scalar of a list item, or "" when the item has none.
++func nameOf(node *yaml.Node) string {
++	item := resolveAlias(node)
++	if item == nil || item.Kind != yaml.MappingNode {
++		return ""
++	}
++	if value := mappingValue(item, "name"); value != nil && value.Kind == yaml.ScalarNode {
++		return value.Value
++	}
++	return ""
++}
++
+ func resolveAlias(node *yaml.Node) *yaml.Node {
+ 	for node != nil && node.Kind == yaml.AliasNode && node.Alias != nil {
+ 		node = node.Alias
+diff --git a/core/profile_base_merge_test.go b/core/profile_base_merge_test.go
+new file mode 100644
+index 00000000..554304f8
+--- /dev/null
++++ b/core/profile_base_merge_test.go
+@@ -0,0 +1,76 @@
++package core
++
++import (
++	"testing"
++
++	"go.yaml.in/yaml/v3"
++)
++
++// A profile carries its own proxies, and the host adds one of its own (the local Xray).
++// The merge must keep both, and must never let two entries share a name: mihomo refuses
++// such a config, and one bad entry costs every proxy the user has.
++func TestAppendByNameKeepsBothSides(t *testing.T) {
++	added := list(t, "- name: XRAY-SOCKS\n  type: socks5\n  server: 127.0.0.1\n")
++	profile := list(t, "- name: node-a\n  type: vless\n- name: node-b\n  type: trojan\n")
++
++	merged, err := appendByName(added, profile)
++	if err != nil {
++		t.Fatalf("appendByName: %v", err)
++	}
++	names := namesOf(t, merged)
++	if len(names) != 3 || names[0] != "XRAY-SOCKS" || names[1] != "node-a" || names[2] != "node-b" {
++		t.Fatalf("want the host entry first then the profile's, got %v", names)
++	}
++}
++
++func TestAppendByNameDropsDuplicates(t *testing.T) {
++	added := list(t, "- name: XRAY-SOCKS\n  type: socks5\n")
++	profile := list(t, "- name: XRAY-SOCKS\n  type: http\n- name: node-a\n  type: vless\n")
++
++	merged, err := appendByName(added, profile)
++	if err != nil {
++		t.Fatalf("appendByName: %v", err)
++	}
++	names := namesOf(t, merged)
++	if len(names) != 2 {
++		t.Fatalf("want the duplicate dropped, got %v", names)
++	}
++	if names[0] != "XRAY-SOCKS" || names[1] != "node-a" {
++		t.Fatalf("want the host's entry to win, got %v", names)
++	}
++}
++
++func TestAppendByNameWithoutHostEntriesChangesNothing(t *testing.T) {
++	profile := list(t, "- name: node-a\n  type: vless\n")
++	merged, err := appendByName(nil, profile)
++	if err != nil {
++		t.Fatalf("appendByName: %v", err)
++	}
++	if merged != nil {
++		t.Fatalf("want nil so the caller leaves the profile alone, got %v", namesOf(t, merged))
++	}
++}
++
++func list(t *testing.T, src string) *yaml.Node {
++	t.Helper()
++	var doc yaml.Node
++	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
++		t.Fatalf("unmarshal: %v", err)
++	}
++	if len(doc.Content) == 0 {
++		t.Fatalf("empty document")
++	}
++	return doc.Content[0]
++}
++
++func namesOf(t *testing.T, node *yaml.Node) []string {
++	t.Helper()
++	if node == nil {
++		return nil
++	}
++	out := make([]string, 0, len(node.Content))
++	for _, item := range node.Content {
++		out = append(out, nameOf(item))
++	}
++	return out
++}
+diff --git a/lib/common/constant.dart b/lib/common/constant.dart
+index 5ff6bba7..d168a256 100644
+--- a/lib/common/constant.dart
++++ b/lib/common/constant.dart
+@@ -9,7 +9,7 @@ import 'package:fl_clash/enum/enum.dart';
+ import 'package:fl_clash/models/models.dart';
+ import 'package:material_ui/material_ui.dart';
+ 
+-const appName = 'FlClashX';
++const appName = 'Portal';
+ final appHelperService = helperServiceFor(pre: isPreDesktopApp);
+ final appSystemName = isPreDesktopApp ? '$appName Pre' : appName;
+ const coreManifestName = 'manifest.json';
+@@ -177,7 +177,8 @@ const proxiesListStoreKey = PageStorageKey<String>('proxies_list');
+ const toolsStoreKey = PageStorageKey<String>('tools');
+ const profilesStoreKey = PageStorageKey<String>('profiles');
+ 
+-const defaultPrimaryColor = 0xFF03A9F4;
++// Portal Connect accent: the cyan of the legacy PortalVPN gateway button.
++const defaultPrimaryColor = 0xFF00E5FF;
+ 
+ const maxLogsLength = 5000;
+ const maxRequestsLength = 2000;
+@@ -192,6 +193,7 @@ const trafficSampleLength = 30;
+ // macOS accent colors.
+ const defaultPrimaryColors = [
+   defaultPrimaryColor,
++  0xFFA855F7, // Portal purple, the second half of the legacy palette
+   0xFF007AFF,
+   0xFFCB30E0,
+   0xFFFF2D55,
+diff --git a/lib/common/l10n_labels.dart b/lib/common/l10n_labels.dart
+index bec3867e..d78d2feb 100644
+--- a/lib/common/l10n_labels.dart
++++ b/lib/common/l10n_labels.dart
+@@ -49,7 +49,7 @@ extension ModeL10n on Mode {
+   String get label {
+     final appLocalizations = currentAppLocalizations;
+     return switch (this) {
+-      Mode.rule => appLocalizations.rule,
++      Mode.rule => appLocalizations.rules,
+       Mode.global => appLocalizations.global,
+       Mode.direct => appLocalizations.direct,
+     };
+diff --git a/lib/common/outbound.dart b/lib/common/outbound.dart
+new file mode 100644
+index 00000000..bee02077
+--- /dev/null
++++ b/lib/common/outbound.dart
+@@ -0,0 +1,10 @@
++/// The engine ships built-in outbounds whose names are decorated by the panel
++/// (`DIRECT 🇷🇺`, `DIRECT `, `Reject`). DIRECT and REJECT are routing targets, not
++/// portals: picking one by hand is how a user silently ends up without a tunnel.
++///
++/// One predicate for the whole app — state layer, chip filter and the portal's own
++/// fallback must agree, or a built-in reappears somewhere it was already banned.
++bool isBuiltinOutboundName(String name) {
++  final word = name.trim().split(RegExp(r'[\s_\-|·/]+')).first.toUpperCase();
++  return word == 'DIRECT' || word == 'REJECT';
++}
+diff --git a/lib/common/package.dart b/lib/common/package.dart
+index 2d92cec4..d90cf963 100644
+--- a/lib/common/package.dart
++++ b/lib/common/package.dart
+@@ -1,5 +1,3 @@
+-import 'dart:io';
+-
+ import 'package:package_info_plus/package_info_plus.dart';
+ 
+ import 'common.dart';
+@@ -8,13 +6,12 @@ extension PackageInfoExtension on PackageInfo {
+   String get displayVersion =>
+       appVersionDefine.isNotEmpty ? appVersionDefine : version;
+ 
+-  /// `FlClashX/v<app> core/<mihomo> Platform/<os>`; the core token is left
+-  /// out until a version is known.
+-  String uaWith(String coreVersion) => [
+-    '$appName/v$displayVersion',
+-    if (coreVersion.isNotEmpty) 'core/$coreVersion',
+-    'Platform/${Platform.operatingSystem}',
+-  ].join(' ');
++  /// Presents the client as mihomo so panels serve the Mihomo YAML template:
++  /// `mihomo/v<core>`. Without a core version yet, the app version stands in.
++  String uaWith(String coreVersion) {
++    final version = coreVersion.replaceFirst(RegExp('^v'), '');
++    return 'mihomo/v${version.isNotEmpty ? version : displayVersion}';
++  }
+ }
+ 
+ int compareVersions(String version1, String version2) {
+diff --git a/lib/common/request.dart b/lib/common/request.dart
+index 89c3ecb5..e6fd23cd 100644
+--- a/lib/common/request.dart
++++ b/lib/common/request.dart
+@@ -51,6 +51,7 @@ class Request {
+     ResponseType responseType, {
+     Duration timeout = downloadTimeoutDuration,
+     Map<String, String> headers = const {},
++    String? userAgent,
+   }) {
+     final target = downloadTarget(url);
+     final cancelToken = CancelToken();
+@@ -60,7 +61,7 @@ class Request {
+           target.uri,
+           options: Options(
+             responseType: responseType,
+-            headers: {...headers, ...target.headers},
++            headers: {...headers, ...target.headers, ...?userAgentHeader(userAgent)},
+             // Nothing asks for a range, so a 206 is a cut-off copy.
+             validateStatus: (status) =>
+                 status != null &&
+@@ -104,6 +105,10 @@ class Request {
+         ResponseType.bytes,
+         timeout: timeout,
+         headers: headers,
++        // The panel picks the template from this header, so it has to reach the wire as
++        // written. The adapter also sets a client-level agent; dio's per-request value
++        // replaces it rather than appending, which is what a mismatch here would need.
++        userAgent: headers['User-Agent'],
+       );
+     } catch (e) {
+       commonPrint.log(
+@@ -114,9 +119,17 @@ class Request {
+     }
+   }
+ 
+-  Future<Response<String>> getTextResponseForUrl(String url) async {
++  Future<Response<String>> getTextResponseForUrl(
++    String url, {
++    Map<String, String> headers = const {},
++  }) async {
+     try {
+-      return await _download<String>(url, ResponseType.plain);
++      return await _download<String>(
++        url,
++        ResponseType.plain,
++        headers: headers,
++        userAgent: headers['User-Agent'],
++      );
+     } catch (e) {
+       commonPrint.log(
+         'getTextResponseForUrl error ${compactError(e)}',
+@@ -355,6 +368,10 @@ final class _CappedSink implements Sink<List<int>> {
+ 
+ /// dart:io turns [Uri.userInfo] into Basic credentials still percent-encoded.
+ @visibleForTesting
++/// The per-request user-agent as a one-entry map, or null when there is none to send.
++Map<String, String>? userAgentHeader(String? agent) =>
++    agent == null ? null : {'User-Agent': agent};
++
+ ({Uri uri, Map<String, Object> headers}) downloadTarget(String url) {
+   final uri = url.webUri ?? Uri.parse(url);
+   if (uri.userInfo.isEmpty) {
+diff --git a/lib/common/task.dart b/lib/common/task.dart
+index 83389803..8414bfac 100644
+--- a/lib/common/task.dart
++++ b/lib/common/task.dart
+@@ -394,6 +394,32 @@ Future<RealProfile> _makeRealProfileTask(MakeRealProfileState data) async {
+         .toList();
+   }
+   applyProxyChains(rawConfig, data.proxyChains);
++  // The local Xray owns the real node when the portal network is off. Its socks inbound is
++  // always declared so the switch is a pure mode change: nothing has to be rebuilt, and no
++  // connection is dropped when the owner flips it.
++  rawConfig['proxies'] = [
++    ...?(rawConfig['proxies'] as List?)?.where(
++      (item) => item is! Map || item['name'] != 'XRAY-SOCKS',
++    ),
++    {
++      'name': 'XRAY-SOCKS',
++      'type': 'socks5',
++      'server': '127.0.0.1',
++      'port': 10808,
++      'udp': false,
++    },
++  ];
++  rawConfig['proxy-groups'] = [
++    {
++      'name': 'PORTAL-XRAY',
++      'type': 'select',
++      'proxies': ['XRAY-SOCKS'],
++      'hidden': true,
++    },
++    ...?(rawConfig['proxy-groups'] as List?)?.where(
++      (item) => item is! Map || item['name'] != 'PORTAL-XRAY',
++    ),
++  ];
+   rawConfig['rules'] = rules;
+   final yaml = await _encodeYaml(Map<String, dynamic>.from(rawConfig));
+   return (yaml: yaml, md5: yaml.toMd5(), counts: configCountsOf(rawConfig));
+diff --git a/lib/common/tray.dart b/lib/common/tray.dart
+index 08ef8e81..33cedf1f 100644
+--- a/lib/common/tray.dart
++++ b/lib/common/tray.dart
+@@ -182,7 +182,7 @@ class AppTray implements TrayPort {
+         ),
+       if (trayState.globalModeAllowed) ...[
+         const TrayMenuSeparator(),
+-        for (final mode in Mode.values)
++        for (final mode in Mode.values.where((mode) => mode != Mode.direct))
+           TrayMenuCheckbox(
+             label: mode.label,
+             checked: mode == trayState.mode,
+diff --git a/lib/ui/null_status.dart b/lib/ui/null_status.dart
+index f4b6ae27..a7e5cabc 100644
+--- a/lib/ui/null_status.dart
++++ b/lib/ui/null_status.dart
+@@ -11,7 +11,8 @@ import 'package:fl_clash/ui/metrics.dart';
+ import 'package:fl_clash/ui/navigator.dart';
+ import 'package:fl_clash/ui/typography.dart';
+ import 'package:material_new_shapes/material_new_shapes.dart';
+-import 'package:material_ui/material_ui.dart';
++// MaterialShapes is exported by both packages; take it from material_new_shapes.
++import 'package:material_ui/material_ui.dart' hide MaterialShapes, RoundedPolygon;
+ 
+ enum NullStatusIllustration {
+   data,
+diff --git a/lib/views/about.dart b/lib/views/about.dart
+index 5a137129..4cfae1a8 100644
+--- a/lib/views/about.dart
++++ b/lib/views/about.dart
+@@ -26,9 +26,24 @@ const _forkAuthors = [
+   ),
+ ];
+ 
++/// The people whose work this build carries; the fork author above is credited by the
++/// licence, this list is ours.
++const _contributors = [
++  Person(
++    avatar: 'assets/images/avatar/saved-j.png',
++    name: 'saved-j',
++    link: 'https://github.com/saved-j',
++  ),
++];
++
+ const _upstreamRepository = 'chen08209/FlClash';
+ const _coreRepository = 'MetaCubeX/mihomo';
+-const _telegram = 'https://t.me/flclashx';
++const _xrayRepository = 'XTLS/Xray-core';
++const _portalSite = 'https://web.portal-connect.io';
++const _portalChat = 'https://t.me/portalconnect';
++const _portalBot = 'https://t.me/portalconnect_bot';
++const _portalSupport = 'https://t.me/portalconnect_support';
++const _portalVk = 'https://vk.com/markvictorson';
+ 
+ /// The running core's version when it answers, else the one this build was
+ /// made with, else nothing.
+@@ -108,31 +123,75 @@ class AboutView extends ConsumerWidget {
+           ),
+           const SizedBox(height: 8),
+           generateSection(
+-            title: appLocalizations.more,
++            title: context.appLocalizations.aboutPortal,
+             items: [
+               _buildLinkItem(
+-                glyph: AppGlyphs.code,
+-                title: appLocalizations.project,
+-                url: 'https://github.com/$repository',
+-                label: 'github.com/$repository',
++                glyph: AppGlyphs.link,
++                title: '🌐 Сайт',
++                url: _portalSite,
++                label: 'web.portal-connect.io',
++              ),
++              _buildLinkItem(
++                glyph: AppGlyphs.send,
++                title: '💬 Чат',
++                url: _portalChat,
++                label: 't.me/portalconnect',
++              ),
++              _buildLinkItem(
++                glyph: AppGlyphs.send,
++                title: '💳 Оформить подписку',
++                url: _portalBot,
++                label: 't.me/portalconnect_bot',
++              ),
++              _buildLinkItem(
++                glyph: AppGlyphs.send,
++                title: '📱 Поддержка в Telegram',
++                url: _portalSupport,
++                label: 't.me/portalconnect_support',
+               ),
+               _buildLinkItem(
+                 glyph: AppGlyphs.link,
+-                title: appLocalizations.originalRepository,
+-                url: 'https://github.com/$_upstreamRepository',
+-                label: 'github.com/$_upstreamRepository',
++                title: '📱 Поддержка в VK',
++                url: _portalVk,
++                label: 'vk.com/markvictorson',
+               ),
++            ],
++          ),
++          generateSection(
++            title: context.appLocalizations.aboutCores,
++            items: [
+               _buildLinkItem(
+                 glyph: AppGlyphs.cpu,
+-                title: appLocalizations.core,
++                title: 'Prizrak-Core',
+                 url: 'https://github.com/$_coreRepository',
+-                label: 'github.com/$_coreRepository',
++                label: context.appLocalizations.aboutPortalNetworkCore,
+               ),
+               _buildLinkItem(
+-                glyph: AppGlyphs.send,
+-                title: 'Telegram',
+-                url: _telegram,
+-                label: 't.me/flclashx',
++                glyph: AppGlyphs.cpu,
++                title: 'Xray',
++                url: 'https://github.com/$_xrayRepository',
++                label: 'github.com/$_xrayRepository',
++              ),
++            ],
++          ),
++          generateSection(
++            title: context.appLocalizations.aboutContributors,
++            items: const [_PeopleRow(people: _contributors)],
++          ),
++          generateSection(
++            title: context.appLocalizations.aboutBuiltOn,
++            items: [
++              _buildLinkItem(
++                glyph: AppGlyphs.code,
++                title: 'FlClashX',
++                url: 'https://github.com/$repository',
++                label: 'github.com/$repository',
++              ),
++              _buildLinkItem(
++                glyph: AppGlyphs.code,
++                title: 'FlClash',
++                url: 'https://github.com/$_upstreamRepository',
++                label: 'github.com/$_upstreamRepository',
+               ),
+             ],
+           ),
+@@ -175,8 +234,7 @@ class _AboutHero extends ConsumerWidget {
+     required this.onEasterEgg,
+   });
+ 
+-  static const _logoSize = 96.0;
+-  static const _logoInset = 14.0;
++  static const _logoSize = 148.0;
+ 
+   @override
+   Widget build(BuildContext context, WidgetRef ref) {
+@@ -191,18 +249,16 @@ class _AboutHero extends ConsumerWidget {
+           _TapCounter(
+             onEnterDeveloperMode: onEnterDeveloperMode,
+             onEasterEgg: onEasterEgg,
+-            child: DecoratedBox(
+-              decoration: ShapeDecoration(
+-                color: raised,
+-                shape: AppShape.all(AppCorner.fit(_logoSize)),
+-              ),
+-              child: Padding(
+-                padding: const EdgeInsets.all(_logoInset),
+-                child: Image.asset(
+-                  'assets/images/icon.png',
+-                  width: _logoSize - _logoInset * 2,
+-                  height: _logoSize - _logoInset * 2,
+-                ),
++            // The mark fills the plate and is cropped by its rounding: no inset, no
++            // frame of background colour around it.
++            child: ClipRRect(
++              borderRadius: BorderRadius.circular(_logoSize * 0.24),
++              child: Image.asset(
++                'assets/images/icon.png',
++                width: _logoSize,
++                height: _logoSize,
++                fit: BoxFit.cover,
++                filterQuality: FilterQuality.medium,
+               ),
+             ),
+           ),
+diff --git a/lib/views/hotkey.dart b/lib/views/hotkey.dart
+index 460627c3..d8e346e6 100644
+--- a/lib/views/hotkey.dart
++++ b/lib/views/hotkey.dart
+@@ -38,7 +38,6 @@ List<(String, List<HotAction>)> _sections(AppLocalizations appLocalizations) {
+         HotAction.mode,
+         HotAction.ruleMode,
+         HotAction.globalMode,
+-        HotAction.directMode,
+       ],
+     ),
+     (
+diff --git a/macos/Runner.xcodeproj/project.pbxproj b/macos/Runner.xcodeproj/project.pbxproj
+index 16f65d71..462f41a9 100644
+--- a/macos/Runner.xcodeproj/project.pbxproj
++++ b/macos/Runner.xcodeproj/project.pbxproj
+@@ -408,7 +408,7 @@
+ 			);
+ 			runOnlyForDeploymentPostprocessing = 0;
+ 			shellPath = /bin/sh;
+-			shellScript = "# The bundle id comes from Channel.xcconfig, which setup.dart writes for\n# APP_ENV=pre; a build whose defines disagree would ship the wrong app.\n[ \"$CONFIGURATION\" = \"Debug\" ] && exit 0\nenv=pre\nfor define in $(echo \"$DART_DEFINES\" | tr ',' ' '); do\n  pair=$(echo \"$define\" | base64 --decode 2>/dev/null)\n  case \"$pair\" in APP_ENV=*) env=\"${pair#APP_ENV=}\" ;; esac\ndone\nexpected=com.follow.clashx\n[ \"$env\" = \"pre\" ] && expected=com.follow.clashx.pre\nif [ \"$PRODUCT_BUNDLE_IDENTIFIER\" != \"$expected\" ]; then\n  echo \"error: APP_ENV=$env needs bundle id $expected, not $PRODUCT_BUNDLE_IDENTIFIER; build with dart setup.dart macos --env $env\"\n  exit 1\nfi\n";
++			shellScript = "# The bundle id comes from Channel.xcconfig, which setup.dart writes for\n# APP_ENV=pre; a build whose defines disagree would ship the wrong app.\n[ \"$CONFIGURATION\" = \"Debug\" ] && exit 0\nenv=pre\nfor define in $(echo \"$DART_DEFINES\" | tr ',' ' '); do\n  pair=$(echo \"$define\" | base64 --decode 2>/dev/null)\n  case \"$pair\" in APP_ENV=*) env=\"${pair#APP_ENV=}\" ;; esac\ndone\nexpected=io.portal.xfc\n[ \"$env\" = \"pre\" ] && expected=io.portal.xfc.pre\nif [ \"$PRODUCT_BUNDLE_IDENTIFIER\" != \"$expected\" ]; then\n  echo \"error: APP_ENV=$env needs bundle id $expected, not $PRODUCT_BUNDLE_IDENTIFIER; build with dart setup.dart macos --env $env\"\n  exit 1\nfi\n";
+ 		};
+ /* End PBXShellScriptBuildPhase section */
+ 
+@@ -466,7 +466,7 @@
+ 				CURRENT_PROJECT_VERSION = 1;
+ 				GENERATE_INFOPLIST_FILE = YES;
+ 				MARKETING_VERSION = 1.0;
+-				PRODUCT_BUNDLE_IDENTIFIER = com.follow.flClashX.RunnerTests;
++				PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.RunnerTests;
+ 				PRODUCT_NAME = "$(TARGET_NAME)";
+ 				SWIFT_VERSION = 5.0;
+ 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fl_clash.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fl_clash";
+@@ -480,7 +480,7 @@
+ 				CURRENT_PROJECT_VERSION = 1;
+ 				GENERATE_INFOPLIST_FILE = YES;
+ 				MARKETING_VERSION = 1.0;
+-				PRODUCT_BUNDLE_IDENTIFIER = com.follow.flClashX.RunnerTests;
++				PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.RunnerTests;
+ 				PRODUCT_NAME = "$(TARGET_NAME)";
+ 				SWIFT_VERSION = 5.0;
+ 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fl_clash.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fl_clash";
+@@ -494,7 +494,7 @@
+ 				CURRENT_PROJECT_VERSION = 1;
+ 				GENERATE_INFOPLIST_FILE = YES;
+ 				MARKETING_VERSION = 1.0;
+-				PRODUCT_BUNDLE_IDENTIFIER = com.follow.flClashX.RunnerTests;
++				PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.RunnerTests;
+ 				PRODUCT_NAME = "$(TARGET_NAME)";
+ 				SWIFT_VERSION = 5.0;
+ 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fl_clash.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fl_clash";
+@@ -701,7 +701,7 @@
+ 					"$(inherited)",
+ 					"@executable_path/../Frameworks",
+ 				);
+-				PRODUCT_BUNDLE_IDENTIFIER = com.follow.clashx.debug;
++				PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.debug;
+ 				PROVISIONING_PROFILE_SPECIFIER = "";
+ 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+ 				SWIFT_VERSION = 5.0;
+diff --git a/macos/Runner/Configs/AppInfo.xcconfig b/macos/Runner/Configs/AppInfo.xcconfig
+index b3353038..1514e5d3 100755
+--- a/macos/Runner/Configs/AppInfo.xcconfig
++++ b/macos/Runner/Configs/AppInfo.xcconfig
+@@ -5,13 +5,13 @@
+ // 'flutter create' template.
+ 
+ // The application's name. By default this is also the title of the Flutter window.
+-PRODUCT_NAME = FlClashX
++PRODUCT_NAME = Portal
+ 
+ // The application's bundle identifier
+-PRODUCT_BUNDLE_IDENTIFIER = com.follow.clashx
++PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc
+ 
+ // The name the Finder, the Dock and the menu bar show
+-APP_DISPLAY_NAME = FlClashX
++APP_DISPLAY_NAME = Portal
+ 
+ // The copyright displayed in application information
+ PRODUCT_COPYRIGHT = Copyright © 2023 com.follow. All rights reserved.
+diff --git a/pubspec.yaml b/pubspec.yaml
+index 7bc1003b..8ebf6f3f 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -1,7 +1,7 @@
+ name: fl_clash
+ description: FlClashX, a fork of FlClash - a multi-platform proxy client based on ClashMeta for Remnawave users.
+ publish_to: 'none'
+-version: 0.5.3+2026111401
++version: 0.5.3-portal-duo+2026111401
+ environment:
+   sdk: '>=3.10.0 <4.0.0'
+ 
+@@ -103,6 +103,7 @@ flutter:
+     - assets/fonts/
+     - assets/images/
+     - assets/images/avatar/
++    - assets/xray/
+     - assets/images/flags/
+     - assets/images/services/
+     - assets/ca/ca-certificates.crt
+diff --git a/release.sh b/release.sh
+new file mode 100755
+index 00000000..fb86a4e3
+--- /dev/null
++++ b/release.sh
+@@ -0,0 +1,43 @@
++#!/bin/bash
++# Publish a Portal release: tag → push → CI builds every platform → assets land in the
++# GitHub release. Users download installers; nobody has to build anything.
++#
++#   ./release.sh v0.1.0            real release
++#   ./release.sh v0.1.0 --draft    draft release (CI still uploads assets)
++#
++# Requires: gh authenticated (gh auth status), clean working tree, CI green on the commit.
++set -euo pipefail
++
++VERSION="${1:-}"
++MODE="${2:-}"
++[[ -n "$VERSION" ]] || { echo "usage: $0 vX.Y.Z [--draft]" >&2; exit 2; }
++[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "error: tag must look like v1.2.3" >&2; exit 2; }
++
++REPO_DIR="${REPO_DIR:-$HOME/.work/portal}"
++cd "$REPO_DIR"
++
++git fetch --quiet origin
++[[ -z "$(git status --porcelain)" ]] || { echo "error: working tree is dirty — commit or stash first" >&2; exit 1; }
++git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null && { echo "error: tag $VERSION already exists" >&2; exit 1; }
++
++# The patch set must reproduce this tree, otherwise the release is not reproducible.
++./apply.sh check
++
++echo "tagging $VERSION on $(git log -1 --format='%h %s')"
++git tag -a "$VERSION" -m "Portal $VERSION"
++git push --quiet origin HEAD "$VERSION"
++echo "pushed. CI: $(gh repo view --json nameWithOwner -q .nameWithOwner) → Actions → build"
++
++if [[ "$MODE" == "--draft" ]]; then
++  echo "note: CI creates the release; mark it draft afterwards in the web UI if needed"
++fi
++
++cat <<EOF
++
++What users download from the release page (built by CI, not by them):
++  macOS    FlClashX-*-macos-*.dmg        (or .zip)
++  Windows  FlClashX-*-windows-*.zip      (or -setup.exe)
++  Linux    FlClashX-*-linux-*.AppImage   (+ .deb/.rpm when packaged)
++  Android  FlClashX-*-android-*.apk
++  iOS      not built — the tree has no ios/ target yet
++EOF
+diff --git a/setup.dart b/setup.dart
+index 6efb7b87..4bce2204 100755
+--- a/setup.dart
++++ b/setup.dart
+@@ -5,8 +5,8 @@ import 'package:args/args.dart';
+ import 'package:path/path.dart' as p;
+ import 'package:yaml/yaml.dart';
+ 
+-const _appName = 'FlClashX';
+-const _bundleId = 'com.follow.clashx';
++const _appName = 'Portal';
++const _bundleId = 'io.portal.xfc';
+ const _distDir = 'dist';
+ 
+ const _allTargets = <String, String>{
+@@ -183,7 +183,7 @@ String createPackageTargets(String platform, String? customTargets) {
+ /// pre-release gets its own bundle id and name, so it installs beside the
+ /// stable app; null for every other build, which goes without the file.
+ String? macosChannelConfig(String env) => env == 'pre'
+-    ? 'PRODUCT_BUNDLE_IDENTIFIER = com.follow.clashx.pre\n'
++    ? 'PRODUCT_BUNDLE_IDENTIFIER = io.portal.xfc.pre\n'
+           'APP_DISPLAY_NAME = $_appName Pre\n'
+     : null;
+ 
+@@ -220,25 +220,25 @@ class DesktopIdentity {
+ const stableDesktop = DesktopIdentity(
+   pre: false,
+   executable: _appName,
+-  helper: 'FlClashXHelperService',
++  helper: 'PortalHelperService',
+   displayName: _appName,
+   bundleId: _bundleId,
+   packageName: 'flclashx',
+   installDir: _appName,
+   helperUnit: 'flclashx-helper',
+-  windowsDataDir: r'com.follow\clashx',
++  windowsDataDir: r'io.portal\xfc',
+ );
+ 
+ const preDesktop = DesktopIdentity(
+   pre: true,
+-  executable: 'FlClashXPre',
+-  helper: 'FlClashXPreHelperService',
++  executable: 'PortalPre',
++  helper: 'PortalPreHelperService',
+   displayName: '$_appName Pre',
+   bundleId: '$_bundleId.pre',
+   packageName: 'flclashx-pre',
+-  installDir: 'FlClashXPre',
++  installDir: 'PortalPre',
+   helperUnit: 'flclashx-pre-helper',
+-  windowsDataDir: r'com.follow\clashx.pre',
++  windowsDataDir: r'io.portal\xfc.pre',
+ );
+ 
+ const _preWindowsAppId = '3B6E2F0A-9C41-4D57-8A2E-7F1D5C0B9E63';

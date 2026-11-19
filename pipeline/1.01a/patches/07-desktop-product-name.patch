@@ -1,0 +1,76 @@
+diff --git a/linux/CMakeLists.txt b/linux/CMakeLists.txt
+index bbc80d8c..72aea953 100644
+--- a/linux/CMakeLists.txt
++++ b/linux/CMakeLists.txt
+@@ -4,7 +4,7 @@ project(runner LANGUAGES CXX)
+ 
+ # The name of the executable created for the application. Change this to change
+ # the on-disk name of your application.
+-set(BINARY_NAME "FlClashX")
++set(BINARY_NAME "Portal")
+ # The unique GTK application identifier for this application. See:
+ # https://wiki.gnome.org/HowDoI/ChooseApplicationID
+ set(APPLICATION_ID "com.follow.clashx")
+diff --git a/windows/CMakeLists.txt b/windows/CMakeLists.txt
+index ea508ab2..9851fae1 100644
+--- a/windows/CMakeLists.txt
++++ b/windows/CMakeLists.txt
+@@ -4,7 +4,7 @@ project(FlClashX LANGUAGES CXX)
+ 
+ # The name of the executable created for the application. Change this to change
+ # the on-disk name of your application.
+-set(BINARY_NAME "FlClashX")
++set(BINARY_NAME "Portal")
+ 
+ # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
+ # versions of CMake.
+diff --git a/windows/runner/Runner.rc b/windows/runner/Runner.rc
+index 0a054363..78b9601b 100644
+--- a/windows/runner/Runner.rc
++++ b/windows/runner/Runner.rc
+@@ -89,21 +89,21 @@ BEGIN
+     BEGIN
+         BLOCK "040904e4"
+         BEGIN
+-            VALUE "CompanyName", "com.follow" "\0"
++            VALUE "CompanyName", "Portal" "\0"
+ #ifdef FLCLASHX_PRE
+-            VALUE "FileDescription", "FlClashX Pre" "\0"
++            VALUE "FileDescription", "Portal Pre" "\0"
+ #else
+-            VALUE "FileDescription", "FlClashX" "\0"
++            VALUE "FileDescription", "Portal" "\0"
+ #endif
+             VALUE "FileVersion", VERSION_AS_STRING "\0"
+-            VALUE "InternalName", "clashx" "\0"
++            VALUE "InternalName", "portal" "\0"
+             VALUE "LegalCopyright", "Copyright (C) 2025 com.follow. All rights reserved." "\0"
+ #ifdef FLCLASHX_PRE
+-            VALUE "OriginalFilename", "FlClashXPre.exe" "\0"
+-            VALUE "ProductName", "clashx.pre" "\0"
++            VALUE "OriginalFilename", "PortalPre.exe" "\0"
++            VALUE "ProductName", "Portal Pre" "\0"
+ #else
+-            VALUE "OriginalFilename", "FlClashX.exe" "\0"
+-            VALUE "ProductName", "clashx" "\0"
++            VALUE "OriginalFilename", "Portal.exe" "\0"
++            VALUE "ProductName", "Portal" "\0"
+ #endif
+             VALUE "ProductVersion", VERSION_AS_STRING "\0"
+         END
+diff --git a/windows/runner/main.cpp b/windows/runner/main.cpp
+index 0e1b6161..bb5abb16 100644
+--- a/windows/runner/main.cpp
++++ b/windows/runner/main.cpp
+@@ -50,9 +50,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
+   Win32Window::Point origin(10, 10);
+   Win32Window::Size size(1280, 720);
+ #ifdef FLCLASHX_PRE
+-  constexpr wchar_t kTitle[] = L"FlClashX Pre";
++  constexpr wchar_t kTitle[] = L"Portal Pre";
+ #else
+-  constexpr wchar_t kTitle[] = L"FlClashX";
++  constexpr wchar_t kTitle[] = L"Portal";
+ #endif
+   if (!window.Create(kTitle, origin, size)) {
+     return EXIT_FAILURE;

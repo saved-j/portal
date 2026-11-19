@@ -1,5 +1,5 @@
 diff --git a/lib/models/config.dart b/lib/models/config.dart
-index f9aef7e5694186e0f77d07d46a47cadfc97dca6a..72334908645063f7c577685ccafa373b6af4c24b 100644
+index f9aef7e5..72334908 100644
 --- a/lib/models/config.dart
 +++ b/lib/models/config.dart
 @@ -260,6 +260,11 @@ abstract class AppSettingProps with _$AppSettingProps {
@@ -15,7 +15,7 @@ index f9aef7e5694186e0f77d07d46a47cadfc97dca6a..72334908645063f7c577685ccafa373b
      @JsonKey(readValue: _readTabAnimation)
      TabAnimation tabAnimation,
 diff --git a/lib/models/generated/config.freezed.dart b/lib/models/generated/config.freezed.dart
-index ab07d2ca440fb09bbc979d371c6aa115c3659d22..d53c35eedac68ba78d793402bf8cfe4652b86047 100644
+index ab07d2ca..d53c35ee 100644
 --- a/lib/models/generated/config.freezed.dart
 +++ b/lib/models/generated/config.freezed.dart
 @@ -303,7 +303,9 @@ as String,
@@ -206,7 +206,7 @@ index ab07d2ca440fb09bbc979d371c6aa115c3659d22..d53c35eedac68ba78d793402bf8cfe46
  as bool,autoCheckUpdate: null == autoCheckUpdate ? _self.autoCheckUpdate : autoCheckUpdate // ignore: cast_nullable_to_non_nullable
  as bool,hiddenUpdate: freezed == hiddenUpdate ? _self.hiddenUpdate : hiddenUpdate // ignore: cast_nullable_to_non_nullable
 diff --git a/lib/models/generated/config.g.dart b/lib/models/generated/config.g.dart
-index 48fb15bc3a2be0bed8fb2b6b27754068fe8dc4a2..4bedc0029725289a1ee296ac985b3fcb788552aa 100644
+index 48fb15bc..4bedc002 100644
 --- a/lib/models/generated/config.g.dart
 +++ b/lib/models/generated/config.g.dart
 @@ -38,6 +38,8 @@ _AppSettingProps _$AppSettingPropsFromJson(
@@ -228,7 +228,7 @@ index 48fb15bc3a2be0bed8fb2b6b27754068fe8dc4a2..4bedc0029725289a1ee296ac985b3fcb
        'floatingNavigationBar': instance.floatingNavigationBar,
        'autoCheckUpdate': instance.autoCheckUpdate,
 diff --git a/lib/models/profile.dart b/lib/models/profile.dart
-index f5605a0a36b7190fca054f9e31ad936d4bc37cb7..fa864ffafee70a5ace355b471437bca49305f11d 100644
+index f5605a0a..fa864ffa 100644
 --- a/lib/models/profile.dart
 +++ b/lib/models/profile.dart
 @@ -1,8 +1,14 @@
@@ -465,7 +465,7 @@ index f5605a0a36b7190fca054f9e31ad936d4bc37cb7..fa864ffafee70a5ace355b471437bca4
 +  }
 +}
 diff --git a/lib/models/provider_headers.dart b/lib/models/provider_headers.dart
-index ab1a2a780afb5a61e629e21cd8d5f4f95161f728..76acfd1f49ac41e43284fa708984b5072999e6ec 100644
+index ab1a2a78..76acfd1f 100644
 --- a/lib/models/provider_headers.dart
 +++ b/lib/models/provider_headers.dart
 @@ -28,6 +28,34 @@ class ProviderHeaders {
@@ -503,8 +503,93 @@ index ab1a2a780afb5a61e629e21cd8d5f4f95161f728..76acfd1f49ac41e43284fa708984b507
    String? get webPageUrl {
      final url = text('profile-web-page-url');
      return url != null && url.isUrl ? url : null;
+diff --git a/lib/providers/generated/action.g.dart b/lib/providers/generated/action.g.dart
+index fbb4b28a..44aca030 100644
+--- a/lib/providers/generated/action.g.dart
++++ b/lib/providers/generated/action.g.dart
+@@ -40,7 +40,7 @@ final class CommonActionProvider extends $NotifierProvider<CommonAction, void> {
+   }
+ }
+ 
+-String _$commonActionHash() => r'c6f5289eeec410fc7852d7e496c3e9a14f7220eb';
++String _$commonActionHash() => r'ac604ee78837182b2d152ec09cb748805c9df112';
+ 
+ abstract class _$CommonAction extends $Notifier<void> {
+   void build();
+@@ -150,7 +150,7 @@ final class ProfileHeadersActionProvider
+ }
+ 
+ String _$profileHeadersActionHash() =>
+-    r'175ee9ee62e3c674705374d2039f4e8151a1b30c';
++    r'52a310d12d09d105325337eaa9e0478988d74349';
+ 
+ /// Lands once per update of, or switch to, a profile; edits in between stay.
+ 
+diff --git a/lib/providers/generated/state.g.dart b/lib/providers/generated/state.g.dart
+index b7ef4904..7a5dc5f8 100644
+--- a/lib/providers/generated/state.g.dart
++++ b/lib/providers/generated/state.g.dart
+@@ -2089,7 +2089,7 @@ final class CurrentGroupsStateProvider
+ }
+ 
+ String _$currentGroupsStateHash() =>
+-    r'b334885e3b790e3c5f70bf05addff9d98cb93178';
++    r'ee0289ead2087c2f0cc724081400c79fa981eefc';
+ 
+ @ProviderFor(proxyState)
+ final proxyStateProvider = ProxyStateProvider._();
+@@ -3991,16 +3991,28 @@ String _$widgetEditingDeniedHash() =>
+     r'7b80292720b5fa889e0e8a79cebaf93e2208ad1a';
+ 
+ /// The outbound modes the current panel leaves on offer.
++///
++/// Portal Connect has no user-facing "direct": the only way to get untunnelled
++/// traffic is to switch the portal off, so the mode is never offered here even
++/// though the engine still understands it.
+ 
+ @ProviderFor(availableModes)
+ final availableModesProvider = AvailableModesProvider._();
+ 
+ /// The outbound modes the current panel leaves on offer.
++///
++/// Portal Connect has no user-facing "direct": the only way to get untunnelled
++/// traffic is to switch the portal off, so the mode is never offered here even
++/// though the engine still understands it.
+ 
+ final class AvailableModesProvider
+     extends $FunctionalProvider<List<Mode>, List<Mode>, List<Mode>>
+     with $Provider<List<Mode>> {
+   /// The outbound modes the current panel leaves on offer.
++  ///
++  /// Portal Connect has no user-facing "direct": the only way to get untunnelled
++  /// traffic is to switch the portal off, so the mode is never offered here even
++  /// though the engine still understands it.
+   AvailableModesProvider._()
+     : super(
+         from: null,
+@@ -4034,7 +4046,7 @@ final class AvailableModesProvider
+   }
+ }
+ 
+-String _$availableModesHash() => r'd62b18b7ed38014dc69828fbf893ba404bfa0a77';
++String _$availableModesHash() => r'dc4dd8b2ea972aaf80083b422a1c1d8b5578d239';
+ 
+ @ProviderFor(announcement)
+ final announcementProvider = AnnouncementProvider._();
+diff --git a/lib/providers/state.dart b/lib/providers/state.dart
+index 2b0ab5d7..78e974b1 100644
+--- a/lib/providers/state.dart
++++ b/lib/providers/state.dart
+@@ -21,6 +21,7 @@ import 'app.dart';
+ import 'config.dart';
+ import 'core.dart';
+ import 'database.dart';
++import 'package:fl_clash/common/outbound.dart';
+ 
+ part 'generated/state.g.dart';
+ part 'state/proxies.dart';
 diff --git a/lib/providers/state/profile.dart b/lib/providers/state/profile.dart
-index 1b93c8f9ee9f9a61d77e97f7991f5f91d9f337f6..d90e2ee4b7634c72ceddaf15daa50f6cc614bd6d 100644
+index 1b93c8f9..d90e2ee4 100644
 --- a/lib/providers/state/profile.dart
 +++ b/lib/providers/state/profile.dart
 @@ -133,12 +133,16 @@ bool widgetEditingDenied(Ref ref) {
@@ -525,14 +610,217 @@ index 1b93c8f9ee9f9a61d77e97f7991f5f91d9f337f6..d90e2ee4b7634c72ceddaf15daa50f6c
    ];
  }
  
+diff --git a/lib/providers/state/proxies.dart b/lib/providers/state/proxies.dart
+index b06ce18d..f5459882 100644
+--- a/lib/providers/state/proxies.dart
++++ b/lib/providers/state/proxies.dart
+@@ -11,14 +11,23 @@ GroupsState currentGroupsState(Ref ref) {
+   final shown = switch (mode) {
+     Mode.direct => const <Group>[],
+     Mode.global when globalOverride => groups.where(isGlobal),
+-    Mode.global => groups,
++    Mode.global => groups.where(_selectable),
+     Mode.rule => groups.where(
+-      (item) => item.hidden == false && !(globalOverride && isGlobal(item)),
++      (item) =>
++          item.hidden == false &&
++          _selectable(item) &&
++          !(globalOverride && isGlobal(item)),
+     ),
+   };
+   return GroupsState(value: shown.map(_withoutSelection).toList());
+ }
+ 
++/// Portal Connect never shows the engine's built-in outbounds as choices: DIRECT
++/// and REJECT are routing targets, not portals, and picking one by hand is how a
++/// user silently ends up without a tunnel. GLOBAL stays: it is the mihomo
++/// selector the global mode relies on.
++bool _selectable(Group group) => !isBuiltinOutboundName(group.name);
++
+ Group _withoutSelection(Group group) {
+   final all = group.all.any(_hasSelection)
+       ? [
+@@ -26,9 +35,18 @@ Group _withoutSelection(Group group) {
+             _hasSelection(proxy) ? proxy.copyWith(now: '') : proxy,
+         ]
+       : group.all;
+-  return group.copyWith(now: '', all: all);
++  // The GLOBAL group lists every outbound the engine knows, including the built-in
++  // DIRECT and REJECT. They are routing targets, not portals, so they never reach
++  // the picker even when they sit as members of a selectable group.
++  final selectable = [
++    for (final proxy in all)
++      if (_selectableMember(proxy)) proxy,
++  ];
++  return group.copyWith(now: '', all: selectable);
+ }
+ 
++bool _selectableMember(Proxy proxy) => !isBuiltinOutboundName(proxy.name);
++
+ bool _hasSelection(Proxy proxy) => proxy.now?.isNotEmpty ?? false;
+ 
+ @riverpod
 diff --git a/lib/views/profiles/add.dart b/lib/views/profiles/add.dart
-index 8c88c54ea28ce76d6ca84045f25df683d7660dd1..22597cc2ef92f00da6f24376652c4274d8e1ae71 100644
+index 8c88c54e..2802c18f 100644
 --- a/lib/views/profiles/add.dart
 +++ b/lib/views/profiles/add.dart
-@@ -68,21 +68,21 @@ class AddProfileMenu extends ConsumerWidget {
-       case null:
-         return;
-       case [final single]:
+@@ -1,165 +1,241 @@
+ import 'dart:async';
+ 
+ import 'package:fl_clash/common/common.dart';
++import 'package:fl_clash/enum/enum.dart';
+ import 'package:fl_clash/pages/scan.dart';
+-import 'package:fl_clash/plugins/app.dart';
+ import 'package:fl_clash/providers/providers.dart';
+ import 'package:fl_clash/ui/icons/icons.dart';
+ import 'package:fl_clash/views/profiles/custom/custom.dart';
+-import 'package:fl_clash/features/form/form.dart';
+ import 'package:fl_clash/widgets/widgets.dart';
+ import 'package:material_ui/material_ui.dart';
++import 'package:flutter/services.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ 
+-/// The ways to add a profile, in a menu out of the control [builder] makes.
++/// Adding a subscription: one sheet, every way in visible at once.
++///
++/// The menu used to hide the link field, the file picker and the scanner behind three
++/// taps on a popup. A person adding a subscription knows what they have — a link, a file
++/// or a code — so the field, the paste key, the file key, the scanner and the Add button
++/// all sit on the same screen and cost exactly one tap.
+ class AddProfileMenu extends ConsumerWidget {
+   const AddProfileMenu({super.key, required this.builder});
+ 
+   final Widget Function(PopupOpen open) builder;
+ 
+-  Future<void> _handleAddProfileFormFile(WidgetRef ref) async {
+-    unawaited(ref.read(profilesActionProvider.notifier).addProfileFormFile());
++  @override
++  Widget build(BuildContext context, WidgetRef ref) {
++    return Builder(
++      builder: (innerContext) => builder(
++        () => unawaited(_openSheet(innerContext, ref)),
++      ),
++    );
+   }
++}
+ 
+-  Future<void> _toScan(BuildContext context, WidgetRef ref) async {
+-    final profilesAction = ref.read(profilesActionProvider.notifier);
+-    if (system.isDesktop) {
+-      unawaited(profilesAction.addProfileFormQrCode());
+-      return;
+-    }
+-    final url = await BaseNavigator.push(context, const ScanPage());
+-    if (url == null) {
+-      return;
+-    }
+-    if (context.mounted) {
+-      await whenRouteUncovered(context);
+-    }
+-    WidgetsBinding.instance.addPostFrameCallback((_) {
+-      unawaited(profilesAction.addProfileFromLink(url));
++Future<void> _openSheet(BuildContext context, WidgetRef ref) async {
++  await showModalBottomSheet<void>(
++    context: context,
++    isScrollControlled: true,
++    useSafeArea: true,
++    builder: (_) => const _AddProfileSheet(),
++  );
++}
++
++class _AddProfileSheet extends ConsumerWidget {
++  const _AddProfileSheet();
++
++  @override
++  Widget build(BuildContext context, WidgetRef ref) {
++    return AddProfileForm(
++      padding: EdgeInsets.only(
++        left: 20,
++        right: 20,
++        top: 16,
++        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
++      ),
++      showTitle: true,
++      onDone: () => Navigator.of(context).popUntil((route) => route.isFirst),
++    );
++  }
++}
++
++/// The subscription form itself: link field, paste, file, scanner, Add underneath.
++///
++/// It lives on the empty start screen as well as in a sheet, because a person who has
++/// just installed the app should not have to press "Add profile" to discover that there
++/// is something to add.
++class AddProfileForm extends ConsumerStatefulWidget {
++  const AddProfileForm({
++    super.key,
++    this.padding = const EdgeInsets.symmetric(horizontal: 4),
++    this.showTitle = false,
++    this.hint,
++    this.onDone,
++  });
++
++  final EdgeInsets padding;
++  final bool showTitle;
++
++  /// A line above the field, used on the start screen to say what the field wants.
++  final String? hint;
++  final VoidCallback? onDone;
++
++  @override
++  ConsumerState<AddProfileForm> createState() => _AddProfileFormState();
++}
++
++class _AddProfileFormState extends ConsumerState<AddProfileForm> {
++  final _controller = TextEditingController();
++  String? _error;
++  bool _busy = false;
++
++  @override
++  void dispose() {
++    _controller.dispose();
++    super.dispose();
++  }
++
++  Future<void> _paste() async {
++    final data = await Clipboard.getData(Clipboard.kTextPlain);
++    final text = data?.text?.trim() ?? '';
++    if (text.isEmpty) return;
++    setState(() {
++      _controller.text = text;
++      _error = null;
+     });
+   }
+ 
+-  Future<void> _toAdd(BuildContext context, WidgetRef ref) async {
+-    final profilesAction = ref.read(profilesActionProvider.notifier);
+-    final appLocalizations = context.appLocalizations;
+-    final res = await showNamedUrlsForm(
+-      context,
+-      title: appLocalizations.importFromLink,
+-      urlLabel: appLocalizations.link,
+-      batchTip: appLocalizations.batchLinkInputTip,
+-      urlValidator: (value) {
+-        if (value == null || value.isEmpty) {
+-          return appLocalizations.emptyTip(appLocalizations.link);
+-        }
+-        if (!value.isUrl && !value.isShareLink) {
+-          return appLocalizations.invalidLinkTip;
+-        }
+-        return null;
+-      },
+-      existingUrls: {
+-        for (final profile in ref.read(profilesProvider))
+-          if (profile.url.isNotEmpty) profile.url,
+-      },
+-      withAgeSecretKey: true,
+-      withDeviceHeaders: true,
+-      clipboardImport: true,
+-    );
+-    switch (res) {
+-      case null:
+-        return;
+-      case [final single]:
 -        unawaited(
 -          profilesAction.addProfileFromLink(
 -            single.url,
@@ -540,31 +828,213 @@ index 8c88c54ea28ce76d6ca84045f25df683d7660dd1..22597cc2ef92f00da6f24376652c4274
 -            ageSecretKey: single.ageSecretKey,
 -            sendDeviceHeaders: single.sendDeviceHeaders,
 -          ),
-+        await profilesAction.addProfileFromLink(
-+          single.url,
-+          label: single.label,
-+          ageSecretKey: single.ageSecretKey,
-+          sendDeviceHeaders: single.sendDeviceHeaders,
-         );
-       default:
+-        );
+-      default:
 -        unawaited(
 -          profilesAction.addProfilesFromLinks([
 -            for (final item in res) item.url,
 -          ]),
 -        );
-+        await profilesAction.addProfilesFromLinks([
-+          for (final item in res) item.url,
-+        ]);
++  Future<void> _pickFile() async {
++    if (_busy) return;
++    setState(() => _busy = true);
++    await ref.read(profilesActionProvider.notifier).addProfileFormFile();
++    if (mounted) {
++      setState(() => _busy = false);
++      (widget.onDone ?? () => Navigator.of(context).pop())();
      }
-+    // The subscription is in: land on the working screen, not on the list of
-+    // subscriptions, and leave nothing on the stack that Back would exit from.
-+    if (!context.mounted) return;
+   }
+ 
+-  Future<void> _toSendFromPhone(WidgetRef ref) async {
+-    final profilesAction = ref.read(profilesActionProvider.notifier);
+-    if (!(await app?.requestLocalNetworkPermission() ?? true)) {
+-      final appLocalizations = currentAppLocalizations;
+-      final res = await dialogs.showMessage(
+-        message: TextSpan(text: appLocalizations.sendFromPhonePermissionDenied),
+-        confirmText: appLocalizations.settings,
+-      );
+-      if (res == true) {
+-        await app?.openAppSettings();
+-      }
++  Future<void> _scan() async {
++    final url = await BaseNavigator.push<String>(context, const ScanPage());
++    if (!mounted || url == null) return;
++    setState(() {
++      _controller.text = url;
++      _error = null;
++    });
++  }
++
++  Future<void> _submit() async {
++    final appLocalizations = context.appLocalizations;
++    final value = _controller.text.trim();
++    if (value.isEmpty) {
++      setState(() => _error = appLocalizations.emptyTip(appLocalizations.link));
+       return;
+     }
+-    final link = await dialogs.showCommonDialog<String>(
+-      child: const _SendFromPhoneDialog(),
+-    );
+-    if (link == null) {
++    if (!value.isUrl && !value.isShareLink) {
++      setState(() => _error = appLocalizations.invalidLinkTip);
+       return;
+     }
+-    final appLocalizations = currentAppLocalizations;
+-    final confirmed = await dialogs.showMessage(
+-      title: appLocalizations.sendFromPhoneConfirmTitle,
+-      message: TextSpan(text: link),
+-      confirmText: appLocalizations.import,
+-    );
+-    if (confirmed == true) {
+-      unawaited(profilesAction.addProfileFromLink(link));
++    setState(() {
++      _busy = true;
++      _error = null;
++    });
++    await ref.read(profilesActionProvider.notifier).addProfileFromLink(value);
++    if (!mounted) return;
++    if (widget.onDone != null) {
++      widget.onDone!();
++      return;
+     }
+-  }
+-
+-  void _toAddCustom(BuildContext context, WidgetRef ref) {
+-    final profileId = ref
+-        .read(profilesActionProvider.notifier)
+-        .addCustomProfile(context.appLocalizations.unnamed);
+-    unawaited(
+-      BaseNavigator.push(
+-        context,
+-        CustomProfileView(profileId: profileId, isNew: true),
+-      ),
+-    );
++    // Added from the start screen: the subscription is in, so go where it is used. Leaving
++    // the form on screen would make the person look for a way forward themselves.
++    ref.read(currentPageLabelProvider.notifier).toPage(PageLabel.dashboard);
 +    Navigator.of(context).popUntil((route) => route.isFirst);
    }
  
-   Future<void> _toSendFromPhone(WidgetRef ref) async {
+   @override
+-  Widget build(BuildContext context, WidgetRef ref) {
++  Widget build(BuildContext context) {
+     final appLocalizations = context.appLocalizations;
+-    return CommonPopupBox(
+-      targetBuilder: builder,
+-      popupBuilder: (_) => CommonPopupMenu(
+-        items: [
+-          CommonPopupMenuItem(
+-            glyph: AppGlyphs.qrCode,
+-            label: appLocalizations.qrcode,
+-            onPressed: () => _toScan(context, ref),
+-          ),
+-          CommonPopupMenuItem(
+-            glyph: AppGlyphs.importFile,
+-            label: appLocalizations.file,
+-            onPressed: () => _handleAddProfileFormFile(ref),
++    final theme = Theme.of(context);
++    return Padding(
++      padding: widget.padding,
++      child: Column(
++        mainAxisSize: MainAxisSize.min,
++        crossAxisAlignment: CrossAxisAlignment.stretch,
++        children: [
++          if (widget.showTitle) ...[
++            Text(
++              appLocalizations.addProfile,
++              style: theme.textTheme.titleMedium,
++            ),
++            const SizedBox(height: 14),
++          ],
++          Row(
++            crossAxisAlignment: CrossAxisAlignment.start,
++            children: [
++              Expanded(
++                child: TextField(
++                  controller: _controller,
++                  autofocus: true,
++                  minLines: 1,
++                  maxLines: 3,
++                  keyboardType: TextInputType.url,
++                  decoration: InputDecoration(
++                    hintText: widget.hint ?? appLocalizations.insertSubscriptionLink,
++                    errorText: _error,
++                    border: const OutlineInputBorder(),
++                    isDense: true,
++                  ),
++                  onChanged: (_) {
++                    if (_error != null) setState(() => _error = null);
++                  },
++                ),
++              ),
++              const SizedBox(width: 8),
++              // Every way in, side by side with the field: paste, file, code.
++              IconButton.filledTonal(
++                tooltip: appLocalizations.paste,
++                onPressed: _paste,
++                icon: const Icon(Icons.content_paste),
++              ),
++              IconButton.filledTonal(
++                tooltip: appLocalizations.file,
++                onPressed: _busy ? null : _pickFile,
++                icon: const GlyphIcon(AppGlyphs.importFile),
++              ),
++              IconButton.filledTonal(
++                tooltip: appLocalizations.qrcode,
++                onPressed: _scan,
++                icon: const GlyphIcon(AppGlyphs.qrCode),
++              ),
++            ],
+           ),
+-          CommonPopupMenuItem(
+-            glyph: AppGlyphs.cloudDownload,
+-            label: appLocalizations.link,
+-            onPressed: () => _toAdd(context, ref),
++          const SizedBox(height: 16),
++          FilledButton(
++            onPressed: _busy ? null : _submit,
++            child: _busy
++                ? const SizedBox.square(
++                    dimension: 18,
++                    child: CommonCircleLoading(),
++                  )
++                : Text(appLocalizations.add),
+           ),
+-          if (system.isTV)
+-            CommonPopupMenuItem(
+-              glyph: AppGlyphs.devices,
+-              label: appLocalizations.sendFromPhone,
+-              onPressed: () => _toSendFromPhone(ref),
+-            ),
+-          CommonPopupMenuItem(
+-            section: const CommonPopupMenuSection(),
+-            glyph: AppGlyphs.customize,
+-            label: appLocalizations.customProfile,
+-            onPressed: () => _toAddCustom(context, ref),
++          const SizedBox(height: 8),
++          if (widget.showTitle)
++            TextButton(
++            onPressed: _busy
++                ? null
++                : () {
++                    final profileId = ref
++                        .read(profilesActionProvider.notifier)
++                        .addCustomProfile(appLocalizations.unnamed);
++                    Navigator.of(context).pop();
++                    unawaited(
++                      BaseNavigator.push(
++                        context,
++                        CustomProfileView(profileId: profileId, isNew: true),
++                      ),
++                    );
++                  },
++            child: Text(appLocalizations.customProfile),
+           ),
+         ],
+       ),
 diff --git a/lib/views/profiles/profiles.dart b/lib/views/profiles/profiles.dart
-index c17d108ea8ca88031bee989d31413904cb13540e..9b4da251a5061109d056cf005ce55bdf8f8ea4d5 100644
+index c17d108e..9b4da251 100644
 --- a/lib/views/profiles/profiles.dart
 +++ b/lib/views/profiles/profiles.dart
 @@ -17,13 +17,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -770,7 +1240,7 @@ index c17d108ea8ca88031bee989d31413904cb13540e..9b4da251a5061109d056cf005ce55bdf
    }
 diff --git a/lib/views/profiles/subscription_facts.dart b/lib/views/profiles/subscription_facts.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..caeba579a5dea00970debafa672d9103f2c0a87f
+index 00000000..caeba579
 --- /dev/null
 +++ b/lib/views/profiles/subscription_facts.dart
 @@ -0,0 +1,46 @@
@@ -822,7 +1292,7 @@ index 0000000000000000000000000000000000000000..caeba579a5dea00970debafa672d9103
 +    '${date.month.toString().padLeft(2, '0')}.${date.year}';
 diff --git a/lib/views/profiles/subscription_lights.dart b/lib/views/profiles/subscription_lights.dart
 new file mode 100644
-index 0000000000000000000000000000000000000000..d1e5ed199e44b8f4da6d37aa24407c07d6dc71f1
+index 00000000..d1e5ed19
 --- /dev/null
 +++ b/lib/views/profiles/subscription_lights.dart
 @@ -0,0 +1,140 @@

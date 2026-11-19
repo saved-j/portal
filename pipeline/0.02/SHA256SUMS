@@ -1,5 +1,0 @@
-8b89c8c24530cbc4840f6f0f4792271c7036c11e894736fa110a20b1c38238b1  patches/10-core-network.mbox
-1718847cfeec35c419fc82ace89f7a7e37828e50495c591df903abb01caa358e  patches/20-brand-assets.mbox
-6c0f1a7c517a6d0c9b1fc543f93601c24d65546c3e1fb0ff3779ba4e754eeb64  patches/30-i18n.mbox
-f2122d786afb2d0bdfec0092c8a3aaad17ab63ee55aa3a593c9ae838e05d2dd6  patches/40-interface.mbox
-018c009f6b4fad298145fa58f89b4542ebec8e99c6bf8f379ec1c340d2643801  patches/50-build-pipeline.mbox
