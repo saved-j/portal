@@ -22,10 +22,17 @@ func handleEncodeShareLinks(mappings []map[string]any) []string {
 	return links
 }
 
+// handleDecodeShareLinks turns one subscription body into proxies the engine can hold.
+//
+// The body is whatever the panel decided to serve: a list of share links, the same list in
+// base64, or an Xray JSON document (Happ, Incy, v2rayN, Remnawave and Streisand are served
+// that shape). Every popular client hands the body to its core and lets the core's own
+// converter read it, so this does the same instead of keeping a second reader in Dart: the
+// link reader and the Xray JSON reader are both here, in the core we already ship.
 func handleDecodeShareLinks(lines []string) [][]map[string]any {
 	results := make([][]map[string]any, len(lines))
 	for i, line := range lines {
-		proxies, err := convert.ConvertsV2Ray([]byte(line))
+		proxies, err := decodeBody(line)
 		if err != nil {
 			proxies = []map[string]any{}
 		}
@@ -35,6 +42,24 @@ func handleDecodeShareLinks(lines []string) [][]map[string]any {
 		results[i] = proxies
 	}
 	return results
+}
+
+// decodeBody reads one body with whichever of the core's readers fits it.
+//
+// A JSON document is a single object or an array of client configs and is read by the Xray
+// JSON reader; everything else is a line of share links, possibly base64-wrapped, and is
+// read by the link reader. `convert.IsXrayJSON` is the same test the engine uses to decide
+// how to read a subscription, so both sides agree on what a body is.
+func decodeBody(body string) ([]map[string]any, error) {
+	trimmed := strings.TrimSpace(body)
+	if trimmed == "" {
+		return nil, nil
+	}
+	buf := []byte(trimmed)
+	if convert.IsXrayJSON(buf) {
+		return convert.ConvertsXrayJSON(buf)
+	}
+	return convert.ConvertsV2Ray(buf)
 }
 
 func unescapeHysteria2Password(proxy map[string]any) {

@@ -685,9 +685,51 @@ class ProfilesAction extends _$ProfilesAction {
   Future<Profile> download(Profile profile, {bool Function()? isCurrent}) {
     return profile.update(
       validate: (path, key) => _core.validateProfile(path, key),
-      fetch: fetch,
+      fetch: _engineFetch,
       isCurrent: isCurrent,
     );
+  }
+
+  /// The body the engine is handed, in the shape the engine reads.
+  ///
+  /// A panel may answer the mihomo user-agent with a link list or with an Xray JSON document
+  /// instead of Clash YAML — Remnawave and several panels serve one document to everyone. The
+  /// popular clients convert such a body once and keep the result; so does this, and with the
+  /// core's own reader instead of a second one written here: links, base64 links and Xray JSON
+  /// all become proxies, and the proxies become the profile the engine runs. Nothing about a
+  /// transport is re-parsed on this side, which is why XHTTP keeps its path, mode and padding.
+  Future<Response<Uint8List>> _engineFetch(
+    String url, {
+    Duration timeout = downloadTimeoutDuration,
+    Map<String, String> headers = const {},
+  }) async {
+    final response = await (fetch ?? request.getFileResponseForUrl)(
+      url,
+      timeout: timeout,
+      headers: headers,
+    );
+    final body = response.data;
+    if (body == null || body.isEmpty) return response;
+    final text = utf8.decode(body, allowMalformed: true);
+    // Clash YAML is what the engine runs as it is; anything else is converted once.
+    if (detectFormat(text) == SubscriptionFormat.mihomo) return response;
+    try {
+      final decoded = await _core.decodeShareLinks([text]);
+      final proxies = [
+        for (final item in decoded) ...item,
+      ];
+      if (proxies.isEmpty) return response;
+      final yaml = await encodeYamlTask({'proxies': proxies});
+      commonPrint.log(
+        'subscription read by the core: ${proxies.length} proxies for the engine',
+      );
+      response.data = Uint8List.fromList(utf8.encode(yaml));
+    } catch (error) {
+      // A body the core cannot read is left as it arrived: the profile's own validation then
+      // says so in the words the owner already knows, instead of a half-written profile.
+      commonPrint.log('subscription conversion skipped: ${compactError(error)}');
+    }
+    return response;
   }
 
   Future<Profile> _withAgeSecretKey(

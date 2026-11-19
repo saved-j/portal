@@ -315,3 +315,45 @@ func TestDecodeShareLinksAnswersEveryLine(t *testing.T) {
 		t.Errorf("names = %v, %v", results[0][0]["name"], results[2][0]["name"])
 	}
 }
+
+func TestDecodeShareLinksReadsAnXrayJSONDocument(t *testing.T) {
+	// A panel that serves one document to every client: Happ and Incy read this, and so does
+	// the engine now — the transport it describes (XHTTP over REALITY, with its path, mode and
+	// padding) must arrive whole, because a path that is lost sends the core to "/" and the
+	// server refuses the session.
+	const body = `[{
+		"remarks": "portal-xhttp",
+		"meta": {"serverDescription": "только Gemini"},
+		"outbounds": [{
+			"tag": "node-1",
+			"protocol": "vless",
+			"settings": {"vnext": [{"address": "cdn.example.com", "port": 443,
+				"users": [{"id": "b831381d-6324-4d53-ad4f-8cda48b30811", "encryption": "none"}]}]},
+			"streamSettings": {
+				"network": "xhttp",
+				"security": "reality",
+				"realitySettings": {"serverName": "www.microsoft.com", "publicKey": "pbk", "shortId": "ab", "fingerprint": "firefox"},
+				"xhttpSettings": {"path": "/7irvxr7e", "mode": "auto", "xPaddingBytes": "100-1000"}
+			}
+		}]
+	}]`
+	results := handleDecodeShareLinks([]string{body})
+	if len(results) != 1 || len(results[0]) != 1 {
+		t.Fatalf("results = %v", results)
+	}
+	proxy := results[0][0]
+	for field, want := range map[string]string{
+		"type":                       "vless",
+		"server":                     "cdn.example.com",
+		"network":                    "xhttp",
+		"xhttp-opts.path":            "/7irvxr7e",
+		"xhttp-opts.mode":            "auto",
+		"xhttp-opts.x-padding-bytes": "100-1000",
+		"servername":                 "www.microsoft.com",
+		"serverDescription":          "только Gemini",
+	} {
+		if got := lookupField(proxy, field); got != want {
+			t.Errorf("%s = %v, want %v", field, got, want)
+		}
+	}
+}

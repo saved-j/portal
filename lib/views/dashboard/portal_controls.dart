@@ -377,13 +377,21 @@ final portalBypassProvider =
       PortalBypassNotifier.new,
     );
 
-/// How the filter chips are drawn. Default 2 is 'name + server + icon'. Lives in a
-/// provider so switching the mode does not reset the user's choice.
+/// How the filter chips are drawn. Default 2 is 'name + server + icon'.
+///
+/// The choice is stored with the rest of the settings, not held in memory: a view the owner
+/// picked must survive a restart, otherwise every launch quietly answers a question he has
+/// already answered.
 class PortalDisplayNotifier extends Notifier<int> {
   @override
-  int build() => 2;
+  int build() => ref.watch(appSettingProvider.select((s) => s.portalDisplay));
 
-  void cycle() => state = (state + 1) % 5;
+  void cycle() {
+    final next = (state + 1) % 5;
+    ref
+        .read(appSettingProvider.notifier)
+        .update((settings) => settings.copyWith(portalDisplay: next));
+  }
 }
 
 final portalDisplayProvider = NotifierProvider<PortalDisplayNotifier, int>(

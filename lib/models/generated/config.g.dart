@@ -40,6 +40,7 @@ _AppSettingProps _$AppSettingPropsFromJson(
       (json['delayTestTimeout'] as num?)?.toInt() ?? defaultDelayTestTimeout,
   portalSortRules: json['portalSortRules'] as String? ?? '',
   portalSortXray: json['portalSortXray'] as String? ?? '',
+  portalDisplay: (json['portalDisplay'] as num?)?.toInt() ?? 2,
   portalPingRulesEnabled: json['portalPingRulesEnabled'] as bool? ?? true,
   portalPingRulesInterval:
       (json['portalPingRulesInterval'] as num?)?.toInt() ?? 60,
@@ -155,6 +156,7 @@ Map<String, dynamic> _$AppSettingPropsToJson(
   'delayTestTimeout': instance.delayTestTimeout,
   'portalSortRules': instance.portalSortRules,
   'portalSortXray': instance.portalSortXray,
+  'portalDisplay': instance.portalDisplay,
   'portalPingRulesEnabled': instance.portalPingRulesEnabled,
   'portalPingRulesInterval': instance.portalPingRulesInterval,
   'portalPingRulesAsInSubscription': instance.portalPingRulesAsInSubscription,

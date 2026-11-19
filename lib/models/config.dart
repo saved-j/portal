@@ -266,6 +266,11 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default('') String portalSortRules,
     @Default('') String portalSortXray,
 
+    /// How the filter chips are drawn (name only, name + server, and so on). Stored because
+    /// a view the owner chose is a choice, not a session: it comes back after a restart
+    /// instead of falling back to the default while nobody is looking.
+    @Default(2) int portalDisplay,
+
     /// Auto-ping, per mode: two switches and two periods, stored apart. The owner sees one
     /// control per list, and each list remembers its own number — a period chosen for the
     /// engine must not become the child's, and vice versa.
