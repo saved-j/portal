@@ -91,7 +91,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 8;
+const tutorialVersion = 9;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -501,7 +501,10 @@ Future<void> showPortalTutorial(BuildContext context, {int fromStep = 0}) async 
         fromStep: fromStep,
         onDone: () {
           if (!done.isCompleted) done.complete();
-          navigator.maybePop();
+          // The route was pushed by this function, so it is popped by this function: a
+          // `maybePop` that decided not to would leave a transparent barrier over the screen,
+          // and every tap after the tour would be swallowed by a tour that looks finished.
+          if (navigator.canPop()) navigator.pop();
         },
       ),
       transitionsBuilder: (context, animation, _, child) =>
