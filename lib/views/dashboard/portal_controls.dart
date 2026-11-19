@@ -1008,9 +1008,8 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
             // and a switch that reads as a switch. The editor button only exists in the
             // network mode, so 'Сеть порталов' has somewhere obvious to lead.
             GestureDetector(
-              key: tutorialKeys[TutorialTarget.portalLabel],
-              // A plain tap on 'Сеть порталов' opens the proxies dashboard: that is what
-              // the network mode is for. The double tap still edits the filter strip.
+              // The whole row still answers with the dashboard: the switch and the name each
+              // have their own tap, and the padding between them should not be dead.
               onTap: () => Navigator.of(
                 context,
               ).push(MaterialPageRoute(builder: (_) => const ProxiesView())),
@@ -1025,6 +1024,7 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                         ? shownReason
                         : (simple ? engineReason : xrayReason),
                     child: Switch(
+                      key: tutorialKeys[TutorialTarget.modeSwitch],
                       // The thumb tells the truth about the mode the app is in, even when that
                       // mode has just gone dark: a portal that keeps working on its last good
                       // config must not look switched off.
@@ -1055,13 +1055,24 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    context.appLocalizations.rules,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: mode == Mode.rule
-                          ? _liveGreen(context)
-                          : theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
+                  // The name is its own control: the dashboard opens on these letters, not on
+                  // the switch next to it, which is what the tour tells people to press.
+                  GestureDetector(
+                    key: tutorialKeys[TutorialTarget.modeLabel],
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      Navigator.of(
+                        context,
+                      ).push(MaterialPageRoute(builder: (_) => const ProxiesView()));
+                    },
+                    child: Text(
+                      context.appLocalizations.rules,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: mode == Mode.rule
+                            ? _liveGreen(context)
+                            : theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],

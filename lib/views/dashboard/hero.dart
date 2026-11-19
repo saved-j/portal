@@ -54,7 +54,9 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final setting = ref.read(appSettingProvider);
-      if (setting.tutorialSeen) return;
+      if (setting.tutorialSeen && setting.tutorialVersion >= tutorialVersion) {
+        return;
+      }
       if (ref.read(profilesProvider).isEmpty) return;
       showPortalTutorial(context, fromStep: setting.tutorialStep);
     });
@@ -287,7 +289,7 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                                     const PortalPlanCard(),
                                     const SizedBox(height: _gap),
                                     PortalModeSwitch(
-                                      key: tutorialKeys[TutorialTarget.mode],
+                                      key: tutorialKeys[TutorialTarget.modeSwitch],
                                     ),
                                   ],
                                 ),
@@ -307,7 +309,7 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                           // switch: visible, but out of the way of choosing a server.
                           const PortalPlanCard(),
                           const SizedBox(height: _gap),
-                          PortalModeSwitch(key: tutorialKeys[TutorialTarget.mode]),
+                          PortalModeSwitch(key: tutorialKeys[TutorialTarget.modeSwitch]),
                           const SizedBox(height: 4),
                           const PortalServerList(),
                         ],

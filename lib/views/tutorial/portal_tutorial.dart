@@ -11,11 +11,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// The keys live here, not in the dashboard: a widget attaches its own key, so the tour can
 /// find it wherever the layout put it — one column on a phone, two on a wide window — without
 /// the dashboard knowing that a tour exists.
-enum TutorialTarget { mode, portalLabel, filters, chip, start }
+enum TutorialTarget { modeSwitch, modeLabel, filters, chip, start }
 
 final tutorialKeys = {
-  TutorialTarget.mode: GlobalKey(debugLabel: 'tutorial-mode'),
-  TutorialTarget.portalLabel: GlobalKey(debugLabel: 'tutorial-portal-label'),
+  TutorialTarget.modeSwitch: GlobalKey(debugLabel: 'tutorial-mode-switch'),
+  TutorialTarget.modeLabel: GlobalKey(debugLabel: 'tutorial-mode-label'),
   TutorialTarget.filters: GlobalKey(debugLabel: 'tutorial-filters'),
   TutorialTarget.chip: GlobalKey(debugLabel: 'tutorial-chip'),
   TutorialTarget.start: GlobalKey(debugLabel: 'tutorial-start'),
@@ -47,9 +47,15 @@ class TutorialStep {
 /// The same on every platform: one list, one set of words, one order. The one step that cannot
 /// happen on a desktop — the quick-settings tile — is marked as such instead of being dropped
 /// from the list, so the numbering stays honest.
+/// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
+/// is compared against it when the app starts.
+const tutorialVersion = 3;
+
 const tutorialSteps = <TutorialStep>[
+  // The switch, not the row: the tour asks for a tap on the control that moves, and the row
+  // around it is a label, not a control.
   TutorialStep(
-    target: TutorialTarget.mode,
+    target: TutorialTarget.modeSwitch,
     title: 'Сеть порталов',
     body:
         'Сеть порталов позволяет делить трафик, подключая разные приложения через разные '
@@ -78,8 +84,10 @@ const tutorialSteps = <TutorialStep>[
     title: 'Вид плиток',
     body: 'Двойным тапом на плитку переключается внешний вид плиток.',
   ),
+  // The word, not the row: the dashboard opens on the name and nothing else, so that is the
+  // spot the tour points at.
   TutorialStep(
-    target: TutorialTarget.portalLabel,
+    target: TutorialTarget.modeLabel,
     title: 'Все фильтры сразу',
     body:
         'Нажатие на «Сеть порталов» открывает экран, где все фильтры настраиваются сразу — '
@@ -139,6 +147,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     ref.read(appSettingProvider.notifier).update((state) => state.copyWith(
       tutorialSeen: true,
       tutorialStep: 0,
+      tutorialVersion: tutorialVersion,
     ));
     widget.onDone();
   }

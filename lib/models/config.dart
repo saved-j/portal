@@ -330,6 +330,9 @@ abstract class AppSettingProps with _$AppSettingProps {
     /// The first-run tour has been seen. It is shown once — on the first launch after
     /// install — and never again unless the settings are cleared.
     @Default(false) bool tutorialSeen,
+    /// Bumped when the tour's own text or targets change: someone who walked an older tour
+    /// should see the new one once, not only a fresh install.
+    @Default(1) int tutorialVersion,
     /// The step the tour stopped on, so a tour interrupted by a restart resumes where it was.
     @Default(0) int tutorialStep,
     @Default(true)

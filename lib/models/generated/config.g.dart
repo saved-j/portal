@@ -98,6 +98,7 @@ _AppSettingProps _$AppSettingPropsFromJson(
   autoCheckUpdate: json['autoCheckUpdate'] as bool? ?? true,
   hiddenUpdate: json['hiddenUpdate'] as String?,
   tutorialSeen: json['tutorialSeen'] as bool? ?? false,
+  tutorialVersion: (json['tutorialVersion'] as num?)?.toInt() ?? 1,
   tutorialStep: (json['tutorialStep'] as num?)?.toInt() ?? 0,
   sidebarExpanded:
       _readSidebarExpanded(json, 'sidebarExpanded') as bool? ?? true,
@@ -203,6 +204,7 @@ Map<String, dynamic> _$AppSettingPropsToJson(
   'autoCheckUpdate': instance.autoCheckUpdate,
   'hiddenUpdate': instance.hiddenUpdate,
   'tutorialSeen': instance.tutorialSeen,
+  'tutorialVersion': instance.tutorialVersion,
   'tutorialStep': instance.tutorialStep,
   'sidebarExpanded': instance.sidebarExpanded,
   'acceptedDisclaimerVersion': instance.acceptedDisclaimerVersion,
