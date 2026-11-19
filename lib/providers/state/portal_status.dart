@@ -9,16 +9,25 @@ class PortalStatusNotifier extends Notifier<PortalRuntimeStatus> {
   @override
   PortalRuntimeStatus build() {
     final source = portalRuntime.status;
+    // Only a record that was Active and then lost its owner means a dead tunnel. On the way up
+    // the same record is Off for a moment before the core answers, and treating that as a loss
+    // cleared the clock seconds after the owner pressed connect — which read as "the button does
+    // nothing", and on a desktop the engine was torn down with the clock.
+    var sawActive = false;
+
     void onChange() {
       final next = source.value;
       state = next;
+      if (next.phase == 'Active' && next.owner != null) sawActive = true;
       // A tunnel that died is not a tunnel. The native record is the one that knows — the
       // engine can stop under a screen that was never told — and this side's clock is what
       // `isStart` reads, so the clock is cleared here. Without it the portal keeps a running
       // timer over a connection that is gone.
-      if (next.phase == 'Off' &&
+      if (sawActive &&
+          next.phase == 'Off' &&
           next.owner == null &&
           ref.read(runTimeProvider) != null) {
+        sawActive = false;
         ref.read(runTimeProvider.notifier).value = null;
       }
     }
