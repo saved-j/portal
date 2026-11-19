@@ -1840,6 +1840,10 @@ Future<void> _testDelayWithEngine(
   // an open portal — must not put down the tunnel somebody else is using by then.
   final sweep = delay.beginSweep(Mode.rule);
   final ownerBefore = portalRuntime.status.value.owner;
+  // The gateway stamps every press. A sweep that is running when the owner presses the button
+  // is sharing the tunnel from that moment, and must not put it down when the measurement ends
+  // — the tunnel the owner asked for is not the sweep's to close.
+  final pressedBefore = portalOpenedAtMs.value;
   // Whether this sweep is the reason the tunnel exists. `setRunning(true)` answers "there is a
   // tunnel now", which is true for a portal that was already up — and a sweep that believes it
   // raised someone else's tunnel puts it down when it finishes. That is a connection closing on
@@ -1887,9 +1891,11 @@ Future<void> _testDelayWithEngine(
     // raised the engine itself, so a runtime that now reports an owner is another owner, and
     // one that reports none is the engine this sweep started.
     final ownerNow = portalRuntime.status.value.owner;
+    final pressedDuring = portalOpenedAtMs.value != pressedBefore;
     final stillMine =
         started &&
         raisedBySweep &&
+        !pressedDuring &&
         delay.isCurrentSweep(sweep, Mode.rule) &&
         ownerNow == PortalOwner.mihomo;
     if (stillMine) {
