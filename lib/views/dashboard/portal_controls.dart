@@ -1848,18 +1848,16 @@ Future<void> _testDelayWithEngine(
   // already asked for a tunnel, even though the record still says Off until the core answers.
   // Without this the sweep sees "nobody owns it", takes the credit for the tunnel the owner
   // asked for, and puts it down when the measurement ends.
-  // A press is the owner's own request, and it is older than the core's answer: the gateway
-  // marks it the moment the finger lands. A sweep that starts within the minute after a press
-  // is sharing the tunnel with the owner, not raising one of its own.
-  final pressedAt = portalOpenedAtMs.value;
-  final ownerJustPressed =
-      pressedAt != null &&
-      DateTime.now().millisecondsSinceEpoch - pressedAt < 60000;
-  final raisedBySweep =
-      ownerBefore == null &&
-      ref.read(runTimeProvider) == null &&
-      !ownerJustPressed;
+  // "Was anything already coming up when I asked?" is the only question that separates a
+  // sweep that raised a tunnel from a sweep that shares the owner's. The record lags the
+  // request — the core answers seconds later — so the three cheap signs are read together, and
+  // one of them is enough to mean the tunnel is not the sweep's to put down.
+  final wasUp =
+      ref.read(runTimeProvider) != null ||
+      ownerBefore != null ||
+      portalRuntime.status.value.busy;
   final started = await ref.read(setupActionProvider.notifier).setRunning(true);
+  final raisedBySweep = started && !wasUp;
   var stopped = false;
   try {
     if (!started) {
