@@ -78,3 +78,6 @@ devtools_options.yaml
 .fvm/
 .fvmrc
 /coverage/lcov.info
+
+# Desktop cores are build inputs, produced by tool/ and never committed.
+tool/cores/

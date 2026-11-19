@@ -103,6 +103,8 @@
   "themeStyleOriginal": "原版",
   "autoPingPeriod": "自动测试间隔",
   "autoPingPeriodNote": "间隔越短，耗电越多：每个周期都会询问每个服务器。",
+"portalBypassFilter": "直接连接，不经门户",
+  "portalRestoreFilter": "恢复经由门户",
   "portalStrikes": "连续失败次数：{count}",
   "portalModeUnavailable": "此模式不可用：{reason}",
   "portalModesUnavailable": "两种模式均不可用：{reason}",

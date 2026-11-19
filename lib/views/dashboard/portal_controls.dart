@@ -1,4 +1,4 @@
-import 'dart:io' show Socket;
+import 'package:fl_clash/core/desktop/xray_child.dart';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -1887,46 +1887,6 @@ Future<void> _testDelayWithEngine(
 /// read while it runs, and the figures that are already known should not wait for the slowest
 /// node. The whole sweep is bounded by one deadline — past it the remaining rows keep a dash
 /// and the core is told to stop.
-/// Times each server by dialling it, one connection per row, without any core involved.
-///
-/// This is the desktop path: the child runs as its own process and the phone's measure
-/// channel does not exist there, so the app measures what it can honestly measure — how long
-/// the node takes to accept a connection.
-Future<int> _measureServersByHand(
-  List<XrayServerConfig> servers,
-  List<({String name, String tag})> chunk,
-  TcpDelayNotifier delay, {
-  required Duration timeout,
-}) async {
-  final byName = {for (final server in servers) server.name: server};
-  var measured = 0;
-  await Future.wait([
-    for (final entry in chunk)
-      () async {
-        final server = byName[entry.name];
-        if (server == null || server.address.isEmpty || server.port <= 0) {
-          delay.record(entry.name, null);
-          return;
-        }
-        final watch = Stopwatch()..start();
-        try {
-          final socket = await Socket.connect(
-            server.address,
-            server.port,
-            timeout: timeout,
-          );
-          socket.destroy();
-          delay.record(entry.name, watch.elapsedMilliseconds);
-          measured++;
-        } catch (_) {
-          // No answer is a fact about the node, and the row draws it as a dash.
-          delay.record(entry.name, null);
-        }
-      }(),
-  ]);
-  return measured;
-}
-
 Future<void> _testDelayWithChild(
   WidgetRef ref,
   List<XrayServerConfig> servers, {
@@ -1976,34 +1936,28 @@ Future<void> _testDelayWithChild(
         break;
       }
       final chunk = stale.skip(index).take(_sweepChunk).toList();
-      final answer = await portalRuntime.startMeasure(
-        config: measure.config,
-        tags: jsonEncode([for (final entry in chunk) entry.tag]),
-        url: url,
-        timeoutMs: _sweepTimeoutMs,
-        limit: _sweepWorkers,
-      );
+      // The same sweep, asked of whichever core owns it: the phone runs it inside the app,
+      // a desktop runs it in the child's own binary under the `measure` subcommand. One
+      // implementation, one set of numbers.
+      final answer = system.isAndroid
+          ? await portalRuntime.startMeasure(
+              config: measure.config,
+              tags: jsonEncode([for (final entry in chunk) entry.tag]),
+              url: url,
+              timeoutMs: _sweepTimeoutMs,
+              limit: _sweepWorkers,
+            )
+          : await DesktopXrayChild.measure(
+              config: measure.config,
+              tags: [for (final entry in chunk) entry.tag],
+              url: url,
+              timeoutMs: _sweepTimeoutMs,
+            );
       if (!delay.isCurrentSweep(sweep, Mode.global)) {
         failure = 'cancelled';
         break;
       }
       if (!answer.ok) {
-        // A desktop has no native measure bridge: the core is a separate process there, and
-        // the channel the phone uses does not exist. The node is dialled from here instead —
-        // that is the number the row promises: how long this server takes to answer.
-        if (!system.isAndroid) {
-          final handshake = await _measureServersByHand(
-            servers,
-            chunk,
-            delay,
-            timeout: Duration(milliseconds: _sweepTimeoutMs),
-          );
-          measured += handshake;
-          commonPrint.log(
-            'portal test: measured $handshake by hand (desktop has no measure bridge)',
-          );
-          continue;
-        }
         failure = answer.message;
         commonPrint.log(
           'portal test: the sweep did not run${failure.isEmpty ? '' : ': $failure'}',

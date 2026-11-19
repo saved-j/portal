@@ -31,6 +31,53 @@ class DesktopXrayChild {
   /// The document the child was started with, so a restart can be skipped when nothing changed.
   static String get document => _document;
 
+  /// One measurement sweep, run by the core itself.
+  ///
+  /// The sweep is the phone's: the same Go code that answers `XrayMeasure` inside libxray is
+  /// built into this binary as the `measure` subcommand, so a desktop row and a phone row are
+  /// produced by one implementation — the core dials each outbound with its own tag and says
+  /// how long the request took. Nothing listens on loopback, and the tunnel's own instance is
+  /// untouched, which is what lets a sweep run while the portal is up.
+  ///
+  /// Returns the rows as the core wrote them, or an error message.
+  static Future<({bool ok, String message, String rows})> measure({
+    required String config,
+    required List<String> tags,
+    required String url,
+    int timeoutMs = 8000,
+  }) async {
+    final binary = await _binaryPath();
+    if (binary == null) {
+      return (ok: false, message: 'the xray binary is missing', rows: '');
+    }
+    final file = File('${await appPath.homeDirPath}/xray-measure.json');
+    try {
+      await file.writeAsString(config);
+    } catch (error) {
+      return (ok: false, message: '$error', rows: '');
+    }
+    try {
+      final result = await Process.run(binary.path, [
+        'measure',
+        file.path,
+        url,
+        '$timeoutMs',
+        jsonEncode(tags),
+      ], workingDirectory: binary.parent.path);
+      final out = '${result.stdout}'.trim();
+      if (result.exitCode != 0 || !out.startsWith('{')) {
+        return (
+          ok: false,
+          message: out.isEmpty ? 'measure exited with ${result.exitCode}' : out,
+          rows: '',
+        );
+      }
+      return (ok: true, message: '', rows: out);
+    } catch (error) {
+      return (ok: false, message: '$error', rows: '');
+    }
+  }
+
   /// Starts the child on [document], a full Xray config for every node of the subscription.
   ///
   /// The config is the engine-format document with one thing added: a socks inbound on a free

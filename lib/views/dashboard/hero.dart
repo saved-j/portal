@@ -26,12 +26,6 @@ import 'package:flutter/services.dart';
 
 const heroMaxWidth = 520.0;
 
-/// From this width a window gets two columns instead of one.
-const _wideBreakpoint = 900.0;
-
-/// How wide the whole page may grow on a big screen; past this the eye loses the rows.
-const _wideMaxWidth = 1280.0;
-
 /// The controls keep the width they have on a phone; the list takes the rest.
 const _wideControlsWidth = 420.0;
 
@@ -82,18 +76,22 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
       );
     }
     final headers = profile.headers;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // A window wide enough for two columns is a window to use: the controls on the left,
-        // the list on the right, and the name over both. Everything narrower keeps the one
-        // column the phone has always had.
-        final wide = constraints.maxWidth >= _wideBreakpoint;
-        final maxWidth = wide
-            ? (_wideMaxWidth.clamp(0.0, constraints.maxWidth))
-            : heroMaxWidth;
+    // How many columns the page gets is decided by the same rule the profiles and the
+    // connection lists use — the fork's own: as many cards as fit, never fewer than one. The
+    // dashboard does not invent a breakpoint of its own.
+    return WidthBuilder(
+      builder: (context, width) {
+        final columns = getProfilesColumns(
+          width - padding.horizontal,
+          spacing: 16,
+          minItemWidth: 320,
+        );
+        final wide = columns > 1;
         return Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxWidth),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: wide ? width - padding.horizontal : heroMaxWidth,
+        ),
             child: Column(
               children: [
                 Expanded(

@@ -9,6 +9,9 @@ import 'package:fl_clash/widgets/widgets.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:flutter/services.dart';
+
+import '../dashboard/portal_controls.dart';
 import 'card.dart';
 import 'common.dart';
 
@@ -650,19 +653,30 @@ class ListHeader extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Flexible(
-              child: Row(
-                children: [
-                  _GroupIcon(src: group.icon, name: groupName),
-                  Flexible(
-                    child: _GroupSummary(
-                      groupName: groupName,
-                      description: group.serverDescription,
+              // A long press on the filter's own name is the same gesture the portal theme
+              // has: it takes this filter out of the portal (the engine is given DIRECT) and
+              // the second press brings the previous server back.
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onLongPress: () {
+                  HapticFeedback.mediumImpact();
+                  ref.read(portalBypassProvider.notifier).toggle(ref, group);
+                },
+                child: Row(
+                  children: [
+                    _GroupIcon(src: group.icon, name: groupName),
+                    Flexible(
+                      child: _GroupSummary(
+                        groupName: groupName,
+                        description: group.serverDescription,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             _GroupActions(
+              group: group,
               isExpand: isExpand,
               isDelayTesting: isDelayTesting,
               onDelayTest: () {
@@ -835,25 +849,46 @@ class _GroupSubtitle extends ConsumerWidget {
   }
 }
 
-class _GroupActions extends StatelessWidget {
+class _GroupActions extends ConsumerWidget {
   const _GroupActions({
+    required this.group,
     required this.isExpand,
     required this.isDelayTesting,
     required this.onDelayTest,
     required this.onToggle,
   });
 
+  final Group group;
   final bool isExpand;
   final bool isDelayTesting;
   final VoidCallback onDelayTest;
   final VoidCallback onToggle;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bypassed = ref.watch(
+      portalBypassProvider.select((state) => state.containsKey(group.name)),
+    );
     return TonalButtonTheme(
       size: TonalButtonSize.compact,
       child: Row(
         children: [
+          // Power: this filter out of the portal for a while, and back. The same switch the
+          // portal theme has on its chips, in the place the list already keeps its controls.
+          IconButton(
+            tooltip: bypassed
+                ? context.appLocalizations.portalRestoreFilter
+                : context.appLocalizations.portalBypassFilter,
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              ref.read(portalBypassProvider.notifier).toggle(ref, group);
+            },
+            icon: GlyphIcon(
+              AppGlyphs.power,
+              color: bypassed ? context.colorScheme.primary : null,
+            ),
+          ),
+          const SizedBox(width: 6),
           IconButton(
             tooltip: context.appLocalizations.delayTest,
             onPressed: isDelayTesting ? null : onDelayTest,

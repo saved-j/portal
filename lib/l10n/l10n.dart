@@ -835,6 +835,26 @@ class AppLocalizations {
     );
   }
 
+  /// `Straight out, past the portal`
+  String get portalBypassFilter {
+    return Intl.message(
+      'Straight out, past the portal',
+      name: 'portalBypassFilter',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Back into the portal`
+  String get portalRestoreFilter {
+    return Intl.message(
+      'Back into the portal',
+      name: 'portalRestoreFilter',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Failed attempts in a row: {count}`
   String portalStrikes(Object count) {
     return Intl.message(

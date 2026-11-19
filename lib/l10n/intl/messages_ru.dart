@@ -1483,9 +1483,15 @@ class MessageLookup extends MessageLookupByLibrary {
     "portHopping": MessageLookupByLibrary.simpleMessage("Перескок портов"),
     "portTip": m63,
     "portValue": m64,
+    "portalBypassFilter": MessageLookupByLibrary.simpleMessage(
+      "Напрямую, мимо портала",
+    ),
     "portalModeUnavailable": m65,
     "portalModesUnavailable": m66,
     "portalOff": MessageLookupByLibrary.simpleMessage("Портал погашен"),
+    "portalRestoreFilter": MessageLookupByLibrary.simpleMessage(
+      "Вернуть в портал",
+    ),
     "portalStartFailed": m67,
     "portalStrikes": m68,
     "portalSwitchFailed": m69,

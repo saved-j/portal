@@ -1209,6 +1209,36 @@ abstract final class AppGlyphs {
     ], closed: true),
   ]);
 
+  /// A power symbol: the ring with a gap at the top and the line through it — the mark every
+  /// client uses for "this one is out of the tunnel for now".
+  static const power = Glyph([
+    GlyphPolyline([
+      GlyphVertex(16.6, 5.4),
+      GlyphVertex(18.2, 7.0),
+      GlyphVertex(19.4, 8.9),
+      GlyphVertex(19.9, 11.1),
+      GlyphVertex(19.9, 13.3),
+      GlyphVertex(19.2, 15.5),
+      GlyphVertex(18.0, 17.3),
+      GlyphVertex(16.3, 18.8),
+      GlyphVertex(14.2, 19.7),
+      GlyphVertex(12.0, 20.0),
+      GlyphVertex(9.8, 19.7),
+      GlyphVertex(7.7, 18.8),
+      GlyphVertex(6.0, 17.3),
+      GlyphVertex(4.8, 15.5),
+      GlyphVertex(4.1, 13.3),
+      GlyphVertex(4.1, 11.1),
+      GlyphVertex(4.6, 8.9),
+      GlyphVertex(5.8, 7.0),
+      GlyphVertex(7.4, 5.4),
+    ]),
+    GlyphPolyline([
+      GlyphVertex(12, 3.2),
+      GlyphVertex(12, 10.8),
+    ]),
+  ]);
+
   static const bolt = Glyph([
     GlyphPolyline([
       GlyphVertex(14.5, 2.8, 1),
