@@ -1839,6 +1839,11 @@ Future<void> _testDelayWithEngine(
   // an open portal — must not put down the tunnel somebody else is using by then.
   final sweep = delay.beginSweep(Mode.rule);
   final ownerBefore = portalRuntime.status.value.owner;
+  // Whether this sweep is the reason the tunnel exists. `setRunning(true)` answers "there is a
+  // tunnel now", which is true for a portal that was already up — and a sweep that believes it
+  // raised someone else's tunnel puts it down when it finishes. That is a connection closing on
+  // its own a few seconds after it opened, with the screen still showing it as live.
+  final raisedBySweep = ownerBefore == null;
   final started = await ref.read(setupActionProvider.notifier).setRunning(true);
   var stopped = false;
   try {
@@ -1871,9 +1876,9 @@ Future<void> _testDelayWithEngine(
     final ownerNow = portalRuntime.status.value.owner;
     final stillMine =
         started &&
+        raisedBySweep &&
         delay.isCurrentSweep(sweep, Mode.rule) &&
-        (ownerNow == ownerBefore ||
-            (ownerBefore == null && ownerNow == PortalOwner.mihomo));
+        ownerNow == PortalOwner.mihomo;
     if (stillMine) {
       stopped = await ref.read(setupActionProvider.notifier).setRunning(false);
     } else if (started) {

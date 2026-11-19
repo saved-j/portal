@@ -9,7 +9,19 @@ class PortalStatusNotifier extends Notifier<PortalRuntimeStatus> {
   @override
   PortalRuntimeStatus build() {
     final source = portalRuntime.status;
-    void onChange() => state = source.value;
+    void onChange() {
+      final next = source.value;
+      state = next;
+      // A tunnel that died is not a tunnel. The native record is the one that knows — the
+      // engine can stop under a screen that was never told — and this side's clock is what
+      // `isStart` reads, so the clock is cleared here. Without it the portal keeps a running
+      // timer over a connection that is gone.
+      if (next.phase == 'Off' &&
+          next.owner == null &&
+          ref.read(runTimeProvider) != null) {
+        ref.read(runTimeProvider.notifier).value = null;
+      }
+    }
     source.addListener(onChange);
     ref.onDispose(() => source.removeListener(onChange));
     if (system.isAndroid) return source.value;
