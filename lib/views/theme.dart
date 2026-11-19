@@ -49,16 +49,9 @@ class ThemeView extends StatelessWidget {
             settingKey: 'view.app.color',
             child: _PrimaryColorItem(),
           ),
-          const SizedBox(height: 16),
-          const ManagedSetting(
-            settingKey: 'view.app.navbar',
-            child: _NavigationBarItem(),
-          ),
-          const SizedBox(height: 16),
-          const ManagedSetting(
-            settingKey: 'view.app.tabs',
-            child: _TabAnimationItem(),
-          ),
+          // The bottom bar and its page animation were removed from this build: the
+          // navigation is the portal's own. A setting that points at an element nobody can
+          // see is a button that does nothing, so both rows are gone with the bar.
           const SizedBox(height: 16),
           const ManagedSetting(
             settingKey: 'view.app.glass',
@@ -766,97 +759,6 @@ class _PureBlackItem extends ConsumerWidget {
         ref
             .read(themeSettingProvider.notifier)
             .update((state) => state.copyWith(pureBlack: value));
-      },
-    );
-  }
-}
-
-class _NavigationBarItem extends ConsumerWidget {
-  const _NavigationBarItem();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final appLocalizations = context.appLocalizations;
-    final floatingBar = ref.watch(_floatingBarProvider);
-    final liquidGlass = ref.watch(_liquidGlassProvider);
-    final colorScheme = context.colorScheme;
-    return PreviewChoiceGroup<bool>(
-      info: Info(
-        label: appLocalizations.navigationBarStyle,
-        glyph: AppGlyphs.layers,
-      ),
-      value: floatingBar,
-      choices: [
-        PreviewChoice(
-          value: true,
-          label: appLocalizations.floating,
-          pictogram: MiniScreenThumb(
-            screen: MiniScreen(
-              colorScheme: colorScheme,
-              floatingBar: true,
-              liquidGlass: liquidGlass,
-            ),
-          ),
-        ),
-        PreviewChoice(
-          value: false,
-          label: appLocalizations.docked,
-          pictogram: MiniScreenThumb(
-            screen: MiniScreen(colorScheme: colorScheme, floatingBar: false),
-          ),
-        ),
-      ],
-      onChanged: (value) {
-        ref
-            .read(appSettingProvider.notifier)
-            .update((state) => state.copyWith(floatingNavigationBar: value));
-      },
-    );
-  }
-}
-
-class _TabAnimationItem extends ConsumerWidget {
-  const _TabAnimationItem();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final appLocalizations = context.appLocalizations;
-    final tabAnimation = ref.watch(
-      appSettingProvider.select((state) => state.tabAnimation),
-    );
-    final floatingBar = ref.watch(_floatingBarProvider);
-    final liquidGlass = ref.watch(_liquidGlassProvider);
-    final colorScheme = context.colorScheme;
-    Widget switching(TabAnimation tabAnimation) => MiniScreenThumb(
-      screen: MiniScreen(
-        colorScheme: colorScheme,
-        floatingBar: floatingBar,
-        liquidGlass: liquidGlass,
-        selected: 1,
-        previous: 0,
-        progress: 0.55,
-        tabAnimation: tabAnimation,
-      ),
-    );
-    return PreviewChoiceGroup<TabAnimation>(
-      info: Info(label: appLocalizations.tabAnimation, glyph: AppGlyphs.motion),
-      value: tabAnimation,
-      choices: [
-        PreviewChoice(
-          value: TabAnimation.slide,
-          label: appLocalizations.slide,
-          pictogram: switching(TabAnimation.slide),
-        ),
-        PreviewChoice(
-          value: TabAnimation.fade,
-          label: appLocalizations.fade,
-          pictogram: switching(TabAnimation.fade),
-        ),
-      ],
-      onChanged: (value) {
-        ref
-            .read(appSettingProvider.notifier)
-            .update((state) => state.copyWith(tabAnimation: value));
       },
     );
   }

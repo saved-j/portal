@@ -95,8 +95,7 @@ _AppSettingProps _$AppSettingPropsFromJson(
         _readTabAnimation(json, 'tabAnimation'),
       ) ??
       TabAnimation.fade,
-  floatingNavigationBar: json['floatingNavigationBar'] as bool? ?? true,
-  autoCheckUpdate: json['autoCheckUpdate'] as bool? ?? false,
+  autoCheckUpdate: json['autoCheckUpdate'] as bool? ?? true,
   hiddenUpdate: json['hiddenUpdate'] as String?,
   sidebarExpanded:
       _readSidebarExpanded(json, 'sidebarExpanded') as bool? ?? true,
@@ -199,7 +198,6 @@ Map<String, dynamic> _$AppSettingPropsToJson(
   'portalSelectionRules': instance.portalSelectionRules,
   'portalSelectionXray': instance.portalSelectionXray,
   'tabAnimation': _$TabAnimationEnumMap[instance.tabAnimation]!,
-  'floatingNavigationBar': instance.floatingNavigationBar,
   'autoCheckUpdate': instance.autoCheckUpdate,
   'hiddenUpdate': instance.hiddenUpdate,
   'sidebarExpanded': instance.sidebarExpanded,

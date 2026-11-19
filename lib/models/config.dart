@@ -316,8 +316,13 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default(TabAnimation.fade)
     @JsonKey(readValue: _readTabAnimation)
     TabAnimation tabAnimation,
-    @Default(true) bool floatingNavigationBar,
-    @Default(false) bool autoCheckUpdate,
+    // Retired with the bottom bar: stored and restored, never read.
+    @JsonKey(includeFromJson: false, includeToJson: false)
+    @Default(true)
+    bool floatingNavigationBar,
+    /// On by default: an app that can update itself should say so when there is a new
+    /// build, without the owner having to find a switch first.
+    @Default(true) bool autoCheckUpdate,
 
     /// The release tag the user hid; automatic checks skip only that one.
     String? hiddenUpdate,
