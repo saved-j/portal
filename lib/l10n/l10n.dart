@@ -9490,6 +9490,11 @@ class AppLocalizations {
       args: [],
     );
   }
+
+  /// `Website`
+  String get site {
+    return Intl.message('Website', name: 'site', desc: '', args: []);
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<AppLocalizations> {

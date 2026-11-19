@@ -1489,6 +1489,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "这里只能填写一条链接，多条请在列表的快速编辑中填写",
     ),
     "singleValueTip": m97,
+    "site": MessageLookupByLibrary.simpleMessage("网站"),
     "size": MessageLookupByLibrary.simpleMessage("尺寸"),
     "skipCertVerify": MessageLookupByLibrary.simpleMessage("跳过证书验证"),
     "skipDomain": MessageLookupByLibrary.simpleMessage("跳过域名"),

@@ -1965,6 +1965,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Saisissez un seul lien ici ; pour en modifier plusieurs, utilisez la modification rapide de la liste",
     ),
     "singleValueTip": m97,
+    "site": MessageLookupByLibrary.simpleMessage("Site"),
     "size": MessageLookupByLibrary.simpleMessage("Taille"),
     "skipCertVerify": MessageLookupByLibrary.simpleMessage(
       "Ignorer la vérification du certificat",

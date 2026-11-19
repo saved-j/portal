@@ -115,6 +115,7 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
               children: [
                 Expanded(
                   child: SingleChildScrollView(
+                    controller: heroScroll,
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: padding.copyWith(bottom: _gap),
                     child: Column(
@@ -416,6 +417,9 @@ final ValueNotifier<int?> portalClosedAtMs = ValueNotifier<int?>(null);
 /// When the portal was switched on. The ignition runs from the press, not from the
 /// moment the engine reports a tunnel — the picture leads, the task follows.
 final ValueNotifier<int?> portalOpenedAtMs = ValueNotifier<int?>(null);
+
+/// The working screen's own scroll, so the tour can show the owner what is further down.
+final heroScroll = ScrollController();
 
 class _ConnectButton extends ConsumerWidget {
   const _ConnectButton({super.key});

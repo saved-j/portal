@@ -2001,6 +2001,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Здесь укажите одну ссылку, несколько можно задать в быстром редактировании списка",
     ),
     "singleValueTip": m97,
+    "site": MessageLookupByLibrary.simpleMessage("Сайт"),
     "size": MessageLookupByLibrary.simpleMessage("Размер"),
     "skipCertVerify": MessageLookupByLibrary.simpleMessage(
       "Пропускать проверку сертификата",

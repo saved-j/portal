@@ -1566,6 +1566,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "ここにはリンクを 1 つだけ入力してください。複数の場合は一覧のクイック編集を使ってください",
     ),
     "singleValueTip": m97,
+    "site": MessageLookupByLibrary.simpleMessage("サイト"),
     "size": MessageLookupByLibrary.simpleMessage("サイズ"),
     "skipCertVerify": MessageLookupByLibrary.simpleMessage("証明書の検証をスキップ"),
     "skipDomain": MessageLookupByLibrary.simpleMessage("スキップするドメイン"),

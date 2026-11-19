@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/l10n/l10n.dart';
+import 'package:fl_clash/views/dashboard/hero.dart';
 
 import 'tutorial_bus.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -90,7 +91,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 7;
+const tutorialVersion = 8;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -182,6 +183,25 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     super.dispose();
   }
 
+  /// Scrolls the working screen so the delay column is on it, when the list is longer than the
+  /// screen. A third of a screen is enough to bring the rows above into view without losing the
+  /// context of what is being pointed at.
+  void _revealNumbers(TutorialStep step) {
+    if (step.number != 7) return;
+    final scroll = heroScroll;
+    if (!scroll.hasClients) return;
+    final target = (scroll.offset + scroll.position.viewportDimension * 0.35)
+        .clamp(0.0, scroll.position.maxScrollExtent);
+    if (target <= scroll.offset + 8) return;
+    unawaited(
+      scroll.animateTo(
+        target,
+        duration: const Duration(milliseconds: 480),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+  }
+
   /// The owner has just done the thing this page asks for: the page closes itself.
   void _onAction() {
     if (!mounted || _waiting) return;
@@ -207,6 +227,9 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     _waitTimer = Timer(step.wait, () {
       if (!mounted) return;
       setState(() => _waiting = false);
+      // A subscription longer than the screen hides the numbers the page is about: the tour
+      // scrolls the working screen a little, so the figures are in the open when it speaks.
+      _revealNumbers(step);
     });
   }
 

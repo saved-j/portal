@@ -1535,6 +1535,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "여기에는 링크를 하나만 입력하세요. 여러 개는 목록의 빠른 편집에서 편집하세요",
     ),
     "singleValueTip": m97,
+    "site": MessageLookupByLibrary.simpleMessage("사이트"),
     "size": MessageLookupByLibrary.simpleMessage("크기"),
     "skipCertVerify": MessageLookupByLibrary.simpleMessage("인증서 검증 건너뛰기"),
     "skipDomain": MessageLookupByLibrary.simpleMessage("건너뛸 도메인"),

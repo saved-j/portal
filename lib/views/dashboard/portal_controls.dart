@@ -1456,8 +1456,12 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
               ),
             ),
           ),
-        for (final proxy in members)
-          _ServerRow(
+        for (final (index, proxy) in members.indexed)
+          _ServerEnter(
+            // The list arrives from the top, one row after another, so a switch reads as the
+            // new list replacing the old one rather than as something being pressed in it.
+            index: index,
+            child: _ServerRow(
             group: group,
             proxy: proxy,
             selected: selectedName == proxy.name,
@@ -1469,8 +1473,59 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
             // engine node's name from here would resolve to the engine's fake-IP.
             tcpHost: xrayServerByName[proxy.name]?.address ?? '',
             tcpPort: xrayServerByName[proxy.name]?.port ?? 0,
+            ),
           ),
       ],
+    );
+  }
+}
+
+/// A row's arrival: nothing, then a short fade and a 10 pt rise, one row after the previous.
+class _ServerEnter extends StatefulWidget {
+  const _ServerEnter({required this.index, required this.child});
+
+  final int index;
+  final Widget child;
+
+  /// 18 ms a row, and no row waits longer than a fifth of a second: a long subscription should
+  /// not take a second to appear.
+  static Duration delayFor(int index) {
+    final ms = (index * 18).clamp(0, 200);
+    return Duration(milliseconds: ms);
+  }
+
+  @override
+  State<_ServerEnter> createState() => _ServerEnterState();
+}
+
+class _ServerEnterState extends State<_ServerEnter> {
+  bool _shown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final delay = _ServerEnter.delayFor(widget.index);
+    if (delay == Duration.zero) {
+      _shown = true;
+      return;
+    }
+    Future<void>.delayed(delay, () {
+      if (mounted) setState(() => _shown = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: _shown ? 1 : 0,
+      duration: const Duration(milliseconds: 170),
+      curve: Curves.easeOut,
+      child: AnimatedSlide(
+        offset: _shown ? Offset.zero : const Offset(0, -0.08),
+        duration: const Duration(milliseconds: 170),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
+      ),
     );
   }
 }
@@ -2812,6 +2867,40 @@ String _serverNote(Proxy proxy) {
 }
 
 /// Plan status and the provider's announcement in one card.
+/// One small door in the subscription card: an icon and a word, opening the panel's own page.
+class _PlanCardLink extends StatelessWidget {
+  const _PlanCardLink({
+    required this.icon,
+    required this.label,
+    required this.url,
+  });
+
+  final Glyph icon;
+  final String label;
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: TextButton.icon(
+        onPressed: () {
+          HapticFeedback.selectionClick();
+          unawaited(dialogs.openUrl(url));
+        },
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          visualDensity: VisualDensity.compact,
+          foregroundColor: theme.colorScheme.primary,
+        ),
+        icon: GlyphIcon(icon, size: 16),
+        label: Text(label, style: theme.textTheme.labelMedium),
+      ),
+    );
+  }
+}
+
 class PortalPlanCard extends ConsumerWidget {
   const PortalPlanCard({super.key});
 
@@ -2888,6 +2977,31 @@ class PortalPlanCard extends ConsumerWidget {
                 name,
                 style: theme.textTheme.labelMedium?.copyWith(
                   color: theme.colorScheme.onSurface,
+                ),
+              ),
+            // The two doors a subscription card has in every other client: the operator's site
+            // and the way to reach the operator. Shown only when the panel actually named them
+            // — a button that opens nothing is worse than no button.
+            if (profile != null &&
+                (profile.headers.webPageUrl != null ||
+                    profile.headers.supportUrl != null))
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(
+                  children: [
+                    if (profile.headers.webPageUrl != null)
+                      _PlanCardLink(
+                        icon: AppGlyphs.openExternal,
+                        label: context.appLocalizations.site,
+                        url: profile.headers.webPageUrl!,
+                      ),
+                    if (profile.headers.supportUrl != null)
+                      _PlanCardLink(
+                        icon: AppGlyphs.support,
+                        label: context.appLocalizations.support,
+                        url: profile.headers.supportUrl!,
+                      ),
+                  ],
                 ),
               ),
             if (announcement != null && announcement.isNotEmpty) ...[

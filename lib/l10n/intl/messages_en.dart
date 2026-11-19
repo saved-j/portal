@@ -1917,6 +1917,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Enter one link here; edit several from the quick edit of the list",
     ),
     "singleValueTip": m97,
+    "site": MessageLookupByLibrary.simpleMessage("Website"),
     "size": MessageLookupByLibrary.simpleMessage("Size"),
     "skipCertVerify": MessageLookupByLibrary.simpleMessage(
       "Skip certificate verification",

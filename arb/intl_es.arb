@@ -1092,5 +1092,6 @@
   "autoPingExplainedBody": "Léelo con atención.\n\nA diferencia de otras aplicaciones, la nuestra mide la latencia real a través del túnel, no solo te da cifras bonitas.\n\nEl ping es solo la velocidad de respuesta del servidor y no refleja el ANCHO DE BANDA. Un servidor puede responder rápido y tener un canal muy estrecho: el ping se ve bien y no hay velocidad.\n\nAsí que no descartes los servidores con una latencia menos bonita: pruébalos también.",
   "tutorialTitle8": "Mosaico en la cortina",
   "tutorialBody8": "El mosaico inicia el portal desde cualquier pantalla: abre la cortina, toca el lápiz, desplázate hasta tus aplicaciones y añade «Portal».",
-  "tutorialChipOff": "El filtro está apagado. Mantén pulsado otra vez para encenderlo."
+  "tutorialChipOff": "El filtro está apagado. Mantén pulsado otra vez para encenderlo.",
+  "site": "Sitio"
 }
