@@ -329,8 +329,9 @@ abstract class AppSettingProps with _$AppSettingProps {
 
     /// The first-run tour has been seen. It is shown once — on the first launch after
     /// install — and never again unless the settings are cleared.
-    /// The one-time explanation shown when the delay auto-check is first switched on.
-    @Default(false) bool autoPingExplained,
+    /// The one-time explanation shown shortly after the first connection, when the numbers
+    /// appear: what a delay is and what it is not.
+    @Default(false) bool delayExplained,
     @Default(false) bool tutorialSeen,
     /// Bumped when the tour's own text or targets change: someone who walked an older tour
     /// should see the new one once, not only a fresh install.

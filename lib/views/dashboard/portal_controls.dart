@@ -1138,7 +1138,6 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                           ref.read(patchClashConfigProvider).mode == Mode.global;
                       if (!simple) {
                         unawaited(_showAutoPingPeriod(context, ref));
-                        _explainAutoPingOnce(context, ref);
                         return;
                       }
                       final auto = ref.read(autoPingProvider.notifier);
@@ -1154,7 +1153,6 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                               .setRunning(true),
                         );
                       }
-                      if (turningOn) _explainAutoPingOnce(context, ref);
                       // A document built while the switch was off carries no schedule at all, so a
                       // running core has to be restarted on one that does.
                       final live = ref.read(portalStatusProvider);
@@ -1224,6 +1222,23 @@ class PortalServerList extends ConsumerStatefulWidget {
 }
 
 class _PortalServerListState extends ConsumerState<PortalServerList> {
+  /// The one-shot clock that explains the numbers once the first connection has produced them.
+  Timer? _explain;
+
+  void _scheduleExplained() {
+    if (_explain != null) return;
+    if (ref.read(appSettingProvider).delayExplained) return;
+    if (ref.read(runTimeProvider) == null) return;
+    // Fifteen seconds, because that is how long the first figures take to arrive: the
+    // explanation is about them, and said before them it is a lecture with no object.
+    _explain = Timer(const Duration(seconds: 15), () {
+      _explain = null;
+      if (!mounted) return;
+      if (ref.read(runTimeProvider) == null) return;
+      _explainDelaysOnce(context, ref);
+    });
+  }
+
   /// The last group this list drew, per owner, and the mode it was drawn in. A switch empties
   /// both sources for a moment — the engine has no groups until it takes the profile, the child
   /// has no servers until its subscription is read — and an empty list there is what the owner
@@ -1232,6 +1247,20 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
   OwnedGroup? _heldEngine;
 
   OwnedGroup? _heldChild;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scheduleExplained();
+    });
+  }
+
+  @override
+  void dispose() {
+    _explain?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1261,6 +1290,9 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
       ref.read(tcpDelayProvider.notifier).cancelSweep();
       ref.read(engineDelayProvider.notifier).cancelSweep();
       commonPrint.log('portal test: sweep cancelled, mode is now ${next.name}');
+    });
+    ref.listen(runTimeProvider, (previous, next) {
+      if (next != null) _scheduleExplained();
     });
     ref.listen(currentProfileIdProvider, (previous, next) {
       if (previous == next) return;
@@ -1937,11 +1969,14 @@ Future<void> _testDelayWithChild(
 /// battery is the price — so the choices are bounded, and the sentence under them says why the
 /// short ones are the expensive ones.
 /// Says once what the figure in a row is: a response time, not a throughput.
-void _explainAutoPingOnce(BuildContext context, WidgetRef ref) {
-  if (ref.read(appSettingProvider).autoPingExplained) return;
+///
+/// It arrives a few seconds after the first connection, when the numbers are on screen: the
+/// sentence is about the figures the owner is looking at, and said before them it is a lecture.
+void _explainDelaysOnce(BuildContext context, WidgetRef ref) {
+  if (ref.read(appSettingProvider).delayExplained) return;
   ref
       .read(appSettingProvider.notifier)
-      .update((state) => state.copyWith(autoPingExplained: true));
+      .update((state) => state.copyWith(delayExplained: true));
   unawaited(_showAutoPingExplained(context));
 }
 
