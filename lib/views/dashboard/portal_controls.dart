@@ -2867,36 +2867,34 @@ String _serverNote(Proxy proxy) {
 }
 
 /// Plan status and the provider's announcement in one card.
-/// One small door in the subscription card: an icon and a word, opening the panel's own page.
+/// One small door in the subscription card: an icon anchored at the right edge, opening the
+/// panel's own page.
 class _PlanCardLink extends StatelessWidget {
   const _PlanCardLink({
     required this.icon,
-    required this.label,
+    required this.tooltip,
     required this.url,
   });
 
   final Glyph icon;
-  final String label;
+  final String tooltip;
   final String url;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(right: 4),
-      child: TextButton.icon(
-        onPressed: () {
-          HapticFeedback.selectionClick();
-          unawaited(dialogs.openUrl(url));
-        },
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          visualDensity: VisualDensity.compact,
-          foregroundColor: theme.colorScheme.primary,
-        ),
-        icon: GlyphIcon(icon, size: 16),
-        label: Text(label, style: theme.textTheme.labelMedium),
-      ),
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: () {
+        HapticFeedback.selectionClick();
+        unawaited(dialogs.openUrl(url));
+      },
+      visualDensity: VisualDensity.compact,
+      iconSize: 18,
+      constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+      padding: EdgeInsets.zero,
+      color: theme.colorScheme.primary,
+      icon: GlyphIcon(icon, size: 18),
     );
   }
 }
@@ -2926,84 +2924,83 @@ class PortalPlanCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // One line, as approved: name and mark first, then the two facts separated by
-            // middle dots. Dashes stand in when the panel sends nothing, so the shape never
-            // changes between accounts.
-            if (profile != null)
-              Builder(
-                builder: (context) {
-                  final facts = SubscriptionFacts.of(profile);
-                  final meta = theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  );
-                  final expiry = facts.expiry == '—'
-                      ? '—'
-                      : context.appLocalizations.expiresUntil(facts.expiry);
-                  // Three lines, always three: name with its mark, then the traffic, then the
-                  // expiry. One line put three different facts behind one ellipsis, and a
-                  // missing field hid the rest; a dash says "the panel sent nothing" instead of
-                  // letting the line collapse.
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            // Facts on the left, the two doors anchored to the right edge: the card reads as one
+            // block of text with an action rail, not as a list interrupted by buttons.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: profile != null
+                      ? Builder(
+                          builder: (context) {
+                            final facts = SubscriptionFacts.of(profile);
+                            final meta = theme.textTheme.labelMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            );
+                            final expiry = facts.expiry == '—'
+                                ? '—'
+                                : context.appLocalizations.expiresUntil(facts.expiry);
+                            // Three lines, always three: name with its mark, then the traffic,
+                            // then the expiry — a dash says "the panel sent nothing" instead of
+                            // letting the line collapse.
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '$name ${facts.mark}'.trim(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: theme.colorScheme.onSurface,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  facts.traffic,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: meta,
+                                ),
+                                Text(
+                                  expiry,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: meta,
+                                ),
+                              ],
+                            );
+                          },
+                        )
+                      : Text(
+                          name,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                ),
+                if (profile != null &&
+                    (profile.headers.webPageUrl != null ||
+                        profile.headers.supportUrl != null))
+                  Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        '$name ${facts.mark}'.trim(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.onSurface,
-                          fontWeight: FontWeight.w600,
+                      if (profile.headers.webPageUrl != null)
+                        _PlanCardLink(
+                          icon: AppGlyphs.openExternal,
+                          tooltip: context.appLocalizations.site,
+                          url: profile.headers.webPageUrl!,
                         ),
-                      ),
-                      Text(
-                        facts.traffic,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: meta,
-                      ),
-                      Text(
-                        expiry,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: meta,
-                      ),
+                      if (profile.headers.supportUrl != null)
+                        _PlanCardLink(
+                          icon: AppGlyphs.support,
+                          tooltip: context.appLocalizations.support,
+                          url: profile.headers.supportUrl!,
+                        ),
                     ],
-                  );
-                },
-              )
-            else
-              Text(
-                name,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-            // The two doors a subscription card has in every other client: the operator's site
-            // and the way to reach the operator. Shown only when the panel actually named them
-            // — a button that opens nothing is worse than no button.
-            if (profile != null &&
-                (profile.headers.webPageUrl != null ||
-                    profile.headers.supportUrl != null))
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Row(
-                  children: [
-                    if (profile.headers.webPageUrl != null)
-                      _PlanCardLink(
-                        icon: AppGlyphs.openExternal,
-                        label: context.appLocalizations.site,
-                        url: profile.headers.webPageUrl!,
-                      ),
-                    if (profile.headers.supportUrl != null)
-                      _PlanCardLink(
-                        icon: AppGlyphs.support,
-                        label: context.appLocalizations.support,
-                        url: profile.headers.supportUrl!,
-                      ),
-                  ],
-                ),
-              ),
+                  ),
+              ],
+            ),
             if (announcement != null && announcement.isNotEmpty) ...[
               const SizedBox(height: 8),
               Divider(height: 1, color: theme.colorScheme.outlineVariant),
