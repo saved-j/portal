@@ -92,7 +92,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 18;
+const tutorialVersion = 19;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -537,21 +537,29 @@ class _HolePainter extends CustomPainter {
   void _arrow(Canvas canvas, Size size, Rect hole) {
     final yellow = Paint()
       ..color = const Color(0xFFFFD400)
-      ..strokeWidth = 10
-      ..strokeCap = StrokeCap.round;
-    // The arrow comes from whichever side has room: above the hole when the card sits below it.
+      ..strokeWidth = 7
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    final fill = Paint()..color = const Color(0xFFFFD400);
+    // The arrow starts away from the control, curves in and stops just outside the frame: a
+    // hand-drawn pointer rather than a ruler line.
     final fromBelow = hole.center.dy < size.height / 2;
-    final startY = fromBelow ? hole.bottom + 120 : hole.top - 120;
-    final endY = fromBelow ? hole.bottom + 26 : hole.top - 26;
+    final dir = fromBelow ? -1.0 : 1.0;
+    final startY = fromBelow ? hole.bottom + 92 : hole.top - 92;
+    final endY = fromBelow ? hole.bottom + 18 : hole.top - 18;
     final x = hole.center.dx;
-    canvas.drawLine(Offset(x, startY), Offset(x, endY), yellow);
-    final tip = fromBelow ? 1.0 : -1.0;
+    final bend = 26.0 * (x < size.width / 2 ? 1 : -1);
+    final path = Path()
+      ..moveTo(x + bend, startY)
+      ..quadraticBezierTo(x + bend * 0.4, (startY + endY) / 2, x, endY);
+    canvas.drawPath(path, yellow);
     final head = Path()
       ..moveTo(x, endY)
-      ..lineTo(x - 20, endY + tip * 26)
-      ..lineTo(x + 20, endY + tip * 26)
+      ..lineTo(x - 13, endY + dir * 20)
+      ..lineTo(x + 13, endY + dir * 20)
       ..close();
-    canvas.drawPath(head, Paint()..color = const Color(0xFFFFD400));
+    canvas.drawPath(head, fill);
   }
 
   @override
