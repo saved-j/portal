@@ -86,28 +86,6 @@ final portalSortProvider = NotifierProvider<PortalSortNotifier, PortalSort>(
   PortalSortNotifier.new,
 );
 
-/// What a server row says under its name: the protocol, or the panel's note.
-///
-/// Both are true and neither is optional: the protocol distinguishes two servers of one
-/// country, and the note is what the panel tells the owner about the node («только Gemini»).
-/// A row is one line tall for a name and two for an answer, so they share the second line —
-/// and a double tap on the row swaps it.
-enum ServerRowDetail { protocol, note }
-
-class PortalRowDetailNotifier extends Notifier<ServerRowDetail> {
-  @override
-  ServerRowDetail build() => ServerRowDetail.protocol;
-
-  void toggle() => state = state == ServerRowDetail.protocol
-      ? ServerRowDetail.note
-      : ServerRowDetail.protocol;
-}
-
-final portalRowDetailProvider =
-    NotifierProvider<PortalRowDetailNotifier, ServerRowDetail>(
-      PortalRowDetailNotifier.new,
-    );
-
 /// The server picked in each mode, kept apart and keyed by profile.
 ///
 /// The two lists are different builds of one subscription: the rules list names the
@@ -453,20 +431,63 @@ final portalLiveProvider = Provider<PortalLive>((ref) {
   );
 });
 
+/// Which filters the strip shows, and in what order — stored per mode.
+///
+/// A chip turned off is a preference, not a step: it is written to the settings beside the
+/// open chip and the picks, one key per mode, because the two modes list different groups of
+/// the same subscription and hiding a name in one says nothing about the other.
 class PortalFiltersNotifier
     extends Notifier<({Set<String> hidden, List<String> order})> {
+  bool get _simple =>
+      ref.read(patchClashConfigProvider.select((s) => s.mode)) == Mode.global;
+
   @override
-  ({Set<String> hidden, List<String> order}) build() =>
-      (hidden: <String>{}, order: const <String>[]);
+  ({Set<String> hidden, List<String> order}) build() {
+    final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
+    final settings = ref.watch(appSettingProvider);
+    return (
+      hidden: {
+        ...(mode == Mode.global
+            ? settings.portalHiddenFiltersXray
+            : settings.portalHiddenFiltersRules),
+      },
+      order: [
+        ...(mode == Mode.global
+            ? settings.portalFilterOrderXray
+            : settings.portalFilterOrderRules),
+      ],
+    );
+  }
+
+  void _write({Set<String>? hidden, List<String>? order}) {
+    final simple = _simple;
+    final next = (
+      hidden: hidden ?? state.hidden,
+      order: order ?? state.order,
+    );
+    state = next;
+    ref
+        .read(appSettingProvider.notifier)
+        .update(
+          (settings) => simple
+              ? settings.copyWith(
+                  portalHiddenFiltersXray: next.hidden.toList(),
+                  portalFilterOrderXray: next.order,
+                )
+              : settings.copyWith(
+                  portalHiddenFiltersRules: next.hidden.toList(),
+                  portalFilterOrderRules: next.order,
+                ),
+        );
+  }
 
   void toggle(String name) {
     final hidden = {...state.hidden};
     if (!hidden.remove(name)) hidden.add(name);
-    state = (hidden: hidden, order: state.order);
+    _write(hidden: hidden);
   }
 
-  void reorder(List<String> order) =>
-      state = (hidden: state.hidden, order: order);
+  void reorder(List<String> order) => _write(order: order);
 }
 
 final portalFiltersProvider =
@@ -2652,15 +2673,10 @@ class _ServerRowState extends ConsumerState<_ServerRow>
           child: child,
         );
       },
-      // `ListTile` offers no double tap, and the row needs one: two answers share its second
-      // line, and the owner says which. The gesture wraps the tile so a single tap still goes
-      // to the tile itself, and a double tap swaps the line without selecting anything.
+      // One tap picks the server; both facts about it are on the row at once, so nothing has
+      // to be swapped and there is no second gesture to discover.
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onDoubleTap: () {
-          HapticFeedback.selectionClick();
-          ref.read(portalRowDetailProvider.notifier).toggle();
-        },
         child: ListTile(
           dense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
@@ -2678,11 +2694,23 @@ class _ServerRowState extends ConsumerState<_ServerRow>
               final head = node == null || node == widget.proxy.name
                   ? widget.proxy.name
                   : '${widget.proxy.name} · $node';
-              final note = _serverNote(widget.proxy);
-              final detail = ref.watch(portalRowDetailProvider);
-              final under = detail == ServerRowDetail.note
-                  ? note
-                  : widget.proxy.type.toUpperCase();
+              // The second line is the panel's comment and nothing else. The protocol is a
+              // different fact and sits with the measurement, where it is read together with
+              // the number: «какой протокол» and «сколько он отвечает» are one question.
+              // A row of the engine's list has no note of its own — its document does not
+              // carry one — so the note is looked up by name in the subscription's Xray
+              // document, which describes the same servers. The comment the owner sees in
+              // one list is therefore the comment in the other.
+              final own = _serverNote(widget.proxy);
+              final under = own.isNotEmpty
+                  ? own
+                  : ref
+                        .watch(portalNoteIndexProvider)
+                        .when(
+                          data: (index) => index.noteFor(widget.proxy.name),
+                          loading: () => '',
+                          error: (_, _) => '',
+                        );
               final base = theme.textTheme.bodyLarge?.copyWith(
                 color: widget.selected ? scheme.onPrimaryContainer : null,
                 fontWeight: widget.selected ? FontWeight.w600 : null,
@@ -2714,9 +2742,7 @@ class _ServerRowState extends ConsumerState<_ServerRow>
                       color: widget.selected
                           ? scheme.onPrimaryContainer.withValues(alpha: 0.75)
                           : scheme.onSurfaceVariant,
-                      letterSpacing: detail == ServerRowDetail.protocol
-                          ? 0.4
-                          : 0,
+                      letterSpacing: 0,
                     ),
                   ),
                 ],
@@ -2726,6 +2752,18 @@ class _ServerRowState extends ConsumerState<_ServerRow>
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // The transport, beside the number it belongs to: a second server of the same
+              // country is told apart by what it speaks, and the two are read in one glance.
+              if (widget.proxy.type.trim().isNotEmpty) ...[
+                Text(
+                  widget.proxy.type.toUpperCase(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: color.withValues(alpha: 0.75),
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
               Text(
                 _delayText(delay),
                 style: theme.textTheme.labelMedium?.copyWith(

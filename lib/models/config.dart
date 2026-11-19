@@ -266,6 +266,13 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default('') String portalSortRules,
     @Default('') String portalSortXray,
 
+    /// The filters the owner hid and the order he put them in, per mode. A row of chips is a
+    /// workspace, not a session: a filter turned off must stay off after a restart.
+    @Default([]) List<String> portalHiddenFiltersRules,
+    @Default([]) List<String> portalHiddenFiltersXray,
+    @Default([]) List<String> portalFilterOrderRules,
+    @Default([]) List<String> portalFilterOrderXray,
+
     /// The filter chip the strip had open, per mode. Its own key for the same reason the
     /// order has one: the two lists are different builds of a subscription, and a group
     /// highlighted in one says nothing about the other.

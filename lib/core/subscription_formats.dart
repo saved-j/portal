@@ -80,6 +80,12 @@ SubscriptionFormat? detectFormat(String body) {
     if (_looksLikeClientConfig(json)) return SubscriptionFormat.xray;
   }
 
+  // An Xray client config served under a *client* name. The panel decides by user-agent, and
+  // some panels keep serving the Happ/Incy answer to the mihomo name as well — a body full of
+  // outbounds is not Clash YAML however it arrived, and reading it as a format this mode can
+  // use would let it replace a working config with a document the engine cannot run.
+  if (_looksLikeClientConfig(_tryDecodeJson(text))) return SubscriptionFormat.xray;
+
   // Clash YAML: a mapping with a proxies list, the one thing the engine cannot run without.
   if (RegExp(r'^proxies\s*:', multiLine: true).hasMatch(text)) {
     return SubscriptionFormat.mihomo;

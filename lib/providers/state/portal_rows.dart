@@ -227,6 +227,56 @@ enum RowsOwner {
   final String label;
 }
 
+/// The panel's own note for each server, keyed by name.
+///
+/// The same subscription carries the notes only in the document the second core is served
+/// (`meta.serverDescription`); the engine's YAML has the names and nothing about them. The two
+/// documents describe the same servers, so the notes are read once from whichever one has
+/// them and handed to the rows of both — that is what makes the comment of the Xray list
+/// appear in the network list without the engine ever learning a word about it.
+///
+/// A name is only matched to a note when both sides are the same string after the flag is
+/// dropped: «🇪🇪 Эстония» and «Эстония» are the same server, «Эстония» and «Эстония 2» are not.
+class PortalNoteIndex {
+  const PortalNoteIndex(this._notes);
+
+  const PortalNoteIndex.empty() : _notes = const {};
+
+  final Map<String, String> _notes;
+
+  static final _flag = RegExp(
+    r'^[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\s]+',
+    unicode: true,
+  );
+
+  /// The name as it is compared: no leading flag, no emoji, no extra spaces.
+  static String keyOf(String name) =>
+      name.replaceFirst(_flag, '').replaceAll(RegExp(r'\s+'), ' ').trim();
+
+  /// Builds the index from the second core's document, which is where the notes are.
+  factory PortalNoteIndex.ofServers(List<XrayServerConfig> servers) => PortalNoteIndex({
+        for (final server in servers)
+          if (server.description.isNotEmpty) keyOf(server.name): server.description,
+      });
+
+  String noteFor(String name) => _notes[keyOf(name)] ?? '';
+
+  bool get isEmpty => _notes.isEmpty;
+}
+
+/// The panel's notes for this profile, from its Xray document.
+///
+/// Read once per profile and reused by both lists: a row in the network list is the same
+/// server as a row in the simple portal, and the note belongs to the server, not to the
+/// format it was delivered in.
+final portalNoteIndexProvider = FutureProvider.autoDispose<PortalNoteIndex>((ref) async {
+  final profile = ref.watch(currentProfileProvider);
+  if (profile == null) return const PortalNoteIndex.empty();
+  final body = await profile.readXrayFormat();
+  if (body == null) return const PortalNoteIndex.empty();
+  return PortalNoteIndex.ofServers(parseXraySubscription(body));
+});
+
 /// A group and the owner it came from.
 typedef OwnedGroup = ({Group group, RowsOwner owner});
 

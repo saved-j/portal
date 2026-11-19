@@ -40,6 +40,26 @@ _AppSettingProps _$AppSettingPropsFromJson(
       (json['delayTestTimeout'] as num?)?.toInt() ?? defaultDelayTestTimeout,
   portalSortRules: json['portalSortRules'] as String? ?? '',
   portalSortXray: json['portalSortXray'] as String? ?? '',
+  portalHiddenFiltersRules:
+      (json['portalHiddenFiltersRules'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const [],
+  portalHiddenFiltersXray:
+      (json['portalHiddenFiltersXray'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const [],
+  portalFilterOrderRules:
+      (json['portalFilterOrderRules'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const [],
+  portalFilterOrderXray:
+      (json['portalFilterOrderXray'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      const [],
   portalGroupRules: json['portalGroupRules'] as String? ?? '',
   portalGroupXray: json['portalGroupXray'] as String? ?? '',
   portalGroupRulesProfile: json['portalGroupRulesProfile'] as String? ?? '',
@@ -160,6 +180,10 @@ Map<String, dynamic> _$AppSettingPropsToJson(
   'delayTestTimeout': instance.delayTestTimeout,
   'portalSortRules': instance.portalSortRules,
   'portalSortXray': instance.portalSortXray,
+  'portalHiddenFiltersRules': instance.portalHiddenFiltersRules,
+  'portalHiddenFiltersXray': instance.portalHiddenFiltersXray,
+  'portalFilterOrderRules': instance.portalFilterOrderRules,
+  'portalFilterOrderXray': instance.portalFilterOrderXray,
   'portalGroupRules': instance.portalGroupRules,
   'portalGroupXray': instance.portalGroupXray,
   'portalGroupRulesProfile': instance.portalGroupRulesProfile,

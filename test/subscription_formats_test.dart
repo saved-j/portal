@@ -35,6 +35,19 @@ void main() {
     expect(detectFormat('port: 7890\nmode: rule\n'), SubscriptionFormat.mihomo);
   });
 
+  // A panel may answer the mihomo name with an Xray client config. Its key set happens to
+  // match the loose Clash test (a line starting with `proxies:`), and reading it as the
+  // engine's format let it replace a working profile with a document the engine cannot run.
+  test('an Xray client config is not read as the engine format', () {
+    const config =
+        '[{"inbounds":[{"port":10808,"protocol":"socks"}],'
+        '"outbounds":[{"tag":"node","protocol":"vless",'
+        '"settings":{"vnext":[{"address":"a.example","port":443,'
+        '"users":[{"id":"u"}]}]}}],'
+        '"remarks":"Эстония","meta":{"serverDescription":"Максимальная скорость"}}]';
+    expect(detectFormat(config), SubscriptionFormat.xray);
+  });
+
   test('each format asks with its own user-agent', () {
     expect(subscriptionUserAgents[SubscriptionFormat.mihomo], contains('mihomo'));
     expect(subscriptionUserAgents[SubscriptionFormat.xray], isNot(contains('mihomo')));
