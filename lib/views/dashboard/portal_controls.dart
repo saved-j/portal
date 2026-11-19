@@ -4,6 +4,7 @@ import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/views/dashboard/hero.dart';
 import 'package:fl_clash/views/proxies/proxies.dart';
 import 'package:fl_clash/views/tutorial/portal_tutorial.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
@@ -1847,8 +1848,17 @@ Future<void> _testDelayWithEngine(
   // already asked for a tunnel, even though the record still says Off until the core answers.
   // Without this the sweep sees "nobody owns it", takes the credit for the tunnel the owner
   // asked for, and puts it down when the measurement ends.
+  // A press is the owner's own request, and it is older than the core's answer: the gateway
+  // marks it the moment the finger lands. A sweep that starts within the minute after a press
+  // is sharing the tunnel with the owner, not raising one of its own.
+  final pressedAt = portalOpenedAtMs.value;
+  final ownerJustPressed =
+      pressedAt != null &&
+      DateTime.now().millisecondsSinceEpoch - pressedAt < 60000;
   final raisedBySweep =
-      ownerBefore == null && ref.read(runTimeProvider) == null;
+      ownerBefore == null &&
+      ref.read(runTimeProvider) == null &&
+      !ownerJustPressed;
   final started = await ref.read(setupActionProvider.notifier).setRunning(true);
   var stopped = false;
   try {
