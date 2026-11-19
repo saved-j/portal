@@ -91,7 +91,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 12;
+const tutorialVersion = 13;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -477,6 +477,13 @@ class _HolePainter extends CustomPainter {
 }
 
 /// Opens the tour over whatever is on screen and remembers where it stopped.
+/// The tour is a layer of the working screen, not a route.
+///
+/// A route brings a modal barrier with it, and that barrier — not the tour's own bands — is what
+/// a finger hits: the page could ask the owner to press a control and the press would never
+/// arrive. This notifier is the whole lifecycle: set it to the first step to open, null to close.
+final tutorialRequest = ValueNotifier<int?>(null);
+
 /// True while a tour is on screen. The working screen can be mounted more than once for one
 /// session — a page switch, a mode change rebuilds it — and each mount used to push another
 /// tour. Two tours mean two barriers, and finishing one leaves the other over the screen where
@@ -486,6 +493,11 @@ bool tourIsShowing = false;
 Future<void> showPortalTutorial(BuildContext context, {int fromStep = 0}) async {
   if (tourIsShowing) return;
   tourIsShowing = true;
+  tutorialRequest.value = fromStep;
+  return;
+}
+
+Future<void> _unusedRouteTour(BuildContext context, {int fromStep = 0}) async {
   final done = Completer<void>();
   final navigator = Navigator.of(context, rootNavigator: true);
   navigator.push(
