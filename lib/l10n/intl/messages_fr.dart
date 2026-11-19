@@ -256,26 +256,31 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m97(label) => "${label} doit être un seul élément";
 
-  static String m99(days) =>
+  static String m99(value) => "${value} Ko/s";
+
+  static String m100(days) =>
       "Votre abonnement expire dans ${Intl.plural(days, one: '1 jour', other: '${days} jours')}";
 
-  static String m101(value) => "Pic ${value}";
+  static String m102(value) => "Pic ${value}";
 
-  static String m102(value) => "Total ${value}";
+  static String m103(value) => "Total ${value}";
 
-  static String m103(transport) => "En-têtes ${transport}";
+  static String m104(transport) => "En-têtes ${transport}";
 
-  static String m104(index, total) => "${index} sur ${total}";
+  static String m105(index, total) => "${index} sur ${total}";
 
-  static String m105(label) => "${label} doit être une URL";
+  static String m106(time) =>
+      "La mise à jour a échoué. L\'abonnement continue de fonctionner hors ligne ; la prochaine tentative à ${time}.";
 
-  static String m106(appName) =>
+  static String m107(label) => "${label} doit être une URL";
+
+  static String m108(appName) =>
       "Vous n\'avez pas autorisé ${appName} à se connecter en VPN";
 
-  static String m107(count) =>
+  static String m109(count) =>
       "${Intl.plural(count, one: 'il y a 1 an', other: 'il y a ${count} ans')}";
 
-  static String m108(count) =>
+  static String m110(count) =>
       "${Intl.plural(count, other: 'il y a ${count} a')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
@@ -1437,6 +1442,12 @@ class MessageLookup extends MessageLookupByLibrary {
     "portHopping": MessageLookupByLibrary.simpleMessage("Saut de port"),
     "portTip": m63,
     "portValue": m64,
+    "portalNoNodes": MessageLookupByLibrary.simpleMessage(
+      "cet abonnement ne contient pas de serveurs pour le portail simple",
+    ),
+    "portalNoRules": MessageLookupByLibrary.simpleMessage(
+      "cet abonnement ne contient pas de règles pour le réseau des portails",
+    ),
     "ports": MessageLookupByLibrary.simpleMessage("Ports"),
     "preChannelTip": MessageLookupByLibrary.simpleMessage(
       "Cette préversion est une application à part et ne voit pas les profils de FlClashX. Pour les récupérer, faites une sauvegarde dans FlClashX sous Sauvegarde et restauration et restaurez-la ici, ou ajoutez de nouveau vos abonnements par lien.",
@@ -1976,6 +1987,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "specialProxy": MessageLookupByLibrary.simpleMessage("Proxy spécial"),
     "specialRules": MessageLookupByLibrary.simpleMessage("Règles spéciales"),
     "spectrum": MessageLookupByLibrary.simpleMessage("Spectre"),
+    "speedKilobytes": m99,
     "speedStatistics": MessageLookupByLibrary.simpleMessage(
       "Statistiques de débit",
     ),
@@ -2024,7 +2036,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "subscriptionExpired": MessageLookupByLibrary.simpleMessage(
       "Votre abonnement a expiré",
     ),
-    "subscriptionExpiresInDays": m99,
+    "subscriptionExpiresInDays": m100,
     "subscriptionExpiresSoon": MessageLookupByLibrary.simpleMessage(
       "L’abonnement expire bientôt",
     ),
@@ -2033,6 +2045,18 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "subscriptionInfo": MessageLookupByLibrary.simpleMessage(
       "Infos d’abonnement",
+    ),
+    "subscriptionMihomoAbsent": MessageLookupByLibrary.simpleMessage(
+      "Mihomo / fantôme : le format n\'est pas servi",
+    ),
+    "subscriptionMihomoPresent": MessageLookupByLibrary.simpleMessage(
+      "Mihomo / fantôme : le format est servi",
+    ),
+    "subscriptionXrayAbsent": MessageLookupByLibrary.simpleMessage(
+      "Xray : le format n\'est pas servi",
+    ),
+    "subscriptionXrayPresent": MessageLookupByLibrary.simpleMessage(
+      "Xray : le format est servi",
     ),
     "sudoPasswordTitle": MessageLookupByLibrary.simpleMessage(
       "Saisissez votre mot de passe pour sudo",
@@ -2090,11 +2114,11 @@ class MessageLookup extends MessageLookupByLibrary {
     "totalUpload": MessageLookupByLibrary.simpleMessage("Envoyé"),
     "tproxyPort": MessageLookupByLibrary.simpleMessage("Port TProxy"),
     "traffic": MessageLookupByLibrary.simpleMessage("Trafic"),
-    "trafficPeak": m101,
-    "trafficTotal": m102,
+    "trafficPeak": m102,
+    "trafficTotal": m103,
     "trafficUsage": MessageLookupByLibrary.simpleMessage("Trafic utilisé"),
     "transport": MessageLookupByLibrary.simpleMessage("Transport"),
-    "transportHeaders": m103,
+    "transportHeaders": m104,
     "tun": MessageLookupByLibrary.simpleMessage("TUN"),
     "tunAuthorizationFailed": MessageLookupByLibrary.simpleMessage(
       "TUN n’a pas pu être autorisé et a donc été désactivé.",
@@ -2133,7 +2157,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Suivant"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Passer"),
-    "tutorialStepOf": m104,
+    "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage(
       "Réseau des portails",
     ),
@@ -2214,6 +2238,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "updateExiting": MessageLookupByLibrary.simpleMessage(
       "Fermeture pour terminer la mise à jour…",
     ),
+    "updateFailedOffline": m106,
     "updateHandedOff": MessageLookupByLibrary.simpleMessage(
       "Terminez la mise à jour dans le programme d\'installation ouvert.",
     ),
@@ -2245,7 +2270,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Bande passante d’envoi",
     ),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m105,
+    "urlTip": m107,
     "useHosts": MessageLookupByLibrary.simpleMessage("Utiliser hosts"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage(
       "Utiliser les hosts du système",
@@ -2272,7 +2297,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "Le VPN fait passer automatiquement tout le trafic du système par VpnService.",
     ),
-    "vpnPermissionNotGranted": m106,
+    "vpnPermissionNotGranted": m108,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "L\'administrateur de cet appareil restreint le VPN",
     ),
@@ -2287,8 +2312,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "Écrire dans le système règle aussi l’horloge système ; Android l’ignore.",
     ),
-    "yearsAgo": m107,
-    "yearsAgoShort": m108,
+    "yearsAgo": m109,
+    "yearsAgoShort": m110,
     "yes": MessageLookupByLibrary.simpleMessage("Oui"),
     "zhCN": MessageLookupByLibrary.simpleMessage("Chinois simplifié"),
   };

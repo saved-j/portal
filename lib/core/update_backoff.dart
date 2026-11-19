@@ -1,3 +1,5 @@
+import 'package:fl_clash/l10n/l10n.dart';
+
 /// What happens to a subscription that could not be fetched.
 ///
 /// A download that fails is not the end of the subscription: the file on disk is the last
@@ -26,19 +28,12 @@ Duration updateBackoffAfter(int failures) {
 String updateFailureNote({
   required int failures,
   required DateTime nextAttempt,
-  required bool ru,
+  required AppLocalizations l,
   required String reason,
 }) {
   final hh = nextAttempt.hour.toString().padLeft(2, '0');
   final mm = nextAttempt.minute.toString().padLeft(2, '0');
-  if (ru) {
-    return failures <= 0
-        ? reason
-        : 'Обновление не удалось. Подписка продолжит работать в автономном режиме, '
-            'следующая попытка в $hh:$mm.';
-  }
-  return failures <= 0
-      ? reason
-      : 'The update failed. The subscription keeps working offline; '
-          'the next attempt is at $hh:$mm.';
+  // The sentence lives in the app's own translations like every other one: a Russian phrase in
+  // an English app is the same defect whichever line it sits on.
+  return failures <= 0 ? reason : l.updateFailedOffline('$hh:$mm');
 }

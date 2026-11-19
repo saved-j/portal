@@ -1119,5 +1119,27 @@
         "type": "int"
       }
     }
+  },
+  "updateFailedOffline": "The update failed. The subscription keeps working offline; the next attempt is at {time}.",
+  "portalNoRules": "this subscription carries no rules for the portal network",
+  "portalNoNodes": "this subscription carries no nodes for the simple portal",
+  "subscriptionMihomoPresent": "Mihomo / ghost: the format is served",
+  "subscriptionMihomoAbsent": "Mihomo / ghost: the format is not served",
+  "subscriptionXrayPresent": "Xray: the format is served",
+  "subscriptionXrayAbsent": "Xray: the format is not served",
+  "speedKilobytes": "{value} KB/s",
+  "@updateFailedOffline": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@speedKilobytes": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
   }
 }

@@ -265,28 +265,33 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m98(value) => "Сортировка: ${value}";
 
-  static String m99(days) =>
+  static String m99(value) => "${value} КБ/с";
+
+  static String m100(days) =>
       "Ваша подписка истекает через ${Intl.plural(days, one: '${days} день', few: '${days} дня', many: '${days} дней', other: '${days} дня')}";
 
-  static String m100(value) => "Трафик: ${value}";
+  static String m101(value) => "Трафик: ${value}";
 
-  static String m101(value) => "Пик ${value}";
+  static String m102(value) => "Пик ${value}";
 
-  static String m102(value) => "Всего ${value}";
+  static String m103(value) => "Всего ${value}";
 
-  static String m103(transport) => "Заголовки ${transport}";
+  static String m104(transport) => "Заголовки ${transport}";
 
-  static String m104(index, total) => "${index} из ${total}";
+  static String m105(index, total) => "${index} из ${total}";
 
-  static String m105(label) => "Значение «${label}» должно быть URL";
+  static String m106(time) =>
+      "Обновление не удалось. Подписка продолжит работать в автономном режиме, следующая попытка в ${time}.";
 
-  static String m106(appName) =>
+  static String m107(label) => "Значение «${label}» должно быть URL";
+
+  static String m108(appName) =>
       "Вы не дали ${appName} разрешение на подключение VPN";
 
-  static String m107(count) =>
+  static String m109(count) =>
       "${Intl.plural(count, one: '${count} год назад', few: '${count} года назад', many: '${count} лет назад', other: '${count} года назад')}";
 
-  static String m108(count) =>
+  static String m110(count) =>
       "${Intl.plural(count, one: '${count} г. назад', few: '${count} г. назад', many: '${count} лет назад', other: '${count} г. назад')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
@@ -1490,6 +1495,12 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "portalModeUnavailable": m65,
     "portalModesUnavailable": m66,
+    "portalNoNodes": MessageLookupByLibrary.simpleMessage(
+      "эта подписка не содержит серверов для простого портала",
+    ),
+    "portalNoRules": MessageLookupByLibrary.simpleMessage(
+      "эта подписка не содержит правил для сети порталов",
+    ),
     "portalOff": MessageLookupByLibrary.simpleMessage("Портал погашен"),
     "portalRestoreFilter": MessageLookupByLibrary.simpleMessage(
       "Вернуть в портал",
@@ -2018,6 +2029,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "specialProxy": MessageLookupByLibrary.simpleMessage("Специальный прокси"),
     "specialRules": MessageLookupByLibrary.simpleMessage("Специальные правила"),
     "spectrum": MessageLookupByLibrary.simpleMessage("Спектр"),
+    "speedKilobytes": m99,
     "speedStatistics": MessageLookupByLibrary.simpleMessage(
       "Статистика скорости",
     ),
@@ -2068,7 +2080,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "subscriptionExpired": MessageLookupByLibrary.simpleMessage(
       "Ваша подписка истекла",
     ),
-    "subscriptionExpiresInDays": m99,
+    "subscriptionExpiresInDays": m100,
     "subscriptionExpiresSoon": MessageLookupByLibrary.simpleMessage(
       "Подписка скоро истекает",
     ),
@@ -2077,6 +2089,18 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "subscriptionInfo": MessageLookupByLibrary.simpleMessage(
       "Информация о подписке",
+    ),
+    "subscriptionMihomoAbsent": MessageLookupByLibrary.simpleMessage(
+      "Mihomo / призрак: формат не отдаётся",
+    ),
+    "subscriptionMihomoPresent": MessageLookupByLibrary.simpleMessage(
+      "Mihomo / призрак: формат есть",
+    ),
+    "subscriptionXrayAbsent": MessageLookupByLibrary.simpleMessage(
+      "Xray: формат не отдаётся",
+    ),
+    "subscriptionXrayPresent": MessageLookupByLibrary.simpleMessage(
+      "Xray: формат есть",
     ),
     "sudoPasswordTitle": MessageLookupByLibrary.simpleMessage(
       "Введите пароль для sudo",
@@ -2138,12 +2162,12 @@ class MessageLookup extends MessageLookupByLibrary {
     "totalUpload": MessageLookupByLibrary.simpleMessage("Отдано"),
     "tproxyPort": MessageLookupByLibrary.simpleMessage("Порт TProxy"),
     "traffic": MessageLookupByLibrary.simpleMessage("Трафик"),
-    "trafficLine": m100,
-    "trafficPeak": m101,
-    "trafficTotal": m102,
+    "trafficLine": m101,
+    "trafficPeak": m102,
+    "trafficTotal": m103,
     "trafficUsage": MessageLookupByLibrary.simpleMessage("Статистика трафика"),
     "transport": MessageLookupByLibrary.simpleMessage("Транспорт"),
-    "transportHeaders": m103,
+    "transportHeaders": m104,
     "tun": MessageLookupByLibrary.simpleMessage("TUN"),
     "tunAuthorizationFailed": MessageLookupByLibrary.simpleMessage(
       "Не удалось получить права для TUN, поэтому он выключен.",
@@ -2182,7 +2206,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Далее"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Пропустить"),
-    "tutorialStepOf": m104,
+    "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("Сеть порталов"),
     "tutorialTitle2": MessageLookupByLibrary.simpleMessage("Список фильтров"),
     "tutorialTitle3": MessageLookupByLibrary.simpleMessage("Фильтр на палец"),
@@ -2253,6 +2277,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "updateExiting": MessageLookupByLibrary.simpleMessage(
       "Закрываемся, чтобы завершить обновление…",
     ),
+    "updateFailedOffline": m106,
     "updateHandedOff": MessageLookupByLibrary.simpleMessage(
       "Завершите обновление в открывшемся установщике.",
     ),
@@ -2282,7 +2307,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("Отдача"),
     "uploadBandwidth": MessageLookupByLibrary.simpleMessage("Скорость отдачи"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m105,
+    "urlTip": m107,
     "useHosts": MessageLookupByLibrary.simpleMessage("Использовать hosts"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage(
       "Использовать системный hosts",
@@ -2311,7 +2336,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "VPN автоматически направляет весь системный трафик через VpnService.",
     ),
-    "vpnPermissionNotGranted": m106,
+    "vpnPermissionNotGranted": m108,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "VPN на этом устройстве ограничен администратором",
     ),
@@ -2328,8 +2353,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "«Записывать в систему» также устанавливает системные часы; Android это игнорирует.",
     ),
-    "yearsAgo": m107,
-    "yearsAgoShort": m108,
+    "yearsAgo": m109,
+    "yearsAgoShort": m110,
     "yes": MessageLookupByLibrary.simpleMessage("Да"),
     "zhCN": MessageLookupByLibrary.simpleMessage("Упрощённый китайский"),
   };

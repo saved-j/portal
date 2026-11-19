@@ -1065,5 +1065,27 @@
         "type": "int"
       }
     }
+  },
+  "updateFailedOffline": "更新に失敗しました。サブスクリプションはオフラインで動作を続けます。次回の試行は {time} です。",
+  "portalNoRules": "このサブスクリプションにはポータルネットワークのルールがありません",
+  "portalNoNodes": "このサブスクリプションにはシンプルポータルのサーバーがありません",
+  "subscriptionMihomoPresent": "Mihomo / ゴースト：形式あり",
+  "subscriptionMihomoAbsent": "Mihomo / ゴースト：形式なし",
+  "subscriptionXrayPresent": "Xray：形式あり",
+  "subscriptionXrayAbsent": "Xray：形式なし",
+  "speedKilobytes": "{value} KB/s",
+  "@updateFailedOffline": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@speedKilobytes": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
   }
 }

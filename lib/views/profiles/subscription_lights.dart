@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fl_clash/common/context.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/profile.dart';
 import 'package:material_ui/material_ui.dart';
@@ -72,8 +73,8 @@ class _SubscriptionFormatsLightsState extends State<SubscriptionFormatsLights> {
           on: _mihomo,
           label: 'M',
           tooltip: _mihomo
-              ? 'Mihomo / призрак: формат есть'
-              : 'Mihomo / призрак: формат не отдаётся',
+              ? context.appLocalizations.subscriptionMihomoPresent
+              : context.appLocalizations.subscriptionMihomoAbsent,
           color: theme.colorScheme.onSurfaceVariant,
         ),
         const SizedBox(width: 6),
@@ -81,8 +82,8 @@ class _SubscriptionFormatsLightsState extends State<SubscriptionFormatsLights> {
           on: _loaded && _xray,
           label: 'X',
           tooltip: _xray
-              ? 'Xray: формат есть'
-              : 'Xray: формат не отдаётся',
+              ? context.appLocalizations.subscriptionXrayPresent
+              : context.appLocalizations.subscriptionXrayAbsent,
           color: theme.colorScheme.onSurfaceVariant,
         ),
       ],

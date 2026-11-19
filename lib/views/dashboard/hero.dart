@@ -521,7 +521,9 @@ class _ConnectButton extends ConsumerWidget {
                   connections: live.connections,
                   rateText: live.connections == 0
                       ? null
-                      : '${(rate / 1024).toStringAsFixed(0)} КБ/с',
+                      : context.appLocalizations.speedKilobytes(
+                          (rate / 1024).toStringAsFixed(0),
+                        ),
                 ),
               ),
             ),

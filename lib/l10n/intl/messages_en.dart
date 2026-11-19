@@ -266,28 +266,33 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m98(value) => "Sorting: ${value}";
 
-  static String m99(days) =>
+  static String m99(value) => "${value} KB/s";
+
+  static String m100(days) =>
       "Your subscription expires in ${Intl.plural(days, one: '1 day', other: '${days} days')}";
 
-  static String m100(value) => "Traffic: ${value}";
+  static String m101(value) => "Traffic: ${value}";
 
-  static String m101(value) => "Peak ${value}";
+  static String m102(value) => "Peak ${value}";
 
-  static String m102(value) => "Total ${value}";
+  static String m103(value) => "Total ${value}";
 
-  static String m103(transport) => "${transport} Headers";
+  static String m104(transport) => "${transport} Headers";
 
-  static String m104(index, total) => "${index} of ${total}";
+  static String m105(index, total) => "${index} of ${total}";
 
-  static String m105(label) => "${label} must be a URL";
+  static String m106(time) =>
+      "The update failed. The subscription keeps working offline; the next attempt is at ${time}.";
 
-  static String m106(appName) =>
+  static String m107(label) => "${label} must be a URL";
+
+  static String m108(appName) =>
       "You did not allow ${appName} to connect as a VPN";
 
-  static String m107(count) =>
+  static String m109(count) =>
       "${Intl.plural(count, one: '1 year ago', other: '${count} years ago')}";
 
-  static String m108(count) => "${Intl.plural(count, other: '${count}y ago')}";
+  static String m110(count) => "${Intl.plural(count, other: '${count}y ago')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -1422,6 +1427,12 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "portalModeUnavailable": m65,
     "portalModesUnavailable": m66,
+    "portalNoNodes": MessageLookupByLibrary.simpleMessage(
+      "this subscription carries no nodes for the simple portal",
+    ),
+    "portalNoRules": MessageLookupByLibrary.simpleMessage(
+      "this subscription carries no rules for the portal network",
+    ),
     "portalOff": MessageLookupByLibrary.simpleMessage("Portal is off"),
     "portalRestoreFilter": MessageLookupByLibrary.simpleMessage(
       "Back into the portal",
@@ -1934,6 +1945,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "specialProxy": MessageLookupByLibrary.simpleMessage("Special proxy"),
     "specialRules": MessageLookupByLibrary.simpleMessage("Special rules"),
     "spectrum": MessageLookupByLibrary.simpleMessage("Spectrum"),
+    "speedKilobytes": m99,
     "speedStatistics": MessageLookupByLibrary.simpleMessage("Speed statistics"),
     "splitStrategy": MessageLookupByLibrary.simpleMessage("Split strategy"),
     "splitStrategyNotEmpty": MessageLookupByLibrary.simpleMessage(
@@ -1980,7 +1992,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "subscriptionExpired": MessageLookupByLibrary.simpleMessage(
       "Your subscription has expired",
     ),
-    "subscriptionExpiresInDays": m99,
+    "subscriptionExpiresInDays": m100,
     "subscriptionExpiresSoon": MessageLookupByLibrary.simpleMessage(
       "Subscription expires soon",
     ),
@@ -1989,6 +2001,18 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "subscriptionInfo": MessageLookupByLibrary.simpleMessage(
       "Subscription info",
+    ),
+    "subscriptionMihomoAbsent": MessageLookupByLibrary.simpleMessage(
+      "Mihomo / ghost: the format is not served",
+    ),
+    "subscriptionMihomoPresent": MessageLookupByLibrary.simpleMessage(
+      "Mihomo / ghost: the format is served",
+    ),
+    "subscriptionXrayAbsent": MessageLookupByLibrary.simpleMessage(
+      "Xray: the format is not served",
+    ),
+    "subscriptionXrayPresent": MessageLookupByLibrary.simpleMessage(
+      "Xray: the format is served",
     ),
     "sudoPasswordTitle": MessageLookupByLibrary.simpleMessage(
       "Enter your password for sudo",
@@ -2042,12 +2066,12 @@ class MessageLookup extends MessageLookupByLibrary {
     "totalUpload": MessageLookupByLibrary.simpleMessage("Uploaded"),
     "tproxyPort": MessageLookupByLibrary.simpleMessage("TProxy port"),
     "traffic": MessageLookupByLibrary.simpleMessage("Traffic"),
-    "trafficLine": m100,
-    "trafficPeak": m101,
-    "trafficTotal": m102,
+    "trafficLine": m101,
+    "trafficPeak": m102,
+    "trafficTotal": m103,
     "trafficUsage": MessageLookupByLibrary.simpleMessage("Traffic usage"),
     "transport": MessageLookupByLibrary.simpleMessage("Transport"),
-    "transportHeaders": m103,
+    "transportHeaders": m104,
     "tun": MessageLookupByLibrary.simpleMessage("TUN"),
     "tunAuthorizationFailed": MessageLookupByLibrary.simpleMessage(
       "TUN could not be authorized, so it was turned off.",
@@ -2086,7 +2110,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Next"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Skip"),
-    "tutorialStepOf": m104,
+    "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("Portal network"),
     "tutorialTitle2": MessageLookupByLibrary.simpleMessage("The filter list"),
     "tutorialTitle3": MessageLookupByLibrary.simpleMessage(
@@ -2159,6 +2183,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "updateExiting": MessageLookupByLibrary.simpleMessage(
       "Closing to finish the update…",
     ),
+    "updateFailedOffline": m106,
     "updateHandedOff": MessageLookupByLibrary.simpleMessage(
       "Finish the update in the installer that opened.",
     ),
@@ -2188,7 +2213,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("Upload"),
     "uploadBandwidth": MessageLookupByLibrary.simpleMessage("Upload bandwidth"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m105,
+    "urlTip": m107,
     "useHosts": MessageLookupByLibrary.simpleMessage("Use hosts"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage("Use system hosts"),
     "usedTraffic": MessageLookupByLibrary.simpleMessage("Used traffic"),
@@ -2213,7 +2238,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "VPN routes all system traffic through VpnService automatically.",
     ),
-    "vpnPermissionNotGranted": m106,
+    "vpnPermissionNotGranted": m108,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "VPN is restricted on this device by its administrator",
     ),
@@ -2226,8 +2251,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "Write to system also sets the system clock; Android ignores it.",
     ),
-    "yearsAgo": m107,
-    "yearsAgoShort": m108,
+    "yearsAgo": m109,
+    "yearsAgoShort": m110,
     "yes": MessageLookupByLibrary.simpleMessage("Yes"),
     "zhCN": MessageLookupByLibrary.simpleMessage("Simplified Chinese"),
   };

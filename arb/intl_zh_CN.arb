@@ -1119,5 +1119,27 @@
         "type": "int"
       }
     }
+  },
+  "updateFailedOffline": "更新失败。订阅将继续离线工作，下次尝试时间 {time}。",
+  "portalNoRules": "此订阅不包含门户网络的规则",
+  "portalNoNodes": "此订阅不包含简单门户的服务器",
+  "subscriptionMihomoPresent": "Mihomo / 幻影：格式可用",
+  "subscriptionMihomoAbsent": "Mihomo / 幻影：格式不可用",
+  "subscriptionXrayPresent": "Xray：格式可用",
+  "subscriptionXrayAbsent": "Xray：格式不可用",
+  "speedKilobytes": "{value} KB/s",
+  "@updateFailedOffline": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@speedKilobytes": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
   }
 }

@@ -215,23 +215,28 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m97(label) => "${label}は1項目のみ指定できます";
 
-  static String m99(days) => "サブスクリプションはあと ${days} 日で終了します";
+  static String m99(value) => "${value} KB/s";
 
-  static String m101(value) => "ピーク ${value}";
+  static String m100(days) => "サブスクリプションはあと ${days} 日で終了します";
 
-  static String m102(value) => "累計 ${value}";
+  static String m102(value) => "ピーク ${value}";
 
-  static String m103(transport) => "${transport} リクエストヘッダー";
+  static String m103(value) => "累計 ${value}";
 
-  static String m104(index, total) => "${index} / ${total}";
+  static String m104(transport) => "${transport} リクエストヘッダー";
 
-  static String m105(label) => "${label}はURLである必要があります";
+  static String m105(index, total) => "${index} / ${total}";
 
-  static String m106(appName) => "${appName} の VPN 接続が許可されませんでした";
+  static String m106(time) =>
+      "更新に失敗しました。サブスクリプションはオフラインで動作を続けます。次回の試行は ${time} です。";
 
-  static String m107(count) => "${count} 年前";
+  static String m107(label) => "${label}はURLである必要があります";
 
-  static String m108(count) => "${count} 年前";
+  static String m108(appName) => "${appName} の VPN 接続が許可されませんでした";
+
+  static String m109(count) => "${count} 年前";
+
+  static String m110(count) => "${count} 年前";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -1136,6 +1141,12 @@ class MessageLookup extends MessageLookupByLibrary {
     "portHopping": MessageLookupByLibrary.simpleMessage("ポートホッピング"),
     "portTip": m63,
     "portValue": m64,
+    "portalNoNodes": MessageLookupByLibrary.simpleMessage(
+      "このサブスクリプションにはシンプルポータルのサーバーがありません",
+    ),
+    "portalNoRules": MessageLookupByLibrary.simpleMessage(
+      "このサブスクリプションにはポータルネットワークのルールがありません",
+    ),
     "ports": MessageLookupByLibrary.simpleMessage("ポート"),
     "preChannelTip": MessageLookupByLibrary.simpleMessage(
       "このプレリリース版は別アプリとしてインストールされ、FlClashX のプロファイルは参照できません。移行するには、FlClashX の「バックアップと復元」でバックアップを作成してここで復元するか、リンクからサブスクリプションを追加し直してください。",
@@ -1571,6 +1582,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "specialProxy": MessageLookupByLibrary.simpleMessage("特殊プロキシ"),
     "specialRules": MessageLookupByLibrary.simpleMessage("特殊ルール"),
     "spectrum": MessageLookupByLibrary.simpleMessage("スペクトル"),
+    "speedKilobytes": m99,
     "speedStatistics": MessageLookupByLibrary.simpleMessage("速度統計"),
     "splitStrategy": MessageLookupByLibrary.simpleMessage("振り分け戦略"),
     "splitStrategyNotEmpty": MessageLookupByLibrary.simpleMessage(
@@ -1611,7 +1623,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "subscriptionExpired": MessageLookupByLibrary.simpleMessage(
       "サブスクリプションは終了しました",
     ),
-    "subscriptionExpiresInDays": m99,
+    "subscriptionExpiresInDays": m100,
     "subscriptionExpiresSoon": MessageLookupByLibrary.simpleMessage(
       "サブスクリプションがまもなく終了します",
     ),
@@ -1619,6 +1631,16 @@ class MessageLookup extends MessageLookupByLibrary {
       "サブスクリプションは今日で終了します",
     ),
     "subscriptionInfo": MessageLookupByLibrary.simpleMessage("サブスクリプション情報"),
+    "subscriptionMihomoAbsent": MessageLookupByLibrary.simpleMessage(
+      "Mihomo / ゴースト：形式なし",
+    ),
+    "subscriptionMihomoPresent": MessageLookupByLibrary.simpleMessage(
+      "Mihomo / ゴースト：形式あり",
+    ),
+    "subscriptionXrayAbsent": MessageLookupByLibrary.simpleMessage("Xray：形式なし"),
+    "subscriptionXrayPresent": MessageLookupByLibrary.simpleMessage(
+      "Xray：形式あり",
+    ),
     "sudoPasswordTitle": MessageLookupByLibrary.simpleMessage("sudo のパスワードを入力"),
     "support": MessageLookupByLibrary.simpleMessage("サポート"),
     "suspended": MessageLookupByLibrary.simpleMessage("一時停止中…"),
@@ -1665,11 +1687,11 @@ class MessageLookup extends MessageLookupByLibrary {
     "totalUpload": MessageLookupByLibrary.simpleMessage("アップロード量"),
     "tproxyPort": MessageLookupByLibrary.simpleMessage("TProxyポート"),
     "traffic": MessageLookupByLibrary.simpleMessage("通信量"),
-    "trafficPeak": m101,
-    "trafficTotal": m102,
+    "trafficPeak": m102,
+    "trafficTotal": m103,
     "trafficUsage": MessageLookupByLibrary.simpleMessage("トラフィック統計"),
     "transport": MessageLookupByLibrary.simpleMessage("トランスポート"),
-    "transportHeaders": m103,
+    "transportHeaders": m104,
     "tun": MessageLookupByLibrary.simpleMessage("TUN"),
     "tunAuthorizationFailed": MessageLookupByLibrary.simpleMessage(
       "TUN の権限を取得できなかったため、オフにしました。",
@@ -1704,7 +1726,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody7": MessageLookupByLibrary.simpleMessage("最後に——起動です。"),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("次へ"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("スキップ"),
-    "tutorialStepOf": m104,
+    "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("ポータルネットワーク"),
     "tutorialTitle2": MessageLookupByLibrary.simpleMessage("フィルター一覧"),
     "tutorialTitle3": MessageLookupByLibrary.simpleMessage("タイルを長押し"),
@@ -1769,6 +1791,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "updateExiting": MessageLookupByLibrary.simpleMessage(
       "アップデートを完了するため終了しています…",
     ),
+    "updateFailedOffline": m106,
     "updateHandedOff": MessageLookupByLibrary.simpleMessage(
       "開いたインストーラでアップデートを完了してください。",
     ),
@@ -1790,7 +1813,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("アップロード"),
     "uploadBandwidth": MessageLookupByLibrary.simpleMessage("アップロード帯域幅"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m105,
+    "urlTip": m107,
     "useHosts": MessageLookupByLibrary.simpleMessage("Hostsを使用"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage("システムのHostsを使用"),
     "usedTraffic": MessageLookupByLibrary.simpleMessage("使用済みトラフィック"),
@@ -1815,7 +1838,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "VPN は VpnService でシステムの全トラフィックを自動的にルーティングします。",
     ),
-    "vpnPermissionNotGranted": m106,
+    "vpnPermissionNotGranted": m108,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "このデバイスでは管理者によって VPN が制限されています",
     ),
@@ -1826,8 +1849,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "システムに書き込むを有効にするとシステムクロックも設定します。Android では無視されます。",
     ),
-    "yearsAgo": m107,
-    "yearsAgoShort": m108,
+    "yearsAgo": m109,
+    "yearsAgoShort": m110,
     "yes": MessageLookupByLibrary.simpleMessage("はい"),
     "zhCN": MessageLookupByLibrary.simpleMessage("簡体字中国語"),
   };

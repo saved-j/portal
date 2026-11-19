@@ -1065,5 +1065,27 @@
         "type": "int"
       }
     }
+  },
+  "updateFailedOffline": "La actualización falló. La suscripción sigue funcionando sin conexión; el próximo intento es a las {time}.",
+  "portalNoRules": "esta suscripción no trae reglas para la red de portales",
+  "portalNoNodes": "esta suscripción no trae servidores para el portal simple",
+  "subscriptionMihomoPresent": "Mihomo / fantasma: el formato llega",
+  "subscriptionMihomoAbsent": "Mihomo / fantasma: el formato no llega",
+  "subscriptionXrayPresent": "Xray: el formato llega",
+  "subscriptionXrayAbsent": "Xray: el formato no llega",
+  "speedKilobytes": "{value} KB/s",
+  "@updateFailedOffline": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@speedKilobytes": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
   }
 }

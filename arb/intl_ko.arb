@@ -1065,5 +1065,27 @@
         "type": "int"
       }
     }
+  },
+  "updateFailedOffline": "업데이트에 실패했습니다. 구독은 오프라인으로 계속 작동하며, 다음 시도는 {time}입니다.",
+  "portalNoRules": "이 구독에는 포털 네트워크 규칙이 없습니다",
+  "portalNoNodes": "이 구독에는 간단 포털 서버가 없습니다",
+  "subscriptionMihomoPresent": "Mihomo / 고스트: 형식 제공됨",
+  "subscriptionMihomoAbsent": "Mihomo / 고스트: 형식 제공 안 됨",
+  "subscriptionXrayPresent": "Xray: 형식 제공됨",
+  "subscriptionXrayAbsent": "Xray: 형식 제공 안 됨",
+  "speedKilobytes": "{value} KB/s",
+  "@updateFailedOffline": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@speedKilobytes": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
   }
 }

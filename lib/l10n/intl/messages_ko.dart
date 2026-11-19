@@ -218,23 +218,28 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m97(label) => "${label}은(는) 하나만 입력해야 합니다";
 
-  static String m99(days) => "구독이 ${days}일 후에 만료됩니다";
+  static String m99(value) => "${value} KB/s";
 
-  static String m101(value) => "최고 ${value}";
+  static String m100(days) => "구독이 ${days}일 후에 만료됩니다";
 
-  static String m102(value) => "합계 ${value}";
+  static String m102(value) => "최고 ${value}";
 
-  static String m103(transport) => "${transport} 요청 헤더";
+  static String m103(value) => "합계 ${value}";
 
-  static String m104(index, total) => "${index} / ${total}";
+  static String m104(transport) => "${transport} 요청 헤더";
 
-  static String m105(label) => "${label}은(는) URL이어야 합니다";
+  static String m105(index, total) => "${index} / ${total}";
 
-  static String m106(appName) => "${appName}의 VPN 연결을 허용하지 않았습니다";
+  static String m106(time) =>
+      "업데이트에 실패했습니다. 구독은 오프라인으로 계속 작동하며, 다음 시도는 ${time}입니다.";
 
-  static String m107(count) => "${Intl.plural(count, other: '${count}년 전')}";
+  static String m107(label) => "${label}은(는) URL이어야 합니다";
 
-  static String m108(count) => "${Intl.plural(count, other: '${count}년 전')}";
+  static String m108(appName) => "${appName}의 VPN 연결을 허용하지 않았습니다";
+
+  static String m109(count) => "${Intl.plural(count, other: '${count}년 전')}";
+
+  static String m110(count) => "${Intl.plural(count, other: '${count}년 전')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -1115,6 +1120,12 @@ class MessageLookup extends MessageLookupByLibrary {
     "portHopping": MessageLookupByLibrary.simpleMessage("포트 호핑"),
     "portTip": m63,
     "portValue": m64,
+    "portalNoNodes": MessageLookupByLibrary.simpleMessage(
+      "이 구독에는 간단 포털 서버가 없습니다",
+    ),
+    "portalNoRules": MessageLookupByLibrary.simpleMessage(
+      "이 구독에는 포털 네트워크 규칙이 없습니다",
+    ),
     "ports": MessageLookupByLibrary.simpleMessage("포트"),
     "preChannelTip": MessageLookupByLibrary.simpleMessage(
       "이 사전 출시 버전은 별도의 앱이라 FlClashX의 프로필을 볼 수 없습니다. 옮기려면 FlClashX의 백업 및 복원에서 백업을 만든 뒤 여기서 복원하거나, 링크로 구독을 다시 추가하세요.",
@@ -1540,6 +1551,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "specialProxy": MessageLookupByLibrary.simpleMessage("특수 프록시"),
     "specialRules": MessageLookupByLibrary.simpleMessage("특수 규칙"),
     "spectrum": MessageLookupByLibrary.simpleMessage("스펙트럼"),
+    "speedKilobytes": m99,
     "speedStatistics": MessageLookupByLibrary.simpleMessage("속도 통계"),
     "splitStrategy": MessageLookupByLibrary.simpleMessage("분할 전략"),
     "splitStrategyNotEmpty": MessageLookupByLibrary.simpleMessage(
@@ -1578,7 +1590,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "style": MessageLookupByLibrary.simpleMessage("스타일"),
     "submit": MessageLookupByLibrary.simpleMessage("제출"),
     "subscriptionExpired": MessageLookupByLibrary.simpleMessage("구독이 만료되었습니다"),
-    "subscriptionExpiresInDays": m99,
+    "subscriptionExpiresInDays": m100,
     "subscriptionExpiresSoon": MessageLookupByLibrary.simpleMessage(
       "구독이 곧 만료됩니다",
     ),
@@ -1586,6 +1598,18 @@ class MessageLookup extends MessageLookupByLibrary {
       "구독이 오늘 만료됩니다",
     ),
     "subscriptionInfo": MessageLookupByLibrary.simpleMessage("구독 정보"),
+    "subscriptionMihomoAbsent": MessageLookupByLibrary.simpleMessage(
+      "Mihomo / 고스트: 형식 제공 안 됨",
+    ),
+    "subscriptionMihomoPresent": MessageLookupByLibrary.simpleMessage(
+      "Mihomo / 고스트: 형식 제공됨",
+    ),
+    "subscriptionXrayAbsent": MessageLookupByLibrary.simpleMessage(
+      "Xray: 형식 제공 안 됨",
+    ),
+    "subscriptionXrayPresent": MessageLookupByLibrary.simpleMessage(
+      "Xray: 형식 제공됨",
+    ),
     "sudoPasswordTitle": MessageLookupByLibrary.simpleMessage(
       "sudo 비밀번호를 입력하세요",
     ),
@@ -1634,11 +1658,11 @@ class MessageLookup extends MessageLookupByLibrary {
     "totalUpload": MessageLookupByLibrary.simpleMessage("업로드량"),
     "tproxyPort": MessageLookupByLibrary.simpleMessage("TProxy 포트"),
     "traffic": MessageLookupByLibrary.simpleMessage("트래픽"),
-    "trafficPeak": m101,
-    "trafficTotal": m102,
+    "trafficPeak": m102,
+    "trafficTotal": m103,
     "trafficUsage": MessageLookupByLibrary.simpleMessage("트래픽 사용량"),
     "transport": MessageLookupByLibrary.simpleMessage("전송"),
-    "transportHeaders": m103,
+    "transportHeaders": m104,
     "tun": MessageLookupByLibrary.simpleMessage("TUN"),
     "tunAuthorizationFailed": MessageLookupByLibrary.simpleMessage(
       "TUN 권한을 얻지 못해 끄기로 되돌렸습니다.",
@@ -1673,7 +1697,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody7": MessageLookupByLibrary.simpleMessage("그리고 마지막으로 — 시작입니다."),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("다음"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("건너뛰기"),
-    "tutorialStepOf": m104,
+    "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("포털 네트워크"),
     "tutorialTitle2": MessageLookupByLibrary.simpleMessage("필터 목록"),
     "tutorialTitle3": MessageLookupByLibrary.simpleMessage("타일 길게 누르기"),
@@ -1740,6 +1764,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "updateExiting": MessageLookupByLibrary.simpleMessage(
       "업데이트를 완료하기 위해 종료하는 중…",
     ),
+    "updateFailedOffline": m106,
     "updateHandedOff": MessageLookupByLibrary.simpleMessage(
       "열린 설치 프로그램에서 업데이트를 완료하세요.",
     ),
@@ -1763,7 +1788,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("업로드"),
     "uploadBandwidth": MessageLookupByLibrary.simpleMessage("업로드 대역폭"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m105,
+    "urlTip": m107,
     "useHosts": MessageLookupByLibrary.simpleMessage("hosts 사용"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage("시스템 hosts 사용"),
     "usedTraffic": MessageLookupByLibrary.simpleMessage("사용한 트래픽"),
@@ -1788,7 +1813,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "VPN은 VpnService를 통해 모든 시스템 트래픽을 자동으로 라우팅합니다.",
     ),
-    "vpnPermissionNotGranted": m106,
+    "vpnPermissionNotGranted": m108,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "이 기기에서는 관리자가 VPN을 제한했습니다",
     ),
@@ -1799,8 +1824,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "시스템에 기록하면 시스템 시계도 설정합니다. Android에서는 무시됩니다.",
     ),
-    "yearsAgo": m107,
-    "yearsAgoShort": m108,
+    "yearsAgo": m109,
+    "yearsAgoShort": m110,
     "yes": MessageLookupByLibrary.simpleMessage("예"),
     "zhCN": MessageLookupByLibrary.simpleMessage("중국어 간체"),
   };

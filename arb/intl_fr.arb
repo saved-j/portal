@@ -1065,5 +1065,27 @@
         "type": "int"
       }
     }
+  },
+  "updateFailedOffline": "La mise à jour a échoué. L'abonnement continue de fonctionner hors ligne ; la prochaine tentative à {time}.",
+  "portalNoRules": "cet abonnement ne contient pas de règles pour le réseau des portails",
+  "portalNoNodes": "cet abonnement ne contient pas de serveurs pour le portail simple",
+  "subscriptionMihomoPresent": "Mihomo / fantôme : le format est servi",
+  "subscriptionMihomoAbsent": "Mihomo / fantôme : le format n'est pas servi",
+  "subscriptionXrayPresent": "Xray : le format est servi",
+  "subscriptionXrayAbsent": "Xray : le format n'est pas servi",
+  "speedKilobytes": "{value} Ko/s",
+  "@updateFailedOffline": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@speedKilobytes": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
   }
 }

@@ -1147,5 +1147,27 @@
         "type": "int"
       }
     }
+  },
+  "updateFailedOffline": "Обновление не удалось. Подписка продолжит работать в автономном режиме, следующая попытка в {time}.",
+  "portalNoRules": "эта подписка не содержит правил для сети порталов",
+  "portalNoNodes": "эта подписка не содержит серверов для простого портала",
+  "subscriptionMihomoPresent": "Mihomo / призрак: формат есть",
+  "subscriptionMihomoAbsent": "Mihomo / призрак: формат не отдаётся",
+  "subscriptionXrayPresent": "Xray: формат есть",
+  "subscriptionXrayAbsent": "Xray: формат не отдаётся",
+  "speedKilobytes": "{value} КБ/с",
+  "@updateFailedOffline": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@speedKilobytes": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
   }
 }

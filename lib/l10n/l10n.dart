@@ -9360,6 +9360,86 @@ class AppLocalizations {
       args: [index, total],
     );
   }
+
+  /// `The update failed. The subscription keeps working offline; the next attempt is at {time}.`
+  String updateFailedOffline(String time) {
+    return Intl.message(
+      'The update failed. The subscription keeps working offline; the next attempt is at $time.',
+      name: 'updateFailedOffline',
+      desc: '',
+      args: [time],
+    );
+  }
+
+  /// `this subscription carries no rules for the portal network`
+  String get portalNoRules {
+    return Intl.message(
+      'this subscription carries no rules for the portal network',
+      name: 'portalNoRules',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `this subscription carries no nodes for the simple portal`
+  String get portalNoNodes {
+    return Intl.message(
+      'this subscription carries no nodes for the simple portal',
+      name: 'portalNoNodes',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Mihomo / ghost: the format is served`
+  String get subscriptionMihomoPresent {
+    return Intl.message(
+      'Mihomo / ghost: the format is served',
+      name: 'subscriptionMihomoPresent',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Mihomo / ghost: the format is not served`
+  String get subscriptionMihomoAbsent {
+    return Intl.message(
+      'Mihomo / ghost: the format is not served',
+      name: 'subscriptionMihomoAbsent',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Xray: the format is served`
+  String get subscriptionXrayPresent {
+    return Intl.message(
+      'Xray: the format is served',
+      name: 'subscriptionXrayPresent',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Xray: the format is not served`
+  String get subscriptionXrayAbsent {
+    return Intl.message(
+      'Xray: the format is not served',
+      name: 'subscriptionXrayAbsent',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `{value} KB/s`
+  String speedKilobytes(String value) {
+    return Intl.message(
+      '$value KB/s',
+      name: 'speedKilobytes',
+      desc: '',
+      args: [value],
+    );
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<AppLocalizations> {

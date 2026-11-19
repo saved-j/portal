@@ -230,25 +230,29 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m98(value) => "排序：${value}";
 
-  static String m99(days) => "您的订阅将在 ${days} 天后到期";
+  static String m99(value) => "${value} KB/s";
 
-  static String m100(value) => "流量：${value}";
+  static String m100(days) => "您的订阅将在 ${days} 天后到期";
 
-  static String m101(value) => "峰值 ${value}";
+  static String m101(value) => "流量：${value}";
 
-  static String m102(value) => "累计 ${value}";
+  static String m102(value) => "峰值 ${value}";
 
-  static String m103(transport) => "${transport} 请求头";
+  static String m103(value) => "累计 ${value}";
 
-  static String m104(index, total) => "第 ${index} 步，共 ${total} 步";
+  static String m104(transport) => "${transport} 请求头";
 
-  static String m105(label) => "${label}必须为URL";
+  static String m105(index, total) => "第 ${index} 步，共 ${total} 步";
 
-  static String m106(appName) => "你没有允许 ${appName} 建立 VPN 连接";
+  static String m106(time) => "更新失败。订阅将继续离线工作，下次尝试时间 ${time}。";
 
-  static String m107(count) => "${count} 年前";
+  static String m107(label) => "${label}必须为URL";
 
-  static String m108(count) => "${count} 年前";
+  static String m108(appName) => "你没有允许 ${appName} 建立 VPN 连接";
+
+  static String m109(count) => "${count} 年前";
+
+  static String m110(count) => "${count} 年前";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -1103,6 +1107,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "portalBypassFilter": MessageLookupByLibrary.simpleMessage("直接连接，不经门户"),
     "portalModeUnavailable": m65,
     "portalModesUnavailable": m66,
+    "portalNoNodes": MessageLookupByLibrary.simpleMessage("此订阅不包含简单门户的服务器"),
+    "portalNoRules": MessageLookupByLibrary.simpleMessage("此订阅不包含门户网络的规则"),
     "portalOff": MessageLookupByLibrary.simpleMessage("门户已关闭"),
     "portalRestoreFilter": MessageLookupByLibrary.simpleMessage("恢复经由门户"),
     "portalStartFailed": m67,
@@ -1503,6 +1509,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "specialProxy": MessageLookupByLibrary.simpleMessage("特殊代理"),
     "specialRules": MessageLookupByLibrary.simpleMessage("特殊规则"),
     "spectrum": MessageLookupByLibrary.simpleMessage("光谱"),
+    "speedKilobytes": m99,
     "speedStatistics": MessageLookupByLibrary.simpleMessage("网速统计"),
     "splitStrategy": MessageLookupByLibrary.simpleMessage("分流策略"),
     "splitStrategyNotEmpty": MessageLookupByLibrary.simpleMessage("分流策略不能为空"),
@@ -1537,12 +1544,24 @@ class MessageLookup extends MessageLookupByLibrary {
     "style": MessageLookupByLibrary.simpleMessage("风格"),
     "submit": MessageLookupByLibrary.simpleMessage("提交"),
     "subscriptionExpired": MessageLookupByLibrary.simpleMessage("您的订阅已到期"),
-    "subscriptionExpiresInDays": m99,
+    "subscriptionExpiresInDays": m100,
     "subscriptionExpiresSoon": MessageLookupByLibrary.simpleMessage("订阅即将到期"),
     "subscriptionExpiresToday": MessageLookupByLibrary.simpleMessage(
       "您的订阅今天到期",
     ),
     "subscriptionInfo": MessageLookupByLibrary.simpleMessage("订阅信息"),
+    "subscriptionMihomoAbsent": MessageLookupByLibrary.simpleMessage(
+      "Mihomo / 幻影：格式不可用",
+    ),
+    "subscriptionMihomoPresent": MessageLookupByLibrary.simpleMessage(
+      "Mihomo / 幻影：格式可用",
+    ),
+    "subscriptionXrayAbsent": MessageLookupByLibrary.simpleMessage(
+      "Xray：格式不可用",
+    ),
+    "subscriptionXrayPresent": MessageLookupByLibrary.simpleMessage(
+      "Xray：格式可用",
+    ),
     "sudoPasswordTitle": MessageLookupByLibrary.simpleMessage("输入 sudo 密码"),
     "support": MessageLookupByLibrary.simpleMessage("支持"),
     "suspended": MessageLookupByLibrary.simpleMessage("挂起中…"),
@@ -1589,12 +1608,12 @@ class MessageLookup extends MessageLookupByLibrary {
     "totalUpload": MessageLookupByLibrary.simpleMessage("上传总量"),
     "tproxyPort": MessageLookupByLibrary.simpleMessage("Tproxy端口"),
     "traffic": MessageLookupByLibrary.simpleMessage("流量"),
-    "trafficLine": m100,
-    "trafficPeak": m101,
-    "trafficTotal": m102,
+    "trafficLine": m101,
+    "trafficPeak": m102,
+    "trafficTotal": m103,
     "trafficUsage": MessageLookupByLibrary.simpleMessage("流量统计"),
     "transport": MessageLookupByLibrary.simpleMessage("传输协议"),
-    "transportHeaders": m103,
+    "transportHeaders": m104,
     "tun": MessageLookupByLibrary.simpleMessage("虚拟网卡"),
     "tunAuthorizationFailed": MessageLookupByLibrary.simpleMessage(
       "虚拟网卡授权失败，已关闭。",
@@ -1625,7 +1644,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody7": MessageLookupByLibrary.simpleMessage("最后——启动。"),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("下一步"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("跳过"),
-    "tutorialStepOf": m104,
+    "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("门户网络"),
     "tutorialTitle2": MessageLookupByLibrary.simpleMessage("筛选器列表"),
     "tutorialTitle3": MessageLookupByLibrary.simpleMessage("长按磁贴"),
@@ -1678,6 +1697,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "下载被重定向到 GitHub 以外的地址。",
     ),
     "updateExiting": MessageLookupByLibrary.simpleMessage("正在退出以完成更新…"),
+    "updateFailedOffline": m106,
     "updateHandedOff": MessageLookupByLibrary.simpleMessage("请在打开的安装程序中完成更新。"),
     "updateHide": MessageLookupByLibrary.simpleMessage("隐藏"),
     "updateInstall": MessageLookupByLibrary.simpleMessage("安装"),
@@ -1697,7 +1717,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("上传"),
     "uploadBandwidth": MessageLookupByLibrary.simpleMessage("上行带宽"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
-    "urlTip": m105,
+    "urlTip": m107,
     "useHosts": MessageLookupByLibrary.simpleMessage("使用Hosts"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage("使用系统Hosts"),
     "usedTraffic": MessageLookupByLibrary.simpleMessage("已用流量"),
@@ -1720,7 +1740,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "vpnEnableDesc": MessageLookupByLibrary.simpleMessage(
       "VPN 通过 VpnService 自动路由系统所有流量。",
     ),
-    "vpnPermissionNotGranted": m106,
+    "vpnPermissionNotGranted": m108,
     "vpnRestrictedByAdministrator": MessageLookupByLibrary.simpleMessage(
       "此设备的管理员限制了 VPN",
     ),
@@ -1731,8 +1751,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "写入系统会同时设置系统时钟，Android 上不生效。",
     ),
-    "yearsAgo": m107,
-    "yearsAgoShort": m108,
+    "yearsAgo": m109,
+    "yearsAgoShort": m110,
     "yes": MessageLookupByLibrary.simpleMessage("是"),
     "zhCN": MessageLookupByLibrary.simpleMessage("中文简体"),
   };

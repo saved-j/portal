@@ -14,7 +14,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
 import 'package:fl_clash/core/sweep_ledger.dart';
 import 'package:fl_clash/core/update_backoff.dart';
-import 'package:intl/intl.dart' show Intl;
 import 'package:fl_clash/core/xray_measure.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
 import 'package:fl_clash/core/portal_document.dart';
@@ -561,6 +560,11 @@ typedef ModeAvailability = ({
   String reason,
 });
 
+/// The two refusals a subscription itself can carry. They travel as codes, not as sentences:
+/// the provider has no `context`, and a sentence would then be frozen in one language.
+const _noRulesCode = 'portal-no-rules';
+const _noNodesCode = 'portal-no-nodes';
+
 /// Whether each mode can be entered, and why not.
 ///
 /// Two facts per mode, and the stricter one wins: the app's own count of failed attempts at
@@ -605,7 +609,7 @@ final portalAvailabilityProvider = Provider<({ModeAvailability engine, ModeAvail
           ? engineStrikes.reason
           : (fileProblem.isEmpty
                 ? (known && !hasEngineDoc && hasNodeList
-                      ? 'эта подписка не содержит правил для сети порталов'
+                      ? _noRulesCode
                       : '')
                 : fileProblem),
     ),
@@ -619,8 +623,8 @@ final portalAvailabilityProvider = Provider<({ModeAvailability engine, ModeAvail
           ? xrayStrikes.reason
           : (noServers
                 ? (known && hasEngineDoc
-                      ? 'эта подписка не содержит серверов для простого портала'
-                      : 'this subscription carries no nodes for the portal')
+                      ? _noNodesCode
+                      : _noNodesCode)
                 : ''),
     ),
   );
@@ -630,12 +634,19 @@ final portalAvailabilityProvider = Provider<({ModeAvailability engine, ModeAvail
 ///
 /// The count is the fact the owner can act on ("it failed three times"), and the detail is
 /// the last failure's own words (`http 502`), which is what a support question needs.
+/// A refusal in the reader's language: the provider speaks in codes, the screen in words.
+String _reasonText(AppLocalizations l10n, String reason) => switch (reason) {
+  _noRulesCode => l10n.portalNoRules,
+  _noNodesCode => l10n.portalNoNodes,
+  _ => reason,
+};
+
 String _availabilityReason(
   AppLocalizations l10n,
   ModeAvailability availability,
 ) {
   final strikes = availability.strikes;
-  if (!strikes.blocked) return availability.reason;
+  if (!strikes.blocked) return _reasonText(l10n, availability.reason);
   // A download that failed is a network fact, not a broken file. The owner is told what
   // happened, that the portal keeps working on the file it has, and when the next attempt
   // comes — instead of a count of failures that reads like damage.
@@ -645,7 +656,7 @@ String _availabilityReason(
   return updateFailureNote(
     failures: strikes.failures,
     nextAttempt: next,
-    ru: Intl.getCurrentLocale().startsWith('ru'),
+    l: l10n,
     reason: availability.reason.isEmpty ? strikes.reason : availability.reason,
   );
 }
