@@ -3216,6 +3216,12 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
           'the portal core did not stop: ${stopped.reason}',
         );
       }
+    } else {
+      // A desktop child is a process this side owns, and nothing else stops it: without this
+      // the Xray core kept running after the switch, and its servers — a different subscription
+      // document altogether — were still there to be read in the network mode. Two cores, two
+      // documents, and neither outlives the mode it belongs to.
+      await DesktopXrayChild.stop();
     }
     // 3-5. The next core, then the mode, then the route — in that order, and only as far
     // as each step answers.
