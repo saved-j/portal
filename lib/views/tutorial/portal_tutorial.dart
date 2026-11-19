@@ -92,7 +92,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 15;
+const tutorialVersion = 16;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -540,11 +540,30 @@ final tutorialRequest = ValueNotifier<int?>(null);
 /// it eats every tap while showing nothing.
 bool tourIsShowing = false;
 
+OverlayEntry? _tourEntry;
+
+/// Shows the tour in the window's own overlay.
+///
+/// The overlay is the only surface whose coordinate space is the window's: the target's rectangle
+/// is measured in global coordinates and drawn here, so a frame cannot land beside its control
+/// because of a sidebar or a title bar, and the mask covers everything the owner can see.
 Future<void> showPortalTutorial(BuildContext context, {int fromStep = 0}) async {
   if (tourIsShowing) return;
   tourIsShowing = true;
-  tutorialRequest.value = fromStep;
-  return;
+  final overlay = Overlay.of(context, rootOverlay: true);
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (_) => PortalTutorial(
+      fromStep: fromStep,
+      onDone: () {
+        if (_tourEntry != null && _tourEntry!.mounted) _tourEntry!.remove();
+        if (identical(_tourEntry, entry)) _tourEntry = null;
+        tourIsShowing = false;
+      },
+    ),
+  );
+  _tourEntry = entry;
+  overlay.insert(entry);
 }
 
 

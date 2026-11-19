@@ -75,29 +75,7 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    // The tour is a layer of this screen: nothing is pushed, so nothing sits between the
-    // owner's finger and the control the tour asks him to press.
-    return Stack(
-      children: [
-        Positioned.fill(child: _buildBody(context)),
-        ValueListenableBuilder<int?>(
-          valueListenable: tutorialRequest,
-          builder: (context, step, _) => step == null
-              ? const SizedBox.shrink()
-              : SizedBox.expand(
-                  child: PortalTutorial(
-                  fromStep: step,
-                  onDone: () {
-                    tutorialRequest.value = null;
-                    tourIsShowing = false;
-                  },
-                ),
-                ),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => _buildBody(context);
 
   Widget _buildBody(BuildContext context) {
     final profile = ref.watch(currentProfileProvider);
