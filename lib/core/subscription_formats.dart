@@ -130,6 +130,14 @@ Object? _tryDecodeJson(String text) {
   }
 }
 
+/// True when the body is an Xray *client config* — outbounds and settings, not a link list.
+///
+/// The distinction is load-bearing: a link list is what any core can run after one conversion,
+/// while a client config belongs to the core it was written for. Turning the second into the
+/// first moved the second core's servers into the engine's list, which the owner rejects.
+bool isClientConfig(String body) =>
+    _looksLikeClientConfig(_tryDecodeJson(body.trim()));
+
 /// True for an Xray-shaped document, either bare or wrapped in a list.
 bool _looksLikeClientConfig(Object? json) {
   bool isConfig(Object? value) =>

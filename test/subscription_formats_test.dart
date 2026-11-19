@@ -48,6 +48,15 @@ void main() {
     expect(detectFormat(config), SubscriptionFormat.xray);
   });
 
+  test('a client config is told apart from a link list', () {
+    const config =
+        '[{"inbounds":[{"port":10808,"protocol":"socks"}],'
+        '"outbounds":[{"tag":"node","protocol":"vless","settings":{}}]}]';
+    expect(isClientConfig(config), isTrue);
+    expect(isClientConfig('vless://u@a:443#x'), isFalse);
+    expect(isClientConfig('proxies:\n  - name: a\n    type: socks5\n'), isFalse);
+  });
+
   test('each format asks with its own user-agent', () {
     expect(subscriptionUserAgents[SubscriptionFormat.mihomo], contains('mihomo'));
     expect(subscriptionUserAgents[SubscriptionFormat.xray], isNot(contains('mihomo')));

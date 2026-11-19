@@ -767,8 +767,19 @@ class ProfilesAction extends _$ProfilesAction {
     final body = response.data;
     if (body == null || body.isEmpty) return response;
     final text = utf8.decode(body, allowMalformed: true);
-    // Clash YAML is what the engine runs as it is; anything else is converted once.
+    // Clash YAML is what the engine runs as it is; a list of links is converted once.
+    //
+    // An Xray *client config* is not converted, on purpose: its servers are the second core's
+    // list, and turning them into the engine's rows is exactly how «в режиме mihomo сервера от
+    // иксря» happened. A panel that serves the engine only that document gets a clear answer
+    // from the mode check instead of a list borrowed from the other core.
     if (detectFormat(text) == SubscriptionFormat.mihomo) return response;
+    if (isClientConfig(text)) {
+      commonPrint.log(
+        'subscription is an Xray client config: the engine cannot run it, left as it is',
+      );
+      return response;
+    }
     try {
       final decoded = await _core.decodeShareLinks([text]);
       final proxies = [
