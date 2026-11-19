@@ -1089,5 +1089,6 @@
   "portalSwitchFailed": "Could not switch the portal: {reason}"
 ,
   "portalStartFailed": "Could not open the portal: {reason}",
-  "engineFormatUnusable": "The subscription's rules file cannot be used: {reason}"
+  "engineFormatUnusable": "The subscription could not be downloaded: {reason}",
+    "engineFormatStale": "The subscription did not update; the portal keeps running on the rules it already has."
 }

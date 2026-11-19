@@ -10,6 +10,8 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
 import 'package:fl_clash/core/sweep_ledger.dart';
+import 'package:fl_clash/core/update_backoff.dart';
+import 'package:intl/intl.dart' show Intl;
 import 'package:fl_clash/core/xray_measure.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
 import 'package:fl_clash/core/portal_document.dart';
@@ -526,20 +528,42 @@ final portalAvailabilityProvider =
       // No nodes is not a slow answer: the simple portal has nothing to start with, and the
       // switch has to say so rather than open a portal that carries no traffic.
       final noServers = servers != null && servers.isEmpty;
+  // A subscription that carries only one of the two documents makes only one mode possible:
+  // a profile with no engine document can never fill the network list, and one with no node
+  // list can never start the simple portal. Offering the other mode there is offering a mode
+  // that cannot run, so the switch stays on the side the subscription supports.
+  final hasEngineDoc = engineFile != null &&
+      engineFile.status == EngineFormatStatus.ok;
+  final hasNodeList = servers != null && servers.isNotEmpty;
+      // Neither document yet is the loading state: the switch must not flicker off before the
+      // profile has been read once.
+      final known = engineFile != null || servers != null;
       return (
         engine: (
-          available: !engineStrikes.blocked && fileProblem.isEmpty,
+          available: !engineStrikes.blocked &&
+              fileProblem.isEmpty &&
+              (!known || hasEngineDoc || hasNodeList),
           strikes: engineStrikes,
-          reason: engineStrikes.blocked ? engineStrikes.reason : fileProblem,
+          reason: engineStrikes.blocked
+              ? engineStrikes.reason
+              : (fileProblem.isEmpty
+                  ? (known && !hasEngineDoc && hasNodeList
+                      ? 'эта подписка не содержит правил для сети порталов'
+                      : '')
+                  : fileProblem),
         ),
         xray: (
-          available: !xrayStrikes.blocked && !noServers,
+          available: !xrayStrikes.blocked &&
+              !noServers &&
+              (!known || hasNodeList || hasEngineDoc),
           strikes: xrayStrikes,
           reason: xrayStrikes.blocked
               ? xrayStrikes.reason
               : (noServers
-                    ? 'this subscription carries no nodes for the portal'
-                    : ''),
+                  ? (known && hasEngineDoc
+                      ? 'эта подписка не содержит серверов для простого портала'
+                      : 'this subscription carries no nodes for the portal')
+                  : ''),
         ),
       );
     });
@@ -554,7 +578,17 @@ String _availabilityReason(
 ) {
   final strikes = availability.strikes;
   if (!strikes.blocked) return availability.reason;
-  return '${l10n.portalStrikes(strikes.failures)} (${strikes.reason})';
+  // A download that failed is a network fact, not a broken file. The owner is told what
+  // happened, that the portal keeps working on the file it has, and when the next attempt
+  // comes — instead of a count of failures that reads like damage.
+  final next = (strikes.at ?? DateTime.now())
+      .add(updateBackoffAfter(strikes.failures));
+  return updateFailureNote(
+    failures: strikes.failures,
+    nextAttempt: next,
+    ru: Intl.getCurrentLocale().startsWith('ru'),
+    reason: availability.reason.isEmpty ? strikes.reason : availability.reason,
+  );
 }
 
 /// The rows this mode draws, from the owner that answers or from the mode's own source.

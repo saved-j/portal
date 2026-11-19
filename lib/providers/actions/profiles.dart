@@ -59,6 +59,22 @@ class ProfilesAction extends _$ProfilesAction {
       if (profile.isAutoUpdateDue == false || profile.type != ProfileType.url) {
         continue;
       }
+      // After a failure the app does not ask again for an hour, then two, then three, then
+      // every four: the subscription keeps running on the file it already has, and a panel
+      // that is down is not hammered by every start.
+      // The ledger is a plain object outside the providers on purpose: the fetch path counts
+      // an attempt there whether or not a screen is open.
+      final failures = portalFeeds.snapshot.values
+          .fold<int>(0, (most, strikes) => strikes.failures > most
+              ? strikes.failures
+              : most);
+      final lastAttempt = profile.lastUpdateDate;
+      if (failures > 0 && lastAttempt != null) {
+        final wait = updateBackoffAfter(failures);
+        if (DateTime.now().difference(lastAttempt) < wait) {
+          continue;
+        }
+      }
       if (await _updateWithRetry(id)) {
         refreshed.add(id);
       }

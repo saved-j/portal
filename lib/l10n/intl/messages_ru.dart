@@ -86,7 +86,7 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m25(label) => "Поле «${label}» не может быть пустым";
 
-  static String m26(reason) => "Файл правил подписки непригоден: ${reason}";
+  static String m26(reason) => "Не удалось скачать подписку: ${reason}";
 
   static String m27(label) => "«${label}» уже существует";
 
@@ -828,6 +828,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "emptyTip": m25,
     "en": MessageLookupByLibrary.simpleMessage("Английский"),
     "enabled": MessageLookupByLibrary.simpleMessage("Включено"),
+    "engineFormatStale": MessageLookupByLibrary.simpleMessage(
+      "Подписка не обновилась, портал продолжит работать на сохранённых правилах.",
+    ),
     "engineFormatUnusable": m26,
     "error": MessageLookupByLibrary.simpleMessage("Ошибка"),
     "errorDetails": MessageLookupByLibrary.simpleMessage("Подробности ошибки"),

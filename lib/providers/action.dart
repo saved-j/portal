@@ -11,6 +11,7 @@ import 'package:fl_clash/core/desktop/xray_child.dart';
 import 'package:fl_clash/core/auto_ping_interval.dart';
 import 'package:fl_clash/core/portal_document.dart';
 import 'package:fl_clash/core/portal_feed.dart';
+import 'package:fl_clash/core/update_backoff.dart';
 import 'package:fl_clash/core/xray_subscription.dart';
 import 'package:fl_clash/database/database.dart';
 import 'package:fl_clash/enum/enum.dart';

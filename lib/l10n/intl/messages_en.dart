@@ -89,7 +89,7 @@ class MessageLookup extends MessageLookupByLibrary {
   static String m25(label) => "${label} cannot be empty";
 
   static String m26(reason) =>
-      "The subscription\'s rules file cannot be used: ${reason}";
+      "The subscription could not be downloaded: ${reason}";
 
   static String m27(label) => "${label} already exists";
 
@@ -798,6 +798,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "emptyTip": m25,
     "en": MessageLookupByLibrary.simpleMessage("English"),
     "enabled": MessageLookupByLibrary.simpleMessage("Enabled"),
+    "engineFormatStale": MessageLookupByLibrary.simpleMessage(
+      "The subscription did not update; the portal keeps running on the rules it already has.",
+    ),
     "engineFormatUnusable": m26,
     "error": MessageLookupByLibrary.simpleMessage("Error"),
     "errorDetails": MessageLookupByLibrary.simpleMessage("Error details"),

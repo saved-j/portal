@@ -7,7 +7,6 @@ const _minTwoColumnWidth = 560.0;
 const _minFourColumnWidth = 860.0;
 const _minStandardFourColumnWidth = 1040.0;
 const _minStandardHeight = 824.0;
-const _mobileMaxWidth = 560.0;
 const _stackedMaxWidth = 900.0;
 
 /// Columns the dashboard may use: one on a phone in portrait, two as soon as the window is

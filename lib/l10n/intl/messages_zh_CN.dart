@@ -76,7 +76,7 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m25(label) => "${label}不能为空";
 
-  static String m26(reason) => "订阅的规则文件不可用：${reason}";
+  static String m26(reason) => "无法下载订阅：${reason}";
 
   static String m27(label) => "${label}当前已存在";
 
@@ -621,6 +621,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "emptyTip": m25,
     "en": MessageLookupByLibrary.simpleMessage("英语"),
     "enabled": MessageLookupByLibrary.simpleMessage("已开启"),
+    "engineFormatStale": MessageLookupByLibrary.simpleMessage(
+      "订阅未更新，门户将继续使用已保存的规则运行。",
+    ),
     "engineFormatUnusable": m26,
     "error": MessageLookupByLibrary.simpleMessage("错误"),
     "errorDetails": MessageLookupByLibrary.simpleMessage("错误详情"),

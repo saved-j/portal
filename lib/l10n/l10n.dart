@@ -9166,13 +9166,23 @@ class AppLocalizations {
     );
   }
 
-  /// `The subscription's rules file cannot be used: {reason}`
+  /// `The subscription could not be downloaded: {reason}`
   String engineFormatUnusable(Object reason) {
     return Intl.message(
-      'The subscription\'s rules file cannot be used: $reason',
+      'The subscription could not be downloaded: $reason',
       name: 'engineFormatUnusable',
       desc: '',
       args: [reason],
+    );
+  }
+
+  /// `The subscription did not update; the portal keeps running on the rules it already has.`
+  String get engineFormatStale {
+    return Intl.message(
+      'The subscription did not update; the portal keeps running on the rules it already has.',
+      name: 'engineFormatStale',
+      desc: '',
+      args: [],
     );
   }
 }
