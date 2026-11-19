@@ -1130,21 +1130,31 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                     // grow stale and nothing is spent in the background.
                     onPressed: () {
                       HapticFeedback.mediumImpact();
+                      // In the network mode the engine times its nodes by itself — a
+                      // `url-test` group with an interval is not something the owner can turn
+                      // off, only time differently. So the tap opens the period menu; there is
+                      // no off state to toggle into.
+                      final simple =
+                          ref.read(patchClashConfigProvider).mode == Mode.global;
+                      if (!simple) {
+                        unawaited(_showAutoPingPeriod(context, ref));
+                        _explainAutoPingOnce(context, ref);
+                        return;
+                      }
                       final auto = ref.read(autoPingProvider.notifier);
                       final turningOn = !auto.current.enabled;
                       auto.setEnabled(turningOn);
-                      // Said once, on the first time the switch goes on: what this app measures
-                      // and why a pretty ping is not a fast server.
-                      if (turningOn &&
-                          !ref.read(appSettingProvider).autoPingExplained) {
-                        ref
-                            .read(appSettingProvider.notifier)
-                            .update(
-                              (state) =>
-                                  state.copyWith(autoPingExplained: true),
-                            );
-                        unawaited(_showAutoPingExplained(context));
+                      // Measuring the simple portal means its core is running, and the core is
+                      // the tunnel: switching auto-check on opens the portal, exactly as the
+                      // connect button does.
+                      if (turningOn && ref.read(runTimeProvider) == null) {
+                        unawaited(
+                          ref
+                              .read(setupActionProvider.notifier)
+                              .setRunning(true),
+                        );
                       }
+                      if (turningOn) _explainAutoPingOnce(context, ref);
                       // A document built while the switch was off carries no schedule at all, so a
                       // running core has to be restarted on one that does.
                       final live = ref.read(portalStatusProvider);
@@ -1169,9 +1179,10 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                         : GlyphIcon(
                             AppGlyphs.bolt,
                             size: 18,
-                            // The switch reads at a glance: lit while the list keeps measuring
-                            // itself, faded when it does not.
-                            color: autoPing.enabled
+                            // Lit while the list keeps measuring itself. In the network mode
+                            // the engine always times its nodes, so the bolt is always lit
+                            // there: it opens the period menu, it is not an off switch.
+                            color: (autoPing.enabled || mode != Mode.global)
                                 ? const Color(0xFF00F5A0)
                                 : theme.colorScheme.onSurfaceVariant.withValues(
                                     alpha: 0.4,
@@ -1925,6 +1936,15 @@ Future<void> _testDelayWithChild(
 /// Short periods are a real cost on a VPN app — every node is asked in every period, and the
 /// battery is the price — so the choices are bounded, and the sentence under them says why the
 /// short ones are the expensive ones.
+/// Says once what the figure in a row is: a response time, not a throughput.
+void _explainAutoPingOnce(BuildContext context, WidgetRef ref) {
+  if (ref.read(appSettingProvider).autoPingExplained) return;
+  ref
+      .read(appSettingProvider.notifier)
+      .update((state) => state.copyWith(autoPingExplained: true));
+  unawaited(_showAutoPingExplained(context));
+}
+
 /// The one-time explanation of what the delay figure means.
 ///
 /// It is long on purpose: the number in the row is not a speed, and the owner who reads it as a
