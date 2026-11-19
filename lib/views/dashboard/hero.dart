@@ -85,125 +85,146 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
+                    Stack(
+                      alignment: Alignment.center,
                       children: [
-                        IconButton(
-                          tooltip: context.appLocalizations.tools,
-                          // Pushed, not page-switched: a page index has no history, so
-                          // Back walked out of the app instead of returning here.
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const ToolsView(),
-                            ),
-                          ),
-                          icon: const GlyphIcon(
-                            AppGlyphs.settings,
-                            size: 22,
-                          ),
-                        ),
-                        IconButton(
-                          // Shortcut to the per-app bypass list: the one setting a
-                          // user reaches for while looking at the server list.
-                          tooltip: context.appLocalizations.accessControl,
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const AccessView(),
-                            ),
-                          ),
-                          icon: const GlyphIcon(
-                            AppGlyphs.appsList,
-                            size: 22,
+                        // The name is centred on the screen itself, not on the space the
+                        // buttons leave: two entry points on the left and up to two on the
+                        // right made it drift every time one of them appeared or went away.
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 112),
+                          child: Consumer(
+                            // The working screen says the same two facts the list does:
+                            // name, then traffic, then expiry, in one column.
+                            builder: (context, ref, _) {
+                              // Only the name lives in the header. Traffic, expiry and the
+                              // state mark belong to the subscription card, which is where a
+                              // person looks for them.
+                              return EmojiText(
+                                headers.displayName ??
+                                    headers.serviceName ??
+                                    'portal-connect',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyle.title3.of(
+                                  context,
+                                  emphasized: true,
+                                ),
+                              );
+                            },
                           ),
                         ),
-                        // No app icon and no app name here: the screen shows the
-                        // service the subscription belongs to, not the product that
-                        // opened the door.
-                        Expanded(
-                          child: Center(
-                            child: Consumer(
-                              // The working screen says the same two facts the list does:
-                              // name, then traffic, then expiry, in one column.
-                              builder: (context, ref, _) {
-                                // Only the name lives in the header. Traffic, expiry and the
-                                // state mark belong to the subscription card, which is where a
-                                // person looks for them.
-                                return EmojiText(
-                                  headers.displayName ??
-                                      headers.serviceName ??
-                                      'portal-connect',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyle.title3.of(
-                                    context,
-                                    emphasized: true,
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 96,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    tooltip: context.appLocalizations.tools,
+                                    // Pushed, not page-switched: a page index has no history, so
+                                    // Back walked out of the app instead of returning here.
+                                    onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const ToolsView(),
+                                      ),
+                                    ),
+                                    icon: const GlyphIcon(
+                                      AppGlyphs.settings,
+                                      size: 22,
+                                    ),
                                   ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        // The connections list is the engine's answer, and in the simple
-                        // portal no engine runs: the page could only ever be empty. The
-                        // button exists exactly where its data exists — in the network.
-                        if (ref.watch(
-                              patchClashConfigProvider.select((s) => s.mode),
-                            ) !=
-                            Mode.global)
-                          GestureDetector(
-                          onDoubleTap: () => ref
-                              .read(portalConnectionsBadgeProvider.notifier)
-                              .toggle(),
-                          child: IconButton(
-                            tooltip: context.appLocalizations.connections,
-                          // The connections page is not in the phone navigation any
-                          // more, so switching the page index did nothing: push it.
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const ConnectionFeedsView(),
+                                  IconButton(
+                                    // Shortcut to the per-app bypass list: the one setting a
+                                    // user reaches for while looking at the server list.
+                                    tooltip:
+                                        context.appLocalizations.accessControl,
+                                    onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const AccessView(),
+                                      ),
+                                    ),
+                                    icon: const GlyphIcon(
+                                      AppGlyphs.appsList,
+                                      size: 22,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            icon: Badge(
-                              // Fixed colours: the hero is dark in both themes, so a
-                              // theme-derived label turned black-on-black on white.
-                              backgroundColor: const Color(0xFF00F5A0),
-                              textColor: const Color(0xFF07110C),
-                              isLabelVisible:
-                                  ref.watch(portalConnectionsBadgeProvider),
-                              label: Text(
-                                '${ref.watch(requestsProvider).list.length}',
+                            const Spacer(),
+                            // The connections list is the engine's answer, and in the simple
+                            // portal no engine runs: the page could only ever be empty. The
+                            // button exists exactly where its data exists — in the network.
+                            if (ref.watch(
+                                  patchClashConfigProvider.select(
+                                    (s) => s.mode,
+                                  ),
+                                ) !=
+                                Mode.global)
+                              GestureDetector(
+                                onDoubleTap: () => ref
+                                    .read(
+                                      portalConnectionsBadgeProvider.notifier,
+                                    )
+                                    .toggle(),
+                                child: IconButton(
+                                  tooltip: context.appLocalizations.connections,
+                                  // The connections page is not in the phone navigation any
+                                  // more, so switching the page index did nothing: push it.
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const ConnectionFeedsView(),
+                                    ),
+                                  ),
+                                  icon: Badge(
+                                    // Fixed colours: the hero is dark in both themes, so a
+                                    // theme-derived label turned black-on-black on white.
+                                    backgroundColor: const Color(0xFF00F5A0),
+                                    textColor: const Color(0xFF07110C),
+                                    isLabelVisible: ref.watch(
+                                      portalConnectionsBadgeProvider,
+                                    ),
+                                    label: Text(
+                                      '${ref.watch(requestsProvider).list.length}',
+                                    ),
+                                    child: const GlyphIcon(
+                                      AppGlyphs.connections,
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
                               ),
-                              child: const GlyphIcon(
-                                AppGlyphs.connections,
-                                size: 22,
+                            GestureDetector(
+                              onDoubleTap: () => ref
+                                  .read(portalProfilesBadgeProvider.notifier)
+                                  .toggle(),
+                              child: IconButton(
+                                tooltip: context.appLocalizations.profiles,
+                                onPressed: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const ProfilesView(),
+                                  ),
+                                ),
+                                icon: Badge(
+                                  backgroundColor: const Color(0xFF00F5A0),
+                                  textColor: const Color(0xFF07110C),
+                                  isLabelVisible: ref.watch(
+                                    portalProfilesBadgeProvider,
+                                  ),
+                                  label: Text(
+                                    '${ref.watch(profilesProvider).length}',
+                                  ),
+                                  child: const GlyphIcon(
+                                    AppGlyphs.profiles,
+                                    size: 22,
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onDoubleTap: () => ref
-                              .read(portalProfilesBadgeProvider.notifier)
-                              .toggle(),
-                          child: IconButton(
-                            tooltip: context.appLocalizations.profiles,
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const ProfilesView(),
-                              ),
-                            ),
-                            icon: Badge(
-                              backgroundColor: const Color(0xFF00F5A0),
-                              textColor: const Color(0xFF07110C),
-                              isLabelVisible:
-                                  ref.watch(portalProfilesBadgeProvider),
-                              label: Text(
-                                '${ref.watch(profilesProvider).length}',
-                              ),
-                              child: const GlyphIcon(
-                                AppGlyphs.profiles,
-                                size: 22,
-                              ),
-                            ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
@@ -318,16 +339,21 @@ final ValueNotifier<int?> portalClosedAtMs = ValueNotifier<int?>(null);
 final ValueNotifier<int?> portalOpenedAtMs = ValueNotifier<int?>(null);
 
 class _ConnectButton extends ConsumerWidget {
-
   /// The press answers with its own rhythm: opening is a heavier double beat, closing a
   /// softer pair — the hand should feel which way the portal is going.
   void _portalHaptics({required bool starting}) {
     if (starting) {
       HapticFeedback.heavyImpact();
-      Future<void>.delayed(const Duration(milliseconds: 130), HapticFeedback.mediumImpact);
+      Future<void>.delayed(
+        const Duration(milliseconds: 130),
+        HapticFeedback.mediumImpact,
+      );
     } else {
       HapticFeedback.mediumImpact();
-      Future<void>.delayed(const Duration(milliseconds: 150), HapticFeedback.lightImpact);
+      Future<void>.delayed(
+        const Duration(milliseconds: 150),
+        HapticFeedback.lightImpact,
+      );
     }
   }
 
@@ -339,7 +365,8 @@ class _ConnectButton extends ConsumerWidget {
     final current = ref.watch(
       currentProfileProvider.select((profile) => profile?.currentGroupName),
     );
-    final group = groups.where((g) => g.name == current).firstOrNull ??
+    final group =
+        groups.where((g) => g.name == current).firstOrNull ??
         groups.firstWhere(
           (g) => !isBuiltinOutboundName(g.name),
           orElse: () => groups.first,
@@ -355,6 +382,7 @@ class _ConnectButton extends ConsumerWidget {
       ),
     );
   }
+
   const _ConnectButton();
 
   @override
@@ -389,9 +417,11 @@ class _ConnectButton extends ConsumerWidget {
               onHeld: () {
                 _portalHaptics(starting: !isStart);
                 if (isStart) {
-                  portalClosedAtMs.value = DateTime.now().millisecondsSinceEpoch;
+                  portalClosedAtMs.value =
+                      DateTime.now().millisecondsSinceEpoch;
                 } else {
-                  portalOpenedAtMs.value = DateTime.now().millisecondsSinceEpoch;
+                  portalOpenedAtMs.value =
+                      DateTime.now().millisecondsSinceEpoch;
                 }
                 toggle();
               },
@@ -400,9 +430,11 @@ class _ConnectButton extends ConsumerWidget {
                 onTap: () {
                   _portalHaptics(starting: !isStart);
                   if (isStart) {
-                    portalClosedAtMs.value = DateTime.now().millisecondsSinceEpoch;
+                    portalClosedAtMs.value =
+                        DateTime.now().millisecondsSinceEpoch;
                   } else {
-                    portalOpenedAtMs.value = DateTime.now().millisecondsSinceEpoch;
+                    portalOpenedAtMs.value =
+                        DateTime.now().millisecondsSinceEpoch;
                   }
                   toggle();
                 },
@@ -424,10 +456,7 @@ class _ConnectButton extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Text(
-          label,
-          style: AppTextStyle.headline.of(context, emphasized: true),
-        ),
+        Text(label, style: AppTextStyle.headline.of(context, emphasized: true)),
       ],
     );
   }

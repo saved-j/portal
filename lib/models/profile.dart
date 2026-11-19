@@ -534,7 +534,12 @@ extension ProfileExtension on Profile {
           timeout: timeout,
           headers: {'User-Agent': agent},
         );
-        final body = response.data;
+        // The panel compresses its answer and says so; a body read as raw bytes is not
+        // decoded by the client on the way in, so a gzip stream reached the parser as
+        // garbage and every candidate looked like "no format". Decode it here, where the
+        // header is still known.
+        final raw = response.data;
+        final body = raw == null ? null : _decodedBody(raw, response.headers.value('content-encoding'));
         final text = body == null ? '' : utf8.decode(body, allowMalformed: true);
         final format = detectFormat(text);
         final servers = format == SubscriptionFormat.xray ? _serverCountOf(text) : 0;
@@ -545,6 +550,8 @@ extension ProfileExtension on Profile {
           'xray probe [$agent]: http=${response.statusCode} '
           'bytes=${body?.length ?? 0} format=${format?.name ?? 'none'} '
           'servers=$servers '
+          'ct=${response.headers.value('content-type')} '
+          'ce=${response.headers.value('content-encoding')} '
           'head=${text.length > 120 ? text.substring(0, 120).replaceAll('\n', ' ') : text}',
         );
         // The right shape is not yet an answer: a config with nothing to run is the "zero
@@ -587,6 +594,26 @@ extension ProfileExtension on Profile {
 
   static void _rememberAgentWithNotes(String url, String agent) {
     _notesAgents[Uri.tryParse(url)?.host ?? ''] = agent;
+  }
+
+  /// The body with the compression the panel declared applied to it.
+  ///
+  /// Byte responses are handed over as they arrived: gzip is not decoded for us, and the
+  /// parser then sees a stream it cannot read. A body that cannot be decoded is returned as
+  /// it came, so a wrong header costs nothing more than the attempt.
+  static Uint8List _decodedBody(Uint8List body, String? encoding) {
+    final declared = (encoding ?? '').toLowerCase();
+    try {
+      if (declared.contains('gzip')) {
+        return Uint8List.fromList(GZipCodec().decode(body));
+      }
+      if (declared.contains('deflate')) {
+        return Uint8List.fromList(ZLibCodec().decode(body));
+      }
+    } catch (error) {
+      commonPrint.log('body decompression failed: ${compactError(error)}');
+    }
+    return body;
   }
 
   /// True when the panel wrote its own note for at least one server of this body.

@@ -58,3 +58,4 @@ class MainActivity : FlutterActivity() {
 }
 
 private const val LAUNCH_RISE_MS = 600L
+
