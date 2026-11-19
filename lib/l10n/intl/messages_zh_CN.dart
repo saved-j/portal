@@ -1642,10 +1642,13 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody5": MessageLookupByLibrary.simpleMessage(
       "点击「门户网络」会打开一个页面，在那里可以一次性设置全部筛选器。",
     ),
-    "tutorialBody6": MessageLookupByLibrary.simpleMessage(
+    "tutorialBody6": MessageLookupByLibrary.simpleMessage("最后——启动。"),
+    "tutorialBody7": MessageLookupByLibrary.simpleMessage(
+      "请仔细阅读。\n\n与其他应用不同，我们通过隧道测量真实延迟，而不是只给你好看的数字。\n\nPing 只是服务器的响应速度，并不代表吞吐量。服务器可能响应很快，但通道非常窄：延迟好看，速度却没有。\n\n所以不要因为某些服务器延迟不好看就放弃它们——也试试它们。",
+    ),
+    "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "磁贴可以从任何界面启动门户：打开通知栏，点铅笔，滚动到自己的应用，添加「Portal」。",
     ),
-    "tutorialBody7": MessageLookupByLibrary.simpleMessage("最后——启动。"),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("下一步"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("跳过"),
     "tutorialStepOf": m105,
@@ -1654,8 +1657,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialTitle3": MessageLookupByLibrary.simpleMessage("长按磁贴"),
     "tutorialTitle4": MessageLookupByLibrary.simpleMessage("磁贴样式"),
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage("一次设置全部筛选器"),
-    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("通知栏磁贴"),
-    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("启动"),
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("启动"),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("延迟自动检测已开启"),
+    "tutorialTitle8": MessageLookupByLibrary.simpleMessage("通知栏磁贴"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage("UDP 中继模式"),
     "udpTimeout": MessageLookupByLibrary.simpleMessage("UDP 超时"),
     "udpTimeoutDesc": MessageLookupByLibrary.simpleMessage(

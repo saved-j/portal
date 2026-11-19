@@ -12,7 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// The keys live here, not in the dashboard: a widget attaches its own key, so the tour can
 /// find it wherever the layout put it — one column on a phone, two on a wide window — without
 /// the dashboard knowing that a tour exists.
-enum TutorialTarget { modeSwitch, modeLabel, filters, chip, start }
+enum TutorialTarget { modeSwitch, modeLabel, filters, chip, start, autoPing }
 
 final tutorialKeys = {
   TutorialTarget.modeSwitch: GlobalKey(debugLabel: 'tutorial-mode-switch'),
@@ -20,6 +20,7 @@ final tutorialKeys = {
   TutorialTarget.filters: GlobalKey(debugLabel: 'tutorial-filters'),
   TutorialTarget.chip: GlobalKey(debugLabel: 'tutorial-chip'),
   TutorialTarget.start: GlobalKey(debugLabel: 'tutorial-start'),
+  TutorialTarget.autoPing: GlobalKey(debugLabel: 'tutorial-autoping'),
 };
 
 /// One page of the tour.
@@ -34,6 +35,7 @@ class TutorialStep {
     required this.number,
     this.pictures = const [],
     this.androidOnly = false,
+    this.wait = Duration.zero,
   });
 
   final TutorialTarget? target;
@@ -47,6 +49,10 @@ class TutorialStep {
   /// A step that exists on the phone only: a desktop has no notification shade.
   final bool androidOnly;
 
+  /// How long the screen waits before this page appears: the sentence about the numbers is
+  /// about numbers that take a few seconds to arrive.
+  final Duration wait;
+
   String title(AppLocalizations l) => switch (number) {
     1 => l.tutorialTitle1,
     2 => l.tutorialTitle2,
@@ -54,7 +60,8 @@ class TutorialStep {
     4 => l.tutorialTitle4,
     5 => l.tutorialTitle5,
     6 => l.tutorialTitle6,
-    _ => l.tutorialTitle7,
+    7 => l.tutorialTitle7,
+    _ => l.tutorialTitle8,
   };
 
   String body(AppLocalizations l) => switch (number) {
@@ -64,7 +71,8 @@ class TutorialStep {
     4 => l.tutorialBody4,
     5 => l.tutorialBody5,
     6 => l.tutorialBody6,
-    _ => l.tutorialBody7,
+    7 => l.tutorialBody7,
+    _ => l.tutorialBody8,
   };
 }
 
@@ -85,8 +93,15 @@ const tutorialSteps = <TutorialStep>[
   TutorialStep(target: TutorialTarget.chip, number: 4),
   // The word, not the row: the dashboard opens on the name and nothing else.
   TutorialStep(target: TutorialTarget.modeLabel, number: 5),
-  TutorialStep(target: null, number: 6, androidOnly: true),
-  TutorialStep(target: TutorialTarget.start, number: 7),
+  // The start, then the sentence about what the numbers mean — said when the first figures are
+  // on screen, which is a few seconds after the tunnel came up.
+  TutorialStep(target: TutorialTarget.start, number: 6),
+  TutorialStep(target: TutorialTarget.autoPing, number: 7, wait: Duration(seconds: 6)),
+  TutorialStep(
+    target: null,
+    number: 8,
+    androidOnly: true,
+  ),
 ];
 
 
@@ -107,10 +122,35 @@ class PortalTutorial extends ConsumerStatefulWidget {
 class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   late int _index = widget.fromStep.clamp(0, tutorialSteps.length - 1);
 
+  /// A page that wants the screen to settle first: the sentence about the numbers is about
+  /// numbers the core has not produced yet when the previous page closes.
+  bool _waiting = false;
+
+  Timer? _waitTimer;
+
   List<TutorialStep> get _steps => [
     for (final step in tutorialSteps)
       if (!step.androidOnly || system.isAndroid) step,
   ];
+
+  @override
+  void dispose() {
+    _waitTimer?.cancel();
+    super.dispose();
+  }
+
+  void _waitFor(TutorialStep step) {
+    _waitTimer?.cancel();
+    if (step.wait == Duration.zero) {
+      setState(() => _waiting = false);
+      return;
+    }
+    setState(() => _waiting = true);
+    _waitTimer = Timer(step.wait, () {
+      if (!mounted) return;
+      setState(() => _waiting = false);
+    });
+  }
 
   void _next() {
     AppHaptics.tap();
@@ -123,6 +163,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       return;
     }
     setState(() => _index += 1);
+    _waitFor(_steps[_index]);
   }
 
   void _finish() {
@@ -178,6 +219,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
               child: const SizedBox.expand(),
             ),
           ),
+          if (!_waiting)
           Positioned(
             left: 16,
             right: 16,

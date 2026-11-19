@@ -9306,35 +9306,35 @@ class AppLocalizations {
     );
   }
 
-  /// `Tile in the shade`
+  /// `Start`
   String get tutorialTitle6 {
-    return Intl.message(
-      'Tile in the shade',
-      name: 'tutorialTitle6',
-      desc: '',
-      args: [],
-    );
+    return Intl.message('Start', name: 'tutorialTitle6', desc: '', args: []);
   }
 
-  /// `The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.`
+  /// `And finally — start.`
   String get tutorialBody6 {
     return Intl.message(
-      'The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.',
+      'And finally — start.',
       name: 'tutorialBody6',
       desc: '',
       args: [],
     );
   }
 
-  /// `Start`
+  /// `Delay auto-check is on`
   String get tutorialTitle7 {
-    return Intl.message('Start', name: 'tutorialTitle7', desc: '', args: []);
+    return Intl.message(
+      'Delay auto-check is on',
+      name: 'tutorialTitle7',
+      desc: '',
+      args: [],
+    );
   }
 
-  /// `And finally — start.`
+  /// `Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too.`
   String get tutorialBody7 {
     return Intl.message(
-      'And finally — start.',
+      'Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too.',
       name: 'tutorialBody7',
       desc: '',
       args: [],
@@ -9456,6 +9456,26 @@ class AppLocalizations {
     return Intl.message(
       'Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too.',
       name: 'autoPingExplainedBody',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Tile in the shade`
+  String get tutorialTitle8 {
+    return Intl.message(
+      'Tile in the shade',
+      name: 'tutorialTitle8',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.`
+  String get tutorialBody8 {
+    return Intl.message(
+      'The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.',
+      name: 'tutorialBody8',
       desc: '',
       args: [],
     );

@@ -2205,10 +2205,13 @@ class MessageLookup extends MessageLookupByLibrary {
       "Нажатие на «Сеть порталов» открывает экран, где все фильтры настраиваются сразу — на одном экране.",
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage(
-      "Плитка запускает портал из любого экрана: откройте шторку, нажмите карандаш, пролистайте до пользовательских приложений и добавьте «Портал».",
+      "И наконец — запуск.",
     ),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "И наконец — запуск.",
+      "Прочтите это внимательно.\n\nВ отличие от других приложений, наше замеряет реальную задержку через тоннель, а не просто даёт вам красивые цифры.\n\nДело в том, что пинг (задержка) — это просто скорость отклика сервера, не отражающая ПРОПУСКНУЮ СПОСОБНОСТЬ. Сервер может откликаться быстро, но иметь неприлично узкий канал с низкой пропускной способностью: пинг красивый, а скорости нет.\n\nПоэтому не стоит брезговать серверами, у которых не самая красивая задержка, — пробуйте и их.",
+    ),
+    "tutorialBody8": MessageLookupByLibrary.simpleMessage(
+      "Плитка запускает портал из любого экрана: откройте шторку, нажмите карандаш, пролистайте до пользовательских приложений и добавьте «Портал».",
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Далее"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Пропустить"),
@@ -2218,8 +2221,11 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialTitle3": MessageLookupByLibrary.simpleMessage("Фильтр на палец"),
     "tutorialTitle4": MessageLookupByLibrary.simpleMessage("Вид плиток"),
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage("Все фильтры сразу"),
-    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("Плитка в шторке"),
-    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("Запуск"),
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("Запуск"),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage(
+      "Автозамер задержки включён",
+    ),
+    "tutorialTitle8": MessageLookupByLibrary.simpleMessage("Плитка в шторке"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage(
       "Режим ретрансляции UDP",
     ),

@@ -1697,10 +1697,13 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody5": MessageLookupByLibrary.simpleMessage(
       "\'포털 네트워크\'를 누르면 모든 필터를 한 화면에서 설정하는 페이지가 열립니다.",
     ),
-    "tutorialBody6": MessageLookupByLibrary.simpleMessage(
+    "tutorialBody6": MessageLookupByLibrary.simpleMessage("그리고 마지막으로 — 시작입니다."),
+    "tutorialBody7": MessageLookupByLibrary.simpleMessage(
+      "주의 깊게 읽어 주세요.\n\n다른 앱과 달리 저희 앱은 터널을 통한 실제 지연을 측정합니다. 보기 좋은 숫자를 만들어 내지 않습니다.\n\n핑은 서버의 응답 속도일 뿐이며 처리량을 의미하지 않습니다. 응답은 빠르지만 대역폭이 매우 좁은 서버도 있습니다. 핑은 좋아도 속도가 나지 않습니다.\n\n지연 숫자가 좋지 않은 서버도 포기하지 말고 시험해 보세요.",
+    ),
+    "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "타일로 어느 화면에서든 포털을 시작할 수 있습니다. 알림창을 열고 연필을 누른 뒤 내 앱까지 스크롤하여 \'Portal\'을 추가하세요.",
     ),
-    "tutorialBody7": MessageLookupByLibrary.simpleMessage("그리고 마지막으로 — 시작입니다."),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("다음"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("건너뛰기"),
     "tutorialStepOf": m105,
@@ -1709,8 +1712,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialTitle3": MessageLookupByLibrary.simpleMessage("타일 길게 누르기"),
     "tutorialTitle4": MessageLookupByLibrary.simpleMessage("타일 보기"),
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage("모든 필터 한 번에"),
-    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("알림창 타일"),
-    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("시작"),
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("시작"),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("지연 자동 측정이 켜졌습니다"),
+    "tutorialTitle8": MessageLookupByLibrary.simpleMessage("알림창 타일"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage("UDP 릴레이 모드"),
     "udpTimeout": MessageLookupByLibrary.simpleMessage("UDP 시간 제한"),
     "udpTimeoutDesc": MessageLookupByLibrary.simpleMessage(

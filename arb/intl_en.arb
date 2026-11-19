@@ -1102,10 +1102,10 @@
   "tutorialBody4": "A double tap on a tile changes the way the tiles look.",
   "tutorialTitle5": "All filters at once",
   "tutorialBody5": "Tapping “Portal network” opens the screen where every filter is set at once — on one page.",
-  "tutorialTitle6": "Tile in the shade",
-  "tutorialBody6": "The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.",
-  "tutorialTitle7": "Start",
-  "tutorialBody7": "And finally — start.",
+  "tutorialTitle6": "Start",
+  "tutorialBody6": "And finally — start.",
+  "tutorialTitle7": "Delay auto-check is on",
+  "tutorialBody7": "Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too.",
   "tutorialNext": "Next",
   "tutorialSkip": "Skip",
   "tutorialStepOf": "{index} of {total}",
@@ -1143,5 +1143,7 @@
     }
   },
   "autoPingExplainedTitle": "Delay auto-check is on",
-  "autoPingExplainedBody": "Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too."
+  "autoPingExplainedBody": "Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too.",
+  "tutorialTitle8": "Tile in the shade",
+  "tutorialBody8": "The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”."
 }

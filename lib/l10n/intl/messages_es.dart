@@ -2154,10 +2154,13 @@ class MessageLookup extends MessageLookupByLibrary {
       "Al tocar «Red de portales» se abre la pantalla donde todos los filtros se ajustan a la vez, en una sola página.",
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage(
-      "El mosaico inicia el portal desde cualquier pantalla: abre la cortina, toca el lápiz, desplázate hasta tus aplicaciones y añade «Portal».",
+      "Y por último: el inicio.",
     ),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "Y por último: el inicio.",
+      "Léelo con atención.\n\nA diferencia de otras aplicaciones, la nuestra mide la latencia real a través del túnel, no solo te da cifras bonitas.\n\nEl ping es solo la velocidad de respuesta del servidor y no refleja el ANCHO DE BANDA. Un servidor puede responder rápido y tener un canal muy estrecho: el ping se ve bien y no hay velocidad.\n\nAsí que no descartes los servidores con una latencia menos bonita: pruébalos también.",
+    ),
+    "tutorialBody8": MessageLookupByLibrary.simpleMessage(
+      "El mosaico inicia el portal desde cualquier pantalla: abre la cortina, toca el lápiz, desplázate hasta tus aplicaciones y añade «Portal».",
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Siguiente"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Omitir"),
@@ -2175,10 +2178,13 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage(
       "Todos los filtros a la vez",
     ),
-    "tutorialTitle6": MessageLookupByLibrary.simpleMessage(
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("Inicio"),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage(
+      "El auto-chequeo de latencia está activado",
+    ),
+    "tutorialTitle8": MessageLookupByLibrary.simpleMessage(
       "Mosaico en la cortina",
     ),
-    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("Inicio"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage(
       "Modo de retransmisión UDP",
     ),

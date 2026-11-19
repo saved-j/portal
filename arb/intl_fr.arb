@@ -1048,10 +1048,10 @@
   "tutorialBody4": "Un double appui sur une tuile change l'aspect des tuiles.",
   "tutorialTitle5": "Tous les filtres d'un coup",
   "tutorialBody5": "Un appui sur « Réseau des portails » ouvre l'écran où tous les filtres se règlent d'un coup, sur une seule page.",
-  "tutorialTitle6": "Tuile dans le volet",
-  "tutorialBody6": "La tuile lance le portail depuis n'importe quel écran : ouvrez le volet, touchez le crayon, faites défiler jusqu'à vos applications et ajoutez « Portal ».",
-  "tutorialTitle7": "Lancement",
-  "tutorialBody7": "Et enfin — le lancement.",
+  "tutorialTitle6": "Lancement",
+  "tutorialBody6": "Et enfin — le lancement.",
+  "tutorialTitle7": "La mesure automatique de la latence est activée",
+  "tutorialBody7": "Lisez ceci attentivement.\n\nContrairement à d'autres applications, la nôtre mesure la latence réelle à travers le tunnel, au lieu de vous donner de jolis chiffres.\n\nLe ping n'est que la vitesse de réponse d'un serveur et ne dit rien du DÉBIT. Un serveur peut répondre vite avec un canal très étroit : le ping est beau et la vitesse absente.\n\nN'écartez donc pas les serveurs dont la latence est moins belle — essayez-les aussi.",
   "tutorialNext": "Suivant",
   "tutorialSkip": "Passer",
   "tutorialStepOf": "{index} sur {total}",
@@ -1089,5 +1089,7 @@
     }
   },
   "autoPingExplainedTitle": "La mesure automatique de la latence est activée",
-  "autoPingExplainedBody": "Lisez ceci attentivement.\n\nContrairement à d'autres applications, la nôtre mesure la latence réelle à travers le tunnel, au lieu de vous donner de jolis chiffres.\n\nLe ping n'est que la vitesse de réponse d'un serveur et ne dit rien du DÉBIT. Un serveur peut répondre vite avec un canal très étroit : le ping est beau et la vitesse absente.\n\nN'écartez donc pas les serveurs dont la latence est moins belle — essayez-les aussi."
+  "autoPingExplainedBody": "Lisez ceci attentivement.\n\nContrairement à d'autres applications, la nôtre mesure la latence réelle à travers le tunnel, au lieu de vous donner de jolis chiffres.\n\nLe ping n'est que la vitesse de réponse d'un serveur et ne dit rien du DÉBIT. Un serveur peut répondre vite avec un canal très étroit : le ping est beau et la vitesse absente.\n\nN'écartez donc pas les serveurs dont la latence est moins belle — essayez-les aussi.",
+  "tutorialTitle8": "Tuile dans le volet",
+  "tutorialBody8": "La tuile lance le portail depuis n'importe quel écran : ouvrez le volet, touchez le crayon, faites défiler jusqu'à vos applications et ajoutez « Portal »."
 }

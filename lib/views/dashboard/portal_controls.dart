@@ -1120,6 +1120,7 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                   // Long and short presses are both owned here; the button inside only paints.
                   behavior: HitTestBehavior.opaque,
                   child: IconButton(
+                    key: tutorialKeys[TutorialTarget.autoPing],
                     // No tooltip: a Tooltip opens on long press by default, which swallowed the
                     // gesture this button exists for — the period menu answered nothing because the
                     // tooltip took the press first. The label stays for screen readers.
@@ -1222,45 +1223,11 @@ class PortalServerList extends ConsumerStatefulWidget {
 }
 
 class _PortalServerListState extends ConsumerState<PortalServerList> {
-  /// The one-shot clock that explains the numbers once the first connection has produced them.
-  Timer? _explain;
-
-  void _scheduleExplained() {
-    if (_explain != null) return;
-    if (ref.read(appSettingProvider).delayExplained) return;
-    if (ref.read(runTimeProvider) == null) return;
-    // Fifteen seconds, because that is how long the first figures take to arrive: the
-    // explanation is about them, and said before them it is a lecture with no object.
-    _explain = Timer(const Duration(seconds: 15), () {
-      _explain = null;
-      if (!mounted) return;
-      if (ref.read(runTimeProvider) == null) return;
-      _explainDelaysOnce(context, ref);
-    });
-  }
-
-  /// The last group this list drew, per owner, and the mode it was drawn in. A switch empties
-  /// both sources for a moment — the engine has no groups until it takes the profile, the child
-  /// has no servers until its subscription is read — and an empty list there is what the owner
-  /// saw as a flicker. The owner is part of the memory: the engine's last group is not a row of
-  /// the simple portal, and the child's is not a row of the network mode.
+  /// The last group this list drew, per owner. A switch empties both sources for a moment and
+  /// an empty list there is the flicker the owner saw; the owner is part of the memory.
   OwnedGroup? _heldEngine;
 
   OwnedGroup? _heldChild;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _scheduleExplained();
-    });
-  }
-
-  @override
-  void dispose() {
-    _explain?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1290,9 +1257,6 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
       ref.read(tcpDelayProvider.notifier).cancelSweep();
       ref.read(engineDelayProvider.notifier).cancelSweep();
       commonPrint.log('portal test: sweep cancelled, mode is now ${next.name}');
-    });
-    ref.listen(runTimeProvider, (previous, next) {
-      if (next != null) _scheduleExplained();
     });
     ref.listen(currentProfileIdProvider, (previous, next) {
       if (previous == next) return;
@@ -1968,41 +1932,6 @@ Future<void> _testDelayWithChild(
 /// Short periods are a real cost on a VPN app — every node is asked in every period, and the
 /// battery is the price — so the choices are bounded, and the sentence under them says why the
 /// short ones are the expensive ones.
-/// Says once what the figure in a row is: a response time, not a throughput.
-///
-/// It arrives a few seconds after the first connection, when the numbers are on screen: the
-/// sentence is about the figures the owner is looking at, and said before them it is a lecture.
-void _explainDelaysOnce(BuildContext context, WidgetRef ref) {
-  if (ref.read(appSettingProvider).delayExplained) return;
-  ref
-      .read(appSettingProvider.notifier)
-      .update((state) => state.copyWith(delayExplained: true));
-  unawaited(_showAutoPingExplained(context));
-}
-
-/// The one-time explanation of what the delay figure means.
-///
-/// It is long on purpose: the number in the row is not a speed, and the owner who reads it as a
-/// speed will dismiss the servers that would carry his traffic best.
-Future<void> _showAutoPingExplained(BuildContext context) async {
-  final l10n = context.appLocalizations;
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text(l10n.autoPingExplainedTitle),
-      content: SingleChildScrollView(
-        child: Text(l10n.autoPingExplainedBody),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
-          child: Text(l10n.close),
-        ),
-      ],
-    ),
-  );
-}
-
 Future<void> _showAutoPingPeriod(BuildContext context, WidgetRef ref) async {
   final l10n = context.appLocalizations;
   final auto = ref.read(autoPingProvider.notifier);

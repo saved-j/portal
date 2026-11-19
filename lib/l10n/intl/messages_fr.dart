@@ -2156,10 +2156,13 @@ class MessageLookup extends MessageLookupByLibrary {
       "Un appui sur « Réseau des portails » ouvre l\'écran où tous les filtres se règlent d\'un coup, sur une seule page.",
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage(
-      "La tuile lance le portail depuis n\'importe quel écran : ouvrez le volet, touchez le crayon, faites défiler jusqu\'à vos applications et ajoutez « Portal ».",
+      "Et enfin — le lancement.",
     ),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "Et enfin — le lancement.",
+      "Lisez ceci attentivement.\n\nContrairement à d\'autres applications, la nôtre mesure la latence réelle à travers le tunnel, au lieu de vous donner de jolis chiffres.\n\nLe ping n\'est que la vitesse de réponse d\'un serveur et ne dit rien du DÉBIT. Un serveur peut répondre vite avec un canal très étroit : le ping est beau et la vitesse absente.\n\nN\'écartez donc pas les serveurs dont la latence est moins belle — essayez-les aussi.",
+    ),
+    "tutorialBody8": MessageLookupByLibrary.simpleMessage(
+      "La tuile lance le portail depuis n\'importe quel écran : ouvrez le volet, touchez le crayon, faites défiler jusqu\'à vos applications et ajoutez « Portal ».",
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Suivant"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Passer"),
@@ -2177,10 +2180,13 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage(
       "Tous les filtres d\'un coup",
     ),
-    "tutorialTitle6": MessageLookupByLibrary.simpleMessage(
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("Lancement"),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage(
+      "La mesure automatique de la latence est activée",
+    ),
+    "tutorialTitle8": MessageLookupByLibrary.simpleMessage(
       "Tuile dans le volet",
     ),
-    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("Lancement"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage("Mode de relais UDP"),
     "udpTimeout": MessageLookupByLibrary.simpleMessage("Délai UDP"),
     "udpTimeoutDesc": MessageLookupByLibrary.simpleMessage(

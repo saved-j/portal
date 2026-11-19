@@ -2109,10 +2109,13 @@ class MessageLookup extends MessageLookupByLibrary {
       "Tapping “Portal network” opens the screen where every filter is set at once — on one page.",
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage(
-      "The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.",
+      "And finally — start.",
     ),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "And finally — start.",
+      "Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too.",
+    ),
+    "tutorialBody8": MessageLookupByLibrary.simpleMessage(
+      "The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.",
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Next"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Skip"),
@@ -2126,8 +2129,11 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage(
       "All filters at once",
     ),
-    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("Tile in the shade"),
-    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("Start"),
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("Start"),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage(
+      "Delay auto-check is on",
+    ),
+    "tutorialTitle8": MessageLookupByLibrary.simpleMessage("Tile in the shade"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage("UDP relay mode"),
     "udpTimeout": MessageLookupByLibrary.simpleMessage("UDP timeout"),
     "udpTimeoutDesc": MessageLookupByLibrary.simpleMessage(

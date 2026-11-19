@@ -1048,10 +1048,10 @@
   "tutorialBody4": "Un doble toque en un mosaico cambia el aspecto de los mosaicos.",
   "tutorialTitle5": "Todos los filtros a la vez",
   "tutorialBody5": "Al tocar «Red de portales» se abre la pantalla donde todos los filtros se ajustan a la vez, en una sola página.",
-  "tutorialTitle6": "Mosaico en la cortina",
-  "tutorialBody6": "El mosaico inicia el portal desde cualquier pantalla: abre la cortina, toca el lápiz, desplázate hasta tus aplicaciones y añade «Portal».",
-  "tutorialTitle7": "Inicio",
-  "tutorialBody7": "Y por último: el inicio.",
+  "tutorialTitle6": "Inicio",
+  "tutorialBody6": "Y por último: el inicio.",
+  "tutorialTitle7": "El auto-chequeo de latencia está activado",
+  "tutorialBody7": "Léelo con atención.\n\nA diferencia de otras aplicaciones, la nuestra mide la latencia real a través del túnel, no solo te da cifras bonitas.\n\nEl ping es solo la velocidad de respuesta del servidor y no refleja el ANCHO DE BANDA. Un servidor puede responder rápido y tener un canal muy estrecho: el ping se ve bien y no hay velocidad.\n\nAsí que no descartes los servidores con una latencia menos bonita: pruébalos también.",
   "tutorialNext": "Siguiente",
   "tutorialSkip": "Omitir",
   "tutorialStepOf": "{index} de {total}",
@@ -1089,5 +1089,7 @@
     }
   },
   "autoPingExplainedTitle": "El auto-chequeo de latencia está activado",
-  "autoPingExplainedBody": "Léelo con atención.\n\nA diferencia de otras aplicaciones, la nuestra mide la latencia real a través del túnel, no solo te da cifras bonitas.\n\nEl ping es solo la velocidad de respuesta del servidor y no refleja el ANCHO DE BANDA. Un servidor puede responder rápido y tener un canal muy estrecho: el ping se ve bien y no hay velocidad.\n\nAsí que no descartes los servidores con una latencia menos bonita: pruébalos también."
+  "autoPingExplainedBody": "Léelo con atención.\n\nA diferencia de otras aplicaciones, la nuestra mide la latencia real a través del túnel, no solo te da cifras bonitas.\n\nEl ping es solo la velocidad de respuesta del servidor y no refleja el ANCHO DE BANDA. Un servidor puede responder rápido y tener un canal muy estrecho: el ping se ve bien y no hay velocidad.\n\nAsí que no descartes los servidores con una latencia menos bonita: pruébalos también.",
+  "tutorialTitle8": "Mosaico en la cortina",
+  "tutorialBody8": "El mosaico inicia el portal desde cualquier pantalla: abre la cortina, toca el lápiz, desplázate hasta tus aplicaciones y añade «Portal»."
 }

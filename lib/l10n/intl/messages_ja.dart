@@ -1726,10 +1726,13 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody5": MessageLookupByLibrary.simpleMessage(
       "「ポータルネットワーク」を押すと、すべてのフィルターを 1 画面で設定できます。",
     ),
-    "tutorialBody6": MessageLookupByLibrary.simpleMessage(
+    "tutorialBody6": MessageLookupByLibrary.simpleMessage("最後に——起動です。"),
+    "tutorialBody7": MessageLookupByLibrary.simpleMessage(
+      "よくお読みください。\n\n他のアプリと違い、当アプリはトンネルを通した実際の遅延を測ります。見栄えの良い数字を作るのではありません。\n\nPing はサーバーの応答速度にすぎず、スループットを示すものではありません。応答が速くても回線が極端に細いサーバーはあります。Ping は良くても速度が出ません。\n\n遅延の数字が良くないサーバーも、ぜひ試してみてください。",
+    ),
+    "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "タイルを使えばどの画面からでも起動できます。シェードを開き、鉛筆を押し、自分のアプリまでスクロールして「Portal」を追加します。",
     ),
-    "tutorialBody7": MessageLookupByLibrary.simpleMessage("最後に——起動です。"),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("次へ"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("スキップ"),
     "tutorialStepOf": m105,
@@ -1738,8 +1741,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialTitle3": MessageLookupByLibrary.simpleMessage("タイルを長押し"),
     "tutorialTitle4": MessageLookupByLibrary.simpleMessage("タイルの表示"),
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage("フィルターをまとめて設定"),
-    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("通知シェードのタイル"),
-    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("起動"),
+    "tutorialTitle6": MessageLookupByLibrary.simpleMessage("起動"),
+    "tutorialTitle7": MessageLookupByLibrary.simpleMessage("遅延の自動計測をオンにしました"),
+    "tutorialTitle8": MessageLookupByLibrary.simpleMessage("通知シェードのタイル"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage("UDP リレーモード"),
     "udpTimeout": MessageLookupByLibrary.simpleMessage("UDP タイムアウト"),
     "udpTimeoutDesc": MessageLookupByLibrary.simpleMessage(
