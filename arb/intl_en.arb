@@ -1145,5 +1145,6 @@
   "autoPingExplainedTitle": "Delay auto-check is on",
   "autoPingExplainedBody": "Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too.",
   "tutorialTitle8": "Tile in the shade",
-  "tutorialBody8": "The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”."
+  "tutorialBody8": "The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.",
+  "tutorialChipOff": "The filter is off. Hold it again to switch it back on."
 }

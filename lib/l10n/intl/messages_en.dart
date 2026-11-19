@@ -2117,6 +2117,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.",
     ),
+    "tutorialChipOff": MessageLookupByLibrary.simpleMessage(
+      "The filter is off. Hold it again to switch it back on.",
+    ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Next"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Skip"),
     "tutorialStepOf": m105,

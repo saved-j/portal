@@ -6,6 +6,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/views/proxies/proxies.dart';
 import 'package:fl_clash/views/tutorial/portal_tutorial.dart';
+import 'package:fl_clash/views/tutorial/tutorial_bus.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1058,6 +1059,7 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                                 return;
                               }
                               HapticFeedback.selectionClick();
+                              TutorialBus.fire(TutorialEvent.modeChanged);
                               // The thumb has already moved; the portal underneath either
                               // comes up on the other core or comes back exactly as it was.
                               unawaited(_switchPortal(ref, toSimple: !value));
@@ -1071,6 +1073,7 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                     key: tutorialKeys[TutorialTarget.modeLabel],
                     onTap: () {
                       HapticFeedback.selectionClick();
+                      TutorialBus.fire(TutorialEvent.labelTapped);
                       Navigator.of(
                         context,
                       ).push(MaterialPageRoute(builder: (_) => const ProxiesView()));
@@ -2259,6 +2262,7 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
         GestureDetector(
           onTap: () {
             HapticFeedback.selectionClick();
+            TutorialBus.fire(TutorialEvent.filtersOpened);
             showPortalFilterEditor(context);
           },
           onLongPress: () {
@@ -2282,6 +2286,7 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
         Expanded(
           child: GestureDetector(
             onDoubleTap: () {
+              TutorialBus.fire(TutorialEvent.chipDoubleTapped);
               // Changing the layout re-measures every chip; keep the strip where the
               // user left it instead of snapping back to the first one.
               final offset = _controller.hasClients ? _controller.offset : 0.0;
@@ -2329,6 +2334,7 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                 // in the server list.
                                 onLongPress: () {
                                   HapticFeedback.mediumImpact();
+                                  TutorialBus.fire(TutorialEvent.chipHeld);
                                   ref
                                       .read(portalBypassProvider.notifier)
                                       .toggle(ref, item);

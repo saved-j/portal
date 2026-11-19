@@ -2164,6 +2164,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "La tuile lance le portail depuis n\'importe quel écran : ouvrez le volet, touchez le crayon, faites défiler jusqu\'à vos applications et ajoutez « Portal ».",
     ),
+    "tutorialChipOff": MessageLookupByLibrary.simpleMessage(
+      "Le filtre est désactivé. Maintenez à nouveau pour le rallumer.",
+    ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Suivant"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Passer"),
     "tutorialStepOf": m105,

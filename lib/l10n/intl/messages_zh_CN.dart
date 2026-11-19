@@ -1649,6 +1649,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "磁贴可以从任何界面启动门户：打开通知栏，点铅笔，滚动到自己的应用，添加「Portal」。",
     ),
+    "tutorialChipOff": MessageLookupByLibrary.simpleMessage("筛选器已关闭。再次长按即可开启。"),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("下一步"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("跳过"),
     "tutorialStepOf": m105,

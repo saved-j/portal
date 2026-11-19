@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/l10n/l10n.dart';
+
+import 'tutorial_bus.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/haptics.dart';
 import 'package:material_ui/material_ui.dart';
@@ -36,6 +38,7 @@ class TutorialStep {
     this.pictures = const [],
     this.androidOnly = false,
     this.wait = Duration.zero,
+    this.done,
   });
 
   final TutorialTarget? target;
@@ -52,6 +55,10 @@ class TutorialStep {
   /// How long the screen waits before this page appears: the sentence about the numbers is
   /// about numbers that take a few seconds to arrive.
   final Duration wait;
+
+  /// The action that closes this page. The owner performs it on the real control; the page
+  /// then says what happened and moves on.
+  final TutorialEvent? done;
 
   String title(AppLocalizations l) => switch (number) {
     1 => l.tutorialTitle1,
@@ -83,26 +90,47 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 5;
+const tutorialVersion = 6;
 
 const tutorialSteps = <TutorialStep>[
-  // The switch, not the row: the tour asks for a tap on the control that moves.
-  TutorialStep(target: TutorialTarget.modeSwitch, number: 1),
-  TutorialStep(target: TutorialTarget.filters, number: 2),
-  TutorialStep(target: TutorialTarget.chip, number: 3),
-  TutorialStep(target: TutorialTarget.chip, number: 4),
-  // The word, not the row: the dashboard opens on the name and nothing else.
-  TutorialStep(target: TutorialTarget.modeLabel, number: 5),
-  // The start, then the sentence about what the numbers mean — said when the first figures are
-  // on screen, which is a few seconds after the tunnel came up.
-  TutorialStep(target: TutorialTarget.start, number: 6),
-  TutorialStep(target: TutorialTarget.autoPing, number: 7, wait: Duration(seconds: 6)),
+  // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
+  // it has actually moved.
   TutorialStep(
-    target: null,
-    number: 8,
-    androidOnly: true,
+    target: TutorialTarget.modeSwitch,
+    number: 1,
+    done: TutorialEvent.modeChanged,
   ),
+  TutorialStep(
+    target: TutorialTarget.filters,
+    number: 2,
+    done: TutorialEvent.filtersOpened,
+  ),
+  TutorialStep(
+    target: TutorialTarget.chip,
+    number: 3,
+    done: TutorialEvent.chipHeld,
+  ),
+  TutorialStep(
+    target: TutorialTarget.chip,
+    number: 4,
+    done: TutorialEvent.chipDoubleTapped,
+  ),
+  // The word, not the row: the dashboard opens on the name and nothing else.
+  TutorialStep(
+    target: TutorialTarget.modeLabel,
+    number: 5,
+    done: TutorialEvent.labelTapped,
+  ),
+  TutorialStep(
+    target: TutorialTarget.start,
+    number: 6,
+    done: TutorialEvent.started,
+  ),
+  // The sentence about the numbers, said when the first figures are on screen.
+  TutorialStep(target: TutorialTarget.autoPing, number: 7, wait: Duration(seconds: 6)),
+  TutorialStep(target: null, number: 8, androidOnly: true),
 ];
+
 
 
 /// The tour itself: a dimmed screen, a hole over the thing it is talking about, and a card.
@@ -122,6 +150,9 @@ class PortalTutorial extends ConsumerStatefulWidget {
 class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   late int _index = widget.fromStep.clamp(0, tutorialSteps.length - 1);
 
+  /// The page that asked for a gesture has seen it, and now says what happened.
+  bool _confirmed = false;
+
   /// A page that wants the screen to settle first: the sentence about the numbers is about
   /// numbers the core has not produced yet when the previous page closes.
   bool _waiting = false;
@@ -134,9 +165,36 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    TutorialBus.last.addListener(_onAction);
+    if (_steps[_index].wait == Duration.zero) {
+      _waiting = false;
+    } else {
+      _waitFor(_steps[_index]);
+    }
+  }
+
+  @override
   void dispose() {
+    TutorialBus.last.removeListener(_onAction);
     _waitTimer?.cancel();
     super.dispose();
+  }
+
+  /// The owner has just done the thing this page asks for: the page closes itself.
+  void _onAction() {
+    if (!mounted || _waiting) return;
+    final step = _steps[_index];
+    if (step.done == null || step.done != TutorialBus.last.value) return;
+    TutorialBus.last.value = null;
+    // The tile page shows the result before it closes: the owner should read what his own
+    // gesture did, not be moved on with the question of whether it worked.
+    if (step.number == 3 && !_confirmed) {
+      setState(() => _confirmed = true);
+      return;
+    }
+    _next();
   }
 
   void _waitFor(TutorialStep step) {
@@ -175,6 +233,34 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     widget.onDone();
   }
 
+  /// The four bands that catch a tap outside the hole. Inside the hole nothing is caught, so
+  /// the button underneath answers the owner's own finger.
+  List<Widget> _frameAround(Rect? hole, Size screen) {
+    Widget band(Rect rect) => Positioned.fromRect(
+      rect: rect,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _next,
+        child: const SizedBox.expand(),
+      ),
+    );
+    if (hole == null) {
+      return [
+        band(Offset.zero & screen),
+      ];
+    }
+    final top = hole.top.clamp(0.0, screen.height);
+    final bottom = hole.bottom.clamp(0.0, screen.height);
+    final left = hole.left.clamp(0.0, screen.width);
+    final right = hole.right.clamp(0.0, screen.width);
+    return [
+      band(Rect.fromLTWH(0, 0, screen.width, top)),
+      band(Rect.fromLTWH(0, bottom, screen.width, screen.height - bottom)),
+      band(Rect.fromLTWH(0, top, left, (bottom - top))),
+      band(Rect.fromLTWH(right, top, screen.width - right, (bottom - top))),
+    ];
+  }
+
   Rect? _targetRect(TutorialTarget? target) {
     if (target == null) return null;
     final box = tutorialKeys[target]?.currentContext?.findRenderObject();
@@ -187,7 +273,8 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final step = _steps[_index];
-    final screen = MediaQuery.sizeOf(context);
+    final size = MediaQuery.sizeOf(context);
+    final screen = size;
     final rect = _targetRect(step.target);
     // The card sits under the thing it points at when there is room, and above it otherwise.
     final cardTop = rect == null
@@ -199,7 +286,9 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       type: MaterialType.transparency,
       child: Stack(
         children: [
-          // One barrier, one hole: the rest of the screen is dimmed, the target is not.
+          // The dim is painted but never touched, and the only things that catch a tap are the
+          // four bands around the hole. The hole itself belongs to the real control underneath:
+          // the tour asks the owner to press it, so it must be pressable.
           Positioned.fill(
             child: IgnorePointer(
               child: CustomPaint(
@@ -210,15 +299,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
               ),
             ),
           ),
-          Positioned.fill(
-            bottom: null,
-            child: GestureDetector(
-              // Taps outside the card advance the tour: nobody wants to hunt for a button.
-              behavior: HitTestBehavior.translucent,
-              onTap: _next,
-              child: const SizedBox.expand(),
-            ),
-          ),
+          ..._frameAround(rect, size),
           if (!_waiting)
           Positioned(
             left: 16,
@@ -228,6 +309,9 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
               step: step,
               index: _index,
               total: _steps.length,
+              bodyOverride: step.number == 3 && _confirmed
+                  ? context.appLocalizations.tutorialChipOff
+                  : null,
               onNext: _next,
               onSkip: _finish,
             ),
@@ -263,9 +347,11 @@ class _TutorialCard extends StatelessWidget {
     required this.total,
     required this.onNext,
     required this.onSkip,
+    this.bodyOverride,
   });
 
   final TutorialStep step;
+  final String? bodyOverride;
   final int index;
   final int total;
   final VoidCallback onNext;
@@ -300,7 +386,7 @@ class _TutorialCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            step.body(context.appLocalizations),
+            bodyOverride ?? step.body(context.appLocalizations),
             style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
           ),
           if (step.pictures.isNotEmpty) ...[

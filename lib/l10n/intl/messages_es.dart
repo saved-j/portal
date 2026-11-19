@@ -2162,6 +2162,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "El mosaico inicia el portal desde cualquier pantalla: abre la cortina, toca el lápiz, desplázate hasta tus aplicaciones y añade «Portal».",
     ),
+    "tutorialChipOff": MessageLookupByLibrary.simpleMessage(
+      "El filtro está apagado. Mantén pulsado otra vez para encenderlo.",
+    ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Siguiente"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Omitir"),
     "tutorialStepOf": m105,

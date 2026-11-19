@@ -1704,6 +1704,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "타일로 어느 화면에서든 포털을 시작할 수 있습니다. 알림창을 열고 연필을 누른 뒤 내 앱까지 스크롤하여 \'Portal\'을 추가하세요.",
     ),
+    "tutorialChipOff": MessageLookupByLibrary.simpleMessage(
+      "필터가 꺼졌습니다. 다시 길게 누르면 켜집니다.",
+    ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("다음"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("건너뛰기"),
     "tutorialStepOf": m105,

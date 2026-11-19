@@ -2213,6 +2213,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "Плитка запускает портал из любого экрана: откройте шторку, нажмите карандаш, пролистайте до пользовательских приложений и добавьте «Портал».",
     ),
+    "tutorialChipOff": MessageLookupByLibrary.simpleMessage(
+      "Фильтр выключен. Зажмите ещё раз, чтобы включить.",
+    ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Далее"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Пропустить"),
     "tutorialStepOf": m105,

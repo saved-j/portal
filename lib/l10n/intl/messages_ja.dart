@@ -1733,6 +1733,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "タイルを使えばどの画面からでも起動できます。シェードを開き、鉛筆を押し、自分のアプリまでスクロールして「Portal」を追加します。",
     ),
+    "tutorialChipOff": MessageLookupByLibrary.simpleMessage(
+      "フィルターはオフです。もう一度長押しするとオンになります。",
+    ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("次へ"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("スキップ"),
     "tutorialStepOf": m105,

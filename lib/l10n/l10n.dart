@@ -9480,6 +9480,16 @@ class AppLocalizations {
       args: [],
     );
   }
+
+  /// `The filter is off. Hold it again to switch it back on.`
+  String get tutorialChipOff {
+    return Intl.message(
+      'The filter is off. Hold it again to switch it back on.',
+      name: 'tutorialChipOff',
+      desc: '',
+      args: [],
+    );
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<AppLocalizations> {

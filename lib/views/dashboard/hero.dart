@@ -13,6 +13,7 @@ import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/views/profiles/add.dart';
 import 'package:fl_clash/views/access.dart';
 import 'package:fl_clash/views/tutorial/portal_tutorial.dart';
+import 'package:fl_clash/views/tutorial/tutorial_bus.dart';
 import 'package:fl_clash/views/profiles/profiles.dart';
 import 'package:fl_clash/views/tools.dart';
 import 'package:fl_clash/views/connection/connection_feeds.dart';
@@ -507,6 +508,7 @@ class _ConnectButton extends ConsumerWidget {
                   } else {
                     portalOpenedAtMs.value =
                         DateTime.now().millisecondsSinceEpoch;
+                    TutorialBus.fire(TutorialEvent.started);
                   }
                   toggle();
                 },
