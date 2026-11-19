@@ -38,6 +38,20 @@ final class DirectCoreLauncher implements CoreProcessLauncher {
   }) async {
     final process = await _startProcess(await _corePath(), [address]);
     final lease = DirectCoreLease(sessionId: sessionId, process: process);
+    commonPrint.log(
+      '[life] core started pid=${process.pid} address=$address session=$sessionId',
+    );
+    // Why a tunnel went away is the one fact a log has to carry: a core that exits on its
+    // own leaves the portal looking switched on and doing nothing.
+    unawaited(
+      process.exitCode.then((code) {
+        commonPrint.log(
+          '[life] core exited code=$code pid=${process.pid} session=$sessionId'
+          '${lease.crashHeadline == null ? '' : ' headline=${lease.crashHeadline}'}',
+          logLevel: LogLevel.warning,
+        );
+      }),
+    );
     process.stdout.listen((_) {});
     process.stderr.listen((data) {
       final error = utf8.decode(data);

@@ -1093,6 +1093,9 @@ class SetupAction extends _$SetupAction {
   }
 
   Future<bool> _restartCoreAfterAuthorization() async {
+    // The restart is silent by design — the owner asked for a setting, not for a tunnel that
+    // goes down — so the log carries the one thing that explains a drop nobody asked for.
+    commonPrint.log('[life] core restart after authorization');
     _tunMissed = false;
     final coreAction = ref.read(coreActionProvider.notifier);
     // Awaited from inside its own restore, the restart would wait on itself.
