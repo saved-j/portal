@@ -92,7 +92,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 14;
+const tutorialVersion = 15;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -346,7 +346,11 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
             left: 16,
             right: 16,
             top: cardTop,
+            // A phone with the largest text scale must still see the whole page: the card is
+            // bounded by the screen and its own text scrolls inside it.
+            bottom: null,
             child: _TutorialCard(
+              maxHeight: size.height * 0.62,
               step: step,
               index: _index,
               total: _steps.length,
@@ -389,10 +393,12 @@ class _TutorialCard extends StatelessWidget {
     required this.onNext,
     required this.onSkip,
     this.bodyOverride,
+    this.maxHeight,
   });
 
   final TutorialStep step;
   final String? bodyOverride;
+  final double? maxHeight;
   final int index;
   final int total;
   final VoidCallback onNext;
@@ -402,6 +408,9 @@ class _TutorialCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: maxHeight ?? double.infinity,
+      ),
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHigh,
@@ -414,6 +423,12 @@ class _TutorialCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
           Text(
             context.appLocalizations.tutorialStepOf(index + 1, total),
             style: theme.textTheme.labelSmall?.copyWith(
@@ -450,6 +465,11 @@ class _TutorialCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+          // The buttons stay outside the scroll: a long page scrolls, the way out never does.
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
