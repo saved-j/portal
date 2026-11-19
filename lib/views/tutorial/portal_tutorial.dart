@@ -92,7 +92,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 16;
+const tutorialVersion = 17;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -307,7 +307,17 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     final box = tutorialKeys[target]?.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.hasSize) return null;
     final origin = box.localToGlobal(Offset.zero);
-    return origin & box.size;
+    final full = origin & box.size;
+    // A Material switch answers in a 48 dp box and draws a 34×14 track inside it: the frame
+    // goes on what the owner can see, not on the invisible margin that takes the touch.
+    if (target == TutorialTarget.modeSwitch) {
+      return Rect.fromCenter(
+        center: full.center,
+        width: full.width * 34 / 48,
+        height: full.height * 14 / 48,
+      );
+    }
+    return full;
   }
 
   @override
@@ -334,7 +344,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
             child: IgnorePointer(
               child: CustomPaint(
                 painter: _HolePainter(
-                  hole: rect?.inflate(8),
+                  hole: rect?.inflate(6),
                   color: Colors.black.withValues(alpha: 0.72),
                 ),
               ),
