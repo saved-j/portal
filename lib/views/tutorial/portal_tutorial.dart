@@ -91,7 +91,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 10;
+const tutorialVersion = 11;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -248,6 +248,13 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   }
 
   void _finish() {
+    // Whatever the stack looks like, no tour may outlive this call: a route left behind is a
+    // barrier that shows nothing and swallows every tap, which is exactly what happened when
+    // the working screen mounted twice and pushed two tours.
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.popUntil((route) => route.isFirst);
+    }
     ref.read(appSettingProvider.notifier).update((state) => state.copyWith(
       tutorialSeen: true,
       tutorialStep: 0,
