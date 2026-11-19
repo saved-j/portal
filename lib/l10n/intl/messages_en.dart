@@ -439,6 +439,12 @@ class MessageLookup extends MessageLookupByLibrary {
       "As in the subscription",
     ),
     "autoPingDefault": MessageLookupByLibrary.simpleMessage("Default"),
+    "autoPingExplainedBody": MessageLookupByLibrary.simpleMessage(
+      "Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too.",
+    ),
+    "autoPingExplainedTitle": MessageLookupByLibrary.simpleMessage(
+      "Delay auto-check is on",
+    ),
     "autoPingHoldHint": MessageLookupByLibrary.simpleMessage(
       "Hold your finger on a server to test that one right now.",
     ),

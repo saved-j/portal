@@ -363,6 +363,10 @@ class MessageLookup extends MessageLookupByLibrary {
     "autoLaunch": MessageLookupByLibrary.simpleMessage("自启动"),
     "autoPingAsInSubscription": MessageLookupByLibrary.simpleMessage("与订阅一致"),
     "autoPingDefault": MessageLookupByLibrary.simpleMessage("默认"),
+    "autoPingExplainedBody": MessageLookupByLibrary.simpleMessage(
+      "请仔细阅读。\n\n与其他应用不同，我们通过隧道测量真实延迟，而不是只给你好看的数字。\n\nPing 只是服务器的响应速度，并不代表吞吐量。服务器可能响应很快，但通道非常窄：延迟好看，速度却没有。\n\n所以不要因为某些服务器延迟不好看就放弃它们——也试试它们。",
+    ),
+    "autoPingExplainedTitle": MessageLookupByLibrary.simpleMessage("延迟自动检测已开启"),
     "autoPingHoldHint": MessageLookupByLibrary.simpleMessage(
       "长按某个服务器可立即测试它的延迟。",
     ),

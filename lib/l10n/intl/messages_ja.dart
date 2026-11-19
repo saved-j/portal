@@ -339,6 +339,12 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "autoInclude": MessageLookupByLibrary.simpleMessage("自動で含める"),
     "autoLaunch": MessageLookupByLibrary.simpleMessage("自動起動"),
+    "autoPingExplainedBody": MessageLookupByLibrary.simpleMessage(
+      "よくお読みください。\n\n他のアプリと違い、当アプリはトンネルを通した実際の遅延を測ります。見栄えの良い数字を作るのではありません。\n\nPing はサーバーの応答速度にすぎず、スループットを示すものではありません。応答が速くても回線が極端に細いサーバーはあります。Ping は良くても速度が出ません。\n\n遅延の数字が良くないサーバーも、ぜひ試してみてください。",
+    ),
+    "autoPingExplainedTitle": MessageLookupByLibrary.simpleMessage(
+      "遅延の自動計測をオンにしました",
+    ),
     "autoRun": MessageLookupByLibrary.simpleMessage("自動実行"),
     "autoRunDesc": MessageLookupByLibrary.simpleMessage(
       "自動実行はアプリを開いたときにプロキシを開始します。",

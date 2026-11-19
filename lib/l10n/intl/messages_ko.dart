@@ -338,6 +338,12 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "autoInclude": MessageLookupByLibrary.simpleMessage("자동 포함"),
     "autoLaunch": MessageLookupByLibrary.simpleMessage("자동 실행"),
+    "autoPingExplainedBody": MessageLookupByLibrary.simpleMessage(
+      "주의 깊게 읽어 주세요.\n\n다른 앱과 달리 저희 앱은 터널을 통한 실제 지연을 측정합니다. 보기 좋은 숫자를 만들어 내지 않습니다.\n\n핑은 서버의 응답 속도일 뿐이며 처리량을 의미하지 않습니다. 응답은 빠르지만 대역폭이 매우 좁은 서버도 있습니다. 핑은 좋아도 속도가 나지 않습니다.\n\n지연 숫자가 좋지 않은 서버도 포기하지 말고 시험해 보세요.",
+    ),
+    "autoPingExplainedTitle": MessageLookupByLibrary.simpleMessage(
+      "지연 자동 측정이 켜졌습니다",
+    ),
     "autoRun": MessageLookupByLibrary.simpleMessage("자동 시작"),
     "autoRunDesc": MessageLookupByLibrary.simpleMessage(
       "자동 시작은 앱을 열 때 프록시를 시작합니다.",

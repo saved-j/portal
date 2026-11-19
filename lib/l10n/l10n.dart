@@ -9440,6 +9440,26 @@ class AppLocalizations {
       args: [value],
     );
   }
+
+  /// `Delay auto-check is on`
+  String get autoPingExplainedTitle {
+    return Intl.message(
+      'Delay auto-check is on',
+      name: 'autoPingExplainedTitle',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too.`
+  String get autoPingExplainedBody {
+    return Intl.message(
+      'Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too.',
+      name: 'autoPingExplainedBody',
+      desc: '',
+      args: [],
+    );
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<AppLocalizations> {

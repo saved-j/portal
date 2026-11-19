@@ -1133,6 +1133,18 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                       final auto = ref.read(autoPingProvider.notifier);
                       final turningOn = !auto.current.enabled;
                       auto.setEnabled(turningOn);
+                      // Said once, on the first time the switch goes on: what this app measures
+                      // and why a pretty ping is not a fast server.
+                      if (turningOn &&
+                          !ref.read(appSettingProvider).autoPingExplained) {
+                        ref
+                            .read(appSettingProvider.notifier)
+                            .update(
+                              (state) =>
+                                  state.copyWith(autoPingExplained: true),
+                            );
+                        unawaited(_showAutoPingExplained(context));
+                      }
                       // A document built while the switch was off carries no schedule at all, so a
                       // running core has to be restarted on one that does.
                       final live = ref.read(portalStatusProvider);
@@ -1913,6 +1925,29 @@ Future<void> _testDelayWithChild(
 /// Short periods are a real cost on a VPN app — every node is asked in every period, and the
 /// battery is the price — so the choices are bounded, and the sentence under them says why the
 /// short ones are the expensive ones.
+/// The one-time explanation of what the delay figure means.
+///
+/// It is long on purpose: the number in the row is not a speed, and the owner who reads it as a
+/// speed will dismiss the servers that would carry his traffic best.
+Future<void> _showAutoPingExplained(BuildContext context) async {
+  final l10n = context.appLocalizations;
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(l10n.autoPingExplainedTitle),
+      content: SingleChildScrollView(
+        child: Text(l10n.autoPingExplainedBody),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(l10n.close),
+        ),
+      ],
+    ),
+  );
+}
+
 Future<void> _showAutoPingPeriod(BuildContext context, WidgetRef ref) async {
   final l10n = context.appLocalizations;
   final auto = ref.read(autoPingProvider.notifier);

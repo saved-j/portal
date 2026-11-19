@@ -422,6 +422,12 @@ class MessageLookup extends MessageLookupByLibrary {
       "Inclure automatiquement",
     ),
     "autoLaunch": MessageLookupByLibrary.simpleMessage("Lancement automatique"),
+    "autoPingExplainedBody": MessageLookupByLibrary.simpleMessage(
+      "Lisez ceci attentivement.\n\nContrairement à d\'autres applications, la nôtre mesure la latence réelle à travers le tunnel, au lieu de vous donner de jolis chiffres.\n\nLe ping n\'est que la vitesse de réponse d\'un serveur et ne dit rien du DÉBIT. Un serveur peut répondre vite avec un canal très étroit : le ping est beau et la vitesse absente.\n\nN\'écartez donc pas les serveurs dont la latence est moins belle — essayez-les aussi.",
+    ),
+    "autoPingExplainedTitle": MessageLookupByLibrary.simpleMessage(
+      "La mesure automatique de la latence est activée",
+    ),
     "autoRun": MessageLookupByLibrary.simpleMessage("Démarrage automatique"),
     "autoRunDesc": MessageLookupByLibrary.simpleMessage(
       "Le démarrage automatique active le proxy à l’ouverture de l’app.",

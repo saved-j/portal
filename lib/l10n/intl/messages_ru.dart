@@ -451,6 +451,12 @@ class MessageLookup extends MessageLookupByLibrary {
       "Как в подписке",
     ),
     "autoPingDefault": MessageLookupByLibrary.simpleMessage("По умолчанию"),
+    "autoPingExplainedBody": MessageLookupByLibrary.simpleMessage(
+      "Прочтите это внимательно.\n\nВ отличие от других приложений, наше замеряет реальную задержку через тоннель, а не просто даёт вам красивые цифры.\n\nДело в том, что пинг (задержка) — это просто скорость отклика сервера, не отражающая ПРОПУСКНУЮ СПОСОБНОСТЬ. Сервер может откликаться быстро, но иметь неприлично узкий канал с низкой пропускной способностью: пинг красивый, а скорости нет.\n\nПоэтому не стоит брезговать серверами, у которых не самая красивая задержка, — пробуйте и их.",
+    ),
+    "autoPingExplainedTitle": MessageLookupByLibrary.simpleMessage(
+      "Автозамер задержки включён",
+    ),
     "autoPingHoldHint": MessageLookupByLibrary.simpleMessage(
       "Удерживайте палец на сервере, чтобы проверить пинг именно его, прямо сейчас.",
     ),

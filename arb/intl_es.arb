@@ -1087,5 +1087,7 @@
         "type": "String"
       }
     }
-  }
+  },
+  "autoPingExplainedTitle": "El auto-chequeo de latencia está activado",
+  "autoPingExplainedBody": "Léelo con atención.\n\nA diferencia de otras aplicaciones, la nuestra mide la latencia real a través del túnel, no solo te da cifras bonitas.\n\nEl ping es solo la velocidad de respuesta del servidor y no refleja el ANCHO DE BANDA. Un servidor puede responder rápido y tener un canal muy estrecho: el ping se ve bien y no hay velocidad.\n\nAsí que no descartes los servidores con una latencia menos bonita: pruébalos también."
 }
