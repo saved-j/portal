@@ -62,6 +62,9 @@ abstract class TrayState with _$TrayState {
     @Default(false) bool menuBarMode,
     @Default({}) Map<HotAction, HotKeyAction> hotKeys,
     @Default(true) bool globalModeAllowed,
+    /// The theme the window is drawn in. A tray icon is read against the taskbar, not against
+    /// the app, so the letter has to know which way the background leans.
+    @Default(true) bool darkTheme,
   }) = _TrayState;
 }
 

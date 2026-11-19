@@ -5,6 +5,7 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/views/proxies/proxies.dart';
+import 'package:fl_clash/views/tutorial/portal_tutorial.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -182,9 +183,7 @@ class PortalGroupNotifier extends Notifier<String?> {
     // The porthole's mark and the strip read the profile's current group; a chip that only
     // moved its own state left the two disagreeing.
     if (name != null) {
-      ref
-          .read(proxiesActionProvider.notifier)
-          .updateCurrentGroupName(name);
+      ref.read(proxiesActionProvider.notifier).updateCurrentGroupName(name);
     }
   }
 }
@@ -463,10 +462,7 @@ class PortalFiltersNotifier
 
   void _write({Set<String>? hidden, List<String>? order}) {
     final simple = _simple;
-    final next = (
-      hidden: hidden ?? state.hidden,
-      order: order ?? state.order,
-    );
+    final next = (hidden: hidden ?? state.hidden, order: order ?? state.order);
     state = next;
     ref
         .read(appSettingProvider.notifier)
@@ -573,59 +569,62 @@ typedef ModeAvailability = ({
 /// all: the file it left behind is still a working config, so the file alone would keep
 /// offering a mode whose every new fetch fails. Unknown — still loading — counts as
 /// available, so a control never flickers off while the answer is on its way.
-final portalAvailabilityProvider =
-    Provider<({ModeAvailability engine, ModeAvailability xray})>((ref) {
-      final strikes = ref.watch(portalFeedsProvider);
-      final engineFile = ref.watch(engineFormatStatusProvider).value;
-      final servers = ref.watch(xrayServersProvider).value;
-      final engineStrikes = strikes[PortalFeed.engine] ?? const FeedStrikes();
-      final xrayStrikes = strikes[PortalFeed.xray] ?? const FeedStrikes();
-      final fileProblem =
-          engineFile == null || engineFile.status == EngineFormatStatus.ok
-          ? ''
-          : engineFile.reason;
-      // No nodes is not a slow answer: the simple portal has nothing to start with, and the
-      // switch has to say so rather than open a portal that carries no traffic.
-      final noServers = servers != null && servers.isEmpty;
+final portalAvailabilityProvider = Provider<({ModeAvailability engine, ModeAvailability xray})>((
+  ref,
+) {
+  final strikes = ref.watch(portalFeedsProvider);
+  final engineFile = ref.watch(engineFormatStatusProvider).value;
+  final servers = ref.watch(xrayServersProvider).value;
+  final engineStrikes = strikes[PortalFeed.engine] ?? const FeedStrikes();
+  final xrayStrikes = strikes[PortalFeed.xray] ?? const FeedStrikes();
+  final fileProblem =
+      engineFile == null || engineFile.status == EngineFormatStatus.ok
+      ? ''
+      : engineFile.reason;
+  // No nodes is not a slow answer: the simple portal has nothing to start with, and the
+  // switch has to say so rather than open a portal that carries no traffic.
+  final noServers = servers != null && servers.isEmpty;
   // A subscription that carries only one of the two documents makes only one mode possible:
   // a profile with no engine document can never fill the network list, and one with no node
   // list can never start the simple portal. Offering the other mode there is offering a mode
   // that cannot run, so the switch stays on the side the subscription supports.
-  final hasEngineDoc = engineFile != null &&
-      engineFile.status == EngineFormatStatus.ok;
+  final hasEngineDoc =
+      engineFile != null && engineFile.status == EngineFormatStatus.ok;
   final hasNodeList = servers != null && servers.isNotEmpty;
-      // Neither document yet is the loading state: the switch must not flicker off before the
-      // profile has been read once.
-      final known = engineFile != null || servers != null;
-      return (
-        engine: (
-          available: !engineStrikes.blocked &&
-              fileProblem.isEmpty &&
-              (!known || hasEngineDoc || hasNodeList),
-          strikes: engineStrikes,
-          reason: engineStrikes.blocked
-              ? engineStrikes.reason
-              : (fileProblem.isEmpty
-                  ? (known && !hasEngineDoc && hasNodeList
+  // Neither document yet is the loading state: the switch must not flicker off before the
+  // profile has been read once.
+  final known = engineFile != null || servers != null;
+  return (
+    engine: (
+      available:
+          !engineStrikes.blocked &&
+          fileProblem.isEmpty &&
+          (!known || hasEngineDoc || hasNodeList),
+      strikes: engineStrikes,
+      reason: engineStrikes.blocked
+          ? engineStrikes.reason
+          : (fileProblem.isEmpty
+                ? (known && !hasEngineDoc && hasNodeList
                       ? 'эта подписка не содержит правил для сети порталов'
                       : '')
-                  : fileProblem),
-        ),
-        xray: (
-          available: !xrayStrikes.blocked &&
-              !noServers &&
-              (!known || hasNodeList || hasEngineDoc),
-          strikes: xrayStrikes,
-          reason: xrayStrikes.blocked
-              ? xrayStrikes.reason
-              : (noServers
-                  ? (known && hasEngineDoc
+                : fileProblem),
+    ),
+    xray: (
+      available:
+          !xrayStrikes.blocked &&
+          !noServers &&
+          (!known || hasNodeList || hasEngineDoc),
+      strikes: xrayStrikes,
+      reason: xrayStrikes.blocked
+          ? xrayStrikes.reason
+          : (noServers
+                ? (known && hasEngineDoc
                       ? 'эта подписка не содержит серверов для простого портала'
                       : 'this subscription carries no nodes for the portal')
-                  : ''),
-        ),
-      );
-    });
+                : ''),
+    ),
+  );
+});
 
 /// A refusal's reason, with the count in the reader's own language.
 ///
@@ -640,8 +639,9 @@ String _availabilityReason(
   // A download that failed is a network fact, not a broken file. The owner is told what
   // happened, that the portal keeps working on the file it has, and when the next attempt
   // comes — instead of a count of failures that reads like damage.
-  final next = (strikes.at ?? DateTime.now())
-      .add(updateBackoffAfter(strikes.failures));
+  final next = (strikes.at ?? DateTime.now()).add(
+    updateBackoffAfter(strikes.failures),
+  );
   return updateFailureNote(
     failures: strikes.failures,
     nextAttempt: next,
@@ -1008,6 +1008,7 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
             // and a switch that reads as a switch. The editor button only exists in the
             // network mode, so 'Сеть порталов' has somewhere obvious to lead.
             GestureDetector(
+              key: tutorialKeys[TutorialTarget.portalLabel],
               // A plain tap on 'Сеть порталов' opens the proxies dashboard: that is what
               // the network mode is for. The double tap still edits the filter strip.
               onTap: () => Navigator.of(
@@ -2349,9 +2350,10 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
               context,
             ).push(MaterialPageRoute(builder: (_) => const ProxiesView()));
           },
-          child: const Padding(
-            padding: EdgeInsets.only(right: 6),
-            child: GlyphIcon(AppGlyphs.sliders, size: 20),
+          child: Padding(
+            key: tutorialKeys[TutorialTarget.filters],
+            padding: const EdgeInsets.only(right: 6),
+            child: const GlyphIcon(AppGlyphs.sliders, size: 20),
           ),
         ),
         SizedBox(
@@ -2383,7 +2385,7 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    for (final item in groups)
+                    for (final (index, item) in groups.indexed)
                       Builder(
                         builder: (context) {
                           // A filter the panel already routes to DIRECT is a bypass by
@@ -2395,112 +2397,121 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                           final bypassed =
                               bypassedNames.contains(item.name) ||
                               (_isBuiltinOutbound(item.now ?? '') && !picked);
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 3),
-                            child: GestureDetector(
-                              // Long press turns the filter into a bypass: the engine gets
-                              // DIRECT, the chip goes grey, nobody has to hunt for DIRECT
-                              // in the server list.
-                              onLongPress: () {
-                                HapticFeedback.mediumImpact();
-                                ref
-                                    .read(portalBypassProvider.notifier)
-                                    .toggle(ref, item);
-                              },
-                              child: Opacity(
-                                opacity: bypassed ? 0.45 : 1,
-                                child: ChoiceChip(
-                                  showCheckmark: false,
-                                  // Five layouts, one row each: name, name+server,
-                                  // icon+server, icon. Everything centres by construction.
-                                  label: Builder(
-                                    builder: (context) {
-                                      // 0 name · 1 name+server · 2 name+server+icon ·
-                                      // 3 icon+server · 4 icon
-                                      final showIcon = display >= 2;
-                                      final showName = display <= 2;
-                                      final mark = SizedBox.square(
-                                        dimension: 16,
-                                        child: CommonTargetIcon(
-                                          src: item.icon,
-                                          fallback: GroupMonogram(item.name),
-                                        ),
-                                      );
-                                      // A bypassed filter has no server on screen at all:
-                                      // the user should see "nothing goes through here", not
-                                      // the word DIRECT.
-                                      // What the user just picked wins over what the engine
-                                      // has confirmed: the chip must name the chosen server
-                                      // in the same frame as the tap.
-                                      final server = bypassed
-                                          ? null
-                                          : (picked
-                                                ? pendingByGroup[item.name]
-                                                : item.now);
-                                      // Two storeys in every layout, all five of them: the filter on top,
-                                      // the server it answers with underneath. The five layouts then
-                                      // differ only in what the top storey carries — name, name+icon or the
-                                      // icon alone — so a chip never changes its height when the owner
-                                      // cycles the layout, and the answer is always in the same place.
-                                      final top = <Widget>[
-                                        if (showIcon) mark,
-                                        if (showIcon && showName)
-                                          const SizedBox(width: 6),
-                                        if (showName)
-                                          Flexible(
-                                            child: Text(
-                                              item.name,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
+                          return KeyedSubtree(
+                            // The tour points at the first tile it can find.
+                            key: index == 0
+                                ? tutorialKeys[TutorialTarget.chip]
+                                : null,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 3,
+                              ),
+                              child: GestureDetector(
+                                // Long press turns the filter into a bypass: the engine gets
+                                // DIRECT, the chip goes grey, nobody has to hunt for DIRECT
+                                // in the server list.
+                                onLongPress: () {
+                                  HapticFeedback.mediumImpact();
+                                  ref
+                                      .read(portalBypassProvider.notifier)
+                                      .toggle(ref, item);
+                                },
+                                child: Opacity(
+                                  opacity: bypassed ? 0.45 : 1,
+                                  child: ChoiceChip(
+                                    showCheckmark: false,
+                                    // Five layouts, one row each: name, name+server,
+                                    // icon+server, icon. Everything centres by construction.
+                                    label: Builder(
+                                      builder: (context) {
+                                        // 0 name · 1 name+server · 2 name+server+icon ·
+                                        // 3 icon+server · 4 icon
+                                        final showIcon = display >= 2;
+                                        final showName = display <= 2;
+                                        final mark = SizedBox.square(
+                                          dimension: 16,
+                                          child: CommonTargetIcon(
+                                            src: item.icon,
+                                            fallback: GroupMonogram(item.name),
                                           ),
-                                      ];
-                                      // No placeholder: a chip with no server simply has no second
-                                      // line. A dash would be a value the engine never gave.
-                                      final bottom =
-                                          server == null || server == item.name
-                                          ? null
-                                          : server;
-                                      return Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.center,
-                                        children: [
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: top.isEmpty
-                                                ? [mark]
-                                                : top,
-                                          ),
-                                          if (bottom != null) ...[
-                                            const SizedBox(height: 1),
-                                            Text(
-                                              bottom,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelSmall
-                                                  ?.copyWith(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurfaceVariant,
-                                                  ),
+                                        );
+                                        // A bypassed filter has no server on screen at all:
+                                        // the user should see "nothing goes through here", not
+                                        // the word DIRECT.
+                                        // What the user just picked wins over what the engine
+                                        // has confirmed: the chip must name the chosen server
+                                        // in the same frame as the tap.
+                                        final server = bypassed
+                                            ? null
+                                            : (picked
+                                                  ? pendingByGroup[item.name]
+                                                  : item.now);
+                                        // Two storeys in every layout, all five of them: the filter on top,
+                                        // the server it answers with underneath. The five layouts then
+                                        // differ only in what the top storey carries — name, name+icon or the
+                                        // icon alone — so a chip never changes its height when the owner
+                                        // cycles the layout, and the answer is always in the same place.
+                                        final top = <Widget>[
+                                          if (showIcon) mark,
+                                          if (showIcon && showName)
+                                            const SizedBox(width: 6),
+                                          if (showName)
+                                            Flexible(
+                                              child: Text(
+                                                item.name,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ),
+                                        ];
+                                        // No placeholder: a chip with no server simply has no second
+                                        // line. A dash would be a value the engine never gave.
+                                        final bottom =
+                                            server == null ||
+                                                server == item.name
+                                            ? null
+                                            : server;
+                                        return Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: top.isEmpty
+                                                  ? [mark]
+                                                  : top,
+                                            ),
+                                            if (bottom != null) ...[
+                                              const SizedBox(height: 1),
+                                              Text(
+                                                bottom,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelSmall
+                                                    ?.copyWith(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
+                                              ),
+                                            ],
                                           ],
-                                        ],
-                                      );
+                                        );
+                                      },
+                                    ),
+                                    selected: item.name == active,
+                                    onSelected: (_) {
+                                      HapticFeedback.selectionClick();
+                                      ref
+                                          .read(portalGroupProvider.notifier)
+                                          .pick(item.name);
                                     },
                                   ),
-                                  selected: item.name == active,
-                                  onSelected: (_) {
-                                    HapticFeedback.selectionClick();
-                                    ref
-                                        .read(portalGroupProvider.notifier)
-                                        .pick(item.name);
-                                  },
                                 ),
                               ),
                             ),

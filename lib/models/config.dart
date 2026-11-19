@@ -326,6 +326,12 @@ abstract class AppSettingProps with _$AppSettingProps {
 
     /// The release tag the user hid; automatic checks skip only that one.
     String? hiddenUpdate,
+
+    /// The first-run tour has been seen. It is shown once — on the first launch after
+    /// install — and never again unless the settings are cleared.
+    @Default(false) bool tutorialSeen,
+    /// The step the tour stopped on, so a tour interrupted by a restart resumes where it was.
+    @Default(0) int tutorialStep,
     @Default(true)
     @JsonKey(readValue: _readSidebarExpanded)
     bool sidebarExpanded,

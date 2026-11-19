@@ -97,6 +97,8 @@ _AppSettingProps _$AppSettingPropsFromJson(
       TabAnimation.fade,
   autoCheckUpdate: json['autoCheckUpdate'] as bool? ?? true,
   hiddenUpdate: json['hiddenUpdate'] as String?,
+  tutorialSeen: json['tutorialSeen'] as bool? ?? false,
+  tutorialStep: (json['tutorialStep'] as num?)?.toInt() ?? 0,
   sidebarExpanded:
       _readSidebarExpanded(json, 'sidebarExpanded') as bool? ?? true,
   acceptedDisclaimerVersion:
@@ -200,6 +202,8 @@ Map<String, dynamic> _$AppSettingPropsToJson(
   'tabAnimation': _$TabAnimationEnumMap[instance.tabAnimation]!,
   'autoCheckUpdate': instance.autoCheckUpdate,
   'hiddenUpdate': instance.hiddenUpdate,
+  'tutorialSeen': instance.tutorialSeen,
+  'tutorialStep': instance.tutorialStep,
   'sidebarExpanded': instance.sidebarExpanded,
   'acceptedDisclaimerVersion': instance.acceptedDisclaimerVersion,
   'minimizeOnExit': instance.minimizeOnExit,

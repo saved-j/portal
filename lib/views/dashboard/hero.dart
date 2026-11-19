@@ -12,6 +12,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/views/profiles/add.dart';
 import 'package:fl_clash/views/access.dart';
+import 'package:fl_clash/views/tutorial/portal_tutorial.dart';
 import 'package:fl_clash/views/profiles/profiles.dart';
 import 'package:fl_clash/views/tools.dart';
 import 'package:fl_clash/views/connection/connection_feeds.dart';
@@ -47,6 +48,16 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
   void initState() {
     super.initState();
     _probe = ref.read(outboundIpProbeProvider.notifier)..watch(routedOutbound);
+    // The tour runs once, on the first screen a person can act on: a subscription is loaded
+    // and there is something to point at. It is drawn after the frame, because it measures
+    // the widgets underneath and they have to be laid out first.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final setting = ref.read(appSettingProvider);
+      if (setting.tutorialSeen) return;
+      if (ref.read(profilesProvider).isEmpty) return;
+      showPortalTutorial(context, fromStep: setting.tutorialStep);
+    });
   }
 
   @override
@@ -262,18 +273,22 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                         if (wide)
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
+                            children: [
                               SizedBox(
                                 width: _wideControlsWidth,
                                 child: Column(
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
                                   children: [
-                                    _ConnectButton(),
-                                    SizedBox(height: 12),
-                                    PortalPlanCard(),
-                                    SizedBox(height: _gap),
-                                    PortalModeSwitch(),
+                                    _ConnectButton(
+                                      key: tutorialKeys[TutorialTarget.start],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    const PortalPlanCard(),
+                                    const SizedBox(height: _gap),
+                                    PortalModeSwitch(
+                                      key: tutorialKeys[TutorialTarget.mode],
+                                    ),
                                   ],
                                 ),
                               ),
@@ -285,14 +300,14 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                           // The portal comes first and the choice comes after it, the
                           // order Happ and Incy taught people: the button you press
                           // before the list you read.
-                          const _ConnectButton(),
+                          _ConnectButton(key: tutorialKeys[TutorialTarget.start]),
                           const SizedBox(height: 12),
                           // Announcement and subscription sit together right under the
                           // button, the way Happ and Incy put plan status next to the
                           // switch: visible, but out of the way of choosing a server.
                           const PortalPlanCard(),
                           const SizedBox(height: _gap),
-                          const PortalModeSwitch(),
+                          PortalModeSwitch(key: tutorialKeys[TutorialTarget.mode]),
                           const SizedBox(height: 4),
                           const PortalServerList(),
                         ],
@@ -395,6 +410,7 @@ final ValueNotifier<int?> portalClosedAtMs = ValueNotifier<int?>(null);
 final ValueNotifier<int?> portalOpenedAtMs = ValueNotifier<int?>(null);
 
 class _ConnectButton extends ConsumerWidget {
+  const _ConnectButton({super.key});
   /// The press answers with its own rhythm: opening is a heavier double beat, closing a
   /// softer pair — the hand should feel which way the portal is going.
   void _portalHaptics({required bool starting}) {
@@ -438,8 +454,6 @@ class _ConnectButton extends ConsumerWidget {
       ),
     );
   }
-
-  const _ConnectButton();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

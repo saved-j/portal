@@ -61,16 +61,21 @@ class AppTray implements TrayPort {
     required bool tunEnable,
     required bool safeMode,
     bool monochrome = true,
+    bool darkTheme = true,
   }) {
-    final status = switch ((
-      safeMode,
-      _isTemplate(monochrome) || !isStart,
-      tunEnable,
-    )) {
+    // macOS and Windows both show one letter with two states: off is the same letter at
+    // 45 % opacity, on is solid. The colour belongs to the system — a macOS template is
+    // tinted by the menu bar itself, a Windows icon is drawn in the shade the taskbar has.
+    if (_isTemplate(monochrome) || isWindows) {
+      final status = isStart && !safeMode ? 4 : 1;
+      final shade = isWindows && !darkTheme ? '_light' : '';
+      return '${_trayIconDir(monochrome)}/status_$status$shade.$_trayIconSuffix';
+    }
+    final status = switch ((safeMode, isStart, tunEnable)) {
       (true, _, _) => 4,
-      (false, true, _) => 1,
-      (false, false, false) => 2,
-      (false, false, true) => 3,
+      (false, true, false) => 2,
+      (false, true, true) => 3,
+      (false, false, _) => 1,
     };
     return '${_trayIconDir(monochrome)}/status_$status.$_trayIconSuffix';
   }
@@ -103,6 +108,7 @@ class AppTray implements TrayPort {
             tunEnable: trayState.tunEnable,
             safeMode: trayState.safeMode,
             monochrome: trayState.monochromeTrayIcon,
+            darkTheme: trayState.darkTheme,
           ),
           isTemplate: _isTemplate(trayState.monochromeTrayIcon),
           size: isMacOS ? 18 : 16,

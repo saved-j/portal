@@ -84,6 +84,7 @@ TrayState trayState(Ref ref) {
     safeMode: safeMode,
     hotKeys: hotKeys,
     globalModeAllowed: ref.watch(globalModeAllowedProvider),
+    darkTheme: ref.watch(currentBrightnessProvider) == Brightness.dark,
   );
 }
 
