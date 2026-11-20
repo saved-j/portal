@@ -1159,19 +1159,22 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                           ref.read(patchClashConfigProvider).mode == Mode.global;
                       final runStatus = ref.read(portalStatusProvider);
                       if (simple) {
-                        // The list the screen is drawing, not a fresh fetch: a press measures
-                        // what the owner sees.
-                        final servers = ref.read(xrayServersProvider).value ?? const <XrayServerConfig>[];
-                        unawaited(
-                          _testDelayWithChild(
+                        // The list the screen is drawing, not a fresh fetch: the provider is
+                        // awaited so a press works even before the list has finished loading —
+                        // reading `.value` here was null on a cold screen and the press did
+                        // nothing at all.
+                        unawaited(() async {
+                          final servers =
+                              await ref.read(xrayServersProvider.future);
+                          await _testDelayWithChild(
                             ref,
                             servers,
                             wasRunning:
                                 runStatus.active &&
                                 runStatus.owner == PortalOwner.xray,
                             force: true,
-                          ),
-                        );
+                          );
+                        }());
                         return;
                       }
                       final liveGroup = ref.read(portalGroupProvider);

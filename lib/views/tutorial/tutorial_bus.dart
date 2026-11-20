@@ -6,7 +6,15 @@ import 'package:flutter/foundation.dart';
 /// the button says when it was pressed, the switch says when it moved. A tour that closed its
 /// page because a value changed in the background would be teaching the owner that the value
 /// changes by itself.
-enum TutorialEvent { modeChanged, filtersOpened, chipHeld, chipDoubleTapped, labelTapped, started }
+enum TutorialEvent {
+  modeChanged,
+  filtersOpened,
+  chipHeld,
+  chipDoubleTapped,
+  labelTapped,
+  started,
+  pingAllStarted,
+}
 
 /// The one channel between a control and the tour.
 final class TutorialBus {

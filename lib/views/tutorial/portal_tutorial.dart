@@ -81,7 +81,7 @@ class TutorialStep {
     3 => l.tutorialTitle3,
     4 => l.tutorialTitle4,
     5 => l.tutorialTitle5,
-    6 => l.tutorialTitle6,
+    9 => l.tutorialTitle6,
     7 => l.tutorialTitle7,
     _ => l.tutorialTitle8,
   };
@@ -92,7 +92,7 @@ class TutorialStep {
     3 => l.tutorialBody3,
     4 => l.tutorialBody4,
     5 => l.tutorialBody5,
-    6 => l.tutorialBody6,
+    9 => l.tutorialBody6,
     7 => l.tutorialBody7,
     _ => l.tutorialBody8,
   };
@@ -105,7 +105,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 32;
+const tutorialVersion = 33;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -139,11 +139,12 @@ const tutorialSteps = <TutorialStep>[
     done: TutorialEvent.labelTapped,
     opensScreen: true,
   ),
+  // The page asks for the measurement the button performs, and the list it leaves behind is the
+  // lesson: numbers appearing where dashes were.
   TutorialStep(
-    target: TutorialTarget.start,
-    number: 6,
-    done: TutorialEvent.started,
-    needsMode: false,
+    target: TutorialTarget.autoPing,
+    number: 9,
+    done: TutorialEvent.pingAllStarted,
   ),
   // The whole column — the bolt and every row under it — because the sentence is about the
   // figures that appear in it the moment the portal opens. No wait: they are there at once.
@@ -587,6 +588,8 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
               bodyOverride: step.number == 3 && _confirmed
                   ? context.appLocalizations.tutorialChipOff
                   : null,
+              isLast: _index == _steps.length - 1,
+              holdsMore: step.number == 4 && _confirmed,
               onNext: _next,
               onSkip: _finish,
             ),
@@ -615,11 +618,18 @@ class _TutorialCard extends StatelessWidget {
     required this.onSkip,
     this.bodyOverride,
     this.maxHeight,
+    this.isLast = false,
+    this.holdsMore = false,
   });
 
   final TutorialStep step;
   final String? bodyOverride;
   final double? maxHeight;
+  final bool isLast;
+
+  /// A page that asks for a gesture the owner should repeat: the first one shows what happened and
+  /// leaves the buttons up, so the second and third can be tried before moving on.
+  final bool holdsMore;
   final int index;
   final int total;
   final VoidCallback onNext;
@@ -700,16 +710,24 @@ class _TutorialCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 4,
             children: [
-              TextButton(
-                onPressed: onSkip,
-                child: Text(
-                  context.appLocalizations.tutorialSkip,
-                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+              if (isLast)
+                const SizedBox.shrink()
+              else
+                TextButton(
+                  onPressed: onSkip,
+                  child: Text(
+                    context.appLocalizations.tutorialSkip,
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                  ),
                 ),
-              ),
               // No "Next" on a page that asks for a gesture: the gesture is the way forward, and
               // a button beside it reads as a second, weaker way to skip the lesson.
-              if (step.done == null)
+              if (isLast)
+                FilledButton(
+                  onPressed: onNext,
+                  child: Text(context.appLocalizations.tutorialNext),
+                )
+              else if (step.done == null || step.number == 4 && holdsMore)
                 FilledButton(
                   onPressed: onNext,
                   child: Text(context.appLocalizations.tutorialNext),
