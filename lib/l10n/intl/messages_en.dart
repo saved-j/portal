@@ -2098,7 +2098,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "The portal network splits traffic, sending different apps through different countries. That is dynamic split tunnelling.\n\nIf you do not need it, the app works in the “simple mode”, where almost all traffic goes through one country.\n\nSwitch the mode here.",
     ),
     "tutorialBody2": MessageLookupByLibrary.simpleMessage(
-      "The button to the left of the tiles opens the filter list. Here you can turn off the filters you do not need by removing them from the list.",
+      "The button on the left opens the filter list. Here a filter can be folded or unfolded, sent direct, or given another country — the app opens the list and comes back by itself.",
     ),
     "tutorialBody3": MessageLookupByLibrary.simpleMessage(
       "Holding a finger on a tile switches that filter on and off — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.",
@@ -2110,10 +2110,10 @@ class MessageLookup extends MessageLookupByLibrary {
       "Tapping “Portal network” opens the screen where every filter is set at once — on one page.",
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage(
-      "And finally — start.",
+      "Press the portal: it opens and starts carrying traffic.",
     ),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too.",
+      "Press the bolt: the app measures the delay to every server in this mode. The dashes turn into spinners and then into numbers. Hold a row to measure that one only.",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.",
@@ -2135,7 +2135,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialTitle6": MessageLookupByLibrary.simpleMessage("Start"),
     "tutorialTitle7": MessageLookupByLibrary.simpleMessage(
-      "Delay auto-check is on",
+      "Measuring the delay",
     ),
     "tutorialTitle8": MessageLookupByLibrary.simpleMessage("Tile in the shade"),
     "udpRelayMode": MessageLookupByLibrary.simpleMessage("UDP relay mode"),

@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fl_clash/common/outbound.dart';
+import 'package:fl_clash/ui/haptics.dart';
 import 'package:fl_clash/core/sweep_ledger.dart';
 import 'package:fl_clash/core/update_backoff.dart';
 import 'package:fl_clash/core/xray_measure.dart';
@@ -2458,6 +2459,8 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
         Expanded(
           child: GestureDetector(
             onDoubleTap: () {
+              // The tile changes shape under the finger: the hand has to feel that it landed.
+              AppHaptics.commit();
               TutorialBus.fire(TutorialEvent.chipDoubleTapped);
               // Changing the layout re-measures every chip; keep the strip where the
               // user left it instead of snapping back to the first one.

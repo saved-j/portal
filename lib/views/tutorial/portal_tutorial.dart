@@ -105,7 +105,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 35;
+const tutorialVersion = 36;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -141,14 +141,21 @@ const tutorialSteps = <TutorialStep>[
   ),
   // The page asks for the measurement the button performs, and the list it leaves behind is the
   // lesson: numbers appearing where dashes were.
+  // Start, then measure: two different controls, two different lessons. They were one page in an
+  // earlier pass and the words stopped matching the screen.
+  TutorialStep(
+    target: TutorialTarget.start,
+    number: 6,
+    done: TutorialEvent.started,
+  ),
   TutorialStep(
     target: TutorialTarget.autoPing,
-    number: 6,
+    number: 7,
     done: TutorialEvent.pingAllStarted,
   ),
   // The whole column — the bolt and every row under it — because the sentence is about the
   // figures that appear in it the moment the portal opens. No wait: they are there at once.
-  TutorialStep(target: TutorialTarget.autoPingColumn, number: 7),
+
   TutorialStep(
     target: null,
     number: 8,

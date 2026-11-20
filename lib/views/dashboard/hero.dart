@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:fl_clash/common/outbound.dart';
+import 'package:fl_clash/ui/haptics.dart';
 import 'package:flutter/services.dart';
 
 const heroMaxWidth = 520.0;
@@ -471,18 +472,12 @@ class _ConnectButton extends ConsumerWidget {
   /// The press answers with its own rhythm: opening is a heavier double beat, closing a
   /// softer pair — the hand should feel which way the portal is going.
   void _portalHaptics({required bool starting}) {
+    // One rhythm per direction: opening swells like a door giving way, closing is the three short
+    // knocks of a latch — the hand knows which way the portal went before the screen says it.
     if (starting) {
-      HapticFeedback.heavyImpact();
-      Future<void>.delayed(
-        const Duration(milliseconds: 130),
-        HapticFeedback.mediumImpact,
-      );
+      unawaited(AppHaptics.opened());
     } else {
-      HapticFeedback.mediumImpact();
-      Future<void>.delayed(
-        const Duration(milliseconds: 150),
-        HapticFeedback.lightImpact,
-      );
+      unawaited(AppHaptics.closed());
     }
   }
 

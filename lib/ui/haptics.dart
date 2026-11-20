@@ -24,4 +24,21 @@ class AppHaptics {
   static Future<void> hold() async {
     await HapticFeedback.heavyImpact();
   }
+
+  /// The portal opening: a long swell, the way a heavy door gives way.
+  static Future<void> opened() async {
+    await HapticFeedback.heavyImpact();
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    await HapticFeedback.heavyImpact();
+  }
+
+  /// The portal closing: three short knocks, cut off — «ту-ту-тук».
+  static Future<void> closed() async {
+    for (var i = 0; i < 3; i++) {
+      await HapticFeedback.mediumImpact();
+      await Future<void>.delayed(
+        Duration(milliseconds: i == 2 ? 0 : 80),
+      );
+    }
+  }
 }
