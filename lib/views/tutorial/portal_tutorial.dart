@@ -402,6 +402,39 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       ),
     );
   }
+  /// The yellow arrow: beside the target when there is room, above or below otherwise.
+  Widget _pointer(Rect hole, Size screen) {
+    const color = Color(0xFFFFD400);
+    const size = 60.0;
+    IconData glyph;
+    Offset at;
+    if (hole.right + size + 8 < screen.width) {
+      glyph = Icons.arrow_forward_rounded;
+      at = Offset(hole.right + 8, hole.center.dy - size / 2);
+    } else if (hole.left - size - 8 > 0) {
+      glyph = Icons.arrow_back_rounded;
+      at = Offset(hole.left - size - 8, hole.center.dy - size / 2);
+    } else if (hole.bottom + size + 8 < screen.height) {
+      glyph = Icons.arrow_downward_rounded;
+      at = Offset(hole.center.dx - size / 2, hole.bottom + 8);
+    } else {
+      glyph = Icons.arrow_upward_rounded;
+      at = Offset(hole.center.dx - size / 2, hole.top - size - 8);
+    }
+    return Positioned(
+      left: at.dx,
+      top: at.dy,
+      child: IgnorePointer(
+        child: Icon(
+          glyph,
+          size: size,
+          color: color,
+          shadows: const [Shadow(color: Color(0x77000000), blurRadius: 10)],
+        ),
+      ),
+    );
+  }
+
 }
 
 class _TutorialCard extends StatelessWidget {
@@ -513,6 +546,8 @@ class _TutorialCard extends StatelessWidget {
         ],
       ),
     );
+
+
   }
 }
 
@@ -546,36 +581,45 @@ class _HolePainter extends CustomPainter {
     _arrow(canvas, size, hole!);
   }
 
-  /// A fat yellow arrow from the card's side of the screen to the hole — the one sign that
-  /// needs no reading.
-  void _arrow(Canvas canvas, Size size, Rect hole) {
-    final yellow = Paint()
-      ..color = const Color(0xFFFFD400)
-      ..strokeWidth = 7
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-    final fill = Paint()..color = const Color(0xFFFFD400);
-    // The arrow starts away from the control, curves in and stops just outside the frame: a
-    // hand-drawn pointer rather than a ruler line.
-    final fromBelow = hole.center.dy < size.height / 2;
-    final dir = fromBelow ? -1.0 : 1.0;
-    final startY = fromBelow ? hole.bottom + 92 : hole.top - 92;
-    final endY = fromBelow ? hole.bottom + 18 : hole.top - 18;
-    final x = hole.center.dx;
-    final bend = 26.0 * (x < size.width / 2 ? 1 : -1);
-    final path = Path()
-      ..moveTo(x + bend, startY)
-      ..quadraticBezierTo(x + bend * 0.4, (startY + endY) / 2, x, endY);
-    canvas.drawPath(path, yellow);
-    final head = Path()
-      ..moveTo(x, endY)
-      ..lineTo(x - 13, endY + dir * 20)
-      ..lineTo(x + 13, endY + dir * 20)
-      ..close();
-    canvas.drawPath(head, fill);
-  }
 
+
+
+
+
+  /// The pointer: a yellow arrow beside the hole, at its own height, so it never lands on the
+  /// card and never covers the text it belongs to. Ten-pixel shaft into a thirty-pixel head.
+  void _arrow(Canvas canvas, Size size, Rect hole) {
+    const yellow = Color(0xFFFFD400);
+    const half = 16.0;
+    const shaft = 9.0;
+    final cy = hole.center.dy;
+    final spaceRight = size.width - (hole.right + 18);
+    final spaceLeft = hole.left - 18;
+    final right = spaceRight >= spaceLeft;
+    // The arrow is as long as the dim beside the control allows: a wide control on a narrow
+    // screen still gets a short one rather than none.
+    final len = ((right ? spaceRight : spaceLeft) - 8).clamp(0.0, 92.0);
+    if (len < 24) return;
+    final headLen = (len * 0.45).clamp(14.0, 26.0);
+    final tipX = right ? hole.right + 18 : hole.left - 18;
+    final dirX = right ? -1.0 : 1.0; // the head looks at the hole
+    final tailX = tipX - dirX * len;
+
+    final head = Path()
+      ..moveTo(tipX, cy)
+      ..lineTo(tipX - dirX * headLen, cy - half)
+      ..lineTo(tipX - dirX * headLen, cy + half)
+      ..close();
+    canvas.drawLine(
+      Offset(tailX, cy),
+      Offset(tipX - dirX * (headLen - 2), cy),
+      Paint()
+        ..color = yellow
+        ..strokeWidth = shaft
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawPath(head, Paint()..color = yellow);
+  }
   @override
   bool shouldRepaint(_HolePainter oldDelegate) =>
       oldDelegate.hole != hole || oldDelegate.color != color;
