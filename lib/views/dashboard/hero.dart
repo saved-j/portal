@@ -39,6 +39,13 @@ const _gap = 12.0;
 /// makes is the one the tour asks for — and he sees the list arrive as a result of it.
 final tourSwitchOff = ValueNotifier<bool>(false);
 
+/// True while the tour is up: the working screen does not scroll under it.
+///
+/// The tour measures its target every frame, so a frame cannot lag behind a scroll — but a page the
+/// owner scrolls by accident still moves the control out from under the card he is reading. With
+/// the list frozen, nothing moves unless the tour moves it.
+final tourScrollLocked = ValueNotifier<bool>(false);
+
 class HeroDashboard extends ConsumerStatefulWidget {
   const HeroDashboard({super.key});
 
@@ -53,6 +60,9 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
   void initState() {
     super.initState();
     _probe = ref.read(outboundIpProbeProvider.notifier)..watch(routedOutbound);
+    // The lock changes what the list does, so the page has to be built again when the tour opens
+    // or closes: a physics argument is read at build time and nowhere else.
+    tourScrollLocked.addListener(_onLockChanged);
     // The tour runs once, on the first screen a person can act on: a subscription is loaded
     // and there is something to point at. It is drawn after the frame, because it measures
     // the widgets underneath and they have to be laid out first.
@@ -72,8 +82,13 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
     });
   }
 
+  void _onLockChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    tourScrollLocked.removeListener(_onLockChanged);
     _probe.unwatch(routedOutbound);
     super.dispose();
   }
@@ -122,7 +137,11 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                 Expanded(
                   child: SingleChildScrollView(
                     controller: heroScroll,
-                    physics: const AlwaysScrollableScrollPhysics(),
+                    // Frozen while the tour is up: a stray drag must not move the control the
+                    // card is describing.
+                    physics: tourScrollLocked.value
+                        ? const NeverScrollableScrollPhysics()
+                        : const AlwaysScrollableScrollPhysics(),
                     padding: padding.copyWith(bottom: _gap),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -1444,17 +1444,20 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Measures the servers of this list once, from a lifecycle method: a build pass is
-        // not the place to start work, and a rebuild is not a reason to start it again.
-        _TcpDelaySweep(
-          servers: xrayServers,
-          engineProxies: simple ? const <Proxy>[] : members,
-          simple: simple,
-          wasRunning:
-              portalRuntime.status.value.active &&
-              portalRuntime.status.value.owner ==
-                  (simple ? PortalOwner.xray : PortalOwner.mihomo),
-        ),
+        // OFF FOR THIS RELEASE: the automatic measurement is disabled, the code is kept.
+        //
+        // It measured on a timer whether or not anybody was reading the numbers, and on a phone
+        // that is the battery. What stays is the deliberate one: holding a row times that row.
+        //
+        // _TcpDelaySweep(
+        //   servers: xrayServers,
+        //   engineProxies: simple ? const <Proxy>[] : members,
+        //   simple: simple,
+        //   wasRunning:
+        //       portalRuntime.status.value.active &&
+        //       portalRuntime.status.value.owner ==
+        //           (simple ? PortalOwner.xray : PortalOwner.mihomo),
+        // ),
         // The filter strip belongs to the engine's rules. In the simple portal the list is
         // the second core's own servers, so there are no filters to show.
         if (!simple && xrayServers.isEmpty && groups.length > 1)
@@ -1493,6 +1496,10 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
   }
 }
 
+/// Whether the rows arrive one after another. False for this release: the automatic work that
+/// made the wave worth watching (the measuring sweep) is off too.
+const serverEnterEnabled = false;
+
 /// A row's arrival: nothing, then a short fade and a 10 pt rise, one row after the previous.
 class _ServerEnter extends StatefulWidget {
   const _ServerEnter({required this.index, required this.child});
@@ -1517,6 +1524,12 @@ class _ServerEnterState extends State<_ServerEnter> {
   @override
   void initState() {
     super.initState();
+    // OFF FOR THIS RELEASE: the rows arrive at once. The wave is the code below, kept and not
+    // run — a list that fades in row by row looked like the app thinking on every switch.
+    if (!serverEnterEnabled) {
+      _shown = true;
+      return;
+    }
     final delay = _ServerEnter.delayFor(widget.index);
     if (delay == Duration.zero) {
       _shown = true;
@@ -1527,6 +1540,7 @@ class _ServerEnterState extends State<_ServerEnter> {
     });
   }
 
+  @override
   @override
   Widget build(BuildContext context) {
     return AnimatedOpacity(

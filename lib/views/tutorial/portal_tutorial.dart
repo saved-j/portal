@@ -214,6 +214,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   @override
   void initState() {
     super.initState();
+    tourScrollLocked.value = true;
     _follow = Timer.periodic(const Duration(milliseconds: 16), (_) {
       if (mounted) setState(() {});
     });
@@ -271,6 +272,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   @override
   void dispose() {
     tourSwitchOff.value = false;
+    tourScrollLocked.value = false;
     _autoClose?.cancel();
     TutorialBus.last.removeListener(_onAction);
     tutorialScreenOpened.removeListener(_onScreenChanged);
@@ -425,22 +427,122 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // larger than the gap.
     const margin = 16.0;
     const gap = 24.0;
-    final spaceBelow = rect == null
-        ? screen.height - 2 * margin
-        : screen.height - (rect.bottom + gap) - margin;
-    final spaceAbove = rect == null ? 0.0 : (rect.top - gap) - margin;
-    final below = rect == null || spaceBelow >= spaceAbove;
-    // Never more than two fifths of the screen: the point of the tour is the interface behind
-    // it, and a card that covers the page is a slideshow, not a pointer.
-    final cardSpace = (below ? spaceBelow : spaceAbove)
-        .clamp(120.0, screen.height * 0.42);
-    // The card is as tall as its own text and no taller: a page of two lines takes two lines. It
-    // is anchored to one edge — below the target, or above it — and never to both, because
-    // anchoring both edges made a short page a full screen tall.
-    final cardTop = rect == null
-        ? (screen.height / 2 - 140).clamp(margin, screen.height - 280)
-        : (below ? rect.bottom + gap : null);
-    final cardBottom = (rect != null && !below) ? screen.height - (rect.top - gap) : null;
+    // Four gaps around the control, measured, not guessed: below, above, right, left. The card
+    // takes the roomiest one that can hold a readable page, so the same tour works on a phone, on
+    // a wide window, with the largest text and with a control that sits at the top or the bottom.
+    final gaps = <({String side, Rect room})>[
+      if (rect == null)
+        (side: 'free', room: Rect.fromLTWH(margin, margin, screen.width - 2 * margin, screen.height - 2 * margin))
+      else ...[
+        (
+          side: 'below',
+          room: Rect.fromLTRB(
+            margin,
+            rect.bottom + gap,
+            screen.width - margin,
+            screen.height - margin,
+          ),
+        ),
+        (
+          side: 'above',
+          room: Rect.fromLTRB(
+            margin,
+            margin,
+            screen.width - margin,
+            rect.top - gap,
+          ),
+        ),
+        (
+          side: 'right',
+          room: Rect.fromLTRB(
+            rect.right + gap,
+            margin,
+            screen.width - margin,
+            screen.height - margin,
+          ),
+        ),
+        (
+          side: 'left',
+          room: Rect.fromLTRB(
+            margin,
+            margin,
+            rect.left - gap,
+            screen.height - margin,
+          ),
+        ),
+      ],
+    ];
+    // A gap is usable when a page fits in it: two lines of text and the two buttons. The first
+    // gap that clears the bar wins — below, then above, then right, then left — because "below"
+    // is where a reader looks after the control, and the roomiest gap is not always the one
+    // furthest from the eye.
+    const minRoom = Size(200, 132);
+    // Below the control is where a reader looks next, so it wins whenever a page fits there; the
+    // others are only for a control near the bottom edge. A gap on the side of a control that
+    // spans the screen is zero wide and never wins.
+    ({String side, Rect room}) usable = gaps.first;
+    bool fits(Rect r) => r.width >= minRoom.width && r.height >= minRoom.height;
+    for (final gapRoom in gaps) {
+      if (fits(gapRoom.room)) {
+        usable = gapRoom;
+        break;
+      }
+    }
+    // ignore: avoid_print
+    assert(() {
+      if (rect != null) {
+        // ignore: avoid_print
+        print(
+          'TOUR page ${step.number}: gaps '
+          '${gaps.map((g) => "${g.side}=${g.room.width.round()}x${g.room.height.round()}").join(" ")} '
+          '-> ${usable.side}',
+        );
+      }
+      return true;
+    }());
+    // Nothing clears the bar — a control wider than the screen with no room above or below:
+    // the roomiest gap is used and its page scrolls; the bands still keep the control's own
+    // rectangle clear.
+    if (!fits(usable.room)) {
+      var roomiest = gaps.first;
+      for (final gapRoom in gaps) {
+        if (gapRoom.room.width * gapRoom.room.height >
+            roomiest.room.width * roomiest.room.height) {
+          roomiest = gapRoom;
+        }
+      }
+      usable = roomiest;
+    }
+    final room = usable.room;
+    // The card never takes more than its own gap, and never more than two fifths of the screen:
+    // the page behind it is the lesson.
+    // Never taller than its gap, and never taller than two fifths of the screen: the page behind
+    // it is the lesson, and the card's own text scrolls inside whatever height is left.
+    final cardSpace = room.height.clamp(0.0, screen.height * 0.42);
+    // ignore: avoid_print
+    assert(() {
+      if (rect != null) print('TGT ${step.number}: ${rect.top.round()}..${rect.bottom.round()} gaps ${gaps.map((g) => "${g.side}:${g.room.top.round()}..${g.room.bottom.round()}").join(" ")}');
+      return true;
+    }());
+    assert(() {
+      print(
+        'SLOT ${usable.side} room=${room.top.round()}..${room.bottom.round()} '
+        'space=${cardSpace.round()}',
+      );
+      return true;
+    }());
+    // ignore: avoid_print
+    assert(() {
+      if (rect != null) {
+        print(
+          'TOUR ${step.number}: side=${usable.side} '
+          'room=${room.left.round()},${room.top.round()} '
+          '${room.width.round()}x${room.height.round()} cap=${cardSpace.round()} '
+          'screenH=${screen.height.round()}',
+        );
+      }
+      return true;
+    }());
     return Material(
       type: MaterialType.transparency,
       child: Stack(
@@ -460,13 +562,23 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
           ),
           ..._frameAround(rect, size),
           if (!_waiting)
-          Positioned(
-            left: 16,
-            right: 16,
-            top: cardTop,
-            // A phone with the largest text scale must still see the whole page: the card is
-            // bounded by the free gap and its own text scrolls inside it.
-            bottom: cardBottom,
+          IgnorePointer(
+            ignoring: false,
+            child: _CardSlot(
+            left: room.left,
+            width: room.width,
+            // A slot that starts from the bottom is first limited in height: with only a
+            // `bottom` set, a child taller than the room grows up over the control instead of
+            // being cut off inside its own gap.
+            // Anchored to the edge the room was measured from: an "above" page ends where the
+            // gap ends, a "below" page starts where the gap starts, and in both cases the card is
+            // exactly `cardSpace` tall — never stretched by a row that has no other child.
+            cardSpace: cardSpace,
+            upper: usable.side == 'above' || usable.side == 'left',
+            // The room's real bottom: the page inside the card scrolls, so a card that has to be
+            // shorter than a readable page is the correct trade — it never covers the control.
+            roomTop: room.top,
+            roomBottom: room.bottom,
             child: _TutorialCard(
               maxHeight: cardSpace,
               step: step,
@@ -478,6 +590,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
               onNext: _next,
               onSkip: _finish,
             ),
+            ),
           ),
           // One way forward: the card's own button. A second Next floating at the bottom made
           // the tour read as two different screens fighting for the same tap.
@@ -486,39 +599,12 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     );
   }
   /// The yellow arrow: beside the target when there is room, above or below otherwise.
-  Widget _pointer(Rect hole, Size screen) {
-    const color = Color(0xFFFFD400);
-    const size = 60.0;
-    IconData glyph;
-    Offset at;
-    if (hole.right + size + 8 < screen.width) {
-      glyph = Icons.arrow_forward_rounded;
-      at = Offset(hole.right + 8, hole.center.dy - size / 2);
-    } else if (hole.left - size - 8 > 0) {
-      glyph = Icons.arrow_back_rounded;
-      at = Offset(hole.left - size - 8, hole.center.dy - size / 2);
-    } else if (hole.bottom + size + 8 < screen.height) {
-      glyph = Icons.arrow_downward_rounded;
-      at = Offset(hole.center.dx - size / 2, hole.bottom + 8);
-    } else {
-      glyph = Icons.arrow_upward_rounded;
-      at = Offset(hole.center.dx - size / 2, hole.top - size - 8);
-    }
-    return Positioned(
-      left: at.dx,
-      top: at.dy,
-      child: IgnorePointer(
-        child: Icon(
-          glyph,
-          size: size,
-          color: color,
-          shadows: const [Shadow(color: Color(0x77000000), blurRadius: 10)],
-        ),
-      ),
-    );
-  }
-
 }
+
+/// The card, findable by tests: the stand checks that it never overlaps the control it explains.
+/// A key, not the painted box: a card's decoration may spill a shadow outside its layout box, and
+/// a test that measured the painted edge would report a collision the layout never had.
+const tutorialCardKey = Key('tutorial-card-layout');
 
 class _TutorialCard extends StatelessWidget {
   const _TutorialCard({
@@ -542,10 +628,13 @@ class _TutorialCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: maxHeight ?? double.infinity,
-      ),
+    // A fixed height, not a maximum: the row it sits in gives it `cardSpace`, and a column that
+    // only says "at most" lets a long page grow past it, over the control the page explains. The
+    // page scrolls inside this box; the buttons sit outside the scroll.
+    return SizedBox(
+      key: const ValueKey('tour-card-inner'),
+      height: maxHeight,
+      child: Container(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHigh,
@@ -628,9 +717,56 @@ class _TutorialCard extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
+  }
+}
 
+/// Places a fixed-height card against the edge of the free gap, without a `Positioned` that
+/// would let the card grow with its content: a row with no other child stretches, and a page of
+/// two lines must not be a screen tall.
+class _CardSlot extends StatelessWidget {
+  const _CardSlot({
+    required this.left,
+    required this.width,
+    required this.upper,
+    required this.roomTop,
+    required this.roomBottom,
+    required this.cardSpace,
+    required this.child,
+  });
 
+  final double left;
+  final double width;
+  final bool upper;
+  /// Unused: kept for the record of which edge the room was measured from.
+  final double roomTop;
+  final double roomBottom;
+  final double cardSpace;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          left: left,
+          width: width,
+          top: upper ? roomBottom - cardSpace : roomTop,
+          child: SizedBox(
+            key: tutorialCardKey,
+            height: cardSpace,
+            width: width,
+            // The card sits at the top of its window for a page below the control, and at the
+            // bottom for a page above it — never floating in the middle of a taller slot.
+            child: Align(
+              alignment: upper ? Alignment.bottomCenter : Alignment.topCenter,
+              child: child,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -679,6 +815,7 @@ class _HolePainter extends CustomPainter {
     final spaceRight = size.width - (hole.right + 18);
     final spaceLeft = hole.left - 18;
     final right = spaceRight >= spaceLeft;
+    // Nothing to point with when the control spans the width: the frame alone carries it.
     // The arrow is as long as the dim beside the control allows: a wide control on a narrow
     // screen still gets a short one rather than none.
     final len = ((right ? spaceRight : spaceLeft) - 8).clamp(0.0, 92.0);
