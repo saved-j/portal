@@ -92,7 +92,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 19;
+const tutorialVersion = 20;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -327,12 +327,21 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     final size = MediaQuery.sizeOf(context);
     final screen = size;
     final rect = _targetRect(step.target);
-    // The card sits under the thing it points at when there is room, and above it otherwise.
+    // The card fills the larger free gap beside the thing it points at, and never leaves the
+    // screen: the gap is the card's height limit, and the page scrolls inside it when the text is
+    // larger than the gap.
+    const margin = 16.0;
+    const gap = 24.0;
+    final spaceBelow = rect == null
+        ? screen.height - 2 * margin
+        : screen.height - (rect.bottom + gap) - margin;
+    final spaceAbove = rect == null ? 0.0 : (rect.top - gap) - margin;
+    final below = rect == null || spaceBelow >= spaceAbove;
+    final cardSpace = (below ? spaceBelow : spaceAbove).clamp(120.0, screen.height);
     final cardTop = rect == null
         ? screen.height / 2 - 140
-        : (rect.bottom + 24 + 220 > screen.height
-              ? (rect.top - 24 - 220).clamp(24.0, screen.height - 260)
-              : rect.bottom + 24);
+        : (below ? rect.bottom + gap : null);
+    final cardBottom = (rect != null && !below) ? screen.height - (rect.top - gap) : margin;
     return Material(
       type: MaterialType.transparency,
       child: Stack(
@@ -357,10 +366,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
             right: 16,
             top: cardTop,
             // A phone with the largest text scale must still see the whole page: the card is
-            // bounded by the screen and its own text scrolls inside it.
-            bottom: null,
+            // bounded by the free gap and its own text scrolls inside it.
+            bottom: cardBottom,
             child: _TutorialCard(
-              maxHeight: size.height * 0.62,
+              maxHeight: cardSpace,
               step: step,
               index: _index,
               total: _steps.length,
@@ -480,8 +489,13 @@ class _TutorialCard extends StatelessWidget {
             ),
           ),
           // The buttons stay outside the scroll: a long page scrolls, the way out never does.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // A wrap, not a row: at the largest text scale the two labels do not fit side by side,
+          // and the way out used to paint outside the card.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               TextButton(
                 onPressed: onSkip,
