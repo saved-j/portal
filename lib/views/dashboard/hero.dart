@@ -354,7 +354,9 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                           ValueListenableBuilder<bool>(
                             valueListenable: tourSwitchOff,
                             builder: (_, off, _) => PortalModeSwitch(
-                              key: tutorialKeys[TutorialTarget.modeSwitch],
+                              // The switch itself carries the tour key: a second key on this
+                              // wrapper made the same GlobalKey live twice, and the frame
+                              // vanished because the measured context was the dead one.
                               forcedOff: off,
                             ),
                           ),
