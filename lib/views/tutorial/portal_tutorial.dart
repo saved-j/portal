@@ -105,7 +105,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 30;
+const tutorialVersion = 31;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -631,10 +631,8 @@ class _TutorialCard extends StatelessWidget {
     // A fixed height, not a maximum: the row it sits in gives it `cardSpace`, and a column that
     // only says "at most" lets a long page grow past it, over the control the page explains. The
     // page scrolls inside this box; the buttons sit outside the scroll.
-    return SizedBox(
-      key: const ValueKey('tour-card-inner'),
-      height: maxHeight,
-      child: Container(
+    return Container(
+      constraints: BoxConstraints(maxHeight: maxHeight ?? double.infinity),
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHigh,
@@ -717,12 +715,11 @@ class _TutorialCard extends StatelessWidget {
           ),
         ],
       ),
-      ),
     );
   }
 }
 
-/// Places a fixed-height card against the edge of the free gap, without a `Positioned` that
+/// Places the card against the edge of the free gap, without a `Positioned` that
 /// would let the card grow with its content: a row with no other child stretches, and a page of
 /// two lines must not be a screen tall.
 class _CardSlot extends StatelessWidget {
@@ -753,16 +750,12 @@ class _CardSlot extends StatelessWidget {
           left: left,
           width: width,
           top: upper ? roomBottom - cardSpace : roomTop,
-          child: SizedBox(
+          child: ConstrainedBox(
             key: tutorialCardKey,
-            height: cardSpace,
-            width: width,
-            // The card sits at the top of its window for a page below the control, and at the
-            // bottom for a page above it — never floating in the middle of a taller slot.
-            child: Align(
-              alignment: upper ? Alignment.bottomCenter : Alignment.topCenter,
-              child: child,
-            ),
+            constraints: BoxConstraints(maxHeight: cardSpace, maxWidth: width),
+            // The card is as tall as its own words and no taller: the slot is a limit, not a
+            // box. A page of two lines is a small card, however large the screen.
+            child: child,
           ),
         ),
       ],
