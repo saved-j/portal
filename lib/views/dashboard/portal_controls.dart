@@ -2025,14 +2025,28 @@ Future<void> _testDelayWithChild(
       // The same sweep, asked of whichever core owns it: the phone runs it inside the app,
       // a desktop runs it in the child's own binary under the `measure` subcommand. One
       // implementation, one set of numbers.
+      // The native call is bounded here as well: a measurement that never answers must not leave
+      // the rows spinning for ever — the owner has to see either a number or a reason.
+      const answerBudget = Duration(seconds: 45);
       final answer = system.isAndroid
-          ? await portalRuntime.startMeasure(
-              config: measure.config,
-              tags: jsonEncode([for (final entry in chunk) entry.tag]),
-              url: url,
-              timeoutMs: _sweepTimeoutMs,
-              limit: _sweepWorkers,
-            )
+          ? await portalRuntime
+                .startMeasure(
+                  config: measure.config,
+                  tags: jsonEncode([for (final entry in chunk) entry.tag]),
+                  url: url,
+                  timeoutMs: _sweepTimeoutMs,
+                  limit: _sweepWorkers,
+                )
+                .timeout(
+                  answerBudget,
+                  onTimeout: () {
+                    commonPrint.log(
+                      'portal test: the core did not answer in 45s',
+                      logLevel: LogLevel.warning,
+                    );
+                    return (ok: false, message: 'ядро не ответило за 45 с', rows: '');
+                  },
+                )
           : await DesktopXrayChild.measure(
               config: measure.config,
               tags: [for (final entry in chunk) entry.tag],
@@ -2071,6 +2085,8 @@ Future<void> _testDelayWithChild(
       if (failure.isNotEmpty) break;
     }
   } finally {
+    // Always: a spinner that outlives the run is a lie about work in progress.
+    busy.clear();
     await portalRuntime.stopMeasure();
     // Nothing to clear: the identifier only grows, so a sweep that has been superseded can
     // never look current again.
