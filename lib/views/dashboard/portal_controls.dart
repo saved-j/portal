@@ -1129,7 +1129,13 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                 return GestureDetector(
                   // A long press sets the period, in this mode only: the number of requests a
                   // minute is a decision about the phone's battery, so it is the owner's to make.
+                  // The period menu is the engine's url-test override, so it exists in the
+                  // network mode only. In the simple portal a long press has nothing to say and
+                  // must not open a dialog about a timer that does not exist.
                   onLongPress: () {
+                    if (ref.read(patchClashConfigProvider).mode == Mode.global) {
+                      return;
+                    }
                     HapticFeedback.heavyImpact();
                     unawaited(_showAutoPingPeriod(context, ref));
                   },
