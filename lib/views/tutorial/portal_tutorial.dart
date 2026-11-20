@@ -105,7 +105,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 26;
+const tutorialVersion = 27;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -270,6 +270,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   @override
   void dispose() {
+    tourSwitchOff.value = false;
     _autoClose?.cancel();
     TutorialBus.last.removeListener(_onAction);
     tutorialScreenOpened.removeListener(_onScreenChanged);
@@ -407,6 +408,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   @override
   Widget build(BuildContext context) {
+    // The first page asks for the switch: it is drawn off while that page is up, and the list
+    // under it is what the owner's own press fills.
+    final forceOff = _index == 0 && _steps[_index].target == TutorialTarget.modeSwitch;
+    if (tourSwitchOff.value != forceOff) tourSwitchOff.value = forceOff;
     // While a screen the tour opened is up, the tour is not drawn at all: the owner reads the
     // screen first, and the page that follows is the one that says how to use it.
     if (_screens > 0) return const SizedBox.shrink();

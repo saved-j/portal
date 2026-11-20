@@ -35,6 +35,10 @@ const _gap = 12.0;
 
 /// The hero home page: the service's logo and name over the plan, the
 /// server and one connect button, the way the fork drew it.
+/// The switch is drawn off while the tour is on its first page, so the first gesture the owner
+/// makes is the one the tour asks for — and he sees the list arrive as a result of it.
+final tourSwitchOff = ValueNotifier<bool>(false);
+
 class HeroDashboard extends ConsumerStatefulWidget {
   const HeroDashboard({super.key});
 
@@ -297,7 +301,14 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                                     const SizedBox(height: 12),
                                     const PortalPlanCard(),
                                     const SizedBox(height: _gap),
-                                    const PortalModeSwitch(),
+                                    ValueListenableBuilder<bool>(
+                                      valueListenable: tourSwitchOff,
+                                      builder: (_, off, _) => PortalModeSwitch(
+                                        key: tutorialKeys[
+                                            TutorialTarget.modeSwitch],
+                                        forcedOff: off,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -321,7 +332,13 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                           // switch: visible, but out of the way of choosing a server.
                           const PortalPlanCard(),
                           const SizedBox(height: _gap),
-                          const PortalModeSwitch(),
+                          ValueListenableBuilder<bool>(
+                            valueListenable: tourSwitchOff,
+                            builder: (_, off, _) => PortalModeSwitch(
+                              key: tutorialKeys[TutorialTarget.modeSwitch],
+                              forcedOff: off,
+                            ),
+                          ),
                           const SizedBox(height: 4),
                           PortalServerList(
                             key: tutorialKeys[TutorialTarget.autoPingColumn],
