@@ -81,7 +81,7 @@ class TutorialStep {
     3 => l.tutorialTitle3,
     4 => l.tutorialTitle4,
     5 => l.tutorialTitle5,
-    9 => l.tutorialTitle6,
+    6 => l.tutorialTitle6,
     7 => l.tutorialTitle7,
     _ => l.tutorialTitle8,
   };
@@ -92,7 +92,7 @@ class TutorialStep {
     3 => l.tutorialBody3,
     4 => l.tutorialBody4,
     5 => l.tutorialBody5,
-    9 => l.tutorialBody6,
+    6 => l.tutorialBody6,
     7 => l.tutorialBody7,
     _ => l.tutorialBody8,
   };
@@ -105,7 +105,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 34;
+const tutorialVersion = 35;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -143,7 +143,7 @@ const tutorialSteps = <TutorialStep>[
   // lesson: numbers appearing where dashes were.
   TutorialStep(
     target: TutorialTarget.autoPing,
-    number: 9,
+    number: 6,
     done: TutorialEvent.pingAllStarted,
   ),
   // The whole column — the bolt and every row under it — because the sentence is about the
@@ -182,6 +182,13 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// A page that wants the screen to settle first: the sentence about the numbers is about
   /// numbers the core has not produced yet when the previous page closes.
   bool _waiting = false;
+
+  /// How many times the owner has switched the tile look on the page that asks for it.
+  int _chipTaps = 0;
+
+  /// The page that asked for a screen has been served: it is not drawn again, not even for the
+  /// moment the closing sheet takes to slide away.
+  bool _served = false;
 
   Timer? _waitTimer;
 
@@ -245,17 +252,19 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     if (screens > _screens) {
       _screens = screens;
       if (_steps[_index].opensScreen) {
+        // The page has done its job the moment its screen appears: it must not come back when
+        // that screen closes.
+        _served = true;
         // The page asked for a screen, the screen is up, the owner sees it — and then the tour
         // closes it itself. The next page is about the working screen, and a sheet left open
         // would put its card over the sheet instead of over the control it points at.
         _autoClose?.cancel();
+        // The next page is chosen while the screen is still up — so page two is never drawn
+        // again for the moment the sheet takes to slide away — and the screen is closed after.
         _autoClose = Timer(const Duration(milliseconds: 1600), () {
           if (!mounted) return;
+          _next();
           _nav?.maybePop();
-          Timer(const Duration(milliseconds: 420), () {
-            if (!mounted) return;
-            _next();
-          });
         });
       }
       setState(() {});
@@ -314,6 +323,13 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       setState(() => _confirmed = true);
       return;
     }
+    // The look of the tiles changes under the finger, so one double tap is not enough to see it:
+    // the page stays until ten taps have happened or the owner presses Next himself.
+    if (step.number == 4) {
+      _chipTaps += 1;
+      setState(() => _confirmed = true);
+      if (_chipTaps < 10) return;
+    }
     _next();
   }
 
@@ -332,6 +348,8 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   }
 
   void _next() {
+    _served = false;
+    _chipTaps = 0;
     AppHaptics.tap();
     // The step is written down as it is reached: a tour cut off by a restart resumes here.
     ref.read(appSettingProvider.notifier).update((state) => state.copyWith(
@@ -418,6 +436,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // While a screen the tour opened is up, the tour is not drawn at all: the owner reads the
     // screen first, and the page that follows is the one that says how to use it.
     if (_screens > 0) return const SizedBox.shrink();
+    if (_served && _steps[_index].opensScreen) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final step = _steps[_index];
     final size = MediaQuery.sizeOf(context);

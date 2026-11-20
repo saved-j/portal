@@ -1255,6 +1255,16 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
         // One line, not a tooltip: a phone has to say why a control does not move without
         // being long-pressed first. Two lines at most, so a long reason cannot push the list
         // off the dashboard.
+        if (ref.watch(delayRunMessageProvider).isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Замер: ${ref.watch(delayRunMessageProvider)}',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ),
         if (shownReason.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(left: 4, top: 2),
@@ -1953,9 +1963,23 @@ Future<void> _testDelayWithChild(
   required bool wasRunning,
   bool force = false,
 }) async {
-  if (servers.isEmpty) return;
+  if (servers.isEmpty) {
+    commonPrint.log(
+    'portal test: the simple portal has no servers to measure '
+    '(profile carries none)',
+    logLevel: LogLevel.warning,
+    );
+    ref.read(delayRunMessageProvider.notifier).set('в подписке нет серверов Xray');
+    return;
+  }
   final measure = measureConfig(servers);
-  if (measure.entries.isEmpty) return;
+  if (measure.entries.isEmpty) {
+    commonPrint.log(
+      'portal test: the simple portal has servers but no measurable addresses',
+      logLevel: LogLevel.warning,
+    );
+    return;
+  }
   final delay = ref.read(tcpDelayProvider.notifier);
   final url = ref.read(appSettingProvider).testUrl;
   final watch = Stopwatch()..start();
@@ -2024,6 +2048,7 @@ Future<void> _testDelayWithChild(
           'portal test: the sweep did not run${failure.isEmpty ? '' : ': $failure'}',
           logLevel: LogLevel.warning,
         );
+        ref.read(delayRunMessageProvider.notifier).set(failure);
         break;
       }
       failure = measuredError(answer.rows);
@@ -2650,6 +2675,20 @@ String sortLabelFor(BuildContext context, PortalSort sort) {
 
 /// Names whose measurement is in flight: their row shows a small turning indicator instead of a
 /// dash, and it turns into the number when the answer arrives.
+/// Why the last measurement did not run, in the words of whoever refused: the child's message,
+/// the empty list, the deadline. Empty when the last run finished or is running.
+final delayRunMessageProvider =
+    NotifierProvider<DelayRunMessage, String>(DelayRunMessage.new);
+
+class DelayRunMessage extends Notifier<String> {
+  @override
+  String build() => '';
+
+  void set(String value) {
+    if (state != value) state = value;
+  }
+}
+
 final delayBusyProvider =
     NotifierProvider<DelayBusyNotifier, Set<String>>(DelayBusyNotifier.new);
 
