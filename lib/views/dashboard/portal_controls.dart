@@ -1496,9 +1496,11 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
   }
 }
 
-/// Whether the rows arrive one after another. False for this release: the automatic work that
-/// made the wave worth watching (the measuring sweep) is off too.
-const serverEnterEnabled = false;
+/// Whether the rows arrive one after another.
+///
+/// Always true. The wave is the list saying "this is a new list", and it has nothing to do with
+/// whether anything measures the rows — switching it off with the sweep was a mistake.
+const serverEnterEnabled = true;
 
 /// A row's arrival: nothing, then a short fade and a 10 pt rise, one row after the previous.
 class _ServerEnter extends StatefulWidget {
