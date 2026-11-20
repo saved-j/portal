@@ -72,27 +72,15 @@ List<PortalRow> parsePortalRows(String body) {
     return const [];
   }
   if (document is! Map) return const [];
+  // Rows are servers, never group names. A group is the filter above the list — the way FlClashX
+  // draws it: the strip holds groups, the list holds their members. Panels name their groups after
+  // routing rules (`VPN - Main`, `Всё остальное`), and taking `proxy-groups` for rows put those
+  // names where servers belong.
   final proxies = document['proxies'];
-  final groups = document['proxy-groups'];
-  if (proxies is! List && groups is! List) return const [];
+  if (proxies is! List) return const [];
   final rows = <PortalRow>[];
   final seen = <String>{};
-  // Groups first: `⚡️ Auto`, `Auto Europe` and the rest are `url-test` entries under
-  // `proxy-groups`, and a list built from `proxies` alone never showed them — they were on the
-  // filter strip and nowhere else. A group is a choice the owner can make, so it is a row.
-  for (final item in (groups is List ? groups : const [])) {
-    if (item is! Map) continue;
-    final name = '${item['name'] ?? ''}'.trim();
-    if (name.isEmpty || !seen.add(name)) continue;
-    if (isBuiltinOutboundName(name) || isPortalServiceNode(name)) continue;
-    rows.add(
-      PortalRow(
-        name: name,
-        type: '${item['type'] ?? ''}'.trim(),
-      ),
-    );
-  }
-  for (final item in (proxies is List ? proxies : const [])) {
+  for (final item in proxies) {
     if (item is! Map) continue;
     final name = '${item['name'] ?? ''}'.trim();
     if (name.isEmpty || !seen.add(name)) continue;

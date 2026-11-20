@@ -201,11 +201,19 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// drawn: the owner is reading the screen the tour told him to open.
   int _screens = 0;
 
+  /// A page that opened a screen has served its purpose the moment that screen appears: the
+  /// owner does not need to be told to press what he has just pressed. The tour moves on while the
+  /// screen is up, so the page that follows is about the open screen — and that page's own text
+  /// says to close it.
   void _onScreenChanged() {
     if (!mounted) return;
-    setState(() {
-      _screens = (tutorialScreenOpened.value - tutorialScreenClosed.value).clamp(0, 9);
-    });
+    final screens = (tutorialScreenOpened.value - tutorialScreenClosed.value).clamp(0, 9);
+    if (screens > _screens && _steps[_index].opensScreen) {
+      _screens = screens;
+      _next();
+      return;
+    }
+    setState(() => _screens = screens);
   }
 
   @override
@@ -346,8 +354,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   @override
   Widget build(BuildContext context) {
-    // While the screen this page opened is up, the tour is not in the way of it at all.
+    // While a screen the tour opened is up, the tour is not drawn at all: the owner reads the
+    // screen first, and the page that follows is the one that says how to use it.
     if (_screens > 0) return const SizedBox.shrink();
+    if (_steps[_index].opensScreen) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final step = _steps[_index];
     final size = MediaQuery.sizeOf(context);
@@ -367,10 +377,13 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // it, and a card that covers the page is a slideshow, not a pointer.
     final cardSpace = (below ? spaceBelow : spaceAbove)
         .clamp(120.0, screen.height * 0.42);
+    // The card is as tall as its own text and no taller: a page of two lines takes two lines. It
+    // is anchored to one edge — below the target, or above it — and never to both, because
+    // anchoring both edges made a short page a full screen tall.
     final cardTop = rect == null
-        ? screen.height / 2 - 140
+        ? (screen.height / 2 - 140).clamp(margin, screen.height - 280)
         : (below ? rect.bottom + gap : null);
-    final cardBottom = (rect != null && !below) ? screen.height - (rect.top - gap) : margin;
+    final cardBottom = (rect != null && !below) ? screen.height - (rect.top - gap) : null;
     return Material(
       type: MaterialType.transparency,
       child: Stack(
