@@ -97,7 +97,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 22;
+const tutorialVersion = 23;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -169,6 +169,11 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   Timer? _waitTimer;
 
+  /// Closes the screen this page opened, so the page that follows is drawn over the page it is
+  /// about.
+  Timer? _autoClose;
+  NavigatorState? _nav;
+
   List<TutorialStep> get _steps => [
     for (final step in tutorialSteps)
       if (!step.androidOnly || system.isAndroid) step,
@@ -208,16 +213,37 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   void _onScreenChanged() {
     if (!mounted) return;
     final screens = (tutorialScreenOpened.value - tutorialScreenClosed.value).clamp(0, 9);
-    if (screens > _screens && _steps[_index].opensScreen) {
+    if (screens > _screens) {
       _screens = screens;
-      _next();
+      if (_steps[_index].opensScreen) {
+        // The page asked for a screen, the screen is up, the owner sees it — and then the tour
+        // closes it itself. The next page is about the working screen, and a sheet left open
+        // would put its card over the sheet instead of over the control it points at.
+        _autoClose?.cancel();
+        _autoClose = Timer(const Duration(milliseconds: 1600), () {
+          if (!mounted) return;
+          _nav?.maybePop();
+          Timer(const Duration(milliseconds: 420), () {
+            if (!mounted) return;
+            _next();
+          });
+        });
+      }
+      setState(() {});
       return;
     }
     setState(() => _screens = screens);
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _nav = Navigator.maybeOf(context);
+  }
+
+  @override
   void dispose() {
+    _autoClose?.cancel();
     TutorialBus.last.removeListener(_onAction);
     tutorialScreenOpened.removeListener(_onScreenChanged);
     tutorialScreenClosed.removeListener(_onScreenChanged);
