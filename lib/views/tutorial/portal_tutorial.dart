@@ -105,7 +105,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 31;
+const tutorialVersion = 32;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -707,10 +707,13 @@ class _TutorialCard extends StatelessWidget {
                   style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ),
-              FilledButton(
-                onPressed: onNext,
-                child: Text(context.appLocalizations.tutorialNext),
-              ),
+              // No "Next" on a page that asks for a gesture: the gesture is the way forward, and
+              // a button beside it reads as a second, weaker way to skip the lesson.
+              if (step.done == null)
+                FilledButton(
+                  onPressed: onNext,
+                  child: Text(context.appLocalizations.tutorialNext),
+                ),
             ],
           ),
         ],

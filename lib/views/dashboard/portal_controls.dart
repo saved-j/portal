@@ -1151,12 +1151,46 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                       // `url-test` group with an interval is not something the owner can turn
                       // off, only time differently. So the tap opens the period menu; there is
                       // no off state to toggle into.
+                      // One press, one meaning in both modes: measure every server in front of
+                      // the owner. In the simple portal the child measures in its own slot and
+                      // no tunnel is touched; in the network mode the engine answers for its own
+                      // nodes. The period menu stays on the long press.
                       final simple =
                           ref.read(patchClashConfigProvider).mode == Mode.global;
-                      if (!simple) {
-                        unawaited(_showAutoPingPeriod(context, ref));
+                      final runStatus = ref.read(portalStatusProvider);
+                      if (simple) {
+                        // The list the screen is drawing, not a fresh fetch: a press measures
+                        // what the owner sees.
+                        final servers = ref.read(xrayServersProvider).value ?? const <XrayServerConfig>[];
+                        unawaited(
+                          _testDelayWithChild(
+                            ref,
+                            servers,
+                            wasRunning:
+                                runStatus.active &&
+                                runStatus.owner == PortalOwner.xray,
+                            force: true,
+                          ),
+                        );
                         return;
                       }
+                      final liveGroup = ref.read(portalGroupProvider);
+                      final rows = ref
+                          .read(groupsProvider)
+                          .where((item) => item.name == liveGroup)
+                          .expand((item) => item.all)
+                          .toList();
+                      unawaited(
+                        _testDelayWithEngine(
+                          ref,
+                          rows,
+                          wasRunning:
+                              runStatus.active &&
+                              runStatus.owner == PortalOwner.mihomo,
+                          force: true,
+                        ),
+                      );
+                      return;
                       final auto = ref.read(autoPingProvider.notifier);
                       final turningOn = !auto.current.enabled;
                       auto.setEnabled(turningOn);
@@ -1474,6 +1508,10 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
           ),
         for (final (index, proxy) in members.indexed)
           _ServerEnter(
+            // The key names the mode as well as the row: without it the widget state survives a
+            // switch, every row stays "already shown", and the wave never plays on the one
+            // occasion it exists for.
+            key: ValueKey('${simple ? 'xray' : 'engine'}:${proxy.name}'),
             // The list arrives from the top, one row after another, so a switch reads as the
             // new list replacing the old one rather than as something being pressed in it.
             index: index,
@@ -1504,7 +1542,11 @@ const serverEnterEnabled = true;
 
 /// A row's arrival: nothing, then a short fade and a 10 pt rise, one row after the previous.
 class _ServerEnter extends StatefulWidget {
-  const _ServerEnter({required this.index, required this.child});
+  const _ServerEnter({
+    super.key,
+    required this.index,
+    required this.child,
+  });
 
   final int index;
   final Widget child;
@@ -1868,6 +1910,9 @@ Future<void> _testDelayWithEngine(
     return;
   }
   if (wasRunning) {
+    ref
+        .read(delayBusyProvider.notifier)
+        .addAll([for (final proxy in stale) proxy.name]);
     await ref.read(proxiesActionProvider.notifier).delayTest(stale, testUrl);
     // The engine answers into its own map; the rows' numbers are taken from there, and each
     // answer is stamped so a switch back does not ask again.
@@ -1875,6 +1920,7 @@ Future<void> _testDelayWithEngine(
       final value = ref.read(delayProvider(proxyName: proxy.name));
       delay.record(proxy.name, (value != null && value > 0) ? value : null);
     }
+    ref.read(delayBusyProvider.notifier).clear();
     commonPrint.log(
       'portal test: engine sweep rows=${stale.length}/${proxies.length} '
       'kept_open=yes',
@@ -1920,9 +1966,10 @@ Future<void> _testDelayWithChild(
     return;
   }
   final sweep = delay.beginSweep(Mode.global);
-  for (final entry in stale) {
-    delay.record(entry.name, null);
-  }
+  // The rows that are about to be asked show a turning indicator, not a dash: an empty number
+  // reads as "no answer", and these have not been asked yet.
+  final busy = ref.read(delayBusyProvider.notifier);
+  busy.addAll([for (final entry in stale) entry.name]);
   var measured = 0;
   var failure = '';
   // What the owner can see: a sweep of the whole list would spend its first seconds on nodes
@@ -2592,6 +2639,24 @@ String sortLabelFor(BuildContext context, PortalSort sort) {
   };
 }
 
+/// Names whose measurement is in flight: their row shows a small turning indicator instead of a
+/// dash, and it turns into the number when the answer arrives.
+final delayBusyProvider =
+    NotifierProvider<DelayBusyNotifier, Set<String>>(DelayBusyNotifier.new);
+
+class DelayBusyNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const <String>{};
+
+  void addAll(Iterable<String> names) =>
+      state = {...state, ...names};
+
+  void remove(String name) =>
+      state = {...state}..remove(name);
+
+  void clear() => state = const <String>{};
+}
+
 String _delayText(int? value) {
   if (value == null) return '—';
   if (value <= 0) return '—';
@@ -2801,13 +2866,26 @@ class _ServerRowState extends ConsumerState<_ServerRow>
                 ),
                 const SizedBox(width: 8),
               ],
-              Text(
-                _delayText(delay),
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: _delayColor(context, delay),
-                  fontWeight: FontWeight.w600,
+              if (ref.watch(
+                delayBusyProvider.select(
+                  (busy) => busy.contains(widget.proxy.name),
                 ),
-              ),
+              ))
+                SizedBox.square(
+                  dimension: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.6,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                Text(
+                  _delayText(delay),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: _delayColor(context, delay),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
             ],
           ),
           onTap: () {
