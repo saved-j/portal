@@ -714,11 +714,25 @@ class ProfilesAction extends _$ProfilesAction {
   }) async {
     try {
       Map<String, List<String>> sent = const {};
-      final body = await _core.fetchSubscription(
-        url,
-        userAgent: headers['User-Agent'] ?? '',
-        onHeaders: (value) => sent = value,
-      );
+      // A core that has not finished starting, or has no route yet, answers nothing at all and
+      // never returns: the add form then spins forever. Eight seconds is longer than any panel
+      // needs and short enough that the owner sees the app's own stack take over.
+      final body = await _core
+          .fetchSubscription(
+            url,
+            userAgent: headers['User-Agent'] ?? '',
+            onHeaders: (value) => sent = value,
+          )
+          .timeout(
+            const Duration(seconds: 8),
+            onTimeout: () {
+              commonPrint.log(
+                'core fetch did not answer in 8s, asking from the app',
+                logLevel: LogLevel.warning,
+              );
+              return null;
+            },
+          );
       if (body == null) return null;
       commonPrint.log(
         'subscription fetched by the core: ${body.length} bytes '
