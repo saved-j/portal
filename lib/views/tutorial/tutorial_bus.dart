@@ -16,3 +16,15 @@ final class TutorialBus {
 
   static void fire(TutorialEvent event) => last.value = event;
 }
+
+/// A page that opened a full screen says so, and says when that screen is gone.
+///
+/// The tour hides while the screen is up: a card and a hole over a page the owner must read is
+/// in the way of what the same page is teaching. The counter, not a flag: two screens can be
+/// pushed in a row and the tour comes back only after the last one.
+final tutorialScreenOpened = ValueNotifier<int>(0);
+final tutorialScreenClosed = ValueNotifier<int>(0);
+
+void tutorialScreenPushed() => tutorialScreenOpened.value++;
+
+void tutorialScreenPopped() => tutorialScreenClosed.value++;

@@ -2318,13 +2318,20 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
           onTap: () {
             HapticFeedback.selectionClick();
             TutorialBus.fire(TutorialEvent.filtersOpened);
-            showPortalFilterEditor(context);
+            // The tour steps off the screen while the list is open, and comes back when it closes.
+            tutorialScreenPushed();
+            unawaited(
+              showPortalFilterEditor(context).whenComplete(tutorialScreenPopped),
+            );
           },
           onLongPress: () {
             HapticFeedback.mediumImpact();
-            Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const ProxiesView()));
+            tutorialScreenPushed();
+            unawaited(
+              Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const ProxiesView()))
+                  .whenComplete(tutorialScreenPopped),
+            );
           },
           child: Padding(
             key: tutorialKeys[TutorialTarget.filters],

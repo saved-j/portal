@@ -41,6 +41,7 @@ class TutorialStep {
     this.androidOnly = false,
     this.wait = Duration.zero,
     this.done,
+    this.opensScreen = false,
   });
 
   final TutorialTarget? target;
@@ -57,6 +58,10 @@ class TutorialStep {
   /// How long the screen waits before this page appears: the sentence about the numbers is
   /// about numbers that take a few seconds to arrive.
   final Duration wait;
+
+  /// This page opens a screen of its own. The tour steps aside for it instead of drawing a card
+  /// the owner cannot act on, and comes back when that screen is closed.
+  final bool opensScreen;
 
   /// The action that closes this page. The owner performs it on the real control; the page
   /// then says what happened and moves on.
@@ -92,7 +97,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 21;
+const tutorialVersion = 22;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -102,10 +107,12 @@ const tutorialSteps = <TutorialStep>[
     number: 1,
     done: TutorialEvent.modeChanged,
   ),
+  // Opening a list is a screen, not a card: the tour hides, the real page comes up, and the next
+  // page is about what the owner does there.
   TutorialStep(
     target: TutorialTarget.filters,
     number: 2,
-    done: TutorialEvent.filtersOpened,
+    opensScreen: true,
   ),
   TutorialStep(
     target: TutorialTarget.chip,
@@ -179,6 +186,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       if (mounted) setState(() {});
     });
     TutorialBus.last.addListener(_onAction);
+    // A page that opened a screen hides the tour while that screen is up, and brings it back on
+    // the way out: a card over a list the owner must read is in the way of the thing it teaches.
+    tutorialScreenOpened.addListener(_onScreenChanged);
+    tutorialScreenClosed.addListener(_onScreenChanged);
     if (_steps[_index].wait == Duration.zero) {
       _waiting = false;
     } else {
@@ -186,9 +197,22 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     }
   }
 
+  /// How many screens the tour's own pages have pushed. While it is above zero the tour is not
+  /// drawn: the owner is reading the screen the tour told him to open.
+  int _screens = 0;
+
+  void _onScreenChanged() {
+    if (!mounted) return;
+    setState(() {
+      _screens = (tutorialScreenOpened.value - tutorialScreenClosed.value).clamp(0, 9);
+    });
+  }
+
   @override
   void dispose() {
     TutorialBus.last.removeListener(_onAction);
+    tutorialScreenOpened.removeListener(_onScreenChanged);
+    tutorialScreenClosed.removeListener(_onScreenChanged);
     _follow?.cancel();
     _waitTimer?.cancel();
     super.dispose();
@@ -322,6 +346,8 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   @override
   Widget build(BuildContext context) {
+    // While the screen this page opened is up, the tour is not in the way of it at all.
+    if (_screens > 0) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final step = _steps[_index];
     final size = MediaQuery.sizeOf(context);
