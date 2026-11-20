@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/views/dashboard/hero.dart';
+import 'package:fl_clash/views/dashboard/portal_controls.dart'
+    show portalAvailabilityProvider;
 
 import 'tutorial_bus.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -42,6 +44,7 @@ class TutorialStep {
     this.wait = Duration.zero,
     this.done,
     this.opensScreen = false,
+    this.needsMode = true,
   });
 
   final TutorialTarget? target;
@@ -62,6 +65,11 @@ class TutorialStep {
   /// This page opens a screen of its own. The tour steps aside for it instead of drawing a card
   /// the owner cannot act on, and comes back when that screen is closed.
   final bool opensScreen;
+
+  /// This page only makes sense when the engine can run the subscription: the mode switch, the
+  /// filter strip and the tile layout are the engine's. A portal-only subscription keeps the
+  /// first and the last pages and nothing in between.
+  final bool needsMode;
 
   /// The action that closes this page. The owner performs it on the real control; the page
   /// then says what happened and moves on.
@@ -97,7 +105,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 25;
+const tutorialVersion = 26;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -135,11 +143,17 @@ const tutorialSteps = <TutorialStep>[
     target: TutorialTarget.start,
     number: 6,
     done: TutorialEvent.started,
+    needsMode: false,
   ),
   // The whole column — the bolt and every row under it — because the sentence is about the
   // figures that appear in it the moment the portal opens. No wait: they are there at once.
   TutorialStep(target: TutorialTarget.autoPingColumn, number: 7),
-  TutorialStep(target: null, number: 8, androidOnly: true),
+  TutorialStep(
+    target: null,
+    number: 8,
+    androidOnly: true,
+    needsMode: false,
+  ),
 ];
 
 
@@ -175,10 +189,22 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   Timer? _autoClose;
   NavigatorState? _nav;
 
-  List<TutorialStep> get _steps => [
-    for (final step in tutorialSteps)
-      if (!step.androidOnly || system.isAndroid) step,
-  ];
+  /// The pages this subscription can teach.
+  ///
+  /// A subscription that the engine cannot run has no mode switch to teach, no filter strip, no
+  /// tile layout — the whole first part of the tour would point at controls that answer with
+  /// "unavailable". What is left is what is true either way: where the portal is started, and how
+  /// to put its tile in the shade.
+  List<TutorialStep> get _steps {
+    final mode = ref.watch(
+      portalAvailabilityProvider.select((state) => state.engine.available),
+    );
+    return [
+      for (final step in tutorialSteps)
+        if (!step.androidOnly || system.isAndroid)
+          if (mode || !step.needsMode) step,
+    ];
+  }
 
   /// A frame clock while the tour is up: the hole is measured from a widget that can move
   /// under it — the list scrolls, and a mask that stayed where the row used to be points at
