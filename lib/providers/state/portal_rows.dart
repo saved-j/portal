@@ -72,14 +72,48 @@ List<PortalRow> parsePortalRows(String body) {
     return const [];
   }
   if (document is! Map) return const [];
-  // Rows are servers, never group names. A group is the filter above the list — the way FlClashX
-  // draws it: the strip holds groups, the list holds their members. Panels name their groups after
-  // routing rules (`VPN - Main`, `Всё остальное`), and taking `proxy-groups` for rows put those
-  // names where servers belong.
+  // Rows are the members of the panel's own group, in the order the panel wrote them — the way
+  // the engine's answer draws the same list. That is what puts `⚡️ Auto Europe` and its siblings
+  // above the servers: they are members of the main group before any server is. Groups that are
+  // named after routing rules stay on the strip, because they are not members of this one.
+  final groups = document['proxy-groups'];
   final proxies = document['proxies'];
-  if (proxies is! List) return const [];
   final rows = <PortalRow>[];
   final seen = <String>{};
+  final proxyTypes = <String, String>{
+    if (proxies is List)
+      for (final item in proxies)
+        if (item is Map && '${item['name'] ?? ''}'.trim().isNotEmpty)
+          '${item['name']}'.trim(): '${item['type'] ?? ''}'.trim(),
+  };
+  final groupTypes = <String, String>{
+    if (groups is List)
+      for (final item in groups)
+        if (item is Map && '${item['name'] ?? ''}'.trim().isNotEmpty)
+          '${item['name']}'.trim(): '${item['type'] ?? ''}'.trim(),
+  };
+  if (groups is List) {
+    for (final group in groups) {
+      if (group is! Map) continue;
+      final members = group['proxies'];
+      if (members is! List || members.isEmpty) continue;
+      for (final member in members) {
+        final name = '$member'.trim();
+        if (name.isEmpty || !seen.add(name)) continue;
+        if (isBuiltinOutboundName(name) || isPortalServiceNode(name)) continue;
+        // A member that is a group carries the group's own type, so the row can say what it is.
+        rows.add(
+          PortalRow(
+            name: name,
+            type: proxyTypes[name] ?? groupTypes[name] ?? '',
+          ),
+        );
+      }
+      break;
+    }
+  }
+  if (rows.isNotEmpty) return rows;
+  if (proxies is! List) return const [];
   for (final item in proxies) {
     if (item is! Map) continue;
     final name = '${item['name'] ?? ''}'.trim();
