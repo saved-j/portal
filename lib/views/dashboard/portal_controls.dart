@@ -1074,9 +1074,18 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                     onTap: () {
                       HapticFeedback.selectionClick();
                       TutorialBus.fire(TutorialEvent.labelTapped);
-                      Navigator.of(
-                        context,
-                      ).push(MaterialPageRoute(builder: (_) => const ProxiesView()));
+                      // The tour hides while this screen is up and closes it afterwards, the same
+                      // way it does for the filter list.
+                      tutorialScreenPushed();
+                      unawaited(
+                        Navigator.of(context)
+                            .push(
+                              MaterialPageRoute(
+                                builder: (_) => const ProxiesView(),
+                              ),
+                            )
+                            .whenComplete(tutorialScreenPopped),
+                      );
                     },
                     child: Text(
                       context.appLocalizations.rules,

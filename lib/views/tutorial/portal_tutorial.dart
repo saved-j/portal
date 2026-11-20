@@ -97,7 +97,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 24;
+const tutorialVersion = 25;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -129,6 +129,7 @@ const tutorialSteps = <TutorialStep>[
     target: TutorialTarget.modeLabel,
     number: 5,
     done: TutorialEvent.labelTapped,
+    opensScreen: true,
   ),
   TutorialStep(
     target: TutorialTarget.start,
