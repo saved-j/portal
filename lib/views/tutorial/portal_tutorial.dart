@@ -97,7 +97,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 23;
+const tutorialVersion = 24;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -383,7 +383,6 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // While a screen the tour opened is up, the tour is not drawn at all: the owner reads the
     // screen first, and the page that follows is the one that says how to use it.
     if (_screens > 0) return const SizedBox.shrink();
-    if (_steps[_index].opensScreen) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final step = _steps[_index];
     final size = MediaQuery.sizeOf(context);
