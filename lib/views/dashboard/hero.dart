@@ -297,9 +297,7 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                                     const SizedBox(height: 12),
                                     const PortalPlanCard(),
                                     const SizedBox(height: _gap),
-                                    PortalModeSwitch(
-                                      key: tutorialKeys[TutorialTarget.modeSwitch],
-                                    ),
+                                    const PortalModeSwitch(),
                                   ],
                                 ),
                               ),
@@ -323,7 +321,7 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                           // switch: visible, but out of the way of choosing a server.
                           const PortalPlanCard(),
                           const SizedBox(height: _gap),
-                          PortalModeSwitch(key: tutorialKeys[TutorialTarget.modeSwitch]),
+                          const PortalModeSwitch(),
                           const SizedBox(height: 4),
                           PortalServerList(
                             key: tutorialKeys[TutorialTarget.autoPingColumn],

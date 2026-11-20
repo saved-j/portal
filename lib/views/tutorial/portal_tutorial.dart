@@ -92,7 +92,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 20;
+const tutorialVersion = 21;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -337,7 +337,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
         : screen.height - (rect.bottom + gap) - margin;
     final spaceAbove = rect == null ? 0.0 : (rect.top - gap) - margin;
     final below = rect == null || spaceBelow >= spaceAbove;
-    final cardSpace = (below ? spaceBelow : spaceAbove).clamp(120.0, screen.height);
+    // Never more than two fifths of the screen: the point of the tour is the interface behind
+    // it, and a card that covers the page is a slideshow, not a pointer.
+    final cardSpace = (below ? spaceBelow : spaceAbove)
+        .clamp(120.0, screen.height * 0.42);
     final cardTop = rect == null
         ? screen.height / 2 - 140
         : (below ? rect.bottom + gap : null);
@@ -380,24 +383,8 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
               onSkip: _finish,
             ),
           ),
-          if (step.target == null)
-            const SizedBox.shrink()
-          else
-            // The next button is always reachable, even when the target covers the card's spot.
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 32,
-              child: Center(
-                child: TextButton(
-                  onPressed: _next,
-                  child: Text(
-                    context.appLocalizations.tutorialNext,
-                    style: TextStyle(color: theme.colorScheme.primary),
-                  ),
-                ),
-              ),
-            ),
+          // One way forward: the card's own button. A second Next floating at the bottom made
+          // the tour read as two different screens fighting for the same tap.
         ],
       ),
     );
