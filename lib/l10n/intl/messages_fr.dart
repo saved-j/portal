@@ -2162,7 +2162,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Et enfin — le lancement.",
     ),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "Touchez l’éclair : l’app mesure la latence de tous les serveurs de ce mode et les tirets deviennent des chiffres. Maintenez ensuite le doigt sur la ligne d’un serveur pour ne mesurer que celui-là. Vérifiez ainsi deux ou trois serveurs, ou touchez « Suivant ».",
+      "Touchez l’éclair : l’app mesure la latence de tous les serveurs de ce mode et les tirets deviennent des chiffres. Maintenez ensuite le doigt sur la ligne d’un serveur pour ne mesurer que celui-là. Vérifiez ainsi deux ou trois serveurs.",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "La tuile lance le portail depuis n\'importe quel écran : ouvrez le volet, touchez le crayon, faites défiler jusqu\'à vos applications et ajoutez « Portal ».",
@@ -2172,6 +2172,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Suivant"),
     "tutorialStart": MessageLookupByLibrary.simpleMessage("Tutoriel"),
+    "tutorialOk": MessageLookupByLibrary.simpleMessage("OK"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Passer"),
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage(

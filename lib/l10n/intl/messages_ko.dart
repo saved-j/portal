@@ -1702,7 +1702,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage("그리고 마지막으로 — 시작입니다."),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "번개를 탭하면 이 모드의 모든 서버 지연을 측정해 대시가 숫자로 바뀝니다. 그런 다음 서버 행을 길게 눌러 해당 서버만 측정하세요. 이렇게 두세 개 서버를 확인하거나 ‘다음’을 탭하세요.",
+      "번개를 탭하면 이 모드의 모든 서버 지연을 측정해 대시가 숫자로 바뀝니다. 그런 다음 서버 행을 길게 눌러 해당 서버만 측정하세요. 이렇게 두세 개 서버를 확인하세요.",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "타일로 어느 화면에서든 포털을 시작할 수 있습니다. 알림창을 열고 연필을 누른 뒤 내 앱까지 스크롤하여 \'Portal\'을 추가하세요.",
@@ -1712,6 +1712,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("다음"),
     "tutorialStart": MessageLookupByLibrary.simpleMessage("튜토리얼"),
+    "tutorialOk": MessageLookupByLibrary.simpleMessage("확인"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("건너뛰기"),
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("포털 네트워크"),

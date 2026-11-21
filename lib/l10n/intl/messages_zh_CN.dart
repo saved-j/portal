@@ -1647,7 +1647,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage("最后——启动。"),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "点击闪电，应用会测量此模式下所有服务器的延迟，破折号会变成数字。然后长按某个服务器的行，只测量那一个。这样检查两三个服务器，或点击“下一步”。",
+      "点击闪电，应用会测量此模式下所有服务器的延迟，破折号会变成数字。然后长按某个服务器的行，只测量那一个。这样检查两三个服务器。",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "磁贴可以从任何界面启动门户：打开通知栏，点铅笔，滚动到自己的应用，添加「Portal」。",
@@ -1655,6 +1655,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialChipOff": MessageLookupByLibrary.simpleMessage("筛选器已关闭。再次长按即可开启。"),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("下一步"),
     "tutorialStart": MessageLookupByLibrary.simpleMessage("教程"),
+    "tutorialOk": MessageLookupByLibrary.simpleMessage("确定"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("跳过"),
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("门户网络"),

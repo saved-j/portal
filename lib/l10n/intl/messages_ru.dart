@@ -2211,7 +2211,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Нажмите на портал — он откроется и начнёт работу.",
     ),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "Нажмите на молнию — приложение замерит задержку до всех серверов этого режима, и вместо прочерков появятся цифры. Затем удержите палец на строке сервера, чтобы замерить его отдельно. Проверьте так 2–3 сервера или нажмите «Далее».",
+      "Нажмите на молнию — приложение замерит задержку до всех серверов этого режима, и вместо прочерков появятся цифры. Затем удержите палец на строке сервера, чтобы замерить его отдельно. Проверьте так 2–3 сервера.",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "Плитка запускает портал из любого экрана: откройте шторку, нажмите карандаш, пролистайте до пользовательских приложений и добавьте «Портал».",
@@ -2221,6 +2221,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Далее"),
     "tutorialStart": MessageLookupByLibrary.simpleMessage("Туториал"),
+    "tutorialOk": MessageLookupByLibrary.simpleMessage("ОК"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Пропустить"),
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("Сеть порталов"),

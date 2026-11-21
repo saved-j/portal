@@ -663,7 +663,6 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
                   (step.number == 4 && _confirmed) ||
                       (step.number == 7 && _showingPings),
               onNext: _next,
-              onSkip: _finish,
             ),
             ),
           ),
@@ -687,7 +686,6 @@ class _TutorialCard extends StatelessWidget {
     required this.index,
     required this.total,
     required this.onNext,
-    required this.onSkip,
     this.bodyOverride,
     this.maxHeight,
     this.isLast = false,
@@ -698,14 +696,10 @@ class _TutorialCard extends StatelessWidget {
   final String? bodyOverride;
   final double? maxHeight;
   final bool isLast;
-
-  /// A page that asks for a gesture the owner should repeat: the first one shows what happened and
-  /// leaves the buttons up, so the second and third can be tried before moving on.
   final bool holdsMore;
   final int index;
   final int total;
   final VoidCallback onNext;
-  final VoidCallback onSkip;
 
   @override
   Widget build(BuildContext context) {
@@ -773,36 +767,18 @@ class _TutorialCard extends StatelessWidget {
               ),
             ),
           ),
-          // The buttons stay outside the scroll: a long page scrolls, the way out never does.
-          // A wrap, not a row: at the largest text scale the two labels do not fit side by side,
-          // and the way out used to paint outside the card.
+          // The gesture is the way forward on every page; no Skip. The last page, and the two
+          // gesture pages that let the owner stop early, carry a plain OK.
           Wrap(
-            alignment: WrapAlignment.spaceBetween,
+            alignment: WrapAlignment.end,
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 8,
             runSpacing: 4,
             children: [
-              if (isLast)
-                const SizedBox.shrink()
-              else
-                TextButton(
-                  onPressed: onSkip,
-                  child: Text(
-                    context.appLocalizations.tutorialSkip,
-                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ),
-              // No "Next" on a page that asks for a gesture: the gesture is the way forward, and
-              // a button beside it reads as a second, weaker way to skip the lesson.
-              if (isLast)
+              if (isLast || holdsMore)
                 FilledButton(
                   onPressed: onNext,
-                  child: Text(context.appLocalizations.tutorialNext),
-                )
-              else if ((step.number == 4 || step.number == 7) && holdsMore)
-                FilledButton(
-                  onPressed: onNext,
-                  child: Text(context.appLocalizations.tutorialNext),
+                  child: Text(context.appLocalizations.tutorialOk),
                 ),
             ],
           ),

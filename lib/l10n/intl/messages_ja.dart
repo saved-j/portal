@@ -1731,7 +1731,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage("最後に——起動です。"),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "稲妻をタップすると、このモードの全サーバーの遅延を測り、ハイフンが数字に変わります。次にサーバーの行を長押しして、そのサーバーだけを測ります。この方法で 2〜3 台確認するか、「次へ」をタップします。",
+      "稲妻をタップすると、このモードの全サーバーの遅延を測り、ハイフンが数字に変わります。次にサーバーの行を長押しして、そのサーバーだけを測ります。この方法で 2〜3 台確認します。",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "タイルを使えばどの画面からでも起動できます。シェードを開き、鉛筆を押し、自分のアプリまでスクロールして「Portal」を追加します。",
@@ -1741,6 +1741,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("次へ"),
     "tutorialStart": MessageLookupByLibrary.simpleMessage("チュートリアル"),
+    "tutorialOk": MessageLookupByLibrary.simpleMessage("OK"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("スキップ"),
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("ポータルネットワーク"),
