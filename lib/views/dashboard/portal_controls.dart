@@ -2849,23 +2849,35 @@ class _ServerRowState extends ConsumerState<_ServerRow>
         child: ListTile(
           dense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+          // The mark of a portal is its own letter — the П of the quick-settings tile — not a
+          // globe, which is any proxy anywhere. A picked server carries the same П, lit: the
+          // brand is what the eye follows, and the glow is the selection.
           leading: widget.selected
-              ? GlyphIcon(AppGlyphs.check, size: 20, color: color)
-              // The mark of a portal is the letter it begins with, not a globe: a globe is
-              // any proxy anywhere, a П is this network.
-              : SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: Center(
-                    child: Text(
-                      'П',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
+              ? DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: scheme.primary.withValues(alpha: 0.55),
+                        blurRadius: 9,
+                        spreadRadius: 1,
                       ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: GlyphIcon(
+                      AppGlyphs.portal,
+                      size: 20,
+                      color: scheme.primary,
                     ),
                   ),
+                )
+              : GlyphIcon(
+                  AppGlyphs.portal,
+                  size: 22,
+                  color: color,
                 ),
           // The title, then the panel's own note about the server — «только Gemini»,
           // «для ИИ» — under it, when the panel wrote one. A note is a fact about the node,
