@@ -2308,14 +2308,27 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
   void initState() {
     super.initState();
     _controller.addListener(_syncEdges);
+    tourResetTiles.addListener(_resetTiles);
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncEdges());
   }
 
   @override
   void dispose() {
     _controller.removeListener(_syncEdges);
+    tourResetTiles.removeListener(_resetTiles);
     _controller.dispose();
     super.dispose();
+  }
+
+  /// The tour swept the strip on its first page and now asks for the start back, so the page
+  /// that points at the first tile finds it on screen again.
+  void _resetTiles() {
+    if (!mounted || !_controller.hasClients) return;
+    _controller.animateTo(
+      0,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   void _syncEdges() {
@@ -2428,6 +2441,9 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
               child: SingleChildScrollView(
                 controller: _controller,
                 scrollDirection: Axis.horizontal,
+                // The tour frames the whole strip when it asks the owner to sweep the tiles,
+                // not one tile: the key sits on the scroll view, not on a child.
+                key: tutorialKeys[TutorialTarget.chipStrip],
                 child: Row(
                   children: [
                     for (final (index, item) in groups.indexed)

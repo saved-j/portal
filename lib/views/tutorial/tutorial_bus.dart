@@ -39,3 +39,8 @@ final tutorialScreenClosed = ValueNotifier<int>(0);
 void tutorialScreenPushed() => tutorialScreenOpened.value++;
 
 void tutorialScreenPopped() => tutorialScreenClosed.value++;
+
+/// The tour asks the tile strip to return to its start. The owner sweeps the tiles on the first
+/// page, and the page after the filter list points at the first tile — which a swept strip has
+/// left off-screen. Bumped, not toggled, so two requests in a row still scroll.
+final tourResetTiles = ValueNotifier<int>(0);

@@ -2144,9 +2144,12 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody1": MessageLookupByLibrary.simpleMessage(
       "La red de portales reparte el tráfico y hace que distintas aplicaciones salgan por distintos países. Eso se llama túnel dividido dinámico.\n\nSi no lo necesitas, la aplicación funciona en el «modo simple», cuando casi todo el tráfico sale por un solo país.\n\nCambia el modo aquí.",
     ),
-    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("Desliza los chips a izquierda y derecha para echar un vistazo."),
+    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("Desliza los mosaicos a izquierda y derecha para echar un vistazo."),
     "tutorialBody2": MessageLookupByLibrary.simpleMessage(
-      "El botón a la izquierda de la fila de mosaicos abre la lista de filtros. Aquí puedes apagar los filtros que no necesitas quitándolos de la lista.",
+      "El botón de la izquierda abre la lista de filtros que dividen el tráfico. Aquí puedes reordenar los filtros y apagar los que no necesitas.",
+    ),
+    "tutorialBody2Off": MessageLookupByLibrary.simpleMessage(
+      "Apaga los filtros que no necesitas.",
     ),
     "tutorialBody3": MessageLookupByLibrary.simpleMessage(
       "Manteniendo el dedo sobre un mosaico se enciende y se apaga ese filtro: así se ajusta el túnel para servicios concretos.\n\nPor ejemplo, puedes dejar el túnel SOLO para Telegram, YouTube e Instagram.",

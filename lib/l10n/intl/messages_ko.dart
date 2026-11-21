@@ -1688,9 +1688,12 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody1": MessageLookupByLibrary.simpleMessage(
       "포털 네트워크는 트래픽을 나누어 앱마다 다른 국가를 거치게 합니다. 이를 동적 분할 터널링이라고 합니다.\n\n필요 없다면 \'간단 모드\'로 사용할 수 있으며, 거의 모든 트래픽이 한 국가를 거칩니다.\n\n여기에서 모드를 전환하세요.",
     ),
-    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("칩을 좌우로 밀어 둘러보세요."),
+    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("타일을 좌우로 밀어 둘러보세요."),
     "tutorialBody2": MessageLookupByLibrary.simpleMessage(
-      "타일 줄 왼쪽의 버튼으로 필터 목록이 열립니다. 필요 없는 필터는 여기에서 목록에서 빼서 끌 수 있습니다.",
+      "왼쪽 버튼으로 트래픽을 나누는 필터 목록이 열립니다. 여기서 필터 순서를 바꾸고 필요 없는 것을 끌 수 있습니다.",
+    ),
+    "tutorialBody2Off": MessageLookupByLibrary.simpleMessage(
+      "필요 없는 필터를 끄세요.",
     ),
     "tutorialBody3": MessageLookupByLibrary.simpleMessage(
       "타일을 길게 누르면 해당 필터가 켜지고 꺼집니다. 이렇게 서비스별로 터널을 설정합니다.\n\n예를 들어 Telegram, YouTube, Instagram에만 터널을 켤 수 있습니다.",

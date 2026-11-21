@@ -2148,7 +2148,10 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("Faites glisser les tuiles à gauche et à droite pour regarder."),
     "tutorialBody2": MessageLookupByLibrary.simpleMessage(
-      "Le bouton à gauche de la rangée de tuiles ouvre la liste des filtres. Vous pouvez y désactiver les filtres inutiles en les retirant de la liste.",
+      "Le bouton de gauche ouvre la liste des filtres qui répartissent le trafic. Vous pouvez y réordonner les filtres et désactiver ceux dont vous n'avez pas besoin.",
+    ),
+    "tutorialBody2Off": MessageLookupByLibrary.simpleMessage(
+      "Désactivez les filtres dont vous n'avez pas besoin.",
     ),
     "tutorialBody3": MessageLookupByLibrary.simpleMessage(
       "Un appui long sur une tuile active ou désactive ce filtre : c\'est ainsi que le tunnel se règle service par service.\n\nPar exemple, on peut garder le tunnel UNIQUEMENT pour Telegram, YouTube et Instagram.",

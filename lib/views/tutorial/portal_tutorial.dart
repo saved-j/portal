@@ -17,13 +17,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// The keys live here, not in the dashboard: a widget attaches its own key, so the tour can
 /// find it wherever the layout put it — one column on a phone, two on a wide window — without
 /// the dashboard knowing that a tour exists.
-enum TutorialTarget { modeSwitch, modeLabel, filters, chip, start, autoPing, autoPingColumn }
+enum TutorialTarget { modeSwitch, modeLabel, filters, chip, chipStrip, start, autoPing, autoPingColumn }
 
 final tutorialKeys = {
   TutorialTarget.modeSwitch: GlobalKey(debugLabel: 'tutorial-mode-switch'),
   TutorialTarget.modeLabel: GlobalKey(debugLabel: 'tutorial-mode-label'),
   TutorialTarget.filters: GlobalKey(debugLabel: 'tutorial-filters'),
   TutorialTarget.chip: GlobalKey(debugLabel: 'tutorial-chip'),
+  TutorialTarget.chipStrip: GlobalKey(debugLabel: 'tutorial-chip-strip'),
   TutorialTarget.start: GlobalKey(debugLabel: 'tutorial-start'),
   TutorialTarget.autoPing: GlobalKey(debugLabel: 'tutorial-autoping'),
   TutorialTarget.autoPingColumn: GlobalKey(debugLabel: 'tutorial-autoping-column'),
@@ -105,7 +106,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 46;
+const tutorialVersion = 47;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, and only the switch. The app opens in the simple portal, so the switch is off by
@@ -198,9 +199,16 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// are the two ways past the page.
   int _pingHolds = 0;
 
-  /// How many filters the owner has toggled on the list page. Three toggles, or closing the
-  /// list, are the two ways past the page.
+  /// How many filters the owner has toggled on the list page. One toggle shows the OK that
+  /// closes the page.
   int _filterToggles = 0;
+
+  /// The floating hint drawn over the filter list once it opens.
+  OverlayEntry? _filterHint;
+
+  /// The owner turned off a filter and pressed the hint's OK: the page advances on the close it
+  /// caused, not on a dismissal.
+  bool _filterDone = false;
 
   /// The card is out of the way for a moment on purpose: the page wants the screen itself to be
   /// watched — the list arriving, a sheet closing — not the words about it.
@@ -294,15 +302,29 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       _screens = screens;
       if (_steps[_index].opensScreen) {
         _served = true;
+        // The filter list is a screen the owner works in, and the page after it points at the
+        // first tile: sweep the strip back to its start while the list hides it, and put up the
+        // hint that says what to do there.
+        if (_steps[_index].number == 2) {
+          tourResetTiles.value++;
+          _showFilterHint();
+        }
       }
       setState(() {});
       return;
     }
     if (screens < _screens) {
       // The owner closed the screen this page opened. The lesson was to see it, so the page is
-      // done the moment it closes.
+      // done the moment it closes — except the filter list, which advances only through its own
+      // OK, once a filter is off.
       _screens = screens;
+      _removeFilterHint();
       if (_steps[_index].opensScreen && _served) {
+        if (_steps[_index].number == 2 && !_filterDone) {
+          _served = false;
+          setState(() {});
+          return;
+        }
         _next();
         return;
       }
@@ -310,6 +332,36 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       return;
     }
     setState(() => _screens = screens);
+  }
+
+  /// Draws the hint over the filter list once it opens. The sheet's route is pushed after this
+  /// page learns it opened, so the hint waits a frame and lands on top of the sheet.
+  void _showFilterHint() {
+    _removeFilterHint();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _filterHint != null) return;
+      final overlay = Overlay.of(context, rootOverlay: true);
+      late final OverlayEntry entry;
+      entry = OverlayEntry(
+        builder: (_) => _FilterHint(
+          ok: _filterToggles >= 1,
+          onOk: () {
+            _filterDone = true;
+            _removeFilterHint();
+            _nav?.pop();
+          },
+        ),
+      );
+      _filterHint = entry;
+      overlay.insert(entry);
+    });
+  }
+
+  void _removeFilterHint() {
+    if (_filterHint != null && _filterHint!.mounted) {
+      _filterHint!.remove();
+    }
+    _filterHint = null;
   }
 
   @override
@@ -321,6 +373,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   @override
   void dispose() {
     tourScrollLocked.value = false;
+    _removeFilterHint();
     TutorialBus.last.removeListener(_onAction);
     tutorialScreenOpened.removeListener(_onScreenChanged);
     tutorialScreenClosed.removeListener(_onScreenChanged);
@@ -379,17 +432,14 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       }
       return;
     }
-    // The filter-list page: a toggled filter is one more step toward the three that close the
-    // list, so the owner can finish by using the list instead of pressing back.
+    // The filter-list page: one filter off is enough for the hint's OK, so the owner can finish
+    // by using the list instead of pressing back.
     if (step.number == 2 &&
         _served &&
         TutorialBus.last.value == TutorialEvent.filterToggled) {
       TutorialBus.last.value = null;
       _filterToggles += 1;
-      setState(() {});
-      if (_filterToggles >= 3) {
-        _nav?.pop();
-      }
+      _filterHint?.markNeedsBuild();
       return;
     }
     if (step.done == null || step.done != TutorialBus.last.value) return;
@@ -457,6 +507,8 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     _chipTaps = 0;
     _pingHolds = 0;
     _filterToggles = 0;
+    _filterDone = false;
+    _removeFilterHint();
     _chipScrolls = 0;
     _showingPings = false;
     _showingChips = false;
@@ -475,6 +527,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   }
 
   void _finish() {
+    _removeFilterHint();
     // Whatever the stack looks like, no tour may outlive this call: a route left behind is a
     // barrier that shows nothing and swallows every tap, which is exactly what happened when
     // the working screen mounted twice and pushed two tours.
@@ -522,10 +575,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   Rect? _targetRect(TutorialTarget? target) {
     if (target == null) return null;
-    // After the switch is pressed the page is about the chip strip, not the switch: the hole
-    // moves onto the chips while the owner sweeps them left and right.
+    // After the switch is pressed the page is about the tile strip, not the switch: the hole
+    // widens onto the whole row of tiles while the owner sweeps them left and right.
     if (_showingChips && target == TutorialTarget.modeSwitch) {
-      target = TutorialTarget.chip;
+      target = TutorialTarget.chipStrip;
     }
     // After the bolt is pressed the page is about the pings on the servers, not the bolt: the
     // hole moves onto the whole server column while the owner sweeps it.
@@ -880,6 +933,66 @@ class _CardSlot extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The floating hint drawn over the filter list: it says what to do there, and its OK appears
+/// once a filter is off. It lives in its own overlay entry so it can sit on top of the sheet the
+/// page opened, without a barrier that would keep the sheet's own controls from the owner.
+class _FilterHint extends StatelessWidget {
+  const _FilterHint({required this.ok, required this.onOk});
+
+  final bool ok;
+  final VoidCallback onOk;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      type: MaterialType.transparency,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          const IgnorePointer(child: SizedBox.expand()),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Material(
+                  color: theme.colorScheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(20),
+                  elevation: 8,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.appLocalizations.tutorialBody2Off,
+                          style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
+                        ),
+                        if (ok) ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: FilledButton(
+                              onPressed: onOk,
+                              child: Text(context.appLocalizations.tutorialOk),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

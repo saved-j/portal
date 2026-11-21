@@ -9245,10 +9245,10 @@ class AppLocalizations {
       args: [],
     );
   }
-  /// `Sweep the chips left and right to look around.`
+  /// `Sweep the tiles left and right to look around.`
   String get tutorialBody1Chips {
     return Intl.message(
-      'Sweep the chips left and right to look around.',
+      'Sweep the tiles left and right to look around.',
       name: 'tutorialBody1Chips',
       desc: '',
       args: [],
@@ -9265,11 +9265,21 @@ class AppLocalizations {
     );
   }
 
-  /// `The button to the left of the tiles opens the filter list. Here you can turn off the filters you do not need by removing them from the list.`
+  /// `The button on the left opens the list of filters that split the traffic. Here you can reorder the filters and turn off the ones you do not need.`
   String get tutorialBody2 {
     return Intl.message(
-      'The button to the left of the tiles opens the filter list. Here you can turn off the filters you do not need by removing them from the list.',
+      'The button on the left opens the list of filters that split the traffic. Here you can reorder the filters and turn off the ones you do not need.',
       name: 'tutorialBody2',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Turn off the filters you do not need.`
+  String get tutorialBody2Off {
+    return Intl.message(
+      'Turn off the filters you do not need.',
+      name: 'tutorialBody2Off',
       desc: '',
       args: [],
     );
