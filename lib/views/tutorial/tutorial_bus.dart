@@ -16,6 +16,7 @@ enum TutorialEvent {
   pingAllStarted,
   pingRowHeld,
   filterToggled,
+  chipScrolled,
 }
 
 /// The one channel between a control and the tour.

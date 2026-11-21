@@ -105,7 +105,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 44;
+const tutorialVersion = 45;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, and only the switch. The app opens in the simple portal, so the switch is off by
@@ -213,6 +213,14 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// The bolt page has moved its focus onto the server list and freed the scroll, so the owner
   /// can sweep the pings before the last page.
   bool _showingPings = false;
+
+  /// The switch page has moved its focus onto the chip strip, asking the owner to sweep the
+  /// chips left and right.
+  bool _showingChips = false;
+
+  /// How many times the owner has swept the chip strip on the first page. Three or four sweeps,
+  /// or the OK button, are the two ways past it.
+  int _chipScrolls = 0;
 
   /// The page that asked for a screen has been served: it is not drawn again, not even for the
   /// moment the closing sheet takes to slide away.
@@ -340,22 +348,23 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     );
   }
 
-  void _advanceAfter({required int seconds, bool noMask = false}) {
-    _cardHidden = true;
-    _noMask = noMask;
-    setState(() {});
-    Future<void>.delayed(Duration(seconds: seconds), () {
-      if (!mounted) return;
-      _cardHidden = false;
-      _noMask = false;
-      _next();
-    });
-  }
-
   /// The owner has just done the thing this page asks for: the page closes itself.
   void _onAction() {
     if (!mounted || _waiting) return;
     final step = _steps[_index];
+    // The switch page, after the switch: a swept chip strip is one more step toward the three
+    // or four that move the page on.
+    if (step.number == 1 &&
+        _showingChips &&
+        TutorialBus.last.value == TutorialEvent.chipScrolled) {
+      TutorialBus.last.value = null;
+      _chipScrolls += 1;
+      setState(() {});
+      if (_chipScrolls >= 3) {
+        _next();
+      }
+      return;
+    }
     // The bolt page, after the bolt: a held row is one more ping toward the three the page
     // asks for. It is a separate gesture from the bolt itself, so it is read here before the
     // page's own `done` gate.
@@ -390,9 +399,14 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // Switching the mode is followed by the list arriving: the owner has to see that before the
     // next page asks him for anything.
     if (step.number == 1) {
-      // Three seconds with the mask lifted: the mode change, then the chips arriving top to
-      // bottom, seen across the whole screen rather than through a hole over the switch.
-      _advanceAfter(seconds: 3, noMask: true);
+      // The switch has moved: the page now asks the owner to sweep the chip strip, and it
+      // advances on three or four sweeps, or the OK button.
+      if (!_showingChips) {
+        _showingChips = true;
+        _chipScrolls = 0;
+        tourScrollLocked.value = false;
+        setState(() {});
+      }
       return;
     }
     if (step.number == 3 && !_confirmed) {
@@ -443,7 +457,9 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     _chipTaps = 0;
     _pingHolds = 0;
     _filterToggles = 0;
+    _chipScrolls = 0;
     _showingPings = false;
+    _showingChips = false;
     tourScrollLocked.value = true;
     AppHaptics.tap();
     // The step is written down as it is reached: a tour cut off by a restart resumes here.
@@ -506,6 +522,11 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   Rect? _targetRect(TutorialTarget? target) {
     if (target == null) return null;
+    // After the switch is pressed the page is about the chip strip, not the switch: the hole
+    // moves onto the chips while the owner sweeps them left and right.
+    if (_showingChips && target == TutorialTarget.modeSwitch) {
+      target = TutorialTarget.chip;
+    }
     // After the bolt is pressed the page is about the pings on the servers, not the bolt: the
     // hole moves onto the whole server column while the owner sweeps it.
     final effective = (_showingPings && target == TutorialTarget.autoPing)
@@ -685,10 +706,13 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
               total: _steps.length,
               bodyOverride: step.number == 3 && _confirmed
                   ? context.appLocalizations.tutorialChipOff
-                  : null,
+                  : step.number == 1 && _showingChips
+                      ? context.appLocalizations.tutorialBody1Chips
+                      : null,
               isLast: _index == _steps.length - 1,
               holdsMore:
-                  (step.number == 4 && _confirmed) ||
+                  (step.number == 1 && _showingChips && _chipScrolls > 0) ||
+                      (step.number == 4 && _confirmed) ||
                       (step.number == 7 && _showingPings),
               onNext: _next,
             ),

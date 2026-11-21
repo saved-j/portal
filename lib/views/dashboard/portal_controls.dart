@@ -2450,9 +2450,13 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                 _controller.jumpTo(offset.clamp(0.0, max));
               });
             },
-            child: NotificationListener<ScrollMetricsNotification>(
-              onNotification: (_) {
-                _syncEdges();
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (notification is ScrollStartNotification) {
+                  TutorialBus.fire(TutorialEvent.chipScrolled);
+                } else if (notification is ScrollMetricsNotification) {
+                  _syncEdges();
+                }
                 return false;
               },
               child: SingleChildScrollView(

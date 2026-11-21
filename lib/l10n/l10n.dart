@@ -9245,6 +9245,15 @@ class AppLocalizations {
       args: [],
     );
   }
+  /// `Sweep the chips left and right to look around.`
+  String get tutorialBody1Chips {
+    return Intl.message(
+      'Sweep the chips left and right to look around.',
+      name: 'tutorialBody1Chips',
+      desc: '',
+      args: [],
+    );
+  }
 
   /// `The filter list`
   String get tutorialTitle2 {
