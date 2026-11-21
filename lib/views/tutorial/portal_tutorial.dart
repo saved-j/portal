@@ -111,7 +111,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 38;
+const tutorialVersion = 39;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row. The page switches the network on itself, through the same control the
@@ -391,6 +391,13 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     }
     if (step.number == 3 && !_confirmed) {
       setState(() => _confirmed = true);
+      return;
+    }
+    // The bolt leaves numbers behind: the card hides, the screen is watched, and only then does
+    // the last page come up. Six seconds is a sweep of a short list, and long enough to see a dash
+    // turn into a number.
+    if (step.number == 7) {
+      _advanceAfter(seconds: 6);
       return;
     }
     // The look of the tiles changes under the finger, so one double tap is not enough to see it:
