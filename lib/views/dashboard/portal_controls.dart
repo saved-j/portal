@@ -385,17 +385,18 @@ final portalBypassProvider =
       PortalBypassNotifier.new,
     );
 
-/// How the filter chips are drawn. Default 2 is 'name + server + icon'.
+/// How the filter chips are drawn. Default 1 is 'icon + name'.
 ///
 /// The choice is stored with the rest of the settings, not held in memory: a view the owner
 /// picked must survive a restart, otherwise every launch quietly answers a question he has
 /// already answered.
 class PortalDisplayNotifier extends Notifier<int> {
   @override
-  int build() => ref.watch(appSettingProvider.select((s) => s.portalDisplay));
+  int build() => ref
+      .watch(appSettingProvider.select((s) => s.portalDisplay.clamp(0, 2)));
 
   void cycle() {
-    final next = (state + 1) % 5;
+    final next = (state + 1) % 3;
     ref
         .read(appSettingProvider.notifier)
         .update((settings) => settings.copyWith(portalDisplay: next));
@@ -2495,14 +2496,13 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                   opacity: bypassed ? 0.45 : 1,
                                   child: ChoiceChip(
                                     showCheckmark: false,
-                                    // Five layouts, one row each: name, name+server,
-                                    // icon+server, icon. Everything centres by construction.
+                                    // Three layouts, one row each: icon, icon+name, name.
+                                    // Everything centres by construction.
                                     label: Builder(
                                       builder: (context) {
-                                        // 0 name · 1 name+server · 2 name+server+icon ·
-                                        // 3 icon+server · 4 icon
-                                        final showIcon = display >= 2;
-                                        final showName = display <= 2;
+                                        // Three layouts: 0 icon · 1 icon+name · 2 name.
+                                        final showIcon = display <= 1;
+                                        final showName = display >= 1;
                                         final mark = SizedBox.square(
                                           dimension: 16,
                                           child: CommonTargetIcon(
