@@ -216,10 +216,8 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   Timer? _waitTimer;
 
-  /// Closes the screen this page opened, so the page that follows is drawn over the page it is
-  /// about.
-  Timer? _autoClose;
-  NavigatorState? _nav;
+  /// The screen this page opened is closed by the owner, not by the tour; the page advances on
+  /// the close.
 
   /// The pages this subscription can teach.
   ///
@@ -246,6 +244,9 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   @override
   void initState() {
     super.initState();
+    // A screen left open by a previous run must not count against this one: start from the
+    // current balance, not from zero, so a stale counter cannot fast-forward an opensScreen page.
+    _screens = (tutorialScreenOpened.value - tutorialScreenClosed.value).clamp(0, 9);
     tourScrollLocked.value = true;
     _follow = Timer.periodic(const Duration(milliseconds: 16), (_) {
       if (mounted) setState(() {});
@@ -267,30 +268,28 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// drawn: the owner is reading the screen the tour told him to open.
   int _screens = 0;
 
-  /// A page that opened a screen has served its purpose the moment that screen appears: the
-  /// owner does not need to be told to press what he has just pressed. The tour moves on while the
-  /// screen is up, so the page that follows is about the open screen — and that page's own text
-  /// says to close it.
+  /// A page that opened a screen is done the moment the owner closes that screen himself: the
+  /// tour steps aside while it is up, and the page advances on the way out — never on a timer,
+  /// so a page cannot run past the owner.
   void _onScreenChanged() {
     if (!mounted) return;
     final screens = (tutorialScreenOpened.value - tutorialScreenClosed.value).clamp(0, 9);
     if (screens > _screens) {
+      // A screen the tour asked for just opened: hide the tour until the owner closes it.
       _screens = screens;
       if (_steps[_index].opensScreen) {
-        // The page has done its job the moment its screen appears: it must not come back when
-        // that screen closes.
         _served = true;
-        // The page asked for a screen, the screen is up, the owner sees it — and then the tour
-        // closes it itself. The next page is about the working screen, and a sheet left open
-        // would put its card over the sheet instead of over the control it points at.
-        _autoClose?.cancel();
-        // The next page is chosen while the screen is still up — so page two is never drawn
-        // again for the moment the sheet takes to slide away — and the screen is closed after.
-        _autoClose = Timer(const Duration(milliseconds: 1600), () {
-          if (!mounted) return;
-          _next();
-          _nav?.maybePop();
-        });
+      }
+      setState(() {});
+      return;
+    }
+    if (screens < _screens) {
+      // The owner closed the screen this page opened. The lesson was to see it, so the page is
+      // done the moment it closes.
+      _screens = screens;
+      if (_steps[_index].opensScreen && _served) {
+        _next();
+        return;
       }
       setState(() {});
       return;
@@ -299,15 +298,8 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _nav = Navigator.maybeOf(context);
-  }
-
-  @override
   void dispose() {
     tourScrollLocked.value = false;
-    _autoClose?.cancel();
     TutorialBus.last.removeListener(_onAction);
     tutorialScreenOpened.removeListener(_onScreenChanged);
     tutorialScreenClosed.removeListener(_onScreenChanged);
