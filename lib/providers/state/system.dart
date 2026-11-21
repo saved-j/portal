@@ -62,7 +62,17 @@ TrayState trayState(Ref ref) {
       ),
     ),
   );
-  final groups = ref.watch(currentGroupsStateProvider).value;
+  final groups = clashConfig.mode == Mode.global
+      ? () {
+          // The simple portal has no engine groups; the tray lists its Xray servers as one
+          // synthetic group instead, so the mode switch is reflected in the menu.
+          final servers =
+              ref.watch(xrayServersProvider).value ?? const <XrayServerConfig>[];
+          return servers.isEmpty
+              ? const <Group>[]
+              : [portalGroupOfServers(servers)];
+        }()
+      : ref.watch(currentGroupsStateProvider).value;
   final selectedMap = ref.watch(selectedMapProvider);
   final safeMode = ref.watch(safeModeProvider);
   final suspended = ref.watch(suspendProvider);
@@ -202,8 +212,32 @@ SharedState sharedState(Ref ref) {
   final currentProfileName = currentProfile.label;
   final selectedMap = currentProfile.selectedMap;
   final testUrl = appSetting.testUrl;
+  final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
+  final profileId = ref.watch(currentProfileIdProvider);
+  final fullSettings = ref.watch(appSettingProvider);
+  // The server the notification names: the Xray node in the simple portal, the main filter's
+  // pick in the network mode.
+  final currentServer = mode == Mode.global
+      ? portalXrayPickFor(fullSettings, profileId)
+      : (selectedMap[GroupName.GLOBAL.name] ?? '');
+  // The servers the notification bolt pings: every node of the live group, the same sweep the
+  // working screen's bolt runs. Empty in the simple portal — its bolt lives in the app, not in
+  // the notification.
+  final liveGroup = portalGroupFor(fullSettings, profileId, false);
+  final groups = ref.watch(currentGroupsStateProvider).value;
+  final pingServers = mode == Mode.global
+      ? const <String>[]
+      : [
+          for (final group in groups)
+            if (group.name == liveGroup)
+              for (final proxy in group.all) proxy.name,
+        ];
   return SharedState(
     currentProfileName: currentProfileName,
+    currentServer: currentServer,
+    pingText: '⚡',
+    showPing: mode != Mode.global,
+    pingServers: pingServers,
     showStopAction: appSetting.showStopAction,
     stopText: currentAppLocalizations.stop,
     stopTip: currentAppLocalizations.stopVpn,

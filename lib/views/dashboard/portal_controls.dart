@@ -795,39 +795,6 @@ PortalShown _portalShown(
 
 String _portalListMark = '';
 
-/// The servers the second core offers.
-///
-/// The subscription body is an array of full xray configurations and each element is one
-/// server, so the list is built from those elements — name, description and the config that
-/// would be started if it were chosen.
-final xrayServersProvider = FutureProvider.autoDispose<List<XrayServerConfig>>((
-  ref,
-) async {
-  final profile = ref.read(currentProfileProvider);
-  if (profile == null) return const [];
-  final body = await profile.readXrayFormat();
-  if (body == null) return const [];
-  final parsed = parseXraySubscriptionResult(body);
-  final servers = parsed.servers;
-  // `ok` is the parse's own verdict, not a second guess at `servers.isNotEmpty`: the two
-  // agree today, and this is the one place that decides which of the two lines below runs.
-  if (parsed.ok) {
-    commonPrint.log(
-      'xray subscription: ${servers.length} servers, '
-      'first=${servers.take(3).map((s) => s.label).join(' | ')}',
-    );
-  } else if (parsed.problem != null) {
-    // An empty list is three different answers — an unreadable body, another schema, or a
-    // subscription with no nodes — so the reason is reported with the profile it was read
-    // for instead of dying in a bare `[]`.
-    commonPrint.log(
-      'xray subscription unreadable: profile=${profile.id} ${parsed.message}',
-      logLevel: LogLevel.warning,
-    );
-  }
-  return servers;
-});
-
 /// What the subscription's engine-format file actually answered.
 ///
 /// Three states, because a corrupt file and an absent one are different problems: the first
@@ -1174,8 +1141,8 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                         unawaited(() async {
                           final servers =
                               await ref.read(xrayServersProvider.future);
-                          await _testDelayWithChild(
-                            ref,
+                          await testDelayWithChild(
+                            ref.read,
                             servers,
                             wasRunning:
                                 runStatus.active &&
@@ -1192,8 +1159,8 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                           .expand((item) => item.all)
                           .toList();
                       unawaited(
-                        _testDelayWithEngine(
-                          ref,
+                        testDelayWithEngine(
+                          ref.read,
                           rows,
                           wasRunning:
                               runStatus.active &&
@@ -1757,8 +1724,8 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
         .keys
         .any((name) => widget.servers.any((server) => server.name == name));
     if (answered) return;
-    await _testDelayWithChild(
-      ref,
+    await testDelayWithChild(
+      ref.read,
       widget.servers,
       wasRunning: widget.wasRunning,
     );
@@ -1847,8 +1814,8 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
       unawaited(_readOrSweep());
     } else {
       unawaited(
-        _testDelayWithEngine(
-          ref,
+        testDelayWithEngine(
+          ref.read,
           widget.engineProxies,
           wasRunning: widget.wasRunning,
         ),
@@ -1869,8 +1836,8 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
 /// running to have that config and to reach the nodes. So a closed portal is opened for the
 /// duration of the test, without any of the portal's own animation or state, and closed
 /// again afterwards. If the portal was already open, nothing is toggled.
-Future<void> _testDelayWithEngine(
-  WidgetRef ref,
+Future<void> testDelayWithEngine(
+  ProviderReader read,
   List<Proxy> proxies, {
   String? testUrl,
   required bool wasRunning,
@@ -1879,7 +1846,7 @@ Future<void> _testDelayWithEngine(
   if (proxies.isEmpty) return;
   // Two minutes of a row's own number is good enough: a mode switch fills the gaps instead
   // of re-measuring a list it had just finished.
-  final delay = ref.read(engineDelayProvider.notifier);
+  final delay = read(engineDelayProvider.notifier);
   final stale = [
     for (final proxy in proxies)
       if (delay.ledger.needsMeasurement(proxy.name, force: force)) proxy,
@@ -1892,17 +1859,16 @@ Future<void> _testDelayWithEngine(
     return;
   }
   if (wasRunning) {
-    ref
-        .read(delayBusyProvider.notifier)
+    read(delayBusyProvider.notifier)
         .addAll([for (final proxy in stale) proxy.name]);
-    await ref.read(proxiesActionProvider.notifier).delayTest(stale, testUrl);
+    await read(proxiesActionProvider.notifier).delayTest(stale, testUrl);
     // The engine answers into its own map; the rows' numbers are taken from there, and each
     // answer is stamped so a switch back does not ask again.
     for (final proxy in stale) {
-      final value = ref.read(delayProvider(proxyName: proxy.name));
+      final value = read(delayProvider(proxyName: proxy.name));
       delay.record(proxy.name, (value != null && value > 0) ? value : null);
     }
-    ref.read(delayBusyProvider.notifier).clear();
+    read(delayBusyProvider.notifier).clear();
     commonPrint.log(
       'portal test: engine sweep rows=${stale.length}/${proxies.length} '
       'kept_open=yes',
@@ -1920,8 +1886,8 @@ Future<void> _testDelayWithEngine(
 }
 
 /// and the core is told to stop.
-Future<void> _testDelayWithChild(
-  WidgetRef ref,
+Future<void> testDelayWithChild(
+  ProviderReader read,
   List<XrayServerConfig> servers, {
   required bool wasRunning,
   bool force = false,
@@ -1932,7 +1898,7 @@ Future<void> _testDelayWithChild(
     '(profile carries none)',
     logLevel: LogLevel.warning,
     );
-    ref.read(delayRunMessageProvider.notifier).set('в подписке нет серверов Xray');
+    read(delayRunMessageProvider.notifier).set('в подписке нет серверов Xray');
     return;
   }
   final measure = measureConfig(servers);
@@ -1943,8 +1909,8 @@ Future<void> _testDelayWithChild(
     );
     return;
   }
-  final delay = ref.read(tcpDelayProvider.notifier);
-  final url = ref.read(appSettingProvider).testUrl;
+  final delay = read(tcpDelayProvider.notifier);
+  final url = read(appSettingProvider).testUrl;
   final watch = Stopwatch()..start();
   // Rows measured less than a minute ago are not asked again: a mode switch is a reason to
   // fill the gaps, not to spend the phone's traffic on numbers that are still true.
@@ -1964,14 +1930,14 @@ Future<void> _testDelayWithChild(
   final sweep = delay.beginSweep(Mode.global);
   // The rows that are about to be asked show a turning indicator, not a dash: an empty number
   // reads as "no answer", and these have not been asked yet.
-  final busy = ref.read(delayBusyProvider.notifier);
+  final busy = read(delayBusyProvider.notifier);
   busy.addAll([for (final entry in stale) entry.name]);
   var measured = 0;
   var failure = '';
   // What the owner can see: a sweep of the whole list would spend its first seconds on nodes
   // that are scrolled out of sight. The filter is the app's own, and the list already draws
   // only what it passes.
-  final visible = _visibleServerNames(ref);
+  final visible = _visibleServerNames(read);
   try {
     for (var index = 0; index < stale.length; index += _sweepChunk) {
       // A newer sweep — a mode switch, a tap on the other list — owns the map from here.
@@ -2025,7 +1991,7 @@ Future<void> _testDelayWithChild(
           'portal test: the sweep did not run${failure.isEmpty ? '' : ': $failure'}',
           logLevel: LogLevel.warning,
         );
-        ref.read(delayRunMessageProvider.notifier).set(failure);
+        read(delayRunMessageProvider.notifier).set(failure);
         break;
       }
       failure = measuredError(answer.rows);
@@ -2311,11 +2277,11 @@ const _sweepDeadline = Duration(seconds: 120);
 ///
 /// The sweep itself measures every node — a number is a fact about the node, not about the
 /// scroll position — and this only records how many of them the owner could see.
-List<String> _visibleServerNames(WidgetRef ref) {
-  final filters = ref.watch(portalFiltersProvider);
-  final group = ref.read(
+List<String> _visibleServerNames(ProviderReader read) {
+  final filters = read(portalFiltersProvider);
+  final group = read(
     portalChildRowsProvider,
-  )['${ref.read(currentProfileIdProvider) ?? ''}'];
+  )['${read(currentProfileIdProvider) ?? ''}'];
   final visible = portalGroupOfRows(group ?? const <PortalRow>[]);
   return [
     for (final proxy in visible.all)
@@ -3023,8 +2989,8 @@ class _ServerRowState extends ConsumerState<_ServerRow>
               final server = widget.xrayServer;
               if (server != null) {
                 unawaited(
-                  _testDelayWithChild(
-                    ref,
+                  testDelayWithChild(
+                    ref.read,
                     [server],
                     wasRunning: ref.read(runTimeProvider) != null,
                     force: true,
@@ -3043,7 +3009,7 @@ class _ServerRowState extends ConsumerState<_ServerRow>
                     .setRunning(true);
                 if (!raised) return;
               }
-              await _testDelayWithEngine(ref, [
+              await testDelayWithEngine(ref.read, [
                 widget.proxy,
               ], wasRunning: true, force: true);
               if (!wasRunning) {

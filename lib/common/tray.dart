@@ -12,6 +12,9 @@ import 'app_ports.dart';
 import 'constant.dart';
 import 'keyboard.dart';
 import 'provider_reader.dart';
+import 'package:fl_clash/plugins/portal_runtime.dart' show PortalOwner;
+import 'package:fl_clash/views/dashboard/portal_controls.dart'
+    show testDelayWithChild;
 import 'system.dart';
 import 'window.dart';
 
@@ -275,6 +278,22 @@ class AppTray implements TrayPort {
         label: HotAction.delayTest.label,
         detail: _shortcut(trayState, HotAction.delayTest),
         onSelected: () {
+          // Same sweep the working screen's bolt runs: the child's servers in the simple
+          // portal, the engine's groups in the network mode.
+          if (trayState.mode == Mode.global) {
+            final servers = read(xrayServersProvider).value;
+            if (servers == null) return;
+            final status = read(portalStatusProvider);
+            unawaited(
+              testDelayWithChild(
+                read,
+                servers,
+                wasRunning: status.active && status.owner == PortalOwner.xray,
+                force: true,
+              ),
+            );
+            return;
+          }
           proxiesAction.delayTestGroups(trayState.groups);
         },
       ),

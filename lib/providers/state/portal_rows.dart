@@ -374,3 +374,36 @@ final profilePortalRowsProvider =
     return const [];
   }
 });
+
+/// The servers the second core offers.
+///
+/// The subscription body is an array of full xray configurations and each element is one
+/// server, so the list is built from those elements — name, description and the config that
+/// would be started if it were chosen.
+final xrayServersProvider = FutureProvider.autoDispose<List<XrayServerConfig>>((
+  ref,
+) async {
+  final profile = ref.read(currentProfileProvider);
+  if (profile == null) return const [];
+  final body = await profile.readXrayFormat();
+  if (body == null) return const [];
+  final parsed = parseXraySubscriptionResult(body);
+  final servers = parsed.servers;
+  // `ok` is the parse's own verdict, not a second guess at `servers.isNotEmpty`: the two
+  // agree today, and this is the one place that decides which of the two lines below runs.
+  if (parsed.ok) {
+    commonPrint.log(
+      'xray subscription: ${servers.length} servers, '
+      'first=${servers.take(3).map((s) => s.label).join(' | ')}',
+    );
+  } else if (parsed.problem != null) {
+    // An empty list is three different answers — an unreadable body, another schema, or a
+    // subscription with no nodes — so the reason is reported with the profile it was read
+    // for instead of dying in a bare `[]`.
+    commonPrint.log(
+      'xray subscription unreadable: profile=${profile.id} ${parsed.message}',
+      logLevel: LogLevel.warning,
+    );
+  }
+  return servers;
+});
