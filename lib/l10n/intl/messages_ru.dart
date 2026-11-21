@@ -2226,7 +2226,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("Сеть порталов"),
     "tutorialTitle2": MessageLookupByLibrary.simpleMessage("Список фильтров"),
-    "tutorialTitle3": MessageLookupByLibrary.simpleMessage("Фильтр на палец"),
+    "tutorialTitle3": MessageLookupByLibrary.simpleMessage("Управление маршрутами"),
     "tutorialTitle4": MessageLookupByLibrary.simpleMessage("Вид плиток"),
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage("Все фильтры сразу"),
     "tutorialTitle6": MessageLookupByLibrary.simpleMessage("Запуск"),

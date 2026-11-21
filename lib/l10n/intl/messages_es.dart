@@ -2178,7 +2178,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "La lista de filtros",
     ),
     "tutorialTitle3": MessageLookupByLibrary.simpleMessage(
-      "Un filtro con el dedo",
+      "Gestión de rutas",
     ),
     "tutorialTitle4": MessageLookupByLibrary.simpleMessage(
       "Aspecto de los mosaicos",

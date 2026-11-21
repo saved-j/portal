@@ -1717,7 +1717,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("포털 네트워크"),
     "tutorialTitle2": MessageLookupByLibrary.simpleMessage("필터 목록"),
-    "tutorialTitle3": MessageLookupByLibrary.simpleMessage("타일 길게 누르기"),
+    "tutorialTitle3": MessageLookupByLibrary.simpleMessage("경로 관리"),
     "tutorialTitle4": MessageLookupByLibrary.simpleMessage("타일 보기"),
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage("모든 필터 한 번에"),
     "tutorialTitle6": MessageLookupByLibrary.simpleMessage("시작"),

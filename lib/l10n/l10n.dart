@@ -9269,7 +9269,7 @@ class AppLocalizations {
   /// `A filter on the finger`
   String get tutorialTitle3 {
     return Intl.message(
-      'A filter on the finger',
+      'Managing routes',
       name: 'tutorialTitle3',
       desc: '',
       args: [],

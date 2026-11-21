@@ -2182,7 +2182,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "La liste des filtres",
     ),
     "tutorialTitle3": MessageLookupByLibrary.simpleMessage(
-      "Un filtre au doigt",
+      "Gestion des routes",
     ),
     "tutorialTitle4": MessageLookupByLibrary.simpleMessage("Aspect des tuiles"),
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage(

@@ -2131,7 +2131,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("Portal network"),
     "tutorialTitle2": MessageLookupByLibrary.simpleMessage("The filter list"),
     "tutorialTitle3": MessageLookupByLibrary.simpleMessage(
-      "A filter on the finger",
+      "Managing routes",
     ),
     "tutorialTitle4": MessageLookupByLibrary.simpleMessage("Tile view"),
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage(

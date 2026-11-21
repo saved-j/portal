@@ -439,6 +439,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   void _next() {
     _served = false;
+    _confirmed = false;
     _chipTaps = 0;
     _pingHolds = 0;
     _filterToggles = 0;

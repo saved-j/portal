@@ -1746,7 +1746,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("ポータルネットワーク"),
     "tutorialTitle2": MessageLookupByLibrary.simpleMessage("フィルター一覧"),
-    "tutorialTitle3": MessageLookupByLibrary.simpleMessage("タイルを長押し"),
+    "tutorialTitle3": MessageLookupByLibrary.simpleMessage("ルートの管理"),
     "tutorialTitle4": MessageLookupByLibrary.simpleMessage("タイルの表示"),
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage("フィルターをまとめて設定"),
     "tutorialTitle6": MessageLookupByLibrary.simpleMessage("起動"),

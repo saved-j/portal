@@ -1660,7 +1660,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("门户网络"),
     "tutorialTitle2": MessageLookupByLibrary.simpleMessage("筛选器列表"),
-    "tutorialTitle3": MessageLookupByLibrary.simpleMessage("长按磁贴"),
+    "tutorialTitle3": MessageLookupByLibrary.simpleMessage("管理路由"),
     "tutorialTitle4": MessageLookupByLibrary.simpleMessage("磁贴样式"),
     "tutorialTitle5": MessageLookupByLibrary.simpleMessage("一次设置全部筛选器"),
     "tutorialTitle6": MessageLookupByLibrary.simpleMessage("启动"),
