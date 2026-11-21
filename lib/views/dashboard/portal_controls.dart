@@ -1458,7 +1458,7 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
         // The filter strip belongs to the engine's rules. In the simple portal the list is
         // the second core's own servers, so there are no filters to show.
         if (!simple && xrayServers.isEmpty && groups.length > 1)
-          const _GroupStrip(),
+          _FilterStripEnter(child: const _GroupStrip()),
         if (!simple && groups.length == 1)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -1502,6 +1502,45 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
 /// Always true. The wave is the list saying "this is a new list", and it has nothing to do with
 /// whether anything measures the rows — switching it off with the sweep was a mistake.
 const serverEnterEnabled = true;
+
+/// The filter strip's arrival: it slides down from above as it appears, the same beat the rows
+/// below come in on. The strip is the network mode's own control — its entrance is what shows
+/// the owner that switching the mode turned a new control on.
+class _FilterStripEnter extends StatefulWidget {
+  const _FilterStripEnter({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_FilterStripEnter> createState() => _FilterStripEnterState();
+}
+
+class _FilterStripEnterState extends State<_FilterStripEnter> {
+  bool _shown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _shown = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSlide(
+      offset: _shown ? Offset.zero : const Offset(0, -0.35),
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+      child: AnimatedOpacity(
+        opacity: _shown ? 1 : 0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
+    );
+  }
+}
 
 /// A row's arrival: nothing, then a short fade and a 10 pt rise, one row after the previous.
 class _ServerEnter extends StatefulWidget {

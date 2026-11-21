@@ -44,3 +44,8 @@ void tutorialScreenPopped() => tutorialScreenClosed.value++;
 /// page, and the page after the filter list points at the first tile — which a swept strip has
 /// left off-screen. Bumped, not toggled, so two requests in a row still scroll.
 final tourResetTiles = ValueNotifier<int>(0);
+
+/// True while a tour is up. The first page simulates the simple mode so the owner can turn the
+/// network on himself, so a panel that forbids the global mode (`noglobal`) must not push the
+/// rule mode back over it mid-lesson.
+final tourSimulatesSimple = ValueNotifier<bool>(false);

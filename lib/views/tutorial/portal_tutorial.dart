@@ -106,7 +106,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 47;
+const tutorialVersion = 48;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, and only the switch. The app opens in the simple portal, so the switch is off by
@@ -1096,6 +1096,7 @@ OverlayEntry? _tourEntry;
 Future<void> showPortalTutorial(BuildContext context, {int fromStep = 0}) async {
   if (tourIsShowing) return;
   tourIsShowing = true;
+  tourSimulatesSimple.value = true;
   final overlay = Overlay.of(context, rootOverlay: true);
   late final OverlayEntry entry;
   entry = OverlayEntry(
@@ -1105,6 +1106,7 @@ Future<void> showPortalTutorial(BuildContext context, {int fromStep = 0}) async 
         if (_tourEntry != null && _tourEntry!.mounted) _tourEntry!.remove();
         if (identical(_tourEntry, entry)) _tourEntry = null;
         tourIsShowing = false;
+        tourSimulatesSimple.value = false;
       },
     ),
   );

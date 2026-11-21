@@ -83,18 +83,24 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
       return;
     }
     if (ref.read(profilesProvider).isEmpty) return;
+    // There is nothing to teach without a network subscription: the tour is about the mode
+    // switch, the filter strip and the tile layout, and those are the engine's. A user who only
+    // has an xray subscription keeps `tutorialSeen` false, so if a network subscription arrives
+    // later the tour starts then — exactly when the mode becomes teachable.
+    final engineReady = ref.watch(
+      portalAvailabilityProvider.select((state) => state.engine.available),
+    );
+    if (!engineReady) return;
     // A tour whose text changed starts from its first page: the stored step belongs to the
     // previous one and would drop the owner into the middle of a story he has not begun.
     final resume = setting.tutorialVersion >= tutorialVersion
         ? setting.tutorialStep
         : 0;
-    // The tour teaches the network mode from the simple portal: the switch must sit on the
-    // simple mode before the tour opens, whatever the panel last set. This covers a
-    // version-bump re-run too — a user who finished the old tour keeps `tutorialSeen`, and
-    // without this line their last mode (network) is still on when the switch page asks them
-    // to turn it on, so their first tap turns it off and the chip page has no chips. Set
-    // directly, bypassing the panel's mode gate, so even a panel that forbids the global mode
-    // still starts the tour in the simple portal.
+    // The tour teaches the network mode from the simple portal, so the switch must sit on the
+    // simple mode before the tour opens. A panel that forbids the global mode (`noglobal`)
+    // pushes the rule mode back after this, so this is a simulation: the simple mode is forced
+    // at startup whatever the panel says, and the owner's own press is the turn-on the lesson
+    // needs. The suppression below keeps the panel from undoing it mid-tour.
     if (resume == 0) {
       ref
           .read(patchClashConfigProvider.notifier)

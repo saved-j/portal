@@ -169,6 +169,7 @@ class ProfileHeadersAction extends _$ProfileHeadersAction {
       set: (state, on) => state.copyWith(vibration: !on),
     );
     if (!settings.globalModeAllowed &&
+        !tourSimulatesSimple.value &&
         ref.read(patchClashConfigProvider).mode == Mode.global) {
       ref.read(setupActionProvider.notifier).changeMode(Mode.rule);
     }
