@@ -1654,6 +1654,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialChipOff": MessageLookupByLibrary.simpleMessage("筛选器已关闭。再次长按即可开启。"),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("下一步"),
+    "tutorialStart": MessageLookupByLibrary.simpleMessage("教程"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("跳过"),
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("门户网络"),

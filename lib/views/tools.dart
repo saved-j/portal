@@ -21,6 +21,7 @@ import 'config/custom_resources.dart';
 import 'developer.dart';
 import 'disclaimer.dart';
 import 'theme.dart';
+import 'tutorial/portal_tutorial.dart';
 
 class ToolsView extends ConsumerStatefulWidget {
   const ToolsView({super.key});
@@ -43,6 +44,7 @@ class _ToolViewState extends ConsumerState<ToolsView> {
     return generateSection(
       title: context.appLocalizations.other,
       items: [
+        const _TutorialItem(),
         const _DisclaimerItem(),
         if (enableDeveloperMode) const _DeveloperItem(),
         const _InfoItem(),
@@ -298,6 +300,19 @@ class _DeveloperItem extends StatelessWidget {
       leading: const GlyphIcon(AppGlyphs.cpu),
       title: Text(context.appLocalizations.developerMode),
       widget: const DeveloperView(),
+    );
+  }
+}
+
+class _TutorialItem extends StatelessWidget {
+  const _TutorialItem();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListItem(
+      leading: const GlyphIcon(AppGlyphs.sparkle),
+      title: Text(context.appLocalizations.tutorialStart),
+      onTap: () => unawaited(showPortalTutorial(context)),
     );
   }
 }

@@ -1740,6 +1740,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "フィルターはオフです。もう一度長押しするとオンになります。",
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("次へ"),
+    "tutorialStart": MessageLookupByLibrary.simpleMessage("チュートリアル"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("スキップ"),
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("ポータルネットワーク"),

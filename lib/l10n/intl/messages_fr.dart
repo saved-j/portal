@@ -2171,6 +2171,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Le filtre est désactivé. Maintenez à nouveau pour le rallumer.",
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Suivant"),
+    "tutorialStart": MessageLookupByLibrary.simpleMessage("Tutoriel"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Passer"),
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage(

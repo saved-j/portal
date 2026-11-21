@@ -2124,6 +2124,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "The filter is off. Hold it again to switch it back on.",
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Next"),
+    "tutorialStart": MessageLookupByLibrary.simpleMessage("Tutorial"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Skip"),
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("Portal network"),

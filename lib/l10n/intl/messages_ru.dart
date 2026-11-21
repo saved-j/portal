@@ -2220,6 +2220,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Фильтр выключен. Зажмите ещё раз, чтобы включить.",
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Далее"),
+    "tutorialStart": MessageLookupByLibrary.simpleMessage("Туториал"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Пропустить"),
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("Сеть порталов"),

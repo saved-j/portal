@@ -1711,6 +1711,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "필터가 꺼졌습니다. 다시 길게 누르면 켜집니다.",
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("다음"),
+    "tutorialStart": MessageLookupByLibrary.simpleMessage("튜토리얼"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("건너뛰기"),
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("포털 네트워크"),

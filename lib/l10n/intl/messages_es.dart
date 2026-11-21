@@ -2169,6 +2169,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "El filtro está apagado. Mantén pulsado otra vez para encenderlo.",
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Siguiente"),
+    "tutorialStart": MessageLookupByLibrary.simpleMessage("Tutorial"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Omitir"),
     "tutorialStepOf": m105,
     "tutorialTitle1": MessageLookupByLibrary.simpleMessage("Red de portales"),

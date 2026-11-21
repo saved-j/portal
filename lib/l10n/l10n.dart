@@ -9366,6 +9366,11 @@ class AppLocalizations {
     return Intl.message('Next', name: 'tutorialNext', desc: '', args: []);
   }
 
+  /// `Tutorial`
+  String get tutorialStart {
+    return Intl.message('Tutorial', name: 'tutorialStart', desc: '', args: []);
+  }
+
   /// `Skip`
   String get tutorialSkip {
     return Intl.message('Skip', name: 'tutorialSkip', desc: '', args: []);
