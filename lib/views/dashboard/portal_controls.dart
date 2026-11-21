@@ -602,8 +602,10 @@ final portalAvailabilityProvider = Provider<({ModeAvailability engine, ModeAvail
   final known = engineFile != null || servers != null;
   return (
     engine: (
+      // A subscription that failed to update is offline, not unusable: the last good document is
+      // still on disk. Blocking the switch on those strikes left the owner with a portal he could
+      // not move at all after one bad fetch.
       available:
-          !engineStrikes.blocked &&
           fileProblem.isEmpty &&
           (!known || hasEngineDoc || hasNodeList),
       strikes: engineStrikes,
@@ -617,7 +619,6 @@ final portalAvailabilityProvider = Provider<({ModeAvailability engine, ModeAvail
     ),
     xray: (
       available:
-          !xrayStrikes.blocked &&
           !noServers &&
           (!known || hasNodeList || hasEngineDoc),
       strikes: xrayStrikes,
