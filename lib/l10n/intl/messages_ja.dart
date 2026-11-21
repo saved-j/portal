@@ -1731,7 +1731,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage("最後に——起動です。"),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "よくお読みください。\n\n他のアプリと違い、当アプリはトンネルを通した実際の遅延を測ります。見栄えの良い数字を作るのではありません。\n\nPing はサーバーの応答速度にすぎず、スループットを示すものではありません。応答が速くても回線が極端に細いサーバーはあります。Ping は良くても速度が出ません。\n\n遅延の数字が良くないサーバーも、ぜひ試してみてください。",
+      "稲妻をタップすると、このモードの全サーバーの遅延を測り、ハイフンが数字に変わります。次にサーバーの行を長押しして、そのサーバーだけを測ります。この方法で 2〜3 台確認するか、「次へ」をタップします。",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "タイルを使えばどの画面からでも起動できます。シェードを開き、鉛筆を押し、自分のアプリまでスクロールして「Portal」を追加します。",

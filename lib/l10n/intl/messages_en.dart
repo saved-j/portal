@@ -2115,7 +2115,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Press the portal: it opens and starts carrying traffic.",
     ),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "Press the bolt: the app measures the delay to every server in this mode. The dashes turn into spinners and then into numbers. Hold a row to measure that one only.",
+      "Press the bolt and the app measures the delay to every server in this mode, turning the dashes into numbers. Then hold a finger on a server's row to measure just that one. Check two or three servers this way, or tap Next.",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.",

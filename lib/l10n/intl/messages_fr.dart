@@ -2162,7 +2162,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Et enfin — le lancement.",
     ),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "Lisez ceci attentivement.\n\nContrairement à d\'autres applications, la nôtre mesure la latence réelle à travers le tunnel, au lieu de vous donner de jolis chiffres.\n\nLe ping n\'est que la vitesse de réponse d\'un serveur et ne dit rien du DÉBIT. Un serveur peut répondre vite avec un canal très étroit : le ping est beau et la vitesse absente.\n\nN\'écartez donc pas les serveurs dont la latence est moins belle — essayez-les aussi.",
+      "Touchez l’éclair : l’app mesure la latence de tous les serveurs de ce mode et les tirets deviennent des chiffres. Maintenez ensuite le doigt sur la ligne d’un serveur pour ne mesurer que celui-là. Vérifiez ainsi deux ou trois serveurs, ou touchez « Suivant ».",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "La tuile lance le portail depuis n\'importe quel écran : ouvrez le volet, touchez le crayon, faites défiler jusqu\'à vos applications et ajoutez « Portal ».",

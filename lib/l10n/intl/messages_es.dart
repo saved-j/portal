@@ -2160,7 +2160,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Y por último: el inicio.",
     ),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "Léelo con atención.\n\nA diferencia de otras aplicaciones, la nuestra mide la latencia real a través del túnel, no solo te da cifras bonitas.\n\nEl ping es solo la velocidad de respuesta del servidor y no refleja el ANCHO DE BANDA. Un servidor puede responder rápido y tener un canal muy estrecho: el ping se ve bien y no hay velocidad.\n\nAsí que no descartes los servidores con una latencia menos bonita: pruébalos también.",
+      "Pulsa el rayo: la app mide la latencia de todos los servidores de este modo y los guiones se vuelven números. Luego mantén el dedo sobre la fila de un servidor para medir solo ese. Comprueba así dos o tres servidores, o pulsa «Siguiente».",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "El mosaico inicia el portal desde cualquier pantalla: abre la cortina, toca el lápiz, desplázate hasta tus aplicaciones y añade «Portal».",

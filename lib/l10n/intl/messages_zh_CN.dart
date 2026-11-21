@@ -1647,7 +1647,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage("最后——启动。"),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "请仔细阅读。\n\n与其他应用不同，我们通过隧道测量真实延迟，而不是只给你好看的数字。\n\nPing 只是服务器的响应速度，并不代表吞吐量。服务器可能响应很快，但通道非常窄：延迟好看，速度却没有。\n\n所以不要因为某些服务器延迟不好看就放弃它们——也试试它们。",
+      "点击闪电，应用会测量此模式下所有服务器的延迟，破折号会变成数字。然后长按某个服务器的行，只测量那一个。这样检查两三个服务器，或点击“下一步”。",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "磁贴可以从任何界面启动门户：打开通知栏，点铅笔，滚动到自己的应用，添加「Portal」。",
