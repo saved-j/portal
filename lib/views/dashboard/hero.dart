@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:collection/collection.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/service_probe.dart' show routedOutbound;
-import 'package:fl_clash/enum/enum.dart' show Mode, GroupName;
+import 'package:fl_clash/enum/enum.dart' show Mode;
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/outbound_ip.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -96,19 +96,8 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
     final resume = setting.tutorialVersion >= tutorialVersion
         ? setting.tutorialStep
         : 0;
-    // The tour teaches the network mode from the simple portal, so the switch must sit on the
-    // simple mode before the tour opens. A panel that forbids the global mode (`noglobal`)
-    // pushes the rule mode back after this, so this is a simulation: the simple mode is forced
-    // at startup whatever the panel says, and the owner's own press is the turn-on the lesson
-    // needs. The suppression below keeps the panel from undoing it mid-tour.
-    if (resume == 0) {
-      ref
-          .read(patchClashConfigProvider.notifier)
-          .update((state) => state.copyWith(mode: Mode.global));
-      ref
-          .read(proxiesActionProvider.notifier)
-          .updateCurrentGroupName(GroupName.GLOBAL.name);
-    }
+    // The simple-mode simulation itself lives in `showPortalTutorial`, the one shared entry
+    // point, so it holds for the settings item too.
     _tourRequested = true;
     showPortalTutorial(context, fromStep: resume);
   }
@@ -133,6 +122,16 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
         if (mounted) _maybeShowTutorial();
       });
     });
+    // The engine's document is parsed after the profile lands: on the very first frame it is not
+    // ready yet and the tour would be turned away. When it becomes available, try again.
+    ref.listen(
+      portalAvailabilityProvider.select((state) => state.engine.available),
+      (_, __) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _maybeShowTutorial();
+        });
+      },
+    );
     return _buildBody(context);
   }
 

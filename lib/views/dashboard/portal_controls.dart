@@ -3362,15 +3362,6 @@ class _PortalSwitchFailure implements Exception {
   String toString() => reason;
 }
 
-/// How long the record gets to show the new owner before the switch stops asking.
-///
-/// This is a bound on a question that the start has almost always answered already — it
-/// returned only once the owner acknowledged — so it guards against a record that never
-/// moves, it does not wait for work to finish. The 12 s that used to sit here was a wait for
-/// the engine's config push; that push is a background task now, and its absence must not
-/// freeze the screen.
-const _modeAckTimeout = Duration(milliseconds: 1500);
-
 /// A switch already in flight **from this screen**. A second tap is dropped rather than
 /// queued: two transactions over one portal can only end with the second undoing the first.
 ///
@@ -3470,31 +3461,14 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
       }
     }
     if (wasRunning) {
-      // In the simple portal there is no engine config to wait for: the mode is a setting
-      // and the tunnel is the child's, so the start that follows is the whole answer.
-      var started = await setup.setRunning(true);
-      if (!started && !toSimple) {
-        // The engine answered nothing: the listener was asked to open before the core had the
-        // profile it opens from. Pushing it once more and asking again is the difference between
-        // a switch that works on the second tap and one that never does.
-        await setup.applyProfile(force: true, silence: true);
-        started = await setup.setRunning(true);
-      }
-      if (!started) {
-        final reason = setup.lastPortalFailure;
-        throw _PortalSwitchFailure(
-          reason.isEmpty ? 'the portal did not start again' : reason,
-        );
-      }
-      // In the network mode the engine has to have said it holds the tunnel. That answer is
-      // the start's own: `open` publishes `Active` only after the owner has its listener, so
-      // the switch reads the record rather than polling for a config push that is no longer
-      // part of it. A record that never answers is a warning here, not a rollback.
-      if (!toSimple) {
-        final confirmed = await _awaitMode(Mode.rule);
-        if (!confirmed.ok) {
-          _reportSwitchUnconfirmed(confirmed.reason);
-        }
+      // The owner switched mode while the portal was open. The connection is not the point —
+      // reaching the new mode's list fast is, so the portal stops right now and stays stopped:
+      // the owner picks a server or pings, and starts again himself. Trying to hand the tunnel
+      // over while keeping the connection is exactly the "config changed, reload" stall this
+      // replaces.
+      final stopped = await setup.setRunning(false);
+      if (!stopped) {
+        throw const _PortalSwitchFailure('the portal did not stop');
       }
     }
   } catch (error) {
@@ -3521,30 +3495,6 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
 /// that here is what turned a two-hundred-millisecond hand-over into twelve seconds of empty
 /// list, so it is not waited for: the record is read, and a record that does not name the
 /// new owner within [_modeAckTimeout] is reported rather than turned into a rollback.
-Future<PortalCoreResult> _awaitMode(Mode mode) async {
-  final deadline = DateTime.now().add(_modeAckTimeout);
-  while (true) {
-    final status = portalRuntime.status.value;
-    if (status.active && status.owner == PortalOwner.mihomo) {
-      return const PortalCoreResult.ok();
-    }
-    if (status.failed && status.owner == PortalOwner.mihomo) {
-      return PortalCoreResult.nativeError(status.reason);
-    }
-    final left = deadline.difference(DateTime.now());
-    if (left.isNegative) break;
-    await Future<void>.delayed(
-      left < const Duration(milliseconds: 50)
-          ? left
-          : const Duration(milliseconds: 50),
-    );
-  }
-  return PortalCoreResult.nativeError(
-    'the engine did not acknowledge ${mode.name} within '
-    '${_modeAckTimeout.inMilliseconds} ms',
-  );
-}
-
 /// Puts the previous mode and the previous core back, best effort.
 ///
 /// The rollback reads the same typed answers as the switch: a stop, a mode and a start are
@@ -3600,18 +3550,4 @@ void _reportSwitchFailure(Object error) {
     currentAppLocalizations.portalSwitchFailed(reason),
     level: MessageLevel.error,
   );
-}
-
-/// The portal moved but its new owner never said so, in the log and as a notice.
-///
-/// This is the honest answer to a record that stays on `Starting`, and it is deliberately not
-/// a rollback: taking a working portal back down because a log line was slow is worse than
-/// the line. The switch is over, the screen is usable, and the reason reaches whoever can act
-/// on it — the file, logcat and a warning over the list.
-void _reportSwitchUnconfirmed(String reason) {
-  commonPrint.log(
-    'portal switch unconfirmed: $reason',
-    logLevel: LogLevel.warning,
-  );
-  dialogs.showNotifier(reason, level: MessageLevel.warning);
 }

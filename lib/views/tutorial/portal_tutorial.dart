@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/l10n/l10n.dart';
+import 'package:fl_clash/enum/enum.dart' show Mode, GroupName;
 import 'package:fl_clash/views/dashboard/hero.dart';
 import 'package:fl_clash/views/dashboard/portal_controls.dart'
     show portalAvailabilityProvider;
@@ -1114,6 +1115,19 @@ Future<void> showPortalTutorial(BuildContext context, {int fromStep = 0}) async 
   if (tourIsShowing) return;
   tourIsShowing = true;
   tourSimulatesSimple.value = true;
+  // The tour teaches the network mode from the simple portal, so the switch must sit on the
+  // simple mode before the tour opens — whatever launched the tour (the first run or the
+  // settings item). Forced here, in the one shared entry point, and the `tourSimulatesSimple`
+  // flag keeps a `noglobal` panel from pushing the rule mode back over it mid-tour.
+  if (fromStep == 0) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    container
+        .read(patchClashConfigProvider.notifier)
+        .update((state) => state.copyWith(mode: Mode.global));
+    container
+        .read(proxiesActionProvider.notifier)
+        .updateCurrentGroupName(GroupName.GLOBAL.name);
+  }
   final overlay = Overlay.of(context, rootOverlay: true);
   late final OverlayEntry entry;
   entry = OverlayEntry(
