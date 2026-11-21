@@ -436,6 +436,10 @@ class SetupAction extends _$SetupAction {
       );
       if (answer.ok) {
         _commitPortalPick(document);
+        // The network mode's toast comes from the service (its state machine says "starting"),
+        // so the simple portal says its own here: both modes announce the start, each in its own
+        // words.
+        unawaited(app?.tip(currentAppLocalizations.startVpnSimple));
         // What the run is made of, for the screens that show it: the same value the engine
         // path publishes once its listener answered.
         ref.read(runningVpnOptionsProvider.notifier).value =

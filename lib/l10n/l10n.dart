@@ -1281,6 +1281,26 @@ class AppLocalizations {
     return Intl.message('Starting VPN…', name: 'startVpn', desc: '', args: []);
   }
 
+  /// `VPN is starting with split tunnels`
+  String get startVpnNetwork {
+    return Intl.message(
+      'VPN is starting with split tunnels',
+      name: 'startVpnNetwork',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `VPN is starting in simple mode`
+  String get startVpnSimple {
+    return Intl.message(
+      'VPN is starting in simple mode',
+      name: 'startVpnSimple',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Stopping VPN…`
   String get stopVpn {
     return Intl.message('Stopping VPN…', name: 'stopVpn', desc: '', args: []);

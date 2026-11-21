@@ -1980,6 +1980,8 @@ class MessageLookup extends MessageLookupByLibrary {
       "Start from scratch",
     ),
     "startVpn": MessageLookupByLibrary.simpleMessage("Starting VPN…"),
+    "startVpnNetwork": MessageLookupByLibrary.simpleMessage("VPN is starting with split tunnels"),
+    "startVpnSimple": MessageLookupByLibrary.simpleMessage("VPN is starting in simple mode"),
     "startupAndBackground": MessageLookupByLibrary.simpleMessage(
       "Startup and background",
     ),

@@ -1582,6 +1582,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "start": MessageLookupByLibrary.simpleMessage("시작"),
     "startFromScratch": MessageLookupByLibrary.simpleMessage("처음부터 시작"),
     "startVpn": MessageLookupByLibrary.simpleMessage("VPN 시작 중…"),
+    "startVpnNetwork": MessageLookupByLibrary.simpleMessage("VPN이 분할 터널로 시작됩니다"),
+    "startVpnSimple": MessageLookupByLibrary.simpleMessage("VPN이 단순 모드로 시작됩니다"),
     "startupAndBackground": MessageLookupByLibrary.simpleMessage("시작 및 백그라운드"),
     "status": MessageLookupByLibrary.simpleMessage("상태"),
     "statusDesc": MessageLookupByLibrary.simpleMessage(

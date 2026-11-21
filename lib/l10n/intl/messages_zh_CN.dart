@@ -1536,6 +1536,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "start": MessageLookupByLibrary.simpleMessage("启动"),
     "startFromScratch": MessageLookupByLibrary.simpleMessage("从零开始"),
     "startVpn": MessageLookupByLibrary.simpleMessage("正在启动VPN…"),
+    "startVpnNetwork": MessageLookupByLibrary.simpleMessage("VPN 正在以分离隧道模式启动"),
+    "startVpnSimple": MessageLookupByLibrary.simpleMessage("VPN 正在以简单模式启动"),
     "startupAndBackground": MessageLookupByLibrary.simpleMessage("启动与后台"),
     "status": MessageLookupByLibrary.simpleMessage("状态"),
     "statusDesc": MessageLookupByLibrary.simpleMessage("关闭 DNS 后将使用系统 DNS。"),

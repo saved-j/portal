@@ -2024,6 +2024,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "start": MessageLookupByLibrary.simpleMessage("Démarrer"),
     "startFromScratch": MessageLookupByLibrary.simpleMessage("Partir de zéro"),
     "startVpn": MessageLookupByLibrary.simpleMessage("Démarrage du VPN…"),
+    "startVpnNetwork": MessageLookupByLibrary.simpleMessage("VPN démarre avec des tunnels séparés"),
+    "startVpnSimple": MessageLookupByLibrary.simpleMessage("VPN démarre en mode simple"),
     "startupAndBackground": MessageLookupByLibrary.simpleMessage(
       "Démarrage et arrière-plan",
     ),

@@ -2066,6 +2066,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "start": MessageLookupByLibrary.simpleMessage("Старт"),
     "startFromScratch": MessageLookupByLibrary.simpleMessage("С нуля"),
     "startVpn": MessageLookupByLibrary.simpleMessage("Запуск VPN…"),
+    "startVpnNetwork": MessageLookupByLibrary.simpleMessage("VPN запускается с раздельными туннелями"),
+    "startVpnSimple": MessageLookupByLibrary.simpleMessage("VPN запускается в простом режиме"),
     "startupAndBackground": MessageLookupByLibrary.simpleMessage(
       "Запуск и фоновая работа",
     ),

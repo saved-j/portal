@@ -1613,6 +1613,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "start": MessageLookupByLibrary.simpleMessage("開始"),
     "startFromScratch": MessageLookupByLibrary.simpleMessage("最初から作成"),
     "startVpn": MessageLookupByLibrary.simpleMessage("VPNを起動しています…"),
+    "startVpnNetwork": MessageLookupByLibrary.simpleMessage("VPN は分割トンネルで起動します"),
+    "startVpnSimple": MessageLookupByLibrary.simpleMessage("VPN はシンプルモードで起動します"),
     "startupAndBackground": MessageLookupByLibrary.simpleMessage("起動とバックグラウンド"),
     "status": MessageLookupByLibrary.simpleMessage("状態"),
     "statusDesc": MessageLookupByLibrary.simpleMessage(
