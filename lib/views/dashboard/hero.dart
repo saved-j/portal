@@ -53,6 +53,10 @@ class HeroDashboard extends ConsumerStatefulWidget {
 class _HeroDashboardState extends ConsumerState<HeroDashboard> {
   late final OutboundIpProbe _probe;
 
+  /// Guards against the tour being pushed twice when the profile list and the first frame
+  /// both qualify in the same launch.
+  bool _tourRequested = false;
+
   @override
   void initState() {
     super.initState();
@@ -64,19 +68,28 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
     // and there is something to point at. It is drawn after the frame, because it measures
     // the widgets underneath and they have to be laid out first.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final setting = ref.read(appSettingProvider);
-      if (setting.tutorialSeen && setting.tutorialVersion >= tutorialVersion) {
-        return;
-      }
-      if (ref.read(profilesProvider).isEmpty) return;
-      // A tour whose text changed starts from its first page: the stored step belongs to the
-      // previous one and would drop the owner into the middle of a story he has not begun.
-      final resume = setting.tutorialVersion >= tutorialVersion
-          ? setting.tutorialStep
-          : 0;
-      showPortalTutorial(context, fromStep: resume);
+      if (mounted) _maybeShowTutorial();
     });
+  }
+
+  /// Shows the tour once a profile exists to point at and it has not been seen. Called on the
+  /// first frame and whenever the profile list changes — a subscription imported after launch
+  /// (the normal first run: install, then import) still starts the tour instead of being
+  /// missed by a one-shot check that ran before the list was populated.
+  void _maybeShowTutorial() {
+    if (!mounted || _tourRequested) return;
+    final setting = ref.read(appSettingProvider);
+    if (setting.tutorialSeen && setting.tutorialVersion >= tutorialVersion) {
+      return;
+    }
+    if (ref.read(profilesProvider).isEmpty) return;
+    // A tour whose text changed starts from its first page: the stored step belongs to the
+    // previous one and would drop the owner into the middle of a story he has not begun.
+    final resume = setting.tutorialVersion >= tutorialVersion
+        ? setting.tutorialStep
+        : 0;
+    _tourRequested = true;
+    showPortalTutorial(context, fromStep: resume);
   }
 
   void _onLockChanged() {
@@ -91,7 +104,16 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
   }
 
   @override
-  Widget build(BuildContext context) => _buildBody(context);
+  Widget build(BuildContext context) {
+    // The profile list can arrive after the first frame (import after install): listen for it
+    // so the tour still starts when the first profile lands.
+    ref.listen(profilesProvider, (_, __) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _maybeShowTutorial();
+      });
+    });
+    return _buildBody(context);
+  }
 
   Widget _buildBody(BuildContext context) {
     final profile = ref.watch(currentProfileProvider);
