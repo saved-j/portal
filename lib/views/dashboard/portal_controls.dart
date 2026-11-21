@@ -1733,24 +1733,10 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
   /// Tags the core reported that this list cannot name, reported once each.
   final Set<String> _unknownTags = <String>{};
 
-  /// The clock that reads the child core's own numbers. Reading is free, measuring is not: the
-  /// core times every node itself on the owner's period, and this only asks what it has.
-  Timer? _reading;
-
   @override
   void initState() {
     super.initState();
     _start();
-    _reading = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!mounted) return;
-      unawaited(_readObservatory());
-    });
-  }
-
-  @override
-  void dispose() {
-    _reading?.cancel();
-    super.dispose();
   }
 
   @override

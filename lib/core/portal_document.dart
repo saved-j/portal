@@ -36,7 +36,10 @@ String portalChildDocument(
   required String selected,
   /// How often the core re-times every node. Null means no schedule at all: the document then
   /// carries no observatory, because a placeholder period would be a schedule nobody asked for.
-  Duration? probeInterval = const Duration(seconds: 60),
+  /// Auto-ping is retired, so this is always null in practice — the default is null rather than
+  /// a concrete period, so a future call that forgets the parameter cannot silently re-enable
+  /// the core's own background timing.
+  Duration? probeInterval,
   String probeUrl = 'https://www.gstatic.com/generate_204',
 }) {
   final outbounds = <Map<String, Object?>>[];
