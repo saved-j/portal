@@ -216,16 +216,19 @@ SharedState sharedState(Ref ref) {
   final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
   final profileId = ref.watch(currentProfileIdProvider);
   final fullSettings = ref.watch(appSettingProvider);
-  // The server the notification names: the Xray node in the simple portal, the main filter's
-  // pick in the network mode.
+  final liveGroup = portalGroupFor(fullSettings, profileId, false);
+  final groups = ref.watch(currentGroupsStateProvider).value;
+  // The server the notification names: the Xray node in the simple portal, the pick of the
+  // filter whose chip is open in the network mode (the first filter when none is open). The
+  // engine's raw selected-map is not the pick — it is the core's own state, not the choice the
+  // owner sees.
+  final activeGroup = liveGroup ?? groups.firstOrNull?.name ?? '';
   final currentServer = mode == Mode.global
       ? portalXrayPickFor(fullSettings, profileId)
-      : (selectedMap[GroupName.GLOBAL.name] ?? '');
+      : portalRulePickFor(fullSettings, profileId, activeGroup);
   // The servers the notification bolt pings: every node of the live group, the same sweep the
   // working screen's bolt runs. Empty in the simple portal — its bolt lives in the app, not in
   // the notification.
-  final liveGroup = portalGroupFor(fullSettings, profileId, false);
-  final groups = ref.watch(currentGroupsStateProvider).value;
   final pingServers = mode == Mode.global
       ? const <String>[]
       : [
