@@ -2849,11 +2849,24 @@ class _ServerRowState extends ConsumerState<_ServerRow>
         child: ListTile(
           dense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-          leading: GlyphIcon(
-            widget.selected ? AppGlyphs.check : AppGlyphs.proxies,
-            size: 20,
-            color: color,
-          ),
+          leading: widget.selected
+              ? GlyphIcon(AppGlyphs.check, size: 20, color: color)
+              // The mark of a portal is the letter it begins with, not a globe: a globe is
+              // any proxy anywhere, a П is this network.
+              : SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: Center(
+                    child: Text(
+                      'П',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
           // The title, then the panel's own note about the server — «только Gemini»,
           // «для ИИ» — under it, when the panel wrote one. A note is a fact about the node,
           // not part of its name: it is drawn small and muted, drops out when it would not
@@ -2933,26 +2946,48 @@ class _ServerRowState extends ConsumerState<_ServerRow>
                 ),
                 const SizedBox(width: 8),
               ],
-              if (ref.watch(
-                delayBusyProvider.select(
-                  (busy) => busy.contains(widget.proxy.name),
-                ),
-              ))
-                SizedBox.square(
-                  dimension: 12,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.6,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                )
-              else
-                Text(
-                  _delayText(delay),
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: _delayColor(context, delay),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+              // The number arrives the moment the answer does, not at the end of the whole
+              // sweep: the spinner yields to the figure the instant one exists. A server that
+              // answered with a timeout or never answered shows a cross, not a dash that could
+              // also mean "still measuring". The spinner runs only while nothing has come back.
+              Builder(
+                builder: (context) {
+                  final busy = ref.watch(
+                    delayBusyProvider.select(
+                      (busy) => busy.contains(widget.proxy.name),
+                    ),
+                  );
+                  final value = delay;
+                  if (value != null && value > 0) {
+                    return Text(
+                      _delayText(value),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: _delayColor(context, value),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    );
+                  }
+                  // A measured failure — timeout or unreachable — is a fact, read as a cross.
+                  if (value != null) {
+                    return GlyphIcon(
+                      AppGlyphs.close,
+                      size: 14,
+                      color: _delayBad(context),
+                    );
+                  }
+                  if (busy) {
+                    return SizedBox.square(
+                      dimension: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.6,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    );
+                  }
+                  // Not measured yet, and not measuring: an honest dash.
+                  return Text('—', style: theme.textTheme.labelMedium);
+                },
+              ),
             ],
           ),
           onTap: () {
