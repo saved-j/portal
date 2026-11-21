@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:collection/collection.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/service_probe.dart' show routedOutbound;
-import 'package:fl_clash/enum/enum.dart' show Mode;
+import 'package:fl_clash/enum/enum.dart' show Mode, GroupName;
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/outbound_ip.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -83,6 +83,18 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
       return;
     }
     if (ref.read(profilesProvider).isEmpty) return;
+    // The first run teaches the network mode from the simple portal: the mode switch must sit on
+    // the simple mode before the tour opens, whatever the panel last set. A normal (already seen)
+    // launch keeps the last mode instead. Set directly, bypassing the panel's mode gate, so even
+    // a panel that forbids the global mode still starts the tour in the simple portal.
+    if (!setting.tutorialSeen) {
+      ref
+          .read(patchClashConfigProvider.notifier)
+          .update((state) => state.copyWith(mode: Mode.global));
+      ref
+          .read(proxiesActionProvider.notifier)
+          .updateCurrentGroupName(GroupName.GLOBAL.name);
+    }
     // A tour whose text changed starts from its first page: the stored step belongs to the
     // previous one and would drop the owner into the middle of a story he has not begun.
     final resume = setting.tutorialVersion >= tutorialVersion
