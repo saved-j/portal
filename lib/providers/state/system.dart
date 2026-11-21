@@ -192,10 +192,11 @@ SharedState sharedState(Ref ref) {
   ref.watch(loadedLocaleProvider);
   final currentProfile = ref.watch(
     currentProfileProvider.select(
-      // A panel's profile label is often the user's name; the VPN
-      // notification is titled with the service, as the expiry notice is.
+      // A panel's profile label is often the user's name; the VPN notification is titled with
+      // the service, as the expiry notice is. The raw `label` can be the whole title header the
+      // panel packs (`portal-connect Статус Active 163.76 GiB | 0`), so the cleaned name is used.
       (state) => CurrentProfileSelectorState(
-        label: state?.headers.serviceName ?? state?.label ?? '',
+        label: state?.headers.serviceName ?? state?.realLabel ?? '',
         selectedMap: state?.selectedMap ?? {},
       ),
     ),

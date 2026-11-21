@@ -5,6 +5,8 @@ import android.app.Service
 import android.app.Service.STOP_FOREGROUND_REMOVE
 import android.content.Intent
 import android.os.Build
+import android.view.View
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import com.follow.clashx.common.Components
 import com.follow.clashx.common.GlobalState
@@ -51,7 +53,6 @@ internal class NotificationModule(
             GlobalState.NOTIFICATION_CHANNEL,
         ).apply {
             setSmallIcon(R.drawable.ic_service)
-            setContentTitle("FlClashX")
             setContentIntent(intent.toPendingIntent)
             setPriority(NotificationCompat.PRIORITY_LOW)
             setCategory(NotificationCompat.CATEGORY_SERVICE)
@@ -69,19 +70,34 @@ internal class NotificationModule(
     private val pingIntent by lazy { QuickAction.PING.quickIntent.toPendingIntent }
 
     private fun update(params: NotificationParams) {
+        // The expanded shade is a custom view because the standard action row always stacks its
+        // buttons together, and the owner wants Stop on the left and the bolt on the right.
+        val views = RemoteViews(service.packageName, R.layout.notification_portal).apply {
+            setTextViewText(R.id.notif_title, params.title)
+            setTextViewText(R.id.notif_server, params.server)
+            setTextViewText(R.id.notif_stop, params.stopText)
+            setTextColor(R.id.notif_stop, STOP_COLOR)
+            setOnClickPendingIntent(R.id.notif_stop, stopIntent)
+            setViewVisibility(
+                R.id.notif_stop,
+                if (params.showStopAction) View.VISIBLE else View.GONE,
+            )
+            setTextViewText(R.id.notif_ping, params.pingText)
+            setTextColor(R.id.notif_ping, PING_COLOR)
+            setOnClickPendingIntent(R.id.notif_ping, pingIntent)
+            setViewVisibility(
+                R.id.notif_ping,
+                if (params.showPing) View.VISIBLE else View.GONE,
+            )
+        }
         service.startForeground(
             with(notificationBuilder) {
                 setContentTitle(params.title)
                 if (params.server.isNotEmpty()) {
                     setContentText(params.server)
                 }
+                setCustomBigContentView(views)
                 clearActions()
-                if (params.showPing) {
-                    addAction(R.drawable.ic_bolt, params.pingText, pingIntent)
-                }
-                if (params.showStopAction) {
-                    addAction(0, params.stopText, stopIntent)
-                }
                 build()
             },
         )
@@ -94,5 +110,10 @@ internal class NotificationModule(
         } else {
             service.stopForeground(true)
         }
+    }
+
+    private companion object {
+        val STOP_COLOR = 0xFFFF6E6E.toInt()
+        val PING_COLOR = 0xFFFFC107.toInt()
     }
 }
