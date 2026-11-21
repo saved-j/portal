@@ -2141,7 +2141,10 @@ abstract class PatchClashConfig with _$PatchClashConfig {
     @Default(0) @JsonKey(name: 'port') int port,
     @Default(0) @JsonKey(name: 'redir-port') int redirPort,
     @Default(0) @JsonKey(name: 'tproxy-port') int tproxyPort,
-    @Default(Mode.rule) Mode mode,
+    // A fresh install opens in the simple portal: one country, one tunnel, nothing to choose yet.
+    // The network mode is what the first tour page teaches, and it is on only after the owner
+    // turns it on.
+    @Default(Mode.global) Mode mode,
     @Default(false) @JsonKey(name: 'allow-lan') bool allowLan,
     @Default(LogLevel.error) @JsonKey(name: 'log-level') LogLevel logLevel,
     @Default(true) bool ipv6,

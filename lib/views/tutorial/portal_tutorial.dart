@@ -111,7 +111,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 40;
+const tutorialVersion = 41;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row. The page switches the network on itself, through the same control the
@@ -205,6 +205,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// watched — the list arriving, a sheet closing — not the words about it.
   bool _cardHidden = false;
 
+  /// The hole is widened to the chip strip: the page is about the list appearing, not about the
+  /// switch that was already pressed.
+  bool _wideHole = false;
+
   /// The page that asked for a screen has been served: it is not drawn again, not even for the
   /// moment the closing sheet takes to slide away.
   bool _served = false;
@@ -255,14 +259,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     } else {
       _waitFor(_steps[_index]);
     }
-    // The first page needs the network off to teach anything, and the wave only plays when the
-    // switch really moves: the mode is turned on here, once, before the owner sees the page.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_steps[_index].switchesOn) {
-        _switchModeOn();
-      }
-    });
+
   }
 
   /// How many screens the tour's own pages have pushed. While it is above zero the tour is not
@@ -339,26 +336,20 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   /// Turns the network mode on through the switch's own action, then lets the card hide while the
   /// list arrives: the wave is the lesson on this page, and a card over it would hide it.
-  Future<void> _switchModeOn() async {
-    final mode = ref.read(patchClashConfigProvider.select((state) => state.mode));
-    if (mode == Mode.global) return;
-    // The tour starts the app in the simple portal, for real: the switch it points at is off
-    // because the app is in the other mode, and the owner's own press is what turns it on.
-    await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
-  }
-
   /// The page is done: hide the card for a beat so the screen it produced is seen, then move on.
   void _onPageSettled() {
     setState(() => _waiting = false);
     _advanceAfter(seconds: 2);
   }
 
-  void _advanceAfter({required int seconds}) {
+  void _advanceAfter({required int seconds, bool wideHole = false}) {
     _cardHidden = true;
+    _wideHole = wideHole;
     setState(() {});
     Future<void>.delayed(Duration(seconds: seconds), () {
       if (!mounted) return;
       _cardHidden = false;
+      _wideHole = false;
       _next();
     });
   }
@@ -374,8 +365,8 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // Switching the mode is followed by the list arriving: the owner has to see that before the
     // next page asks him for anything.
     if (step.number == 1) {
-      // Three seconds: the mode change itself, then the list arriving top to bottom.
-      _advanceAfter(seconds: 3);
+      // Three seconds with the strip in the hole: the mode change, then the chips arriving.
+      _advanceAfter(seconds: 3, wideHole: true);
       return;
     }
     if (step.number == 3 && !_confirmed) {
@@ -484,11 +475,23 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // A Material switch answers in a 48 dp box and draws a 34×14 track inside it: the frame
     // goes on what the owner can see, not on the invisible margin that takes the touch.
     if (target == TutorialTarget.modeSwitch) {
-      return Rect.fromCenter(
+      final track = Rect.fromCenter(
         center: full.center,
         width: full.width * 34 / 48,
         height: full.height * 14 / 48,
       );
+      // While the list arrives, the hole takes in the strip under the switch: the owner is meant
+      // to watch the chips appear, and a window on the switch alone would hide them.
+      if (_wideHole) {
+        final strip = tutorialKeys[TutorialTarget.filters]
+            ?.currentContext
+            ?.findRenderObject();
+        if (strip is RenderBox && strip.hasSize) {
+          final stripRect = strip.localToGlobal(Offset.zero) & strip.size;
+          return track.expandToInclude(stripRect).inflate(8);
+        }
+      }
+      return track;
     }
     return full;
   }
