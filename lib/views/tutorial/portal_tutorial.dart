@@ -105,7 +105,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 42;
+const tutorialVersion = 43;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, and only the switch. The app opens in the simple portal, so the switch is off by
@@ -201,6 +201,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// The mask is lifted entirely while the chips arrive: the page is about the list appearing,
   /// and a hole over the switch would leave the arriving strip under the dim.
   bool _noMask = false;
+
+  /// The bolt page has moved its focus onto the server list and freed the scroll, so the owner
+  /// can sweep the pings before the last page.
+  bool _showingPings = false;
 
   /// The page that asked for a screen has been served: it is not drawn again, not even for the
   /// moment the closing sheet takes to slide away.
@@ -359,11 +363,17 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       setState(() => _confirmed = true);
       return;
     }
-    // The bolt leaves numbers behind: the card hides, the screen is watched, and only then does
-    // the last page come up. Six seconds is a sweep of a short list, and long enough to see a dash
-    // turn into a number.
+    // The bolt leaves numbers behind. The point of this page is to see the figures on the
+    // servers, not the bolt: the focus moves onto the list, the mask lifts, the scroll is freed
+    // so the owner can sweep up and down, and only then does the last page come up.
     if (step.number == 7) {
-      _advanceAfter(seconds: 6);
+      if (!_showingPings) {
+        _showingPings = true;
+        // Unlock the scroll so the owner can look around while the pings arrive.
+        tourScrollLocked.value = false;
+        setState(() {});
+      }
+      _advanceAfter(seconds: 4, noMask: true);
       return;
     }
     // The look of the tiles changes under the finger, so one double tap is not enough to see it:
@@ -393,6 +403,8 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   void _next() {
     _served = false;
     _chipTaps = 0;
+    _showingPings = false;
+    tourScrollLocked.value = true;
     AppHaptics.tap();
     // The step is written down as it is reached: a tour cut off by a restart resumes here.
     ref.read(appSettingProvider.notifier).update((state) => state.copyWith(
@@ -454,7 +466,12 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   Rect? _targetRect(TutorialTarget? target) {
     if (target == null) return null;
-    final box = tutorialKeys[target]?.currentContext?.findRenderObject();
+    // After the bolt is pressed the page is about the pings on the servers, not the bolt: the
+    // hole moves onto the whole server column while the owner sweeps it.
+    final effective = (_showingPings && target == TutorialTarget.autoPing)
+        ? TutorialTarget.autoPingColumn
+        : target;
+    final box = tutorialKeys[effective]?.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.hasSize) return null;
     final origin = box.localToGlobal(Offset.zero);
     final full = origin & box.size;
