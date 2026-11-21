@@ -526,7 +526,11 @@ class _ConnectButton extends ConsumerWidget {
         ? appLocalizations.closePortal
         : appLocalizations.openPortal;
     void toggle() => ref.read(commonActionProvider.notifier).toggleRunning();
-    return Column(
+    // The portal is the one control a remote must never lose: it wears a ring while focused.
+    return FocusRing(
+      shape: const CircleBorder(),
+      standsOff: true,
+      child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Tooltip(
@@ -583,6 +587,7 @@ class _ConnectButton extends ConsumerWidget {
         const SizedBox(height: 10),
         Text(label, style: AppTextStyle.headline.of(context, emphasized: true)),
       ],
+      ),
     );
   }
 }
