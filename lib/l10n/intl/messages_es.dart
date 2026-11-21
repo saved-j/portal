@@ -2161,7 +2161,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Y por último: el inicio.",
     ),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "Pulsa el rayo: la app mide la latencia de todos los servidores de este modo y los guiones se vuelven números. Luego mantén el dedo sobre la fila de un servidor para medir solo ese. Comprueba así dos o tres servidores.",
+      "Pulsa el rayo: la app mide la latencia de todos los servidores de este modo (un handshake TLS con el host de prueba dentro del túnel) y los guiones se vuelven números. Luego mantén el dedo sobre la fila de un servidor para medir solo ese. Comprueba así dos o tres servidores.",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "El mosaico inicia el portal desde cualquier pantalla: abre la cortina, toca el lápiz, desplázate hasta tus aplicaciones y añade «Portal».",

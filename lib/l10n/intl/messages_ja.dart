@@ -1732,7 +1732,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage("最後に——起動です。"),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "稲妻をタップすると、このモードの全サーバーの遅延を測り、ハイフンが数字に変わります。次にサーバーの行を長押しして、そのサーバーだけを測ります。この方法で 2〜3 台確認します。",
+      "稲妻をタップすると、このモードの全サーバーの遅延（トンネル内でテストホストへの TLS ハンドシェイク）を測り、ハイフンが数字に変わります。次にサーバーの行を長押しして、そのサーバーだけを測ります。この方法で 2〜3 台確認します。",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "タイルを使えばどの画面からでも起動できます。シェードを開き、鉛筆を押し、自分のアプリまでスクロールして「Portal」を追加します。",

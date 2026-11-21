@@ -9363,7 +9363,7 @@ class AppLocalizations {
   /// `Please read this carefully.\n\nUnlike other apps, ours measures the real delay through the tunnel instead of giving you pretty numbers.\n\nPing is only how fast a server answers, and it says nothing about THROUGHPUT. A server can answer fast and still have a very narrow channel: the ping looks great and there is no speed.\n\nSo do not dismiss servers with a less pretty delay — try them too.`
   String get tutorialBody7 {
     return Intl.message(
-      'Press the bolt and the app measures the delay to every server in this mode, turning the dashes into numbers. Then hold a finger on a server\'s row to measure just that one. Check two or three servers this way.',
+      'Press the bolt and the app measures the delay to every server in this mode — a TLS handshake to the test host inside the tunnel — turning the dashes into numbers. Then hold a finger on a server\'s row to measure just that one. Check two or three servers this way.',
       name: 'tutorialBody7',
       desc: '',
       args: [],

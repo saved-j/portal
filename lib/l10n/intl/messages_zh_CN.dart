@@ -1648,7 +1648,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage("最后——启动。"),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
-      "点击闪电，应用会测量此模式下所有服务器的延迟，破折号会变成数字。然后长按某个服务器的行，只测量那一个。这样检查两三个服务器。",
+      "点击闪电，应用会测量此模式下所有服务器的延迟（隧道内到测试主机的 TLS 握手），破折号会变成数字。然后长按某个服务器的行，只测量那一个。这样检查两三个服务器。",
     ),
     "tutorialBody8": MessageLookupByLibrary.simpleMessage(
       "磁贴可以从任何界面启动门户：打开通知栏，点铅笔，滚动到自己的应用，添加「Portal」。",
