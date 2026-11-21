@@ -1155,6 +1155,8 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                     // grow stale and nothing is spent in the background.
                     onPressed: () {
                       HapticFeedback.mediumImpact();
+                      // The guide waits for exactly this press on its measurement page.
+                      TutorialBus.fire(TutorialEvent.pingAllStarted);
                       // In the network mode the engine times its nodes by itself — a
                       // `url-test` group with an interval is not something the owner can turn
                       // off, only time differently. So the tap opens the period menu; there is

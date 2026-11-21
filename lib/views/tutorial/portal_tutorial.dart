@@ -105,7 +105,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 36;
+const tutorialVersion = 37;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
@@ -326,6 +326,20 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     TutorialBus.last.value = null;
     // The tile page shows the result before it closes: the owner should read what his own
     // gesture did, not be moved on with the question of whether it worked.
+    // Switching the mode is followed by the list arriving: the owner has to see that before the
+    // next page asks him for anything.
+    if (step.number == 1) {
+      if (_waiting) return;
+      _waiting = true;
+      setState(() {});
+      Future<void>.delayed(const Duration(milliseconds: 1800), () {
+        if (!mounted) return;
+        _waiting = false;
+        setState(() {});
+        _next();
+      });
+      return;
+    }
     if (step.number == 3 && !_confirmed) {
       setState(() => _confirmed = true);
       return;
@@ -753,7 +767,7 @@ class _TutorialCard extends StatelessWidget {
                   onPressed: onNext,
                   child: Text(context.appLocalizations.tutorialNext),
                 )
-              else if (step.done == null || step.number == 4 && holdsMore)
+              else if (step.number == 4 && holdsMore)
                 FilledButton(
                   onPressed: onNext,
                   child: Text(context.appLocalizations.tutorialNext),
