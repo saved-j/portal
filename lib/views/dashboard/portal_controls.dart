@@ -2849,9 +2849,9 @@ class _ServerRowState extends ConsumerState<_ServerRow>
         child: ListTile(
           dense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-          // The mark of a portal is its own letter — the П of the quick-settings tile — not a
-          // globe, which is any proxy anywhere. A picked server carries the same П, lit: the
-          // brand is what the eye follows, and the glow is the selection.
+          // A picked server carries the firm's own mark — the П of the quick-settings tile, at
+          // its own weight, tinted and lit. The rest keep the neutral globe: a portal that is
+          // chosen is this network; the others are just proxies.
           leading: widget.selected
               ? DecoratedBox(
                   decoration: BoxDecoration(
@@ -2866,17 +2866,19 @@ class _ServerRowState extends ConsumerState<_ServerRow>
                     ],
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(2),
-                    child: GlyphIcon(
-                      AppGlyphs.portal,
-                      size: 20,
+                    padding: const EdgeInsets.all(3),
+                    child: Image.asset(
+                      'assets/images/portal_glyph.png',
+                      width: 18,
+                      height: 18,
                       color: scheme.primary,
+                      colorBlendMode: BlendMode.srcIn,
                     ),
                   ),
                 )
               : GlyphIcon(
-                  AppGlyphs.portal,
-                  size: 22,
+                  AppGlyphs.proxies,
+                  size: 20,
                   color: color,
                 ),
           // The title, then the panel's own note about the server — «только Gemini»,

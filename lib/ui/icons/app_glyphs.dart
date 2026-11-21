@@ -28,22 +28,6 @@ abstract final class AppGlyphs {
     ], role: GlyphRole.detail),
   ]);
 
-  /// The portal's own mark: a П — the letter the network begins with — drawn as an outline,
-  /// the same shape as the quick-settings tile. Two legs, one cap on top, one bar across the
-  /// middle; nothing is filled, so it reads as a brand, not a letter of type.
-  static const portal = Glyph([
-    GlyphPolyline([
-      GlyphVertex(5, 6),
-      GlyphVertex(5, 18),
-      GlyphVertex(19, 18),
-      GlyphVertex(19, 6),
-    ], role: GlyphRole.line),
-    GlyphPolyline([
-      GlyphVertex(5, 13),
-      GlyphVertex(19, 13),
-    ], role: GlyphRole.line),
-  ]);
-
   static const profiles = Glyph([
     GlyphPolyline([
       GlyphVertex(5, 3, 2.5),

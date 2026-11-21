@@ -106,6 +106,7 @@ flutter:
     - assets/xray/
     - assets/images/flags/
     - assets/images/services/
+    - assets/images/portal_glyph.png
     - assets/ca/ca-certificates.crt
     - path: assets/images/tray/unix/
       platforms: [ linux, macos ]
