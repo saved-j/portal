@@ -205,6 +205,33 @@ object PortalRuntimeCoordinator {
         }
     }
 
+    /// The notification's bolt: the same sweep the working screen's bolt runs — every node of
+    /// the live group, one delay test each, so a url-test group re-picks its fastest node and
+    /// a selector group refreshes the whole list. Sent straight to the engine with no Flutter
+    /// round-trip.
+    suspend fun ping(): PortalOutcome = mutex.withLock {
+        val state = AndroidServiceStateHost.loadSharedState()
+        val testUrl = state.setupParams?.testUrl ?: "https://www.gstatic.com/generate_204"
+        val servers = state.pingServers
+        GlobalState.log("$TAG entry=ping servers=${servers.size} testUrl=$testUrl")
+        if (servers.isEmpty()) {
+            return@withLock PortalOutcome(ok = false, reason = "no servers to ping")
+        }
+        var ok = true
+        var lastError = "ping sent"
+        for (server in servers) {
+            val escaped = server.replace("\\", "\\\\").replace("\"", "\\\"")
+            val call =
+                """{"method":"asyncTestDelay","arguments":{"proxy-name":"$escaped","timeout":5000,"test-url":"$testUrl"}}"""
+            val sent = ServiceController.invokeMethod(call) { }
+            if (sent.isFailure) {
+                ok = false
+                lastError = sent.exceptionOrNull()?.message ?: "ping failed"
+            }
+        }
+        PortalOutcome(ok = ok, reason = lastError)
+    }
+
     // Any throw is this transaction's own failure; it must not leave a Starting record that
     // nothing will ever finish, and it must not escape to a caller that only reads `ok`.
     private suspend fun guarded(block: suspend () -> PortalOutcome): PortalOutcome = try {

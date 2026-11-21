@@ -72,6 +72,7 @@ class QuickActionActivity : Activity() {
                     QuickAction.START -> PortalRuntimeCoordinator.openDesired()
                     QuickAction.STOP -> PortalRuntimeCoordinator.close("quick-action")
                     QuickAction.TOGGLE -> PortalRuntimeCoordinator.toggle()
+                    QuickAction.PING -> PortalRuntimeCoordinator.ping()
                 }
             } finally {
                 withContext(Dispatchers.Main) { mainThreadActionsInFlight-- }

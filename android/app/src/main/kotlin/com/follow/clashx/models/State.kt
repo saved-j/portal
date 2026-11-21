@@ -11,6 +11,10 @@ data class SharedState(
     val currentProfileName: String = "FlClashX",
     val stopText: String = "Stop",
     val showStopAction: Boolean = true,
+    val currentServer: String = "",
+    val pingText: String = "Ping",
+    val showPing: Boolean = false,
+    val pingServers: List<String> = emptyList(),
     val vpnOptions: VpnOptions? = null,
     val setupParams: SetupParams? = null,
 )

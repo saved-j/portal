@@ -6,6 +6,7 @@ enum class QuickAction {
     STOP,
     START,
     TOGGLE,
+    PING,
 }
 
 enum class BroadcastAction {

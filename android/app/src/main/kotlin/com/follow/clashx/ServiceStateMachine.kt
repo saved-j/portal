@@ -537,8 +537,11 @@ internal class ServiceStateMachine(private val host: ServiceStateHost) {
 
         fun notificationParams(state: SharedState): NotificationParams = NotificationParams(
             title = state.currentProfileName,
+            server = state.currentServer,
             stopText = state.stopText,
             showStopAction = state.showStopAction,
+            pingText = state.pingText,
+            showPing = state.showPing,
         )
     }
 }

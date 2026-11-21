@@ -66,11 +66,19 @@ internal class NotificationModule(
 
     private val stopIntent by lazy { QuickAction.STOP.quickIntent.toPendingIntent }
 
+    private val pingIntent by lazy { QuickAction.PING.quickIntent.toPendingIntent }
+
     private fun update(params: NotificationParams) {
         service.startForeground(
             with(notificationBuilder) {
                 setContentTitle(params.title)
+                if (params.server.isNotEmpty()) {
+                    setContentText(params.server)
+                }
                 clearActions()
+                if (params.showPing) {
+                    addAction(R.drawable.ic_bolt, params.pingText, pingIntent)
+                }
                 if (params.showStopAction) {
                     addAction(0, params.stopText, stopIntent)
                 }

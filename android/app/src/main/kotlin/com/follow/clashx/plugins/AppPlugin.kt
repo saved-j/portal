@@ -334,7 +334,8 @@ class AppPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware 
 
     private fun shortcutLabels(arguments: Any?): Map<QuickAction, String>? {
         val map = arguments as? Map<*, *> ?: return null
-        return QuickAction.entries.associateWith { action ->
+        // Shortcuts are a fixed set; PING is a notification action with no launcher shortcut.
+        return SHORTCUT_ORDER.associateWith { action ->
             map[action.shortcutId] as? String ?: return null
         }
     }
@@ -359,6 +360,8 @@ class AppPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware 
             QuickAction.START -> R.drawable.ic_shortcut_start
             QuickAction.STOP -> R.drawable.ic_shortcut_stop
             QuickAction.TOGGLE -> R.drawable.ic_shortcut_toggle
+            // PING is a notification action, never a launcher shortcut; this branch is unreachable.
+            QuickAction.PING -> R.drawable.ic_shortcut_start
         }
 
     private fun openVpnSettings(): Boolean {

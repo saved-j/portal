@@ -194,6 +194,10 @@ abstract class SharedState with _$SharedState {
     required String currentProfileName,
     required String stopText,
     @Default(true) bool showStopAction,
+    @Default('') String currentServer,
+    @Default('') String pingText,
+    @Default(false) bool showPing,
+    @Default([]) List<String> pingServers,
   }) = _SharedState;
 
   factory SharedState.fromJson(Map<String, Object?> json) =>
