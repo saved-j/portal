@@ -591,6 +591,12 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     if (_showingChips && target == TutorialTarget.modeSwitch) {
       target = TutorialTarget.chipStrip;
     }
+    // The hold and the double-tap on a tile have the same problem as the server column: one
+    // tile can be scrolled off screen by the sweep on page one. Frame the whole strip, the way
+    // the bolt page frames the whole column.
+    if (target == TutorialTarget.chip) {
+      target = TutorialTarget.chipStrip;
+    }
     // After the bolt is pressed the page is about the pings on the servers, not the bolt: the
     // hole moves onto the whole server column while the owner sweeps it.
     final effective = (_showingPings && target == TutorialTarget.autoPing)
