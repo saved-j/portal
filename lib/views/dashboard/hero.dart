@@ -83,11 +83,19 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
       return;
     }
     if (ref.read(profilesProvider).isEmpty) return;
-    // The first run teaches the network mode from the simple portal: the mode switch must sit on
-    // the simple mode before the tour opens, whatever the panel last set. A normal (already seen)
-    // launch keeps the last mode instead. Set directly, bypassing the panel's mode gate, so even
-    // a panel that forbids the global mode still starts the tour in the simple portal.
-    if (!setting.tutorialSeen) {
+    // A tour whose text changed starts from its first page: the stored step belongs to the
+    // previous one and would drop the owner into the middle of a story he has not begun.
+    final resume = setting.tutorialVersion >= tutorialVersion
+        ? setting.tutorialStep
+        : 0;
+    // The tour teaches the network mode from the simple portal: the switch must sit on the
+    // simple mode before the tour opens, whatever the panel last set. This covers a
+    // version-bump re-run too — a user who finished the old tour keeps `tutorialSeen`, and
+    // without this line their last mode (network) is still on when the switch page asks them
+    // to turn it on, so their first tap turns it off and the chip page has no chips. Set
+    // directly, bypassing the panel's mode gate, so even a panel that forbids the global mode
+    // still starts the tour in the simple portal.
+    if (resume == 0) {
       ref
           .read(patchClashConfigProvider.notifier)
           .update((state) => state.copyWith(mode: Mode.global));
@@ -95,11 +103,6 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
           .read(proxiesActionProvider.notifier)
           .updateCurrentGroupName(GroupName.GLOBAL.name);
     }
-    // A tour whose text changed starts from its first page: the stored step belongs to the
-    // previous one and would drop the owner into the middle of a story he has not begun.
-    final resume = setting.tutorialVersion >= tutorialVersion
-        ? setting.tutorialStep
-        : 0;
     _tourRequested = true;
     showPortalTutorial(context, fromStep: resume);
   }

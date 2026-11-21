@@ -711,7 +711,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
                       : null,
               isLast: _index == _steps.length - 1,
               holdsMore:
-                  (step.number == 1 && _showingChips && _chipScrolls > 0) ||
+                  (step.number == 1 && _showingChips) ||
                       (step.number == 4 && _confirmed) ||
                       (step.number == 7 && _showingPings),
               onNext: _next,
