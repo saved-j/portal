@@ -614,6 +614,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // Never taller than its gap, and never taller than two fifths of the screen: the page behind
     // it is the lesson, and the card's own text scrolls inside whatever height is left.
     final cardSpace = room.height.clamp(0.0, screen.height * 0.42);
+    // A window can be far wider than a readable card. The card is capped so a page never turns
+    // into a banner spanning the screen, while the gap's own width still decides where it sits.
+    const maxCardWidth = 480.0;
+    final cardWidth = room.width.clamp(0.0, maxCardWidth);
     return Material(
       type: MaterialType.transparency,
       child: Stack(
@@ -641,7 +645,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
             ignoring: false,
             child: _CardSlot(
             left: room.left,
-            width: room.width,
+            width: cardWidth,
             // A slot that starts from the bottom is first limited in height: with only a
             // `bottom` set, a child taller than the room grows up over the control instead of
             // being cut off inside its own gap.
