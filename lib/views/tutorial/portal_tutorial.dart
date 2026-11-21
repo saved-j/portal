@@ -106,33 +106,36 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 48;
+const tutorialVersion = 49;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, and only the switch. The app opens in the simple portal, so the switch is off by
   // fact, not by paint: the owner's own press is what turns the network on. The card and the mask
-  // then step aside so the chips arriving is the thing watched, not the words about it.
+  // then step aside so the chips arriving is the thing watched, not the words about it; sweeping
+  // them left and right is the same page.
   TutorialStep(
     target: TutorialTarget.modeSwitch,
     number: 1,
     done: TutorialEvent.modeChanged,
   ),
-  // Opening a list is a screen, not a card: the tour hides, the real page comes up, and the next
-  // page is about what the owner does there.
-  TutorialStep(
-    target: TutorialTarget.filters,
-    number: 2,
-    opensScreen: true,
-  ),
+  // Holding a tile switches one filter on and off: the lesson of tunnelling per service.
   TutorialStep(
     target: TutorialTarget.chip,
     number: 3,
     done: TutorialEvent.chipHeld,
   ),
+  // A double tap changes the tile layout.
   TutorialStep(
     target: TutorialTarget.chip,
     number: 4,
     done: TutorialEvent.chipDoubleTapped,
+  ),
+  // Opening the filter list is a screen, not a card: the tour hides, the real page comes up,
+  // and the next page is about what the owner does there.
+  TutorialStep(
+    target: TutorialTarget.filters,
+    number: 2,
+    opensScreen: true,
   ),
   // The word, not the row: the dashboard opens on the name and nothing else.
   TutorialStep(
@@ -143,8 +146,6 @@ const tutorialSteps = <TutorialStep>[
   ),
   // The page asks for the measurement the button performs, and the list it leaves behind is the
   // lesson: numbers appearing where dashes were.
-  // Start, then measure: two different controls, two different lessons. They were one page in an
-  // earlier pass and the words stopped matching the screen.
   TutorialStep(
     target: TutorialTarget.start,
     number: 6,
@@ -155,9 +156,7 @@ const tutorialSteps = <TutorialStep>[
     number: 7,
     done: TutorialEvent.pingAllStarted,
   ),
-  // The whole column — the bolt and every row under it — because the sentence is about the
-  // figures that appear in it the moment the portal opens. No wait: they are there at once.
-
+  // Adding the portal tile to the quick settings through the pencil on Android.
   TutorialStep(
     target: null,
     number: 8,
@@ -449,12 +448,24 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // Switching the mode is followed by the list arriving: the owner has to see that before the
     // next page asks him for anything.
     if (step.number == 1) {
-      // The switch has moved: the page now asks the owner to sweep the chip strip, and it
+      // The switch has moved. The strip of tiles is sliding in, and the card with the focus
+      // frame must not chase it: hide the card and the mask, let the strip arrive (its own
+      // slide-down, ~260 ms), and only then come back asking the owner to sweep. The page then
       // advances on three or four sweeps, or the OK button.
       if (!_showingChips) {
-        _showingChips = true;
-        _chipScrolls = 0;
-        tourScrollLocked.value = false;
+        _cardHidden = true;
+        _noMask = true;
+        _waitTimer?.cancel();
+        _waitTimer = Timer(const Duration(milliseconds: 420), () {
+          if (!mounted) return;
+          setState(() {
+            _noMask = false;
+            _cardHidden = false;
+            _showingChips = true;
+            _chipScrolls = 0;
+          });
+          tourScrollLocked.value = false;
+        });
         setState(() {});
       }
       return;
