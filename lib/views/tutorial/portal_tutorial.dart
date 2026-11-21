@@ -7,7 +7,6 @@ import 'package:fl_clash/views/dashboard/portal_controls.dart'
     show portalAvailabilityProvider;
 
 import 'tutorial_bus.dart';
-import 'package:fl_clash/enum/enum.dart' show Mode;
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/haptics.dart';
 import 'package:material_ui/material_ui.dart';
@@ -46,7 +45,6 @@ class TutorialStep {
     this.done,
     this.opensScreen = false,
     this.needsMode = true,
-    this.switchesOn = false,
   });
 
   final TutorialTarget? target;
@@ -72,10 +70,6 @@ class TutorialStep {
   /// filter strip and the tile layout are the engine's. A portal-only subscription keeps the
   /// first and the last pages and nothing in between.
   final bool needsMode;
-
-  /// The page turns the network mode on by itself, through the real control, before it lets the
-  /// owner see the list arrive.
-  final bool switchesOn;
 
   /// The action that closes this page. The owner performs it on the real control; the page
   /// then says what happened and moves on.
@@ -111,17 +105,16 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 41;
+const tutorialVersion = 42;
 
 const tutorialSteps = <TutorialStep>[
-  // The switch, not the row. The page switches the network on itself, through the same control the
-  // owner would press, so the wave that follows is the real one; the card hides while it arrives
-  // and leaves only the list visible in the hole.
+  // The switch, and only the switch. The app opens in the simple portal, so the switch is off by
+  // fact, not by paint: the owner's own press is what turns the network on. The card and the mask
+  // then step aside so the chips arriving is the thing watched, not the words about it.
   TutorialStep(
     target: TutorialTarget.modeSwitch,
     number: 1,
     done: TutorialEvent.modeChanged,
-    switchesOn: true,
   ),
   // Opening a list is a screen, not a card: the tour hides, the real page comes up, and the next
   // page is about what the owner does there.
@@ -205,9 +198,9 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// watched — the list arriving, a sheet closing — not the words about it.
   bool _cardHidden = false;
 
-  /// The hole is widened to the chip strip: the page is about the list appearing, not about the
-  /// switch that was already pressed.
-  bool _wideHole = false;
+  /// The mask is lifted entirely while the chips arrive: the page is about the list appearing,
+  /// and a hole over the switch would leave the arriving strip under the dim.
+  bool _noMask = false;
 
   /// The page that asked for a screen has been served: it is not drawn again, not even for the
   /// moment the closing sheet takes to slide away.
@@ -334,22 +327,14 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     );
   }
 
-  /// Turns the network mode on through the switch's own action, then lets the card hide while the
-  /// list arrives: the wave is the lesson on this page, and a card over it would hide it.
-  /// The page is done: hide the card for a beat so the screen it produced is seen, then move on.
-  void _onPageSettled() {
-    setState(() => _waiting = false);
-    _advanceAfter(seconds: 2);
-  }
-
-  void _advanceAfter({required int seconds, bool wideHole = false}) {
+  void _advanceAfter({required int seconds, bool noMask = false}) {
     _cardHidden = true;
-    _wideHole = wideHole;
+    _noMask = noMask;
     setState(() {});
     Future<void>.delayed(Duration(seconds: seconds), () {
       if (!mounted) return;
       _cardHidden = false;
-      _wideHole = false;
+      _noMask = false;
       _next();
     });
   }
@@ -365,8 +350,9 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // Switching the mode is followed by the list arriving: the owner has to see that before the
     // next page asks him for anything.
     if (step.number == 1) {
-      // Three seconds with the strip in the hole: the mode change, then the chips arriving.
-      _advanceAfter(seconds: 3, wideHole: true);
+      // Three seconds with the mask lifted: the mode change, then the chips arriving top to
+      // bottom, seen across the whole screen rather than through a hole over the switch.
+      _advanceAfter(seconds: 3, noMask: true);
       return;
     }
     if (step.number == 3 && !_confirmed) {
@@ -475,23 +461,11 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // A Material switch answers in a 48 dp box and draws a 34×14 track inside it: the frame
     // goes on what the owner can see, not on the invisible margin that takes the touch.
     if (target == TutorialTarget.modeSwitch) {
-      final track = Rect.fromCenter(
+      return Rect.fromCenter(
         center: full.center,
         width: full.width * 34 / 48,
         height: full.height * 14 / 48,
       );
-      // While the list arrives, the hole takes in the strip under the switch: the owner is meant
-      // to watch the chips appear, and a window on the switch alone would hide them.
-      if (_wideHole) {
-        final strip = tutorialKeys[TutorialTarget.filters]
-            ?.currentContext
-            ?.findRenderObject();
-        if (strip is RenderBox && strip.hasSize) {
-          final stripRect = strip.localToGlobal(Offset.zero) & strip.size;
-          return track.expandToInclude(stripRect).inflate(8);
-        }
-      }
-      return track;
     }
     return full;
   }
@@ -502,7 +476,6 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // screen first, and the page that follows is the one that says how to use it.
     if (_screens > 0) return const SizedBox.shrink();
     if (_served && _steps[_index].opensScreen) return const SizedBox.shrink();
-    final theme = Theme.of(context);
     final step = _steps[_index];
     final size = MediaQuery.sizeOf(context);
     final screen = size;
@@ -635,17 +608,21 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
           // The dim is painted but never touched, and the only things that catch a tap are the
           // four bands around the hole. The hole itself belongs to the real control underneath:
           // the tour asks the owner to press it, so it must be pressable.
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(
-                painter: _HolePainter(
-                  hole: rect?.inflate(6),
-                  color: Colors.black.withValues(alpha: 0.72),
+          // While the mask is lifted the whole screen is left bare: the owner watches the chips
+          // arrive, and nothing dims or swallows a tap over them.
+          if (!_noMask) ...[
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _HolePainter(
+                    hole: rect?.inflate(6),
+                    color: Colors.black.withValues(alpha: 0.72),
+                  ),
                 ),
               ),
             ),
-          ),
-          ..._frameAround(rect, size),
+            ..._frameAround(rect, size),
+          ],
           if (!_waiting && !_cardHidden)
           IgnorePointer(
             ignoring: false,
