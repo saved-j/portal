@@ -1,2 +1,4 @@
 # freezed emits lines of trailing spaces, and generated code is never edited by hand.
 lib/**/generated/** -whitespace
+# Windows batch files must keep CRLF: git-am would otherwise normalise them to LF.
+*.bat text eol=crlf

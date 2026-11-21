@@ -1,0 +1,3963 @@
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/FlClashApplication.kt b/android/app/src/main/kotlin/com/follow/clashx/FlClashApplication.kt
+index 4322dfbd42df3bd6a67aaf31aa1ee70400242da5..ecc1acd86bd062f208198fb62cec990e075f69b0 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/FlClashApplication.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/FlClashApplication.kt
+@@ -3,10 +3,28 @@ package com.follow.clashx
+ import android.app.Application
+ import android.content.Context
+ import com.follow.clashx.common.GlobalState
++import com.follow.clashx.common.PortalTelemetry
++import com.follow.clashx.service.ServiceConfig
+ 
+ class FlClashApplication : Application() {
+     override fun attachBaseContext(base: Context?) {
+         super.attachBaseContext(base)
+         GlobalState.init(this)
+     }
++
++    override fun onCreate() {
++        super.onCreate()
++        // The record has to exist before the first portal does, and it has to answer the
++        // one question the log could never answer from logcat alone: which owner holds the
++        // tunnel right now. The service's runtime is only visible from this module, so the
++        // probe is wired here.
++        PortalTelemetry.engineProbe = { ServiceController.engineListening }
++        PortalTelemetry.portProbe = {
++            val options = ServiceConfig.vpnOptions
++            // The options' mixed port first, then the ports the two cores use when a
++            // profile never named one: the probe answers with those that really listen.
++            listOfNotNull(options?.port) + listOf(10810, 7890, 9090)
++        }
++        PortalTelemetry.start()
++    }
+ }
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/MainActivity.kt b/android/app/src/main/kotlin/com/follow/clashx/MainActivity.kt
+index d9bcd092b00d8c219107cbba7e08109060d7de14..8176a5dfb688718ccbb738f33c1c4329f86529fd 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/MainActivity.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/MainActivity.kt
+@@ -3,8 +3,10 @@ package com.follow.clashx
+ import android.os.Bundle
+ import com.follow.clashx.plugins.AppPlugin
+ import com.follow.clashx.plugins.BatteryPlugin
++import com.follow.clashx.plugins.PortalRuntimePlugin
+ import com.follow.clashx.plugins.ServicePlugin
+ import com.follow.clashx.plugins.TilePlugin
++import com.follow.clashx.plugins.XrayPlugin
+ import io.flutter.embedding.android.FlutterActivity
+ import io.flutter.embedding.engine.FlutterEngine
+ 
+@@ -34,7 +36,9 @@ class MainActivity : FlutterActivity() {
+         flutterEngine.plugins.add(AppPlugin())
+         flutterEngine.plugins.add(BatteryPlugin())
+         flutterEngine.plugins.add(ServicePlugin())
++        flutterEngine.plugins.add(PortalRuntimePlugin())
+         flutterEngine.plugins.add(TilePlugin())
++        flutterEngine.plugins.add(XrayPlugin())
+         ServiceState.attachFlutterEngine(flutterEngine)
+         flutterEngine.addEngineLifecycleListener(stopVibrationOnRestart)
+     }
+@@ -54,3 +58,4 @@ class MainActivity : FlutterActivity() {
+ }
+ 
+ private const val LAUNCH_RISE_MS = 600L
++
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/PortalRuntimeCoordinator.kt b/android/app/src/main/kotlin/com/follow/clashx/PortalRuntimeCoordinator.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..bbdcd9218d9b48ed054413eeb4d5371e02ddf83e
+--- /dev/null
++++ b/android/app/src/main/kotlin/com/follow/clashx/PortalRuntimeCoordinator.kt
+@@ -0,0 +1,494 @@
++package com.follow.clashx
++
++import com.follow.clashx.common.GlobalState
++import com.follow.clashx.plugins.XrayPlugin
++import java.io.File
++import com.follow.clashx.common.PortalOwner
++import com.follow.clashx.common.PortalRuntime
++import com.follow.clashx.common.PortalRuntimeState
++import com.follow.clashx.common.XrayTunHolder
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++
++/// What the child answered for one start: its own words, and the tunnel epoch it read.
++data class PortalChildStart(
++    val ok: Boolean,
++    val cancelled: Boolean = false,
++    val reason: String = "",
++    val epoch: Long = 0L,
++)
++
++/// What the child answered for one stop. `ok` is only ever true once `XrayStop` returned.
++data class PortalChildStop(
++    val ok: Boolean,
++    val reason: String = "",
++)
++
++/**
++ * The plugin's half of a transaction, as the coordinator needs it: start and stop that only
++ * return when the core itself has answered, and the flag it keeps.
++ *
++ * The coordinator never touches the core directly: the plugin owns the JNI calls and the
++ * executor they run on, and this is the narrow face it turns towards the one lock.
++ */
++interface PortalChildGateway {
++    fun start(config: String): PortalChildStart
++
++    fun stop(): PortalChildStop
++
++    val running: Boolean
++
++    /** The core's own last line, for a failure the coordinator has to report. */
++    val coreLine: String
++}
++
++/// The answer of one entry: what happened, and the record it left behind.
++data class PortalOutcome(
++    val ok: Boolean,
++    val cancelled: Boolean = false,
++    val reason: String = "",
++    val runtime: PortalRuntime = PortalRuntimeState.current(),
++) {
++    fun toMap(): Map<String, Any?> = mapOf(
++        "ok" to ok,
++        "cancelled" to cancelled,
++        "message" to reason,
++        "state" to runtime.toMap(),
++    )
++}
++
++/**
++ * The one gate every entry to the tunnel goes through.
++ *
++ * The power button, a row tap, Quick Settings, Always-on, a revoke and a restart all ended
++ * up here before, in three different places: a Dart flag around the mode switch, the
++ * service's own mutex around `ServiceController.start`, and a row tap that called Xray
++ * directly. Each was correct about its own little step and none of them knew about the
++ * others, which is how two readers of one interface, a start cancelled by its own stop and
++ * an `Already closed` descriptor all reached the device.
++ *
++ * Now there is one entry and one mutex, and the lock order is fixed and one-directional:
++ *
++ *     coordinator → transitionLock (ServiceStateMachine) → ServiceController.lock → tunLock
++ *
++ * Every path below follows it and none of them takes it backwards. A revoke is the one
++ * exception, and it is not a lock but a fence: it mints a new generation without waiting,
++ * so a transaction that is holding the mutex cannot publish its `Active` over a tunnel the
++ * system has already taken away.
++ *
++ * `Active` is published only after the owner has answered for itself — the child's
++ * `portal0 up`, or the engine's service and listener — with the generation and the tunnel
++ * epoch it was confirmed on.
++ */
++object PortalRuntimeCoordinator {
++    private const val TAG = "PortalRuntime"
++
++    /// The last document a run actually started on, for a start with no Flutter engine.
++    private const val SAVED_DOCUMENT = "portal-last-node.json"
++
++    private val mutex = Mutex()
++
++    @Volatile
++    private var child: PortalChildGateway? = null
++
++    /// Builds the child's document on demand, for an entry that does not carry one.
++    ///
++    /// Quick Settings and Always-on ask for a run without a Flutter call stack; the document
++    /// is the profile's, and only Dart can build it. This is how the one entry gets it, and
++    /// it is awaited inside the mutex so the profile it was built from is the one the
++    /// transaction confirms.
++    @Volatile
++    private var configSource: (suspend () -> String?)? = null
++
++    fun attachChild(gateway: PortalChildGateway) {
++        child = gateway
++    }
++
++    fun detachChild(gateway: PortalChildGateway) {
++        if (child === gateway) child = null
++    }
++
++    fun provideChildConfig(source: (suspend () -> String?)?) {
++        configSource = source
++    }
++
++    /// The node document the previous run used, kept on disk for a start with no Flutter.
++    ///
++    /// The tile can be tapped while the app is not running, and at that moment there is no Dart
++    /// side to build a document — `configSource` is a call into a Flutter engine that does not
++    /// exist. 0.01a answered that by starting from the saved preferences, and that is what makes
++    /// the tile work with the app thrown out of memory. This is the same idea: the last document
++    /// a run actually started on, written next to the core's own files and replayed when no
++    /// builder answers.
++    private fun savedDocumentFile(): File =
++        File(GlobalState.application.filesDir, SAVED_DOCUMENT)
++
++    fun rememberDocument(document: String) {
++        runCatching { savedDocumentFile().writeText(document, Charsets.UTF_8) }
++            .onFailure { GlobalState.log("$TAG cannot save the node document: ${it.message}") }
++    }
++
++    fun savedDocument(): String? = runCatching {
++        val file = savedDocumentFile()
++        if (!file.exists()) return null
++        file.readText(Charsets.UTF_8).takeIf { it.isNotBlank() }
++    }.getOrNull()
++
++    /** The owner the shared state asks for: the mode, as the app last wrote it. */
++    fun desiredOwner(): PortalOwner {
++        val options = runCatching { AndroidServiceStateHost.loadSharedState().vpnOptions }.getOrNull()
++        return if (options?.xrayTun == true) PortalOwner.Xray else PortalOwner.Mihomo
++    }
++
++    /// Quick Settings' start: the owner the mode names, and the document Dart builds — or, with
++    /// no engine attached, the document the last run started on.
++    suspend fun openDesired(): PortalOutcome = open(desiredOwner())
++
++    fun status(): Map<String, Any?> = PortalRuntimeState.current().toMap() + mapOf(
++        "engine" to (ServiceController.runtime != null),
++        "child" to (child?.running == true),
++        "childLine" to (child?.coreLine.orEmpty()),
++    )
++
++    /** Opens the tunnel for [owner], or moves it there from whoever holds it now. */
++    suspend fun open(
++        owner: PortalOwner,
++        config: String? = null,
++        why: String = "app",
++    ): PortalOutcome = mutex.withLock {
++        GlobalState.log("$TAG entry=open owner=${owner.label} why=$why config=${config != null}")
++        guarded { openLocked(owner, config, why) }
++    }
++
++    /** Closes the tunnel: the child first, then the service, and the record follows. */
++    suspend fun close(reason: String = "stop"): PortalOutcome = mutex.withLock {
++        GlobalState.log("$TAG entry=close reason=$reason")
++        guarded { closeLocked(reason) }
++    }
++
++    suspend fun restart(config: String? = null): PortalOutcome = mutex.withLock {
++        GlobalState.log("$TAG entry=restart")
++        guarded {
++            val owner = desiredOwner()
++            val closed = closeLocked("restart")
++            if (!closed.ok) closed else openLocked(owner, config, "restart")
++        }
++    }
++
++    /** A row tap: the same owner, a new document, under the same lock. */
++    suspend fun startChild(config: String): PortalOutcome = mutex.withLock {
++        GlobalState.log("$TAG entry=startChild")
++        guarded {
++            val seen = PortalRuntimeState.current()
++            if (seen is PortalRuntime.Active && seen.owner == PortalOwner.Xray) {
++                // The tunnel stays: only the core reading it is replaced, and the same
++                // generation moves through Starting to Active so a late answer from the
++                // core that was just replaced cannot claim the record.
++                val generation = PortalRuntimeState.nextGeneration()
++                PortalRuntimeState.publish(PortalRuntime.Starting(generation, PortalOwner.Xray), "row")
++                startChildLocked(generation, config, "row")
++            } else {
++                openLocked(PortalOwner.Xray, config, "row")
++            }
++        }
++    }
++
++    /** Quick Settings and the launcher's quick action. */
++    suspend fun toggle(): PortalOutcome = mutex.withLock {
++        val running = PortalRuntimeState.current().isLive || ServiceController.runtime != null
++        GlobalState.log("$TAG entry=toggle running=$running")
++        guarded {
++            when {
++                running -> closeLocked("quick-settings")
++                else -> openLocked(desiredOwner(), null, "quick-settings")
++            }
++        }
++    }
++
++    // Any throw is this transaction's own failure; it must not leave a Starting record that
++    // nothing will ever finish, and it must not escape to a caller that only reads `ok`.
++    private suspend fun guarded(block: suspend () -> PortalOutcome): PortalOutcome = try {
++        block()
++    } catch (error: kotlinx.coroutines.CancellationException) {
++        GlobalState.log("$TAG transaction cancelled: $error")
++        throw error
++    } catch (error: Exception) {
++        val generation = PortalRuntimeState.nextGeneration()
++        val reason = error.message ?: error.toString()
++        GlobalState.log("$TAG transaction failed: $reason")
++        PortalRuntimeState.publish(PortalRuntime.Failed(generation, reason), "failed")
++        PortalOutcome(ok = false, reason = reason)
++    }
++
++    private suspend fun openLocked(
++        owner: PortalOwner,
++        config: String?,
++        why: String,
++    ): PortalOutcome {
++        val seen = PortalRuntimeState.current()
++        // The same owner, and nothing new to hand it: the portal is already what was asked.
++        if (seen is PortalRuntime.Active && seen.owner == owner &&
++            (owner == PortalOwner.Mihomo || config == null)
++        ) {
++            GlobalState.log("$TAG phase=Active owner=${owner.label} result=already-active")
++            return PortalOutcome(ok = true, runtime = seen)
++        }
++        val generation = PortalRuntimeState.nextGeneration()
++        PortalRuntimeState.publish(PortalRuntime.Starting(generation, owner), why)
++
++        // 1. Whoever holds the tunnel lets go first, and only after saying so.
++        releaseLocked(generation, seen, why)?.let { return it }
++        if (!stillCurrent(generation)) return stale(generation, "open")
++
++        // 2. The service, in the mode Dart has already written into the shared state.
++        GlobalState.log("$TAG phase=Starting owner=${owner.label} step=service")
++        val epochBefore = PortalRuntimeState.currentFdEpoch()
++        if (!startService(generation, owner)) {
++            return failed(generation, "the service did not start for ${owner.label}")
++        }
++        // The service chose its own reader when it established the tunnel, from the options
++        // it had. A child's tunnel published for an engine start is a mismatch no answer
++        // can paper over: nothing of the engine would be reading it, and calling that
++        // `Active owner=Mihomo` is exactly the false record this patch exists to remove.
++        if (owner == PortalOwner.Mihomo && XrayTunHolder.currentEpoch() > epochBefore) {
++            // The service established the child's tunnel: the options it started from still named
++            // the child as the reader, left over from the simple portal. A start with the wrong
++            // reader is a start that can be redone — not a portal that has to close — so the
++            // service is stopped, the reader is pointed at the engine and the start is asked once
++            // more. A second mismatch is a real refusal and stays one.
++            GlobalState.log(
++                "$TAG generation=$generation the service built the child's tunnel, " +
++                    "restarting it for the engine",
++            )
++            stopService()
++            ServiceState.pointTunnelAt(child = false)
++            val retryEpoch = PortalRuntimeState.currentFdEpoch()
++            if (!startService(generation, owner)) {
++                return failed(generation, "the service did not start for ${owner.label}")
++            }
++            if (XrayTunHolder.currentEpoch() > retryEpoch) {
++                stopService()
++                return failed(
++                    generation,
++                    "the service published a child tunnel while the engine was asked for one",
++                )
++            }
++        }
++        if (!stillCurrent(generation)) {
++            runCatching { ServiceState.requestStop() }
++            return stale(generation, "service start")
++        }
++
++        // 3. The child, when the tunnel is the child's: it alone can acknowledge reading it.
++        if (owner == PortalOwner.Xray) {
++            return startChildLocked(generation, config, why)
++        }
++        // 4. The engine answered by taking the descriptor in `Core.startTun`; publish it —
++        // but only when there is a runtime to have taken it. A service that came up and then
++        // carried nothing is not `Active`, and a green tile over a dead tunnel is the one lie
++        // this record cannot afford.
++        if (ServiceController.runtime == null) {
++            stopService()
++            return failed(generation, "the engine did not take the tunnel")
++        }
++        val epoch = PortalRuntimeState.currentFdEpoch()
++        PortalRuntimeState.publish(PortalRuntime.Active(generation, PortalOwner.Mihomo, epoch), why)
++        GlobalState.log("$TAG phase=Active owner=Mihomo generation=$generation fdEpoch=$epoch result=ok")
++        return PortalOutcome(ok = true, runtime = PortalRuntimeState.current())
++    }
++
++    private suspend fun startChildLocked(
++        generation: Long,
++        config: String?,
++        why: String,
++    ): PortalOutcome {
++        // The core does not need Flutter to exist: the process keeps one instance, created
++        // headless by whoever asks first (the shade's tile can arrive before any engine) and
++        // adopted by the engine when the app opens. This is the same object either way, so the
++        // tile and the app's button hold the same tunnel, not two copies of one.
++        val gateway = child ?: runCatching {
++            if (!XrayPlugin.available()) return@runCatching null
++            XrayPlugin.obtain().also { attachChild(it) }
++        }.getOrNull()
++            ?: return failed(generation, "this build has no portal core for the tunnel")
++        // A caller that carries a document is the app itself; one that does not is the tile, and
++        // the builder it would ask may be a Flutter engine that is not running. The last document
++        // a run started on is the honest answer there — it is the node the owner last used.
++        val document = config
++            ?: configSource?.invoke()?.takeIf { it.isNotBlank() }
++            ?: savedDocument()
++        if (document.isNullOrBlank()) {
++            closeServiceAfterFailure()
++            return failed(generation, "no node document to start the portal core on")
++        }
++        if (!stillCurrent(generation)) {
++            closeServiceAfterFailure()
++            return stale(generation, "child start")
++        }
++        // The service publishes the child's tunnel when it establishes, and a service already
++        // running for the engine never establishes a second one — the switch then found an empty
++        // slot and reported "the portal has no open tunnel" over a VPN that was perfectly up.
++        // With nothing in hand the service is restarted with the child as its reader, which is
++        // what publishes a tunnel at all.
++        ServiceState.pointTunnelAt(child = true)
++        if (XrayTunHolder.peek() == null) {
++            runCatching { ServiceState.requestStop().await() }
++                .onFailure { GlobalState.log("$TAG the service did not stop: ${it.message}") }
++            if (!startService(generation, PortalOwner.Xray)) {
++                closeServiceAfterFailure()
++                return failed(generation, "the service did not start for the portal core")
++            }
++        }
++        GlobalState.log("$TAG phase=Starting owner=Xray step=child generation=$generation")
++        // Remembered before the start, not after: a core that refuses still names the document a
++        // later no-Flutter start would have to try, and a start that fails is not a reason to
++        // forget which node the owner picked.
++        rememberDocument(document)
++        val started = gateway.start(document)
++        if (!started.ok) {
++            // A core that refused has already let the tunnel go; the service must not stay
++            // up over an interface nothing reads.
++            closeServiceAfterFailure()
++            if (started.cancelled) {
++                GlobalState.log("$TAG phase=Failed owner=Xray generation=$generation cancelled")
++                return PortalOutcome(ok = false, cancelled = true, reason = started.reason)
++            }
++            return failed(generation, started.reason)
++        }
++        if (!stillCurrent(generation)) {
++            gateway.stop()
++            closeServiceAfterFailure()
++            return stale(generation, "child acknowledgement")
++        }
++        PortalRuntimeState.publish(
++            PortalRuntime.Active(generation, PortalOwner.Xray, started.epoch),
++            why,
++        )
++        GlobalState.log(
++            "$TAG phase=Active owner=Xray generation=$generation fdEpoch=${started.epoch} result=ok",
++        )
++        return PortalOutcome(ok = true, runtime = PortalRuntimeState.current())
++    }
++
++    /** Stops whoever holds the tunnel. `null` when there was nobody to stop. */
++    private suspend fun releaseLocked(
++        generation: Long,
++        seen: PortalRuntime,
++        why: String,
++    ): PortalOutcome? {
++        val previous = seen.owner
++        if (previous == null || (!seen.isLive && seen !is PortalRuntime.Failed)) return null
++        PortalRuntimeState.publish(PortalRuntime.Stopping(generation, previous), why)
++        GlobalState.log("$TAG phase=Stopping owner=${previous.label} generation=$generation")
++        if (previous == PortalOwner.Xray || child?.running == true) {
++            val stopped = child?.stop() ?: PortalChildStop(ok = true)
++            if (!stopped.ok) {
++                return failed(generation, "the portal core did not stop: ${stopped.reason}")
++            }
++            GlobalState.log("$TAG phase=Stopping owner=Xray generation=$generation xraystop=ok")
++        }
++        if (ServiceController.runtime != null && !stopService()) {
++            return failed(generation, "the service did not stop")
++        }
++        return null
++    }
++
++    private suspend fun closeLocked(reason: String): PortalOutcome {
++        val seen = PortalRuntimeState.current()
++        val generation = PortalRuntimeState.nextGeneration()
++        if (seen.isLive && seen.owner != null) {
++            PortalRuntimeState.publish(PortalRuntime.Stopping(generation, seen.owner!!), reason)
++            GlobalState.log(
++                "$TAG phase=Stopping owner=${seen.owner!!.label} generation=$generation reason=$reason",
++            )
++        }
++        var ok = true
++        var problem = ""
++        if (seen.owner == PortalOwner.Xray || child?.running == true) {
++            val stopped = child?.stop() ?: PortalChildStop(ok = true)
++            if (!stopped.ok) {
++                ok = false
++                problem = "the portal core did not stop: ${stopped.reason}"
++            }
++        }
++        if (ServiceController.runtime != null && !stopService()) {
++            ok = false
++            if (problem.isEmpty()) problem = "the service did not stop"
++        }
++        if (!ok) return failed(generation, problem)
++        PortalRuntimeState.publish(PortalRuntime.Off(generation), reason)
++        GlobalState.log("$TAG phase=Off generation=$generation result=ok reason=$reason")
++        return PortalOutcome(ok = true, runtime = PortalRuntimeState.current())
++    }
++
++    private suspend fun startService(generation: Long, owner: PortalOwner): Boolean {
++        // The service reads its options from the shared state that the app writes and the
++        // machine holds in memory. A start that did not come from Flutter — the shade's tile,
++        // a shortcut, a boot — has nothing in memory yet, and without this line the request is
++        // refused as if the app had no profile. The same state is what the 0.01a tile path
++        // loaded before asking; here it is loaded for every entry, once, before the ask.
++        // Only a start with nothing in hand needs the file: with Flutter attached the machine
++        // already holds the options Dart just wrote, and loading over them would bring back the
++        // mode the disk had a moment ago — the service would then build the other core's tunnel
++        // and the engine start would be refused as a mismatch.
++        if (!ServiceState.hasSharedState) {
++            runCatching { ServiceState.syncSharedState(AndroidServiceStateHost.loadSharedState()) }
++                .onFailure { GlobalState.log("$TAG cannot load the shared state: ${it.message}") }
++        }
++        // The tunnel's reader is the owner being started — after the load, never before it: the
++        // file may name the other core, and pointing first only to be overwritten by the load is
++        // how the service came to establish the child's tunnel under an engine start.
++        ServiceState.pointTunnelAt(child = owner != PortalOwner.Mihomo)
++        GlobalState.log(
++            "$TAG generation=$generation tunnel reader=${if (owner == PortalOwner.Mihomo) "engine" else "child"}",
++        )
++        // The engine must be configured before a tunnel is handed to it: its config lives in
++        // memory and is normally written by Dart, which a start from the shade does not have.
++        // Without this the service comes up carrying nothing, and calling that `Active` is the
++        // false record this whole path exists to avoid.
++        if (owner == PortalOwner.Mihomo && ServiceController.runtime == null) {
++            val ready = runCatching { ServiceState.prepareCore() }.getOrDefault(false)
++            GlobalState.log("$TAG generation=$generation engine prepared=$ready")
++            if (!ready) return false
++        }
++        val answered = ServiceState.requestStart().await()
++        GlobalState.log(
++            "$TAG generation=$generation step=service start=$answered " +
++                "engine=${ServiceController.runtime != null}",
++        )
++        return answered
++    }
++
++    // The stop is the service's own answer: what it returns is whether the transition that
++    // was asked for is still the newest one, and the record follows the tunnel being gone.
++    private suspend fun stopService(): Boolean {
++        val answered = ServiceState.requestStop().await()
++        GlobalState.log("$TAG step=service stop=$answered engine-off=${ServiceController.runtime == null}")
++        return answered
++    }
++
++    private suspend fun closeServiceAfterFailure() {
++        runCatching { stopService() }
++            .onFailure { GlobalState.log("$TAG unable to close the service after a failure: $it") }
++    }
++
++    private fun stillCurrent(generation: Long): Boolean = PortalRuntimeState.isCurrent(generation)
++
++    private fun stale(generation: Long, step: String): PortalOutcome {
++        GlobalState.log(
++            "$TAG generation=$generation step=$step result=stale " +
++                "(now ${PortalRuntimeState.current().describe()})",
++        )
++        return PortalOutcome(
++            ok = false,
++            cancelled = true,
++            reason = "a newer command took the portal during $step",
++        )
++    }
++
++    private fun failed(generation: Long, reason: String): PortalOutcome {
++        PortalRuntimeState.publish(PortalRuntime.Failed(generation, reason), "failed")
++        GlobalState.log("$TAG generation=$generation phase=Failed reason=$reason")
++        return PortalOutcome(ok = false, reason = reason)
++    }
++}
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/QuickActionActivity.kt b/android/app/src/main/kotlin/com/follow/clashx/QuickActionActivity.kt
+index 5766d934fa721b0b5fc5993501d438ac48e61941..1096fe26a98fedb431be5a2fcf5980a0085af5fd 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/QuickActionActivity.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/QuickActionActivity.kt
+@@ -2,6 +2,7 @@ package com.follow.clashx
+ 
+ import android.app.Activity
+ import android.content.Intent
++import android.os.Build
+ import android.os.Bundle
+ import android.view.WindowManager
+ import androidx.core.content.pm.ShortcutManagerCompat
+@@ -20,8 +21,26 @@ class QuickActionActivity : Activity() {
+ 
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+-        // Android 12 passes touches through another app's window only if it is fully transparent.
+-        window.attributes = window.attributes.apply { alpha = 0f }
++        // Android 12 passes touches through another app's window only if it is fully
++        // transparent. `alpha = 0f` makes the window transparent but not *fully* one in the
++        // system's eyes, and on a translucent theme that is enough for the system to run the
++        // activity's open/close animation — which is the flash Mark saw when tapping the tile.
++        // A 1px transparent window, no dim and no transition is the combination that the system
++        // treats as "not really a window".
++        window.attributes = window.attributes.apply {
++            width = 1
++            height = 1
++            gravity = android.view.Gravity.TOP or android.view.Gravity.START
++            alpha = 0f
++            dimAmount = 0f
++            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
++                // No enter/exit animation at all: nothing to see, nothing to animate.
++                layoutInDisplayCutoutMode =
++                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
++            }
++        }
++        window.setDimAmount(0f)
++        // Kept on purpose: the touch that opened this window must not reach the app behind it.
+         window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+         // A recreated instance gets the same intent again; a second dispatch turns a TOGGLE back.
+         if (savedInstanceState == null) {
+@@ -47,10 +66,12 @@ class QuickActionActivity : Activity() {
+         mainThreadActionsInFlight++
+         GlobalState.launch {
+             try {
++                // The same entry the app and Quick Settings take: the coordinator decides
++                // the owner, the order and the generation, and this holds until it answers.
+                 when (action) {
+-                    QuickAction.START -> ServiceState.handleStartAction()
+-                    QuickAction.STOP -> ServiceState.handleStopAction()
+-                    QuickAction.TOGGLE -> ServiceState.handleToggleAction()
++                    QuickAction.START -> PortalRuntimeCoordinator.openDesired()
++                    QuickAction.STOP -> PortalRuntimeCoordinator.close("quick-action")
++                    QuickAction.TOGGLE -> PortalRuntimeCoordinator.toggle()
+                 }
+             } finally {
+                 withContext(Dispatchers.Main) { mainThreadActionsInFlight-- }
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt b/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
+index 3e1b9cb988f34fc51d685858ebe54a6497ee4751..95347ab483bdfa5f0cd5ead2b1a38e8bc0a80875 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/ServiceController.kt
+@@ -8,6 +8,7 @@ import android.os.Handler
+ import android.os.IBinder
+ import android.os.Looper
+ import com.follow.clashx.common.GlobalState
++import com.follow.clashx.common.PortalRuntimeState
+ import com.follow.clashx.common.intent
+ import com.follow.clashx.core.Core
+ import com.follow.clashx.service.ManagedService
+@@ -36,6 +37,16 @@ object ServiceController {
+     internal var runtime: ServiceRuntime? = null
+         private set
+ 
++    /// The tunnel is read by the Xray child, so the Core is neither started nor stopped here.
++    @Volatile
++    private var xrayTunActive = false
++
++    /// Whether the engine is the process's reader right now: a run exists and the child did
++    /// not take the tunnel. A service that carries a descriptor nothing of the engine reads
++    /// is not an engine that is running, and the record must not claim it is.
++    val engineListening: Boolean
++        get() = runtime != null && !xrayTunActive
++
+     private fun clearBinding() {
+         binding?.unbind()
+         binding = null
+@@ -45,7 +56,19 @@ object ServiceController {
+     private fun release() {
+         clearBinding()
+         runtime = null
+-        Core.stopListener()
++        // Also in the simple portal: the Core was not started *here*, but it may have been
++        // started before this run — Dart's `startListener`, or a network run whose tunnel the
++        // child then took — and a listener left behind is a second reader of the interface
++        // that carries the run. `StopListener` in Go is idempotent (it answers at once when
++        // nothing runs), so the call is unconditional, and it is written down: the log is what
++        // says the engine really stopped instead of only being assumed to have.
++        val stopped = runCatching { Core.stopListener() }
++        GlobalState.log(
++            "engine listener owner=Off xrayTunActive=$xrayTunActive stop=" +
++                (stopped.exceptionOrNull()?.toString() ?: "ok") +
++                " generation=${PortalRuntimeState.current().generation}",
++        )
++        xrayTunActive = false
+     }
+ 
+     fun invokeMethod(data: String, callback: (ByteArray) -> Unit): Result<Unit> = runCatching {
+@@ -72,6 +95,22 @@ object ServiceController {
+ 
+     suspend fun start(options: VpnOptions): Boolean = lock.withLock {
+         ServiceConfig.updateVpnOptions(options)
++        // The simple portal's tunnel belongs to the child alone, so anything of the engine
++        // that is still listening goes before the service publishes the descriptor: Dart's
++        // `startListener` opens the engine and *then* asks for the service, which is how the
++        // engine kept reading the interface the child had been handed. The Go call is
++        // idempotent — with nothing running it answers at once — so it is asked every time.
++        if (options.xrayTun) {
++            // Said out loud, because this is the moment the engine stops being a reader: the
++            // service publishes the descriptor for the child right after, and a listener that
++            // survived would read the same interface beside it.
++            val stopped = runCatching { Core.stopListener() }
++            GlobalState.log(
++                "engine listener owner=Xray stop before the hand-over=" +
++                    (stopped.exceptionOrNull()?.toString() ?: "ok") +
++                    " generation=${PortalRuntimeState.current().generation}",
++            )
++        }
+         val nextIntent = if (options.enable) {
+             VpnService::class.intent
+         } else {
+@@ -106,7 +145,12 @@ object ServiceController {
+             return@withLock false
+         }
+ 
+-        Core.startListener()
++        // The simple portal's tunnel is read by the Xray child: the engine is neither started
++        // nor configured here, and its listener state is left exactly as it was.
++        xrayTunActive = options.xrayTun
++        if (!options.xrayTun) {
++            Core.startListener()
++        }
+         runtime = ServiceRuntime(
+             vpn = options.enable,
+             startedAtMillis = runtime?.startedAtMillis ?: System.currentTimeMillis(),
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/ServiceState.kt b/android/app/src/main/kotlin/com/follow/clashx/ServiceState.kt
+index d12c707a7db1614b05671b0aa1a47cb96975e05d..db21e18b3f60aa8fc69cf1843b7f21679abc92bc 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/ServiceState.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/ServiceState.kt
+@@ -23,6 +23,15 @@ object ServiceState {
+         }
+     }
+ 
++    /// Whether the machine already has options in hand.
++    val hasSharedState: Boolean get() = machine.hasSharedState
++
++    /// Points the tunnel at the core that is about to carry it.
++    fun pointTunnelAt(child: Boolean) = machine.pointTunnelAt(child)
++
++    /// The engine, configured and listening, for a start with no Flutter behind it.
++    suspend fun prepareCore(): Boolean = machine.prepareCore()
++
+     suspend fun handleToggleAction() = machine.handleToggleAction()
+ 
+     suspend fun handleStartAction() = machine.handleStartAction()
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/ServiceStateMachine.kt b/android/app/src/main/kotlin/com/follow/clashx/ServiceStateMachine.kt
+index d32e243abaf5fe4e3972c7cdc8fd4aff80db7a4b..9c33950fd1f7671ccb828614b516961b47e15ca2 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/ServiceStateMachine.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/ServiceStateMachine.kt
+@@ -1,5 +1,6 @@
+ package com.follow.clashx
+ 
++import com.follow.clashx.common.PortalRuntimeState
+ import com.follow.clashx.common.RunIntentArbiter
+ import com.follow.clashx.models.SharedState
+ import com.follow.clashx.service.models.NotificationParams
+@@ -282,6 +283,39 @@ internal class ServiceStateMachine(private val host: ServiceStateHost) {
+         host.updateNotificationParams(notificationParams(sharedState))
+     }
+ 
++    /// Whether this machine already holds options, from the app's own push or an earlier load.
++    ///
++    /// A start that came from Dart has them fresh in memory; reading the file over them would
++    /// replace a mode that just changed with the one that was on disk a moment ago, and the
++    /// service would then establish the other core's tunnel.
++    val hasSharedState: Boolean get() = sharedState.vpnOptions != null
++
++    /// Points the tunnel at the core that is about to carry it.
++    ///
++    /// The options here are the last push, and a switch between the two portals starts the
++    /// service from the coordinator without a push of its own. If those options still name the
++    /// other core as the reader, the service establishes that core's tunnel — and the engine
++    /// start is then refused as a mismatch ("the service published a child tunnel while the
++    /// engine was asked for one"), with `startListener` left unanswered behind it. Whoever
++    /// starts the service knows which core carries it, so it says so here first.
++    fun pointTunnelAt(child: Boolean) {
++        val options = sharedState.vpnOptions ?: return
++        if (options.xrayTun == child) return
++        sharedState = sharedState.copy(vpnOptions = options.copy(xrayTun = child))
++    }
++
++    /// Makes the engine ready to carry a tunnel, for a start that did not come from the app.
++    ///
++    /// The engine's configuration lives in memory and is written by the Flutter side. A start
++    /// from the shade (or from Always-on) has no such side, so the same setup the 0.01a tile
++    /// path used is run here from the shared state: without it the engine has no config, the
++    /// service comes up with a tunnel nothing reads, and the record would call that `Active`.
++    suspend fun prepareCore(): Boolean {
++        sharedState = host.loadSharedState()
++        if (sharedState.setupParams == null) return false
++        return setupCore()
++    }
++
+     private suspend fun setupCore(): Boolean {
+         applySharedState()
+         host.showToast(sharedState.startTip)
+@@ -421,6 +455,10 @@ internal class ServiceStateMachine(private val host: ServiceStateHost) {
+ 
+     private inline fun <T> transitioning(state: RunState, block: () -> T): T {
+         transition = state
++        // The phase in the same words as the portal's own record, with the generation it
++        // belongs to: a `STARTING` in the log without a number cannot be told from the one
++        // a newer transaction published a moment later.
++        host.log("service phase=$state generation=${PortalRuntimeState.current().generation}")
+         publish()
+         try {
+             return block()
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/TileService.kt b/android/app/src/main/kotlin/com/follow/clashx/TileService.kt
+index e41db281be94413d98d3c89bda5f5af2ccdf1b24..65d7594427be80218c735cd52aee5ad5af2585b2 100644
+--- a/android/app/src/main/kotlin/com/follow/clashx/TileService.kt
++++ b/android/app/src/main/kotlin/com/follow/clashx/TileService.kt
+@@ -1,11 +1,8 @@
+ package com.follow.clashx
+ 
+-import android.annotation.SuppressLint
+-import android.os.Build
+ import android.service.quicksettings.Tile
+-import com.follow.clashx.common.QuickAction
+-import com.follow.clashx.common.quickIntent
+-import com.follow.clashx.common.toPendingIntent
++import com.follow.clashx.common.GlobalState
++import com.follow.clashx.common.PortalRuntimeState
+ import kotlinx.coroutines.CoroutineScope
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.SupervisorJob
+@@ -17,6 +14,10 @@ class TileService : android.service.quicksettings.TileService() {
+ 
+     override fun onStartListening() {
+         super.onStartListening()
++        // The tile's own last state is not the truth: after a cold process start it still says
++        // whatever was written before. The record is asked first, so the panel opens showing the
++        // tunnel that actually exists.
++        updateTileFromRecord()
+         scope?.cancel()
+         scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).also { scope ->
+             scope.launch {
+@@ -25,12 +26,32 @@ class TileService : android.service.quicksettings.TileService() {
+         }
+     }
+ 
+-    // Always route through QuickActionActivity: startActivityAndCollapse is
+-    // what closes the shade, so toggling the service in place would leave
+-    // the panel open after a tap.
++    // No Activity, ever.
++    //
++    // Upstream sends every tap through a transparent Activity only so that
++    // `startActivityAndCollapse` closes the shade — AOSP drops any PendingIntent that is not an
++    // activity, so nothing else can collapse the panel. The price of that trick is a window the
++    // owner can see, and it is not a price worth paying: the shade stays open for one gesture
++    // and the tile does its work in place, exactly like a system tile.
++    //
++    // The action goes through the portal coordinator, which is the same entry the app's own
++    // button takes — one owner, one generation, one order. The tile is a second way to ask,
++    // never a second mechanism.
+     override fun onClick() {
+         super.onClick()
+-        openQuickAction()
++        // The record decides, not the service machine's own last value: on a process started by
++        // the tap itself that value is STOPPED even when the tunnel is up, and a tap would then
++        // ask to start what is already running.
++        val phase = PortalRuntimeState.current().phase
++        val start = phase != "Active"
++        GlobalState.log("PortalTile tile tap: phase=$phase -> ${if (start) "start" else "stop"}")
++        GlobalState.launch {
++            if (start) {
++                PortalRuntimeCoordinator.openDesired()
++            } else {
++                PortalRuntimeCoordinator.close("quick-settings")
++            }
++        }
+     }
+ 
+     override fun onStopListening() {
+@@ -39,25 +60,30 @@ class TileService : android.service.quicksettings.TileService() {
+         super.onStopListening()
+     }
+ 
++    /// The record's phase, mapped onto the tile's three states.
++    private fun updateTileFromRecord() {
++        val phase = PortalRuntimeState.current().phase
++        // Never UNAVAILABLE: SystemUI drops taps on an unavailable tile, and a tile that is
++        // busy for half a second must still accept the next tap. Active is the only state the
++        // owner reads as "on"; everything else reads as "off" and stays clickable.
++        setTileState(if (phase == "Active") Tile.STATE_ACTIVE else Tile.STATE_INACTIVE)
++    }
++
++    private fun setTileState(state: Int) {
++        qsTile?.apply {
++            this.state = state
++            updateTile()
++        }
++    }
++
+     private fun updateTile(runState: RunState) {
+         qsTile?.apply {
+             state = when (runState) {
+                 RunState.STARTED -> Tile.STATE_ACTIVE
+-                RunState.STARTING, RunState.STOPPING -> Tile.STATE_UNAVAILABLE
+-                RunState.STOPPED -> Tile.STATE_INACTIVE
++                else -> Tile.STATE_INACTIVE
+             }
+             updateTile()
+         }
+     }
+ 
+-    @SuppressLint("StartActivityAndCollapseDeprecated")
+-    private fun openQuickAction() {
+-        val intent = QuickAction.TOGGLE.quickIntent
+-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+-            startActivityAndCollapse(intent.toPendingIntent)
+-        } else {
+-            @Suppress("DEPRECATION")
+-            startActivityAndCollapse(intent)
+-        }
+-    }
+ }
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..4abacf4901a3be3c33bcf15f26caf36e6d7ebb41
+--- /dev/null
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/PortalRuntimePlugin.kt
+@@ -0,0 +1,253 @@
++package com.follow.clashx.plugins
++
++import com.follow.clashx.PortalOutcome
++import com.follow.clashx.PortalRuntimeCoordinator
++import com.follow.clashx.common.Components
++import com.follow.clashx.common.GlobalState
++import com.follow.clashx.common.PortalMeasureBridge
++import com.follow.clashx.common.PortalOwner
++import com.follow.clashx.common.PortalRuntimeState
++import com.follow.clashx.common.PortalTelemetry
++import io.flutter.embedding.engine.plugins.FlutterPlugin
++import io.flutter.plugin.common.MethodCall
++import io.flutter.plugin.common.MethodChannel
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.suspendCancellableCoroutine
++import kotlin.coroutines.resume
++
++/**
++ * The channel the app's own Dart drives the portal with.
++ *
++ * One entry, one answer: every call here goes through [PortalRuntimeCoordinator], which owns
++ * the mutex, the generation and the tunnel's owner. A call answers when the transaction is
++ * over — `ok` only when the owner acknowledged the tunnel — so a caller no longer has to
++ * guess from a fire-and-forget `true` whether the tunnel it asked for exists.
++ *
++ * `prepareChildConfig` is the reverse direction: an entry that arrived without a document
++ * (Quick Settings, Always-on) asks Dart for one inside the transaction, because the profile
++ * the document is built from lives there.
++ */
++class PortalRuntimePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
++    private lateinit var channel: MethodChannel
++
++    /// Removes this plugin's reader of the record; null when detached.
++    private var detachObserver: (() -> Unit)? = null
++
++    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
++        channel = MethodChannel(binding.binaryMessenger, CHANNEL)
++        channel.setMethodCallHandler(this)
++        attached = true
++        // Dart builds the document; the coordinator asks for it while it holds the lock.
++        PortalRuntimeCoordinator.provideChildConfig {
++            requestChildConfig()
++        }
++        // Every accepted state reaches Dart, whoever caused it: a tile tap, a shortcut, a
++        // revoke, the app's own button. This is the one line that makes the screen belong to
++        // the tunnel instead of to the last tap the screen itself made.
++        detachObserver = PortalRuntimeState.addObserver { _, _, _ -> pushStatus() }
++        // The engine can be created *after* the tunnel exists (tile on a dead process), so
++        // the current record is sent once on attach, not only on the next change.
++        pushStatus()
++    }
++
++    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
++        attached = false
++        detachObserver?.invoke()
++        detachObserver = null
++        channel.setMethodCallHandler(null)
++        PortalRuntimeCoordinator.provideChildConfig(null)
++    }
++
++    /// Sends the record to Dart. Cheap: it is one map of enums and numbers, and it is sent on
++    /// a transition rather than on a clock.
++    private fun pushStatus() {
++        if (!attached) return
++        val payload = PortalRuntimeCoordinator.status()
++        android.os.Handler(android.os.Looper.getMainLooper()).post {
++            runCatching { channel.invokeMethod("state", payload) }
++        }
++    }
++
++    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
++        when (call.method) {
++            "open" -> {
++                val owner = PortalOwner.of(call.argument<String>("owner"))
++                if (owner == null) {
++                    result.success(
++                        PortalOutcome(ok = false, reason = "unknown owner").toMap(),
++                    )
++                    return
++                }
++                val config = call.argument<String>("config")
++                GlobalState.launch { result.success(PortalRuntimeCoordinator.open(owner, config).toMap()) }
++            }
++
++            "close" -> GlobalState.launch {
++                result.success(PortalRuntimeCoordinator.close(call.argument<String>("reason") ?: "app").toMap())
++            }
++
++            "restart" -> GlobalState.launch {
++                result.success(PortalRuntimeCoordinator.restart(call.argument<String>("config")).toMap())
++            }
++
++            "startChild" -> {
++                val config = call.argument<String>("config")
++                if (config.isNullOrBlank()) {
++                    result.success(
++                        PortalOutcome(ok = false, reason = "empty config").toMap(),
++                    )
++                    return
++                }
++                GlobalState.launch {
++                    result.success(PortalRuntimeCoordinator.startChild(config).toMap())
++                }
++            }
++
++            // The measurement core: started for a sweep and stopped right after, never a
++            // portal. The core itself belongs to the xray plugin; the bridge is how this
++            // channel reaches it.
++            "measureStart" -> {
++                val config = call.argument<String>("config")
++                val tags = call.argument<String>("tags")
++                val url = call.argument<String>("url") ?: ""
++                val timeoutMs = (call.argument<Number>("timeoutMs") ?: 8000).toInt()
++                val limit = (call.argument<Number>("limit") ?: 0).toInt()
++                val bridge = PortalMeasureBridge.start
++                if (config.isNullOrBlank() || tags.isNullOrBlank() || bridge == null) {
++                    result.success(
++                        mapOf(
++                            "ok" to false,
++                            "message" to if (bridge == null) "no child on this platform" else "empty config",
++                        ),
++                    )
++                    return
++                }
++                GlobalState.launch { result.success(bridge(config, tags, url, timeoutMs, limit)) }
++            }
++
++            "measureStop" -> {
++                val bridge = PortalMeasureBridge.stop
++                GlobalState.launch {
++                    result.success(mapOf("ok" to (bridge?.invoke() ?: false)))
++                }
++            }
++
++            // Reading the core's own latency numbers is cheap — the core already has them —
++            // so this answers inline instead of going through the measure slot's thread.
++            "observatory" -> {
++                val bridge = PortalMeasureBridge.observatory
++                if (bridge == null) {
++                    result.success(mapOf("ok" to false, "message" to "no child on this platform"))
++                    return
++                }
++                // Off the platform thread, and off any coroutine dispatcher: the native call is
++                // entered from a plain worker thread, which is the shape that returns instead of
++                // aborting ("unknown caller pc" traces pointed at the Go entry frame itself).
++                Thread {
++                    val answer = runCatching { bridge() }.getOrElse { error ->
++                        mapOf<String, Any>("ok" to false, "message" to (error.message ?: "$error"))
++                    }
++                    android.os.Handler(android.os.Looper.getMainLooper()).post {
++                        runCatching { result.success(answer) }
++                    }
++                }.start()
++            }
++
++            "status" -> result.success(PortalRuntimeCoordinator.status())
++
++            // The switch's own clock: the tap starts it here, and the record's hook writes
++            // `phase=active` when the new owner acknowledges; the screen writes `phase=list`
++            // when it has rows to draw. Both lines land in portal-transitions.log.
++            "switchStart" -> {
++                PortalTelemetry.noteSwitchStart(call.argument<String>("to") ?: "")
++                result.success(null)
++            }
++
++            "switchTiming" -> {
++                PortalTelemetry.noteSwitchTiming(
++                    phase = call.argument<String>("phase") ?: "list",
++                    durationMs = (call.argument<Number>("durationMs") ?: 0).toLong(),
++                    detail = call.argument<String>("detail") ?: "",
++                )
++                result.success(null)
++            }
++
++            // A delay test that raised a core: which one, and how long the raise took.
++            "testNote" -> {
++                PortalTelemetry.noteTest(
++                    mode = call.argument<String>("mode") ?: "",
++                    raised = call.argument<String>("raised") ?: "",
++                    durationMs = (call.argument<Number>("durationMs") ?: 0).toLong(),
++                    stoppedAfter = call.argument<Boolean>("stoppedAfter") ?: false,
++                    detail = call.argument<String>("detail") ?: "",
++                )
++                result.success(null)
++            }
++
++            // One attempt at a mode's own feed. The app counts these; the record writes the
++            // line, so the count can be read off the phone instead of off a screenshot.
++            "availabilityNote" -> {
++                PortalTelemetry.noteAvailability(
++                    feed = call.argument<String>("feed") ?: "",
++                    mode = call.argument<String>("mode") ?: "",
++                    attempts = (call.argument<Number>("attempts") ?: 0).toInt(),
++                    limit = (call.argument<Number>("limit") ?: 0).toInt(),
++                    state = call.argument<String>("state") ?: "",
++                    reason = call.argument<String>("reason") ?: "",
++                )
++                result.success(null)
++            }
++
++            else -> result.notImplemented()
++        }
++    }
++
++    /// Asks Dart for the document of the node the portal currently picks.
++    private suspend fun requestChildConfig(): String? =
++        suspendCancellableCoroutine { continuation ->
++            // A start with no Flutter engine — the tile, the notification — must not wait for
++            // one. `invokeMethod` on a channel whose engine is gone never answers, and the
++            // caller (the coordinator, holding the tunnel lock) would wait forever with the
++            // shade already collapsed and nothing happening.
++            if (!attached) {
++                if (continuation.isActive) continuation.resume(null)
++                return@suspendCancellableCoroutine
++            }
++            val main = android.os.Handler(android.os.Looper.getMainLooper())
++            main.post {
++                runCatching {
++                    channel.invokeMethod(
++                        "prepareChildConfig",
++                        null,
++                        object : MethodChannel.Result {
++                            override fun success(answer: Any?) {
++                                if (continuation.isActive) {
++                                    continuation.resume((answer as? String)?.takeIf { it.isNotBlank() })
++                                }
++                            }
++
++                            override fun error(code: String, message: String?, details: Any?) {
++                                GlobalState.log("prepareChildConfig failed: $code $message")
++                                if (continuation.isActive) continuation.resume(null)
++                            }
++
++                            override fun notImplemented() {
++                                if (continuation.isActive) continuation.resume(null)
++                            }
++                        },
++                    )
++                }.onFailure { error ->
++                    GlobalState.log("prepareChildConfig unavailable: $error")
++                    if (continuation.isActive) continuation.resume(null)
++                }
++            }
++        }
++
++    /// Whether a Flutter engine is attached and can answer `prepareChildConfig`.
++    @Volatile
++    private var attached = false
++
++    private companion object {
++        val CHANNEL = "${Components.PACKAGE_NAME}/portal"
++    }
++}
+diff --git a/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..d9afb0c8883fc77a84e1efba4f51ba8a4d907b5f
+--- /dev/null
++++ b/android/app/src/main/kotlin/com/follow/clashx/plugins/XrayPlugin.kt
+@@ -0,0 +1,1090 @@
++package com.follow.clashx.plugins
++
++import android.content.Context
++import android.system.Os
++import android.util.Log
++import com.follow.clashx.PortalChildGateway
++import com.follow.clashx.PortalChildStart
++import com.follow.clashx.PortalChildStop
++import com.follow.clashx.PortalRuntimeCoordinator
++import com.follow.clashx.common.Components
++import com.follow.clashx.common.GlobalState
++import com.follow.clashx.common.PortalRuntimeState
++import com.follow.clashx.common.PortalMeasureBridge
++import com.follow.clashx.common.XrayChildControl
++import com.follow.clashx.common.XrayTun
++import com.follow.clashx.common.XrayTunHolder
++import io.flutter.embedding.engine.plugins.FlutterPlugin
++import io.flutter.plugin.common.MethodCall
++import io.flutter.plugin.common.MethodChannel
++import org.json.JSONArray
++import org.json.JSONObject
++import java.io.ByteArrayOutputStream
++import java.io.File
++import java.io.RandomAccessFile
++import java.util.concurrent.Callable
++import java.util.concurrent.Executors
++import java.util.concurrent.TimeUnit
++import java.util.concurrent.TimeoutException
++import java.util.concurrent.atomic.AtomicLong
++import kotlinx.coroutines.launch
++
++/**
++ * Runs the bundled Xray on the simple portal's tunnel.
++ *
++ * The VpnService establishes the tun — no other component can — and the core reads that very
++ * descriptor. The core is a c-shared library in this process, not a child: `XrayStart` sets
++ * the descriptor on the core's own tun device, so nothing crosses a process boundary and
++ * nothing has to survive one. An exec'd child could not read the tunnel at all: `Runtime.exec`
++ * spawns with close-on-exec set on every descriptor, so the child started without the tun and
++ * died with "bad file descriptor" before it logged a line.
++ *
++ * There is no engine in front of it and no socks bridge behind it: the system routes packets
++ * into the tun, the core reads them, and the node it dials is the one the owner picked.
++ *
++ * The start is only a success once the core has said it is reading the tunnel in its own log;
++ * a core that refuses the document, or one that never takes the descriptor, fails the start
++ * with its own words instead of falling back to a bridge it no longer has.
++ *
++ * Keeping the core's transport out of its own tunnel is the VpnService's job, not the
++ * document's: the service adds this app's package to `addDisallowedApplication`, so the system
++ * installs no route into the tun for this uid and every socket the core opens leaves by the
++ * underlying network. That is the Android-native substitute for binding outbounds to an
++ * interface, and the only one available here: `autoOutboundsInterface` makes the core resolve
++ * the interface with `net.InterfaceByName`, which reads the interface table over rtnetlink,
++ * and an app uid is denied that read (`netlinkrib: permission denied`). The exclusion is by
++ * uid, exactly like `VpnService.protect`, and it needs no interface name at all.
++ */
++class XrayPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, PortalChildGateway {
++    init {
++        // Nothing: the shared instance is created by [obtain] and adopted by the engine.
++    }
++
++    private lateinit var channel: MethodChannel
++    private lateinit var appContext: Context
++    private val executor = Executors.newSingleThreadExecutor()
++
++    /// Whether the core holds the tunnel right now.
++    ///
++    /// An in-process core has no handle to poll: the native start returning is not the same
++    /// as the core reading the tun, and there is no process that dies to tell the two apart.
++    /// The flag is set when the core accepted the document and cleared by the first stop, and
++    /// the acknowledgement in the log is what decides whether the start may keep it.
++    @Volatile private var coreRunning = false
++    @Volatile private var lastLine: String = ""
++
++    /// Set once the library is open and its three entry points resolve.
++    @Volatile private var libraryLoaded = false
++
++    /// Why the library is not usable, if it is not: a start reports this instead of throwing.
++    @Volatile private var libraryProblem: String? = null
++
++    /// The tunnel this plugin was handed, kept for the life of the VPN.
++    ///
++    /// The service publishes it once, when it establishes the interface; the core is
++    /// restarted on every pick, and each restart reads the same descriptor. Taking it once
++    /// and keeping it is what lets a tap replace the core without replacing the tunnel.
++    @Volatile private var cachedTun: XrayTun? = null
++
++    /// Every command takes a number; only the newest one may touch the core.
++    ///
++    /// A stop has to invalidate a start that is already waiting *and* one still queued
++    /// behind it on the executor, which a shared boolean cannot do: the queued start would
++    /// clear it and go on to open a core nobody asked for any more. The number only ever
++    /// grows, so an older command compares false wherever it wakes up.
++    private val operation = AtomicLong(0)
++
++    private fun nextOperation(): Long = operation.incrementAndGet()
++
++    private fun isCurrent(token: Long): Boolean = operation.get() == token
++
++    /// The core's C API, as exported by the c-shared library that ships in jniLibs.
++    ///
++    /// [XrayStart] sets `xray.tun.fd` on the core's own tun device, starts it, and answers
++    /// null on success or the core's error text. The descriptor is this process's, so the
++    /// number means the same thing on both sides of the call — which is the whole reason the
++    /// core is loaded instead of spawned.
++    private external fun XrayStart(config: String, tunFd: Int, assetDir: String): String?
++
++    private external fun XrayStop()
++
++    private external fun XrayVersion(): String?
++
++    /// Times every node of a document in the measurement's own instance.
++    ///
++    /// The answer is JSON: `{"rows":[{"tag","delay","error"}]}`, delay in milliseconds,
++    /// -1 failed and -2 timed out. The measurement has its own core slot, so a sweep runs
++    /// while the portal's child keeps reading the tunnel.
++    private external fun XrayMeasure(
++        config: String,
++        tags: String,
++        url: String,
++        timeoutMs: Int,
++        limit: Int,
++    ): String?
++
++    /// Closes the measurement instance and leaves the tunnel's alone.
++    private external fun XrayMeasureStop()
++
++    /// The running core's own latency numbers. It measures nothing here: the document declares a
++    /// burst observatory, the core times every node on its own period, and this reads what the
++    /// core already knows — the same way a mihomo panel reads url-test history.
++    private external fun XrayObservatory(): String?
++
++    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
++        appContext = binding.applicationContext
++        // The engine adopts the instance that may already own the tunnel: a core started from
++        // the shade before this app was open is the same core this channel now speaks to.
++        shared = this
++        if (this::channel.isInitialized) {
++            // Re-attached (a new engine after the old one went away): the handler is replaced
++            // below, and the old messenger is gone with the old engine.
++        }
++        channel = MethodChannel(binding.binaryMessenger, CHANNEL)
++        channel.setMethodCallHandler(this)
++        // The service takes the core down with the tunnel, so a revoked VPN cannot leave a
++        // core reading a descriptor nobody answers for. Taking a number first also cancels
++        // any start the service's teardown interrupted before it could open the core.
++        // The dashboard speaks to the portal channel, the core lives here: the bridge is the
++        // one line between them, and it is only set while this plugin holds the library.
++        PortalMeasureBridge.start = { config, tags, url, timeoutMs, limit ->
++            val task = executor.submit(Callable { measure(config, tags, url, timeoutMs, limit) })
++            try {
++                task.get(MEASURE_WAIT_MS, TimeUnit.MILLISECONDS)
++            } catch (error: Exception) {
++                task.cancel(true)
++                mapOf("ok" to false, "message" to (error.message ?: "$error"))
++            }
++        }
++        PortalMeasureBridge.stop = {
++            val task = executor.submit(Callable { stopMeasure() })
++            runCatching { task.get(STOP_WAIT_MS, TimeUnit.MILLISECONDS) }.getOrDefault(false)
++        }
++        // Same thread discipline as a measurement: the Go entry point is entered on this
++        // plugin's own executor, which is the only place a native call has ever returned from
++        // here without aborting the process.
++        PortalMeasureBridge.observatory = {
++            val task = executor.submit(Callable { observatory() })
++            try {
++                task.get(MEASURE_WAIT_MS, TimeUnit.MILLISECONDS)
++            } catch (error: Exception) {
++                task.cancel(true)
++                mapOf<String, Any>("ok" to false, "message" to (error.message ?: "$error"))
++            }
++        }
++        XrayChildControl.stop = {
++            nextOperation()
++            // The service is closing the descriptor it owns: the tunnel in hand is gone with
++            // it, and so is whatever is reading it. Called on the service's own thread, so
++            // record the loss and return — the native stop is queued, not run here.
++            cachedTun = null
++            takeCore()
++            requestNativeStop()
++        }
++        // The coordinator's child half: starts and stops that only answer once the core has.
++        PortalRuntimeCoordinator.attachChild(this)
++    }
++
++    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
++        channel.setMethodCallHandler(null)
++        PortalRuntimeCoordinator.detachChild(this)
++        XrayChildControl.stop = null
++        PortalMeasureBridge.start = null
++        PortalMeasureBridge.stop = null
++        PortalMeasureBridge.observatory = null
++        nextOperation()
++        takeCore()
++        requestNativeStop()
++    }
++
++    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
++        when (call.method) {
++            "status" -> result.success(status())
++            // The core's own numbers, read not measured: cheap enough to ask every few seconds.
++            "observatory" -> result.success(observatory())
++            // The channel is not a second way into the core: it is the same entry the mode
++            // switch and Quick Settings take, so the same mutex and the same generation
++            // decide the order. The plugin still answers with its own words.
++            "start" -> {
++                val config = call.argument<String>("config")
++                if (config.isNullOrBlank()) {
++                    result.success(failure("empty config"))
++                    return
++                }
++                GlobalState.launch {
++                    val outcome = PortalRuntimeCoordinator.startChild(config)
++                    pushStatus()
++                    replyOnMain(result, outcome.toMap())
++                }
++            }
++            "stop" -> GlobalState.launch {
++                // Returns after `XrayStop` has returned: a stop that did not happen is not
++                // reported as one, which is what makes the next start's evidence meaningful.
++                val outcome = PortalRuntimeCoordinator.close("plugin-stop")
++                pushStatus()
++                replyOnMain(
++                result,
++                mapOf(
++                    "ok" to outcome.ok,
++                    "cancelled" to outcome.cancelled,
++                    "message" to outcome.reason.ifEmpty { "stopped" },
++                    "generation" to outcome.runtime.generation,
++                ),
++                )
++            }
++            else -> result.notImplemented()
++        }
++    }
++
++    /// Pushes the core's status to Dart, if there is a Dart: a headless instance has no channel
++    /// until an engine adopts it, and a push must never be the reason a start fails.
++    private fun pushStatus() {
++        if (!this::channel.isInitialized) return
++        runCatching { channel.invokeMethodOnMainThread("state", status()) }
++    }
++
++    private fun status(): Map<String, Any> = mapOf(
++        "running" to coreRunning,
++        "lastLine" to lastLine,
++        // Whether this plugin holds a tunnel: the core can only run while it does.
++        "tun" to (cachedTun != null),
++        // The record this core belongs to: a `running` flag without it cannot say whether
++        // the answer still describes the portal on screen.
++        "generation" to PortalRuntimeState.current().generation,
++        "phase" to PortalRuntimeState.current().phase,
++        "fdEpoch" to (cachedTun?.epoch ?: 0L),
++    )
++
++    private fun replyOnMain(result: MethodChannel.Result, value: Any?) {
++        android.os.Handler(android.os.Looper.getMainLooper()).post {
++            runCatching { result.success(value) }
++        }
++    }
++
++    override fun start(config: String): PortalChildStart {
++        val token = nextOperation()
++        val task = executor.submit(Callable { start(token, config) })
++        val outcome = try {
++            task.get(START_WAIT_MS, TimeUnit.MILLISECONDS)
++        } catch (error: TimeoutException) {
++            nextOperation()
++            task.cancel(true)
++            return PortalChildStart(
++                ok = false,
++                reason = "the core did not answer within ${START_WAIT_MS}ms: $lastLine",
++            )
++        } catch (error: Exception) {
++            return PortalChildStart(ok = false, reason = error.message ?: "$error")
++        }
++        val ok = outcome["ok"] == true
++        return PortalChildStart(
++            ok = ok,
++            cancelled = outcome["cancelled"] == true,
++            reason = if (ok) "" else (outcome["message"] as? String).orEmpty(),
++            epoch = (outcome["epoch"] as? Long) ?: 0L,
++        )
++    }
++
++    /// Stops the core, and answers only after `XrayStop` returned.
++    ///
++    /// The flag is taken on the calling thread — that is what makes a start that is still
++    /// waiting see a newer command — and the native call is queued behind whatever the
++    /// executor is doing, then waited for. Its own failure is reported as a failure: the
++    /// plugin used to answer `ok` for a stop that was merely enqueued.
++    override fun stop(): PortalChildStop {
++        val token = nextOperation()
++        val wasRunning = takeCore()
++        val task = executor.submit(Callable {
++            if (!wasRunning || !libraryLoaded) return@Callable Result.success(Unit)
++            runCatching { XrayStop() }
++        })
++        val outcome = try {
++            task.get(STOP_WAIT_MS, TimeUnit.MILLISECONDS)
++        } catch (error: TimeoutException) {
++            task.cancel(true)
++            return PortalChildStop(
++                ok = false,
++                reason = "XrayStop did not return within ${STOP_WAIT_MS}ms",
++            )
++        } catch (error: Exception) {
++            return PortalChildStop(ok = false, reason = error.message ?: "$error")
++        }
++        val problem = outcome.exceptionOrNull()
++        Log.i(
++            TAG,
++            "stop owner=Xray token=$token wasRunning=$wasRunning xraystop=${problem?.message ?: "ok"}",
++        )
++        return if (problem == null) {
++            PortalChildStop(ok = true)
++        } else {
++            PortalChildStop(ok = false, reason = "${problem.message}")
++        }
++    }
++
++    override val running: Boolean get() = coreRunning
++
++    override val coreLine: String get() = lastLine
++
++    private fun start(token: Long, config: String): Map<String, Any> {
++        // One core at a time: a restart after a tap replaces the core that is reading the
++        // tunnel, and two cores cannot share one descriptor.
++        stopCoreHere()
++        // The service publishes as its start returns; a cold start can arrive a few
++        // milliseconds earlier than that, which is why this waits rather than assumes. A
++        // later start — a tap on another node — reuses the tunnel it already has.
++        val tun = tunForChild()
++            ?: return failure("the portal has no open tunnel: the VPN that owns it is not up")
++        // A stop that arrived while the tunnel was being waited for wins: nothing opens.
++        if (!isCurrent(token)) return cancelled()
++        // The descriptor, not merely its number: a tunnel the service closed between the take
++        // and this line reports -1 (and 0..2 are the standard streams), while its number may
++        // already belong to the next file the process opened. proxy/tun would then ioctl that
++        // file and report the ioctl, not the cause.
++        if (tun.fd < XrayTun.FIRST_TUN_FD || !tun.descriptor.fileDescriptor.valid()) {
++            cachedTun = null
++            XrayTunHolder.clear()
++            return failure("the tunnel descriptor is closed: nothing to read")
++        }
++        // The core's own log, in the directory adb can read: `filesDir` is unreadable on a
++        // release build, which is why a refused start on the phone could only be described.
++        // Named in full on purpose: this file's only business with the telemetry is this path.
++        val logFile = com.follow.clashx.common.PortalTelemetry.xrayFile
++        val document = runCatching { tunDocument(config, tun, logFile) }.getOrElse { error ->
++            return failure("the node's config cannot take a tun inbound: ${error.message}")
++        }
++        val configFile = File(appContext.filesDir, CONFIG_NAME)
++        runCatching { configFile.writeText(document, Charsets.UTF_8) }.onFailure { error ->
++            return failure("cannot write ${configFile.name}: ${error.message}")
++        }
++        // The panel's config names rules as geosite:/geoip:, and the core looks for the data
++        // files under XRAY_LOCATION_ASSET. The variable has to be set before the library is
++        // opened, because the Go runtime copies the environment when the library loads.
++        val assets = installGeoAssets()
++        runCatching { Os.setenv(ASSET_ENV, assets.absolutePath, true) }
++            .onFailure { Log.w(TAG, "cannot point xray at ${assets.absolutePath}: ${it.message}") }
++        ensureLibrary()?.let { problem -> return failure(problem) }
++        // A line left by the previous start must not acknowledge this one.
++        runCatching { logFile.writeText("") }
++
++        // The core gets a descriptor this start owns. The service may close its tunnel at any
++        // moment — a mode switch, a new establish — and a number that closed between the check
++        // above and the core's own read is precisely how the core came to ioctl stdin.
++        // Duplicating it here makes the number outlive the service's close for as long as this
++        // call runs; the core duplicates it once more for itself (proxy/tun does
++        // F_DUPFD_CLOEXEC on what it is handed), so closing this one on the way out leaves the
++        // core reading its own.
++        //
++        // `XrayTun.duplicate()` is the only way to it: it asks the descriptor whether it is
++        // still open under the same guard as the duplicate, so a tunnel the service closed in
++        // between answers `null` here instead of throwing `Already closed` out of `dup()`.
++        val handoff = tun.duplicate() ?: run {
++            cachedTun = null
++            XrayTunHolder.clear(tun.epoch)
++            return failure("the tunnel descriptor is closed: nothing to read")
++        }
++        val fd = handoff.fd
++        Log.i(TAG, "handing tun fd $fd (a duplicate of ${tun.fd}, epoch ${tun.epoch}) to the core")
++        val attempt = try {
++            runCatching { XrayStart(document, fd, assets.absolutePath) }
++        } finally {
++            runCatching { handoff.close() }
++        }
++        if (attempt.isFailure) {
++            val error = attempt.exceptionOrNull()
++            Log.e(TAG, "unable to start xray", error)
++            lastLine = error?.message ?: "unable to start xray"
++            return failure(lastLine)
++        }
++        val nativeError = attempt.getOrNull()
++        if (nativeError != null) {
++            // The library's own words: the core refused the document, or could not take the
++            // descriptor. There is no child left to ask and no exit code to read.
++            lastLine = nativeError
++            Log.e(TAG, "xray refused the start: $nativeError")
++            return failure(nativeError)
++        }
++        coreRunning = true
++        lastLine = ""
++        return try {
++            awaitAck(token, fd, logFile, tun.epoch)
++        } catch (e: Exception) {
++            Log.e(TAG, "unable to start xray", e)
++            stopCoreHere()
++            failure(e.message ?: "unable to start xray")
++        }
++    }
++
++
++    /// Times every node of [config] in the measurement's own core instance.
++    ///
++    /// This is the whole sweep: one document whose outbounds are the nodes, one tag list, one
++    /// call. Nothing listens, so there is no port to hand over and nothing for Dart to speak;
++    /// the tunnel's instance is not touched, which is what lets a sweep run beside an open
++    /// portal. Answers JSON: `{"rows":[{tag,delay,error}]}` or `{"error":...}`.
++    private fun measure(
++        config: String,
++        tags: String,
++        url: String,
++        timeoutMs: Int,
++        limit: Int,
++    ): Map<String, Any> {
++        ensureLibrary()?.let { problem ->
++            return mapOf("ok" to false, "message" to problem)
++        }
++        val answer = runCatching { XrayMeasure(config, tags, url, timeoutMs, limit) }
++            .getOrElse { error ->
++                Log.e(TAG, "measurement raised", error)
++                return mapOf("ok" to false, "message" to (error.message ?: "$error"))
++            }
++            ?: return mapOf("ok" to false, "message" to "no answer from the core")
++        return mapOf("ok" to true, "message" to "", "rows" to answer)
++    }
++
++    /// What the tunnel's own core has timed so far, as JSON, without measuring anything.
++    private fun observatory(): Map<String, Any> {
++        ensureLibrary()?.let { problem ->
++            return mapOf("ok" to false, "message" to problem)
++        }
++        val answer = runCatching { XrayObservatory() }
++            .getOrElse { error ->
++                Log.e(TAG, "observatory raised", error)
++                return mapOf("ok" to false, "message" to (error.message ?: "$error"))
++            }
++            ?: return mapOf("ok" to false, "message" to "no answer from the core")
++        return mapOf("ok" to true, "message" to "", "rows" to answer)
++    }
++
++    /// Closes the measurement instance, if one is running. The tunnel's core is not stopped.
++    private fun stopMeasure(): Boolean {
++        if (!libraryLoaded) return false
++        return runCatching {
++            XrayMeasureStop()
++            true
++        }.getOrElse { error ->
++            Log.w(TAG, "measurement stop raised: ${error.message}")
++            false
++        }
++    }
++
++    /**
++     * The node's configuration with the tunnel as its only entry point.
++     *
++     * The panel document is passed through as it is — outbounds, routing, dns — and only its
++     * inbounds are replaced: a socks listener the panel declared would be a bridge into a
++     * core that no longer has anyone on the other side, so it goes. The tun inbound states
++     * the descriptor's number and the tunnel's addresses. It states no outbound interface:
++     * see the class comment — the core would have to enumerate interfaces to resolve one, and
++     * the service keeps this app out of the tunnel by uid instead.
++     */
++    private fun tunDocument(config: String, tun: XrayTun, logFile: File): String {
++        val root = JSONObject(config)
++        val inbounds = JSONArray()
++        // A panel's own listeners are not ours to keep. Whatever the document declares as an
++        // entry point — socks, http, mixed, dokodemo, anything else — would be a port this app
++        // opens on the phone on the provider's terms, and an inbound without credentials is an
++        // open relay to whoever can reach it. The tunnel is the only way in that this app
++        // needs, so every declared inbound goes; the tun inbound below is put in its place.
++        // Linux and Android both reach 127.0.0.1 from other apps, so "it listens on loopback"
++        // is not a protection either.
++        val dropped = mutableListOf<String>()
++        root.optJSONArray("inbounds")?.let { existing ->
++            for (index in 0 until existing.length()) {
++                val item = existing.optJSONObject(index) ?: continue
++                val protocol = item.optString("protocol").ifEmpty { "?" }
++                dropped.add("$protocol@${item.optString("listen")}")
++            }
++        }
++        if (dropped.isNotEmpty()) {
++            Log.i(TAG, "inbounds from the subscription are dropped: ${dropped.joinToString(", ")}")
++        }
++        inbounds.put(
++            JSONObject().apply {
++                put("tag", TUN_INBOUND_TAG)
++                put("protocol", "tun")
++                put(
++                    "settings",
++                    JSONObject().apply {
++                        // Four keys, and nothing else, is the whole document this core can be
++                        // given on Android without it reading the interface table:
++                        //  - `name` must stay non-empty. An empty one sends
++                        //    infra/conf/tun.go to GetAvailableTunName(), which calls
++                        //    net.Interfaces() — the same netlink read the core is denied, one
++                        //    step earlier, at config build.
++                        //  - `autoSystemRoutingTable` must never be emitted. It is a []string of
++                        //    routes in this schema, not a flag, so a boolean refuses the whole
++                        //    config; and a non-empty list implies `autoOutboundsInterface: auto`,
++                        //    which resolves through net.InterfaceByName.
++                        //  - `autoOutboundsInterface` must never be emitted, for that reason.
++                        //    See the class comment: the uid exclusion is what keeps the core's
++                        //    transport out of the tunnel.
++                        //  - `autoSystemWfpBlockLeak` and `autoSystemDnsToGateway` are system
++                        //    takeovers: the first is Windows' firewall, and the second has no
++                        //    implementation on Android (proxy/tun's Android reader exposes no
++                        //    ConfigureSystemDNS), so it can only be checked, never honoured.
++                        //  - The system routes are the VpnService's and are already in place: the
++                        //    core has no root to add its own, and must not try to.
++                        put("name", TUN_NAME)
++                        put("mtu", tun.mtu)
++                        put("gateway", JSONArray(tun.gateway))
++                        put("dns", JSONArray(tun.dns))
++                    },
++                )
++            },
++        )
++        root.put("inbounds", inbounds)
++        // The tunnel's DNS is the core's own business: the VpnService hands every resolver
++        // query to 198.18.0.2:53, and the core must answer it with its DNS module instead of
++        // routing the packet somewhere that cannot exist.
++        hijackTunnelDns(root)
++        // A document that carries an observatory or a balancer asks the core to keep notes on
++        // its own outbounds. Two pieces make that work inside a tunnel and neither is the
++        // panel's business to get right:
++        //  - `stats`, an empty object: the burst observatory reports into it, and a document
++        //    that names `burstObservatory` without it is refused by the core at build.
++        //  - a direct rule for the DNS servers' own addresses. The DNS module resolves names
++        //    through the `dns` outbound, whose queries are ordinary connections to those
++        //    addresses; without the rule they come back into the router, are handed to the
++        //    balancer, and the balancer's health check asks DNS again — a loop that answers
++        //    nothing and looks like a dead node.
++        prepareObservatory(root)
++        // The acknowledgement this start waits for is an info-level line, and it is only
++        // written if the core logs at all — the panel's own level may filter it out. `error`
++        // is the core's general log; `access` records requests, which is not what a start
++        // reads. A file rather than the console: the plugin has to read the core's line, not
++        // only have it appear in logcat.
++        val log = root.optJSONObject("log") ?: JSONObject()
++        log.put("loglevel", ACK_LOG_LEVEL)
++        log.put("error", logFile.absolutePath)
++        root.put("log", log)
++        return root.toString()
++    }
++
++    /// Makes the document answer its own DNS inside the tunnel.
++    ///
++    /// The service gives every app the resolver `198.18.0.2` (see `VpnService`), so the
++    /// packets a name lookup produces arrive at the core as ordinary connections to
++    /// `198.18.0.2:53`. A panel document has no reason to hijack that address: its own DNS
++    /// section is written for a machine where the system resolver is real, and its routing
++    /// sends port 53 wherever it sends everything else. The result on the phone is a query
++    /// handed to `direct` for an address nothing answers — `[tun-in -> direct] …
++    /// 198.18.0.2:53` in the core's log — and every name lookup sits there until it times
++    /// out. That is exactly what the panel's balancer document did, and why 'Авто-выбор'
++    /// resolved nothing while a concrete node seemed to work.
++    ///
++    /// Three things make it resolve, and none of them touch the node:
++    ///  1. a `dns` section with at least one server the module can actually query;
++    ///  2. one outbound of protocol `dns` — the document's own if it already has one, else
++    ///     one appended under a tag of ours;
++    ///  3. a routing rule, first in the list, that sends the tunnel inbound's port 53 to it.
++    ///
++    /// Rewritten rather than refused. A document whose DNS cannot be hijacked is not
++    /// unusable — it is a document that has not been told what the tunnel is — and refusing
++    /// it would fall back to a single node, which silently turns 'Авто-выбор' into "the
++    /// first server" and loses the balancer the owner picked. The rewrite keeps a concrete
++    /// node working exactly as it did (the same rule applies to it) and makes the balancer
++    /// pick behave like one.
++    private fun hijackTunnelDns(root: JSONObject) {
++        val dns = root.optJSONObject("dns") ?: JSONObject().also { root.put("dns", it) }
++        val servers = dns.optJSONArray("servers")
++        if (servers == null || servers.length() == 0) {
++            // No resolver of the panel's own: two anycast resolvers are enough to answer,
++            // and their own traffic leaves by whatever the document routes.
++            dns.put("servers", JSONArray(listOf(FALLBACK_DNS_1, FALLBACK_DNS_2)))
++        }
++
++        val outbounds = root.optJSONArray("outbounds") ?: JSONArray().also { root.put("outbounds", it) }
++        var dnsTag: String? = null
++        for (index in 0 until outbounds.length()) {
++            val item = outbounds.optJSONObject(index) ?: continue
++            if (!item.optString("protocol").equals("dns", ignoreCase = true)) continue
++            val tag = item.optString("tag")
++            if (tag.isEmpty()) {
++                item.put("tag", DNS_OUTBOUND_TAG)
++                dnsTag = DNS_OUTBOUND_TAG
++            } else {
++                dnsTag = tag
++            }
++            break
++        }
++        if (dnsTag == null) {
++            dnsTag = DNS_OUTBOUND_TAG
++            outbounds.put(
++                JSONObject().apply {
++                    put("tag", dnsTag)
++                    put("protocol", "dns")
++                },
++            )
++        }
++
++        val routing = root.optJSONObject("routing") ?: JSONObject().also { root.put("routing", it) }
++        val existing = routing.optJSONArray("rules") ?: JSONArray()
++        val rules = JSONArray()
++        rules.put(
++            JSONObject().apply {
++                put("type", "field")
++                put("inboundTag", JSONArray(listOf(TUN_INBOUND_TAG)))
++                put("port", DNS_PORT)
++                put("outboundTag", dnsTag)
++            },
++        )
++        // A rule of this shape that is already there is replaced, not stacked: a document
++        // that is started twice must not arrive at the core with two of them.
++        for (index in 0 until existing.length()) {
++            val item = existing.optJSONObject(index) ?: continue
++            if (isTunnelDnsRule(item)) continue
++            rules.put(item)
++        }
++        routing.put("rules", rules)
++        Log.i(TAG, "tunnel dns goes to outbound $dnsTag; ${rules.length()} routing rules")
++    }
++
++    /// Makes an observatory or balancer document work inside the tunnel.
++    ///
++    /// Only the documents that ask for it are touched: a plain single-node document keeps its
++    /// own routing untouched. `stats` is added empty because the burst observatory writes its
++    /// results there and the core refuses the document without it, and the DNS servers' own
++    /// addresses get a direct rule first — the pattern Happ ships — so a resolver query cannot
++    /// be routed back through the node whose health depends on it.
++    private fun prepareObservatory(root: JSONObject) {
++        val wantsObservatory = root.has("observatory") || root.has("burstObservatory") ||
++            root.optJSONObject("routing")?.optJSONArray("balancers")?.length()?.let { it > 0 } == true
++        if (!wantsObservatory) return
++        if (!root.has("stats")) root.put("stats", JSONObject())
++
++        val addresses = JsonArrayOfDnsAddresses(root)
++        if (addresses.isEmpty()) return
++        val outbounds = root.optJSONArray("outbounds") ?: JSONArray().also { root.put("outbounds", it) }
++        var directTag: String? = null
++        for (index in 0 until outbounds.length()) {
++            val item = outbounds.optJSONObject(index) ?: continue
++            if (!item.optString("protocol").equals("freedom", ignoreCase = true)) continue
++            val tag = item.optString("tag")
++            if (tag.isNotEmpty()) {
++                directTag = tag
++                break
++            }
++        }
++        if (directTag == null) {
++            directTag = DIRECT_OUTBOUND_TAG
++            outbounds.put(
++                JSONObject().apply {
++                    put("tag", directTag)
++                    put("protocol", "freedom")
++                },
++            )
++        }
++        val routing = root.optJSONObject("routing") ?: JSONObject().also { root.put("routing", it) }
++        val existing = routing.optJSONArray("rules") ?: JSONArray()
++        val rules = JSONArray()
++        // First, so nothing later can claim these addresses: the resolver's own traffic is not
++        // a payload to be routed, it is how this core finds out where anything is.
++        rules.put(
++            JSONObject().apply {
++                put("type", "field")
++                put("ip", JSONArray(addresses))
++                put("outboundTag", directTag)
++            },
++        )
++        for (index in 0 until existing.length()) {
++            val item = existing.optJSONObject(index) ?: continue
++            if (isDirectDnsRule(item)) continue
++            rules.put(item)
++        }
++        routing.put("rules", rules)
++        Log.i(TAG, "observatory document: stats added, ${addresses.size} dns address(es) go direct")
++    }
++
++    /// The literal addresses of the document's own DNS servers: a rule can only name IPs.
++    private fun JsonArrayOfDnsAddresses(root: JSONObject): List<String> {
++        val servers = root.optJSONObject("dns")?.optJSONArray("servers") ?: return emptyList()
++        val found = mutableListOf<String>()
++        for (index in 0 until servers.length()) {
++            val raw = when (val item = servers.opt(index)) {
++                is String -> item
++                is JSONObject -> item.optString("address")
++                else -> ""
++            }
++            // `8.8.8.8`, `8.8.8.8:53`, `https://1.1.1.1/dns-query`: take the host and keep it
++            // only when it is an address, never a name.
++            val host = raw.removePrefix("https://").removePrefix("tls://")
++                .removePrefix("quic://").substringBefore('/').substringBefore(':')
++            if (host.count { it == '.' } == 3 && host.all { it.isDigit() || it == '.' }) {
++                found.add(host)
++            }
++        }
++        return found
++    }
++
++    /// The direct rule this class writes for the resolver's own addresses.
++    private fun isDirectDnsRule(rule: JSONObject): Boolean {
++        if (!rule.optString("type").equals("field", ignoreCase = true)) return false
++        if (rule.optJSONArray("ip") == null) return false
++        return rule.optString("outboundTag") == DIRECT_OUTBOUND_TAG ||
++            rule.optJSONArray("inboundTag") == null && rule.optJSONArray("domain") == null
++    }
++
++    /// The rule this class writes, whichever tag an older version gave it.
++    private fun isTunnelDnsRule(rule: JSONObject): Boolean {
++        if (!rule.optString("type").equals("field", ignoreCase = true)) return false
++        val inbound = rule.optJSONArray("inboundTag") ?: return false
++        if (inbound.length() != 1 || inbound.optString(0) != TUN_INBOUND_TAG) return false
++        return rule.optString("port") == DNS_PORT.toString()
++    }
++
++    /// Copies the geodata shipped as assets into filesDir, once per install.
++    ///
++    /// Xray reads geosite.dat and geoip.dat from XRAY_LOCATION_ASSET, and an APK cannot put
++    /// them next to the library: filesDir is where the core can open them, so they go there
++    /// and the variable above points at the directory.
++    private fun installGeoAssets(): File {
++        val dir = File(appContext.filesDir, GEODATA_DIR)
++        if (!dir.exists()) dir.mkdirs()
++        for (name in listOf("geosite.dat", "geoip.dat")) {
++            val target = File(dir, name)
++            val expected = runCatching {
++                appContext.assets.open("flutter_assets/assets/xray/$name").use { it.readBytes().size }
++            }.getOrDefault(0)
++            if (target.exists() && target.length() == expected.toLong() && expected > 0) continue
++            runCatching {
++                appContext.assets.open("flutter_assets/assets/xray/$name").use { input ->
++                    target.outputStream().use { output -> input.copyTo(output) }
++                }
++            }.onFailure { Log.e(TAG, "cannot install $name: ${it.message}") }
++        }
++        return dir
++    }
++
++    /// The tunnel the core should read: a newly published one, else the one in hand.
++    ///
++    /// The service publishes once per VPN start, so a fresh publish always wins. The cached
++    /// descriptor is what a restart after a tap uses, since the interface behind it did not
++    /// change — but only while it is still open: a VPN torn down and established again closes
++    /// the old descriptor, and its number then belongs to whichever file the process opened
++    /// next, which is how a restart used to hand the core `inappropriate ioctl for device`.
++    /// A dead cache is dropped and the wait below is for the tunnel that replaced it.
++    private fun tunForChild(): XrayTun? {
++        XrayTunHolder.take()?.takeIf { it.live }?.let { tun ->
++            cachedTun = tun
++            return tun
++        }
++        // Not consumed, only read: a second start in the same switch (a reload, then the start
++        // itself) must still see the tunnel the service published once.
++        XrayTunHolder.peek()?.takeIf { it.live }?.let { tun ->
++            cachedTun = tun
++            return tun
++        }
++        cachedTun?.let { cached ->
++            if (cached.live) return cached
++            cachedTun = null
++        }
++        return XrayTunHolder.await(TUN_WAIT_MS)?.takeIf { it.live }?.also { cachedTun = it }
++    }
++
++    /// Waits for the core's own line that says the tunnel is being read.
++    ///
++    /// The core runs in this process, so there is no output stream to drain and no exit code
++    /// to read. What it writes to the log the document names is the only evidence: the tun
++    /// reader says it started, or an `[Error]` line says it never will. Both end the wait —
++    /// one as the acknowledgement, one as the failure, each with the core's own words.
++    private fun awaitAck(token: Long, fd: Int, logFile: File, epoch: Long): Map<String, Any> {
++        val tail = LogTail(logFile)
++        val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
++        while (System.currentTimeMillis() < deadline) {
++            // A newer command — a stop, or another start — owns the core from here.
++            if (!isCurrent(token)) {
++                stopCoreHere()
++                return cancelled()
++            }
++            for (line in tail.poll()) {
++                if (line.isBlank()) continue
++                lastLine = line.trim()
++                // The core writes to the file the document names and nowhere else, and the
++                // shipped build is not debuggable: `run-as` refuses it, so the file cannot be
++                // read on the device that matters. Every line is repeated here in the core's
++                // own words, which is what makes a refusal, or the reader's start line,
++                // evidence on the device instead of a claim about it.
++                Log.i(TAG, "core: $lastLine")
++                // The reader's start line is the proof, in either spelling the core prints.
++                // A failure line answers the start now, not at the deadline: a refused
++                // document would otherwise sit out the whole timeout saying nothing.
++                if (ACK_MARKERS.any { lastLine.contains(it, ignoreCase = true) }) {
++                    Log.i(TAG, "xray is reading the tunnel on fd $fd (epoch $epoch)")
++                    return mapOf(
++                        "ok" to true,
++                        "message" to "tunnel on fd $fd",
++                        "epoch" to epoch,
++                    )
++                }
++                if (isCoreError(lastLine)) {
++                    Log.e(TAG, "xray failed to take the tunnel: $lastLine")
++                    stopCoreHere()
++                    return failure(lastLine)
++                }
++            }
++            // The interval is slept, not spun: a stop that arrives in the middle of it ends
++            // the wait on the next slice instead of after a whole poll.
++            if (!pauseUnlessCancelled(token)) {
++                stopCoreHere()
++                return cancelled()
++            }
++        }
++        stopCoreHere()
++        return failure("xray did not take the tunnel within ${READY_TIMEOUT_MS}ms: $lastLine")
++    }
++
++    /// Reads the log the document names, one appended line at a time.
++    ///
++    /// The plugin and the core are one process, so this file is the channel between them:
++    /// the offset is kept between polls, a line is parsed once, and a write caught in the
++    /// middle of a line is completed by the next read instead of being decoded twice.
++    private class LogTail(private val file: File) {
++        private var offset = 0L
++        private val pending = ByteArrayOutputStream()
++
++        fun poll(): List<String> {
++            val lines = ArrayList<String>()
++            runCatching {
++                if (!file.exists()) return@runCatching
++                RandomAccessFile(file, "r").use { log ->
++                    // The start that opened this log truncated it; an offset past its end no
++                    // longer means anything, so reading starts over.
++                    if (log.length() < offset) {
++                        offset = 0
++                        pending.reset()
++                    }
++                    log.seek(offset)
++                    val buffer = ByteArray(8 * 1024)
++                    while (true) {
++                        val read = log.read(buffer)
++                        if (read <= 0) break
++                        offset += read
++                        pending.write(buffer, 0, read)
++                    }
++                }
++                val bytes = pending.toByteArray()
++                var start = 0
++                for (index in bytes.indices) {
++                    if (bytes[index] != '\n'.code.toByte()) continue
++                    lines.add(String(bytes, start, index - start, Charsets.UTF_8).trimEnd('\r'))
++                    start = index + 1
++                }
++                pending.reset()
++                if (start < bytes.size) pending.write(bytes, start, bytes.size - start)
++            }.onFailure { Log.w(TAG, "cannot read ${file.name}: ${it.message}") }
++            return lines
++        }
++    }
++
++    /// Whether the core said it cannot go on. Its own log prefixes the level in brackets, and
++    /// the line it prints when a start is refused carries none of them.
++    private fun isCoreError(line: String): Boolean =
++        line.contains("[error]", ignoreCase = true) ||
++            line.contains("[fatal]", ignoreCase = true) ||
++            line.startsWith("failed to start", ignoreCase = true)
++
++    /// Sleeps one poll interval in slices, and answers whether the command is still current.
++    private fun pauseUnlessCancelled(token: Long): Boolean {
++        val until = System.currentTimeMillis() + POLL_MS
++        while (System.currentTimeMillis() < until) {
++            if (!isCurrent(token)) return false
++            Thread.sleep(POLL_SLICE_MS)
++        }
++        return isCurrent(token)
++    }
++
++    /// Opens the core library once, and answers with what a start should say when it cannot.
++    /// Makes this instance usable without a Flutter engine.
++    ///
++    /// Nothing here touches the channel — it does not exist yet — and nothing here is a second
++    /// copy of the core: the same fields, the same executor and the same native handle the
++    /// engine will use later.
++    private fun attachHeadless() {
++        if (this::appContext.isInitialized) return
++        appContext = com.follow.clashx.common.GlobalState.application
++        PortalRuntimeCoordinator.attachChild(this)
++        GlobalState.log("$TAG core attached without an engine")
++    }
++
++    private fun ensureLibrary(): String? {
++        if (libraryLoaded) return null
++        libraryProblem?.let { return it }
++        synchronized(this) {
++            if (libraryLoaded) return null
++            libraryProblem?.let { return it }
++            val problem = loadLibrary()
++            if (problem == null) {
++                libraryLoaded = true
++            } else {
++                libraryProblem = problem
++            }
++            return problem
++        }
++    }
++
++    /// `System.loadLibrary` plus a call that proves the entry points are there.
++    ///
++    /// Guarded, because a missing library must read as a build that cannot do it rather than
++    /// crash the thread that asked. The first call into the library is what resolves its
++    /// symbols, so it is made here: a library that loads but does not export the three JNI
++    /// names would otherwise fail inside a start, where it reads as a core refusing a config.
++    private fun loadLibrary(): String? {
++        runCatching { System.loadLibrary(LIB_NAME) }.onFailure { error ->
++            Log.e(TAG, "$UNAVAILABLE: ${error.message}")
++            return UNAVAILABLE
++        }
++        val version = runCatching { XrayVersion() }.getOrElse { error ->
++            Log.e(TAG, "$NO_ENTRY_POINTS: ${error.message}")
++            return NO_ENTRY_POINTS
++        }
++        Log.i(TAG, "xray ${version ?: "?"} is loaded in this process")
++        return null
++    }
++
++    /// Marks the core as gone, whoever asks: the flag is what a start checks, and the
++    /// invalidation has to happen on the thread that owns the decision, not on the queue.
++    private fun takeCore(): Boolean {
++        val was = coreRunning
++        coreRunning = false
++        return was
++    }
++
++    /// Asks the core to stop on the calling thread.
++    ///
++    /// This is the path a start takes: it already owns the executor slot, so the native call
++    /// belongs here rather than queued behind itself. `XrayStop` returns once the core has let
++    /// go of its tunnels; there is no process to wait for, so the old destroy-then-force pair
++    /// has nothing left to do.
++    private fun stopCoreHere() {
++        if (!takeCore()) return
++        if (!libraryLoaded) return
++        runCatching { XrayStop() }.onFailure { Log.w(TAG, "stop: ${it.message}") }
++    }
++
++    /// Hands `XrayStop` to the executor and returns at once.
++    ///
++    /// Starts are queued on the same single thread, so the native stop can never overlap an
++    /// `XrayStart`, and the caller — a tap, or the service closing its tunnel — is not held
++    /// for the core's lifetime. It is queued even when this plugin believes nothing runs: a
++    /// start in flight may have just opened a core, and a stop with nothing running is a
++    /// no-op on the other side.
++    private fun requestNativeStop() {
++        executor.execute {
++            if (!libraryLoaded) return@execute
++            runCatching { XrayStop() }.onFailure { Log.w(TAG, "stop: ${it.message}") }
++        }
++    }
++
++    private fun failure(message: String): Map<String, Any> =
++        mapOf("ok" to false, "message" to message, "lastLine" to lastLine)
++
++    /// A start cut short by a newer request says so, rather than reading as a refusal.
++    private fun cancelled(): Map<String, Any> =
++        mapOf(
++            "ok" to false,
++            "cancelled" to true,
++            "message" to "start cancelled by a newer request",
++            "lastLine" to lastLine,
++        )
++
++    private fun MethodChannel.invokeMethodOnMainThread(method: String, arguments: Any?) {
++        android.os.Handler(android.os.Looper.getMainLooper()).post {
++            invokeMethod(method, arguments)
++        }
++    }
++
++    companion object {
++        private const val TAG = "XrayCore"
++
++        /// The one instance of this class in the process.
++        ///
++        /// The core must be startable without Flutter: the shade's tile can arrive when no engine
++        /// exists, and a second copy of the core's state — its tunnel, its running flag, its
++        /// library handle — is exactly the duplication the portal must not have. So the process
++        /// keeps one instance, created headless by whoever asks first and adopted by the engine
++        /// when it appears: the tile starts the core, the app later finds the same core.
++        @Volatile
++        private var shared: XrayPlugin? = null
++
++        fun obtain(): XrayPlugin = shared ?: synchronized(this) {
++            shared ?: XrayPlugin().also { instance ->
++                instance.attachHeadless()
++                shared = instance
++            }
++        }
++
++        /// True when a core can exist at all in this build.
++        fun available(): Boolean = runCatching {
++            System.loadLibrary(LIB_NAME)
++            true
++        }.getOrDefault(false)
++
++        /// The library as `System.loadLibrary` names it: it adds the `lib` prefix and `.so`.
++        private const val LIB_NAME = "xray"
++
++        private const val READY_TIMEOUT_MS = 12_000L
++
++        /// How long a coordinator entry waits for the core's own answer. Above the ack's own
++        /// deadline plus the tunnel wait, so a slow start reports the core's words rather
++        /// than this timeout.
++        private const val START_WAIT_MS = 45_000L
++
++        /// `XrayStop` returns when the core has let go of its tunnels; a stop that never
++        /// returns is a fact the caller has to hear instead of waiting forever.
++        private const val STOP_WAIT_MS = 30_000L
++
++        /// A sweep of a whole subscription takes seconds; the cap is the Incy one (120 s) plus
++        /// room for the answer to travel, after which the caller is told it failed rather than
++        /// left waiting on a wedged core.
++        private const val MEASURE_WAIT_MS = 130_000L
++
++        /// How often the log is read, and how finely a sleep is cut so a stop does not wait
++        /// out a whole interval before the start gives up.
++        private const val POLL_MS = 200L
++        private const val POLL_SLICE_MS = 50L
++
++        /// How long the plugin waits for the service to publish the tunnel it just made.
++        private const val TUN_WAIT_MS = 8_000L
++
++        /// The document the core is started from, and the log this start reads.
++        private const val CONFIG_NAME = "xray-tun.json"
++
++        /// The direct outbound this class adds when a document needs one and has none.
++        private const val DIRECT_OUTBOUND_TAG = "portal-direct"
++
++        /// The measurement core's own document: a different file, so a sweep can never be
++        /// mistaken for the tunnel's configuration or overwrite it.
++        private const val MEASURE_CONFIG_NAME = "xray-measure.json"
++        private const val LOG_NAME = "xray.log"
++
++        /// The directory the geodata files are installed into, and the core's variable for it.
++        private const val GEODATA_DIR = "xray-assets"
++        private const val ASSET_ENV = "XRAY_LOCATION_ASSET"
++
++        /// What a start answers when the build carries no usable core.
++        private const val UNAVAILABLE = "xray is not available in this build"
++        private const val NO_ENTRY_POINTS = "libxray.so is missing its JNI entry points"
++
++        /// The line the core prints when its tunnel is actually up: `<name> up`, written by
++        /// proxy/tun/handler.go only after the stack and the inbound started. The Android
++        /// reader's `read Android Tun Fd` line looks like proof and is not — it is written
++        /// before the descriptor is validated — so a start waits for this one, and a core that
++        /// never prints it never had a working tunnel.
++        private val ACK_MARKERS = listOf("$TUN_NAME up")
++
++        /// Info, not the panel's level: without it the acknowledgement line is filtered out.
++        private const val ACK_LOG_LEVEL = "info"
++
++        private const val TUN_NAME = "portal0"
++        private const val TUN_INBOUND_TAG = "tun-in"
++
++        /// The outbound that answers the tunnel's own DNS queries, and the port they arrive on.
++        private const val DNS_OUTBOUND_TAG = "portal-dns"
++        private const val DNS_PORT = 53
++
++        /// Used only when the document has no resolver of its own to query.
++        private const val FALLBACK_DNS_1 = "1.1.1.1"
++        private const val FALLBACK_DNS_2 = "8.8.8.8"
++
++        val CHANNEL = "${Components.PACKAGE_NAME}/xray"
++    }
++}
+diff --git a/android/common/src/main/java/com/follow/clashx/common/PortalRuntime.kt b/android/common/src/main/java/com/follow/clashx/common/PortalRuntime.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..14d3aee82aef6b01a6830c2cd93884d4b7bc2a43
+--- /dev/null
++++ b/android/common/src/main/java/com/follow/clashx/common/PortalRuntime.kt
+@@ -0,0 +1,210 @@
++package com.follow.clashx.common
++
++import java.util.concurrent.CopyOnWriteArrayList
++import java.util.concurrent.atomic.AtomicLong
++import java.util.concurrent.atomic.AtomicReference
++
++/**
++ * Who reads the one tunnel the VpnService established.
++ *
++ * `Mode.global` only says which owner the app *wants* next; this enum is the owner a
++ * generation actually has. The two are never the same question: a mode change while the
++ * portal is closed changes only the wish, and a wish that is being carried out is not yet
++ * a fact — that is what [PortalRuntime.Starting] and [PortalRuntime.Active] separate.
++ */
++enum class PortalOwner(val label: String) {
++    Mihomo("Mihomo"),
++    Xray("Xray"),
++    ;
++
++    companion object {
++        fun of(value: String?): PortalOwner? = entries.firstOrNull {
++            it.label.equals(value, ignoreCase = true) || it.name.equals(value, ignoreCase = true)
++        }
++    }
++}
++
++/**
++ * The process-wide record of the tunnel's owner, at one generation.
++ *
++ * Exactly one of these describes the process at any moment. A generation moves on every
++ * open, close, switch and restart, and a late answer from an older generation — a stop that
++ * finally returned, a start that acknowledged after the user closed the portal — is
++ * recognised by its number and cannot publish itself over the newer state. That is the
++ * difference between a portal that *is* owned and one that is *believed* to be owned: the
++ * plugin used to report `running`, the service `xrayTunActive`, and neither said which of
++ * the two was reading the descriptor now.
++ *
++ * [Active] is only ever published after the owner's own acknowledgement — `portal0 up` from
++ * the child's log, or a started service and its engine listener for the engine. Anything
++ * short of that is [Failed] with the owner's own words, and the portal is closed rather than
++ * reported open over a tunnel nothing reads.
++ */
++sealed class PortalRuntime {
++    abstract val generation: Long
++
++    /** The owner this state is about, if any: `Off` and a failed start name none. */
++    open val owner: PortalOwner? get() = null
++
++    /** The tunnel epoch this state was confirmed on; `0` before an establish. */
++    open val fdEpoch: Long get() = 0L
++
++    abstract val phase: String
++
++    /** Whether an owner is holding the tunnel right now. */
++    open val isLive: Boolean get() = false
++
++    data class Off(override val generation: Long = 0L) : PortalRuntime() {
++        override val phase: String get() = "Off"
++    }
++
++    data class Starting(
++        override val generation: Long,
++        override val owner: PortalOwner,
++    ) : PortalRuntime() {
++        override val phase: String get() = "Starting"
++        override val isLive: Boolean get() = true
++    }
++
++    data class Active(
++        override val generation: Long,
++        override val owner: PortalOwner,
++        override val fdEpoch: Long,
++    ) : PortalRuntime() {
++        override val phase: String get() = "Active"
++        override val isLive: Boolean get() = true
++    }
++
++    data class Stopping(
++        override val generation: Long,
++        override val owner: PortalOwner,
++    ) : PortalRuntime() {
++        override val phase: String get() = "Stopping"
++        override val isLive: Boolean get() = true
++    }
++
++    data class Failed(
++        override val generation: Long,
++        val reason: String,
++    ) : PortalRuntime() {
++        override val phase: String get() = "Failed"
++    }
++
++    /** One line: the record, in the log and on the channel, spelled the same way. */
++    fun describe(): String = buildString {
++        append("generation=").append(generation)
++        append(" phase=").append(phase)
++        owner?.let { append(" owner=").append(it.label) }
++        if (fdEpoch > 0) append(" fdEpoch=").append(fdEpoch)
++        if (this@PortalRuntime is Failed) append(" reason=").append(reason)
++    }
++
++    fun toMap(): Map<String, Any?> = mapOf(
++        "generation" to generation,
++        "phase" to phase,
++        "owner" to owner?.label,
++        "fdEpoch" to fdEpoch,
++        "reason" to (this as? Failed)?.reason.orEmpty(),
++        "running" to (this is Active),
++    )
++
++    companion object {
++        val initial: PortalRuntime = Off(0L)
++    }
++}
++
++/**
++ * The one place the record is written, and the one place a number is minted.
++ *
++ * [publish] refuses anything older than what it already holds, so a transaction that was
++ * overtaken — a revoke, a newer open, a close — cannot put its answer back on top. Closing
++ * is the exception only in appearance: a revoke mints a new generation first, which is why
++ * the late `Active` loses.
++ */
++object PortalRuntimeState {
++    private const val TAG = "PortalRuntime"
++
++    private val state = AtomicReference(PortalRuntime.initial)
++    private val generationSeq = AtomicLong(0)
++    private val fdEpochSeq = AtomicLong(0)
++
++    /// Called for every state that is accepted, with the state it replaced.
++    ///
++    /// The record does not know who reads it, and it does not pick one reader: the telemetry
++    /// file, the Flutter bridge and anything else that must follow the tunnel all attach here.
++    /// A single slot used to hold this, so attaching the bridge silently displaced the file —
++    /// the transitions log would have gone quiet the moment the app was alive to listen.
++    private val observers = CopyOnWriteArrayList<(PortalRuntime, PortalRuntime, String) -> Unit>()
++
++    /// Adds a reader; returns the call that removes it again.
++    fun addObserver(observer: (PortalRuntime, PortalRuntime, String) -> Unit): () -> Unit {
++        observers.add(observer)
++        return { observers.remove(observer) }
++    }
++
++    /// Kept for the one caller that predates the list: it now adds a reader like any other.
++    var onPublish: ((PortalRuntime, PortalRuntime, String) -> Unit)? = null
++        set(value) {
++            field = value
++            value?.let { observers.add(it) }
++        }
++
++    fun current(): PortalRuntime = state.get()
++
++    /** A number no earlier step holds; every entry takes one before it changes anything. */
++    fun nextGeneration(): Long = generationSeq.incrementAndGet()
++
++    /** A number for one established tunnel; it moves on every `establish()`. */
++    fun nextFdEpoch(): Long = fdEpochSeq.incrementAndGet()
++
++    fun currentFdEpoch(): Long = fdEpochSeq.get()
++
++    fun isCurrent(generation: Long): Boolean = state.get().generation == generation
++
++    /**
++     * Writes [next] when it still belongs to the newest generation.
++     *
++     * Equal numbers are allowed on purpose: one transaction publishes `Starting`, then
++     * `Stopping`, then `Active` under the same number, and those are its own steps. [why]
++     * is the entry that asked for the move — a button, a row, Quick Settings, a revoke —
++     * and it is part of the record, not of the logging: the one line per transition is
++     * written from here so no path can move the tunnel without saying who asked.
++     */
++    fun publish(next: PortalRuntime, why: String = ""): Boolean {
++        while (true) {
++            val seen = state.get()
++            if (next.generation < seen.generation) {
++                GlobalState.log(
++                    "$TAG refused a stale state: ${next.describe()} (current ${seen.describe()})",
++                )
++                return false
++            }
++            if (state.compareAndSet(seen, next)) {
++                GlobalState.log("$TAG ${next.describe()}${if (why.isEmpty()) "" else " why=$why"}")
++                for (observer in observers) {
++                    // One reader failing must not cost the others their update, and it must
++                    // not unwind the publish that already happened.
++                    runCatching { observer(seen, next, why) }
++                        .onFailure { error -> GlobalState.log("$TAG observer failed: ${error.message}") }
++                }
++                return true
++            }
++        }
++    }
++
++    /**
++     * Takes the tunnel away without waiting for anybody.
++     *
++     * A revoke arrives from the system while a switch may be holding the coordinator's
++     * mutex, and a revoke that waited for that mutex would leave the descriptor being read
++     * by a core the system has already cut off. It fences instead: a new generation is
++     * minted, `Off` is published under it, and the transaction in flight finds its own
++     * number stale wherever it next reports.
++     */
++    fun revoke(reason: String, owner: PortalOwner? = state.get().owner): Long {
++        val generation = nextGeneration()
++        publish(PortalRuntime.Off(generation))
++        GlobalState.log("$TAG revoked owner=${owner?.label ?: "none"} reason=$reason")
++        return generation
++    }
++}
+diff --git a/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt b/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..635e6956495c4ae0bcfde54df9b55e5ec66583e3
+--- /dev/null
++++ b/android/common/src/main/java/com/follow/clashx/common/PortalTelemetry.kt
+@@ -0,0 +1,357 @@
++package com.follow.clashx.common
++
++import android.os.Process
++import java.io.File
++import java.net.HttpURLConnection
++import java.net.URL
++import java.text.SimpleDateFormat
++import java.util.Date
++import java.util.Locale
++import java.util.concurrent.atomic.AtomicBoolean
++
++/**
++ * The portal's own record, in files `adb shell` can read.
++ *
++ * Everything the app wrote before lived in `filesDir`, and the shipped build is not
++ * debuggable: `run-as` refuses it and nothing can be read off the device, so a defect on the
++ * phone could only be described, never shown. These three files sit in the app's external
++ * files directory instead — world-readable through adb on the phone — and the logcat mirror
++ * stays exactly as it was.
++ *
++ *  - [STATUS_FILE] — a heartbeat every five seconds: owner, generation, tunnel epoch, phase,
++ *    whether the engine runs, the app's own listening ports, and the last egress address
++ *    seen by the probe;
++ *  - [TRANSITIONS_FILE] — one line per transition: time, from → to, generation, why, result;
++ *  - [XRAY_FILE] — the core's own log, the same file the tun document names.
++ *
++ * The paths are constants in this one place so the files can be found from the outside, and
++ * `BUILD.md` names them for whoever reads a device next.
++ */
++object PortalTelemetry {
++    /// File names, in the app's external files directory.
++    const val STATUS_FILE = "portal-status.log"
++    const val TRANSITIONS_FILE = "portal-transitions.log"
++    const val XRAY_FILE = "xray.log"
++
++    /// Where an earlier build kept the core's log, for a device that still has one.
++    const val LEGACY_DIR = "xray-assets"
++
++    private const val HEARTBEAT_MS = 5_000L
++    private const val EGRESS_EVERY_TICKS = 6
++    private const val MAX_LINES = 600
++    private const val EGRESS_TIMEOUT_MS = 4_000
++    private const val PORT_PROBE_MS = 200
++
++    private val stamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US)
++
++    private val started = AtomicBoolean(false)
++
++    @Volatile
++    private var lastEgress = "unknown"
++
++    /// When the owner tapped the switch, and where the portal was going.
++    ///
++    /// A switch is measured from the tap, and only the record can say when the owner that
++    /// took the tunnel acknowledged it, so the clock starts here — one channel call from the
++    /// tap — and the `Active` line is written by [noteTransition], the same hook that writes
++    /// every other transition. `0` means no switch is being measured.
++    private val switchClickAt = java.util.concurrent.atomic.AtomicLong(0L)
++
++    @Volatile
++    private var switchFrom = "Off"
++
++    @Volatile
++    private var switchTo = "Off"
++
++    /// Set by the app module, which is the only place that can see the service's runtime.
++    @Volatile
++    var engineProbe: () -> Boolean = { false }
++
++
++    /// The port the app's cores should be listening on, for a table that cannot be read.
++    ///
++    /// `/proc/net/tcp` is a SELinux-denied read for an `untrusted_app` on this Android, so
++    /// the kernel's own answer is not always available. The fallback is still a measurement,
++    /// not a claim: a loopback TCP handshake against the port the options name, which only
++    /// succeeds if something really is listening there.
++    @Volatile
++    var portProbe: () -> List<Int> = { emptyList() }
++
++    /// The directory every file here lives in: external files, else the app's own.
++    val logDir: File by lazy {
++        val external = runCatching {
++            GlobalState.application.getExternalFilesDir(null)
++        }.getOrNull()
++        val dir = external ?: File(GlobalState.application.filesDir, "telemetry")
++        runCatching { if (!dir.exists()) dir.mkdirs() }
++        dir
++    }
++
++    val statusFile: File get() = File(logDir, STATUS_FILE)
++    val transitionsFile: File get() = File(logDir, TRANSITIONS_FILE)
++    val xrayFile: File get() = File(logDir, XRAY_FILE)
++
++    fun start() {
++        if (!started.compareAndSet(false, true)) return
++        // The one line per transition comes from the record, which is what makes it true
++        // for every entry instead of only for the ones that remembered to write it.
++        PortalRuntimeState.addObserver { previous, next, why -> noteTransition(previous, next, why) }
++        Thread({ loop() }, "portal-telemetry").apply {
++            isDaemon = true
++            start()
++        }
++        GlobalState.log("PortalTelemetry writing to ${logDir.absolutePath}")
++    }
++
++    private fun loop() {
++        var tick = 0L
++        while (true) {
++            runCatching { writeStatus() }
++                .onFailure { GlobalState.log("PortalTelemetry heartbeat failed: $it") }
++            if (tick % EGRESS_EVERY_TICKS == 0L) {
++                runCatching { probeEgress() }
++                    .onFailure { GlobalState.log("PortalTelemetry egress probe failed: $it") }
++            }
++            tick++
++            runCatching { Thread.sleep(HEARTBEAT_MS) }
++        }
++    }
++
++    /// One heartbeat line, always in the same shape: the owner first, because that is the
++    /// question every defect on this device came back to.
++    fun writeStatus() {
++        val runtime = PortalRuntimeState.current()
++        val owner = runtime.owner?.label ?: "Off"
++        val engine = if (engineProbe()) "running" else "stopped"
++        // The child is not a separate probe: the record already says whether the child's
++        // owner is the one reading the tunnel, and a second flag could only disagree.
++        val child = if (runtime is PortalRuntime.Active && runtime.owner == PortalOwner.Xray) {
++            "running"
++        } else {
++            "stopped"
++        }
++        val line = "time=${stamp.format(Date())} owner=$owner generation=${runtime.generation} " +
++            "fdEpoch=${runtime.fdEpoch} phase=${runtime.phase} engine=$engine " +
++            "child=$child " +
++            "listeners=${listeners()} egress=$lastEgress"
++        append(statusFile, line)
++    }
++
++    /// One line per transition of the record: who had it, who takes it, and why.
++    ///
++    /// Called from [PortalRuntimeState.publish], the one place a state is written, so no
++    /// entry can move the tunnel without appearing here. A refusal of an older generation
++    /// never reaches this: `publish` returns before it.
++    fun noteTransition(seen: PortalRuntime, next: PortalRuntime, why: String) {
++        val result = when (next) {
++            is PortalRuntime.Failed -> "failed: ${next.reason}"
++            is PortalRuntime.Active -> "ok fdEpoch=${next.fdEpoch}"
++            else -> "ok"
++        }
++        append(
++            transitionsFile,
++            "time=${stamp.format(Date())} from=${seen.owner?.label ?: "Off"} " +
++                "to=${next.owner?.label ?: "Off"} generation=${next.generation} " +
++                "phase=${next.phase} why=${why.ifEmpty { "unsaid" }} result=$result",
++        )
++        if (next is PortalRuntime.Active) noteSwitchConfirmed(next)
++    }
++
++    /// The tap, from the screen that owns it: where the portal is going and when it started.
++    fun noteSwitchStart(to: String) {
++        switchTo = to
++        switchFrom = PortalRuntimeState.current().owner?.label ?: "Off"
++        switchClickAt.set(System.nanoTime())
++    }
++
++    /// Click → `phase=Active`, written once per tap, by the record's own hook.
++    ///
++    /// The owner's acknowledgement is the switch's end: `Active` is published only after the
++    /// owner holds its listener or tunnel, so this number is the hand-over the owner sees, not
++    /// a wait for a config. `0` means the tap was never registered — a transition from Quick
++    /// Settings or a revoke — and those keep the plain line above and nothing invented.
++    private fun noteSwitchConfirmed(next: PortalRuntime.Active) {
++        val click = switchClickAt.getAndSet(0L)
++        if (click == 0L) return
++        val elapsedMs = (System.nanoTime() - click) / 1_000_000L
++        append(
++            transitionsFile,
++            "time=${stamp.format(Date())} kind=switch phase=active " +
++                "duration_ms=$elapsedMs from=$switchFrom to=${next.owner.label} " +
++                "generation=${next.generation}",
++        )
++    }
++
++    /// The screen's half of the same measurement: the tap → the list with rows in it.
++    ///
++    /// [durationMs] is the app's own clock, started before the tap asked anything, and
++    /// [detail] says where the rows came from — the new owner's own answer (`source=live`),
++    /// the last non-empty group the list drew (`source=held`), or the profile's `proxies:`
++    /// (`source=profile`). The three are different facts and only the first is the new owner's.
++    fun noteSwitchTiming(phase: String, durationMs: Long, detail: String) {
++        val to = switchTo
++        append(
++            transitionsFile,
++            "time=${stamp.format(Date())} kind=switch phase=$phase " +
++                "duration_ms=$durationMs from=$switchFrom to=$to" +
++                (if (detail.isEmpty()) "" else " $detail"),
++        )
++    }
++
++    fun noteEgress(value: String) {
++        lastEgress = value
++    }
++
++    /// A delay test that had to raise a tunnel, and how long that took.
++    ///
++    /// The test is a measurement, and a measurement needs a tunnel to be carried through: the
++    /// owner pressing TEST on a closed portal is asking for the portal to be opened long enough
++    /// to answer. The line says which core was raised and how long the raise took, so a slow
++    /// test can be told apart from a slow node.
++    fun noteTest(
++        mode: String,
++        raised: String,
++        durationMs: Long,
++        stoppedAfter: Boolean,
++        detail: String,
++    ) {
++        append(
++            transitionsFile,
++            "time=${stamp.format(Date())} kind=test mode=$mode raised=$raised " +
++                "duration_ms=$durationMs stopped_after=$stoppedAfter" +
++                (if (detail.isEmpty()) "" else " $detail"),
++        )
++    }
++
++    /// One attempt at a mode's own feed, and what the counter said afterwards.
++    ///
++    /// The app counts failures in a row for the two documents a panel serves, and a mode is
++    /// refused once its own count reaches the limit. The count lives in Dart — it is about
++    /// this run's attempts, not about the files — so the line is passed in and written here,
++    /// beside the transitions, where a device check can quote it instead of deducing it from
++    /// a disabled control.
++    fun noteAvailability(
++        feed: String,
++        mode: String,
++        attempts: Int,
++        limit: Int,
++        state: String,
++        reason: String,
++    ) {
++        append(
++            transitionsFile,
++            "time=${stamp.format(Date())} kind=availability feed=$feed mode=$mode " +
++                "attempts=$attempts/$limit state=$state" +
++                (if (reason.isEmpty()) "" else " reason=$reason"),
++        )
++    }
++
++    /// The app's own listening sockets, from the kernel's own table.
++    ///
++    /// `/proc/net/tcp` is readable for the process's own sockets on Android; the uid column
++    /// is what keeps every other app's out of the answer. A table that cannot be read says
++    /// `unknown` instead of an empty list, because "nothing listens" and "nothing could be
++    /// read" are different answers and only one of them is true.
++    private fun listeners(): String {
++        val uid = Process.myUid()
++        val ports = mutableListOf<String>()
++        var readable = false
++        // `self` first: the per-process table is the one an app can sometimes still read.
++        for (name in listOf("/proc/self/net/tcp", "/proc/self/net/tcp6")) {
++            val lines = runCatching { File(name).readLines() }.getOrNull() ?: continue
++            readable = true
++            for (line in lines.drop(1)) {
++                val fields = line.trim().split(Regex("\\s+"))
++                if (fields.size < 8) continue
++                // st == 0A is LISTEN; uid is column 7 in the kernel's own layout.
++                if (fields[3] != "0A") continue
++                if (fields[7] != uid.toString()) continue
++                val address = decode(fields[1]) ?: continue
++                ports.add(address)
++            }
++        }
++        if (!readable) {
++            return probePorts(portProbe()) ?: "unknown"
++        }
++        return ports.distinct().sorted().joinToString(",").ifEmpty { "none" }
++    }
++
++    /// The loopback ports that actually answer, measured rather than assumed.
++    ///
++    /// The options' own mixed port is only one candidate: a profile that never set
++    /// `mixed-port` leaves it 0 while the cores still listen on their defaults, so the probe
++    /// asks the known ports as well and reports the ones that answer. A port that refuses
++    /// the handshake is not listed, which is what makes this a measurement.
++    private fun probePorts(candidates: List<Int>): String? {
++        val open = candidates.filter { it > 0 }.distinct().filter { port ->
++            runCatching {
++                java.net.Socket().use {
++                    it.connect(java.net.InetSocketAddress("127.0.0.1", port), PORT_PROBE_MS)
++                }
++                true
++            }.getOrDefault(false)
++        }
++        if (open.isEmpty()) return null
++        return open.joinToString(",") { "probed:127.0.0.1:$it" }
++    }
++
++    /// `0100007F:2A3A` -> `127.0.0.1:10810`.
++    private fun decode(local: String): String? {
++        val parts = local.split(":")
++        if (parts.size != 2) return null
++        val hex = parts[0]
++        val port = parts[1].toIntOrNull(16) ?: return null
++        val bytes = hex.chunked(2).mapNotNull { it.toIntOrNull(16) }
++        if (bytes.size != 4 && bytes.size != 16) return null
++        val address = if (bytes.size == 4) {
++            bytes.reversed().joinToString(".") { it.toString() }
++        } else {
++            // IPv6: the kernel writes four little-endian words; an all-zero address is `::`.
++            if (bytes.all { it == 0 }) "::" else bytes.chunked(4)
++                .reversed()
++                .joinToString(":") { word -> word.joinToString("") { "%02x".format(it) } }
++        }
++        return "$address:$port"
++    }
++
++    /// The last public address this app's own traffic left by, or `unknown`.
++    ///
++    /// A probe from the app, so in the simple portal it leaves *outside* the tunnel by
++    /// design (the service keeps this uid out of it) — it answers "is there egress at all,
++    /// and where", not "which node is the portal on". A device-side `curl` is what proves
++    /// the node's own address.
++    private fun probeEgress() {
++        val connection = runCatching {
++            (URL("https://api.ipify.org").openConnection() as HttpURLConnection).apply {
++                connectTimeout = EGRESS_TIMEOUT_MS
++                readTimeout = EGRESS_TIMEOUT_MS
++                requestMethod = "GET"
++            }
++        }.getOrNull() ?: return
++        try {
++            if (connection.responseCode !in 200..299) return
++            val body = connection.inputStream.bufferedReader().use { it.readText() }.trim()
++            if (body.isNotEmpty() && body.length <= 64) lastEgress = body
++        } catch (_: Exception) {
++            // Kept as the last value that answered: an unanswered probe is not a fact.
++        } finally {
++            runCatching { connection.disconnect() }
++        }
++    }
++
++    private fun append(file: File, line: String) {
++        synchronized(this) {
++            runCatching {
++                val parent = file.parentFile
++                if (parent != null && !parent.exists()) parent.mkdirs()
++                file.appendText(line + "\n", Charsets.UTF_8)
++                // A log that grows without a bound is a file nobody can pull: the last
++                // [MAX_LINES] lines are what a device check reads anyway.
++                val lines = file.readLines()
++                if (lines.size > MAX_LINES) {
++                    file.writeText(lines.takeLast(MAX_LINES).joinToString("\n") + "\n")
++                }
++            }
++        }
++    }
++}
+diff --git a/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..947b3aecbca8da64e67e8e904a57deb8f69f4809
+--- /dev/null
++++ b/android/common/src/main/java/com/follow/clashx/common/XrayTun.kt
+@@ -0,0 +1,179 @@
++package com.follow.clashx.common
++
++import android.os.ParcelFileDescriptor
++
++/**
++ * The tunnel the VpnService established, and the facts the core needs to read it.
++ *
++ * A library cannot create a VpnService and cannot open the tunnel itself, so the service makes
++ * it and states its facts here: the descriptor and the tunnel's own addresses. [descriptor]
++ * stays owned by the service; the core only borrows the number, in this same process, and
++ * reads it. Nothing here names the interface the core's own transport leaves by: that is the
++ * service's uid exclusion (see `VpnService.keepCoreOutOfTunnel`), not a name.
++ */
++class XrayTun(
++    val descriptor: ParcelFileDescriptor,
++    val mtu: Int,
++    val gateway: List<String>,
++    val dns: List<String>,
++    /// Which `establish()` made this tunnel. The service mints it, the plugin checks it, and
++    /// a descriptor from an older epoch is never handed to a core of the newer one.
++    val epoch: Long = 0L,
++) {
++    /// The number the core is given. Valid only while [descriptor] is open.
++    // `ParcelFileDescriptor.getFd()` throws `IllegalStateException: Already closed` on a closed
++    // descriptor instead of answering -1, and this getter is read on a worker thread at the
++    // moment the service tears the tunnel down — that threw and killed the app. A closed tunnel
++    // is a state to report, never an exception to propagate.
++    val fd: Int get() = runCatching { descriptor.fd }.getOrDefault(-1)
++
++    /// Whether this still names an open tunnel.
++    ///
++    /// The number alone is not enough: a descriptor the service closed reports -1, and its old
++    /// number may already belong to the next file the process opened, so the descriptor itself
++    /// is asked. proxy/tun falls back to 0 for a number that was never set, which is how a
++    /// closed tunnel used to reach the core as a bare `inappropriate ioctl for device`.
++    ///
++    /// Both reads are guarded: `getFd()` *and* `getFileDescriptor()` throw
++    /// `IllegalStateException: Already closed` on a descriptor the service just closed, and a
++    /// reader has no business dying over the answer to a question it asked about a closing
++    /// tunnel. A closed tunnel is `false`, never an exception.
++    val live: Boolean get() = runCatching {
++        val number = descriptor.fd
++        number >= FIRST_TUN_FD && descriptor.fileDescriptor.valid()
++    }.getOrDefault(false)
++
++    /// A descriptor of its own, or `null` when this tunnel is no longer open.
++    ///
++    /// The one way to reach `dup()`: duplicating a closed descriptor throws
++    /// `Already closed`, and a number taken from one belongs to whatever file the process
++    /// opened next. The check and the duplicate happen under the same guard as [live], so a
++    /// newer stop that closes the descriptor between them cannot slip through.
++    @Synchronized
++    fun duplicate(): ParcelFileDescriptor? {
++        if (!live) return null
++        return runCatching { descriptor.dup() }.getOrNull()
++    }
++
++    companion object {
++        /// The first descriptor number that is not stdin, stdout or stderr: a tunnel is never
++        /// one of them, and proxy/tun falls back to 0 for a number that was never set.
++        const val FIRST_TUN_FD = 3
++    }
++}
++
++/**
++ * The single hand-over point between the service that makes the tunnel and the plugin that
++ * starts the core.
++ *
++ * The two live in different Gradle modules but the same process, so the order is fixed: the
++ * service publishes as its start returns and the plugin takes right after. A take clears the
++ * slot, so one tunnel is never handed to two starts.
++ */
++object XrayTunHolder {
++    private const val POLL_MS = 50L
++
++    // One guard for the slot, the epoch and the take: `take` clears what `publish` set, and
++    // two threads doing that beside each other is how one tunnel used to be handed to two
++    // starts. Every operation below is written against this lock and nothing else.
++    private val lock = Any()
++
++    private var pending: XrayTun? = null
++
++    /// The newest epoch this holder has seen, so an older publish cannot replace a newer one.
++    private var publishedEpoch: Long = 0L
++
++    fun publish(tun: XrayTun?) = synchronized(lock) {
++        if (tun != null && tun.epoch in 1 until publishedEpoch) {
++            GlobalState.log(
++                "XrayTunHolder dropped a publish of an older epoch ${tun.epoch} " +
++                    "(holding $publishedEpoch)",
++            )
++            return@synchronized
++        }
++        pending = tun
++        if (tun != null && tun.epoch > publishedEpoch) publishedEpoch = tun.epoch
++        Unit
++    }
++
++    /// The tunnel in hand, without taking it.
++    ///
++    /// A switch can start the child twice — the document reload and the start that follows it —
++    /// and `take` empties the slot on the first call, so the second one found nothing and
++    /// reported "the VPN that owns it is not up" over a tunnel that was up and healthy. Reading
++    /// is not consuming: the descriptor stays until the service closes it.
++    fun peek(): XrayTun? = synchronized(lock) { pending }
++
++    /// The tunnel in hand, cleared as it is taken; an [epoch] given must match.
++    fun take(epoch: Long? = null): XrayTun? = synchronized(lock) {
++        val held = pending ?: return null
++        if (epoch != null && epoch != held.epoch) return null
++        pending = null
++        held
++    }
++
++    /// The epoch of the newest tunnel the service published.
++    fun currentEpoch(): Long = synchronized(lock) { publishedEpoch }
++
++    /**
++     * Waits up to [timeoutMillis] for the service to publish.
++     *
++     * The service is started on the main thread and binds asynchronously, so the plugin can
++     * genuinely arrive first; waiting is how a cold start becomes one ordered step instead of
++     * a race the core would lose by a few milliseconds. It is also what replaces a dead
++     * tunnel: a start whose cached descriptor was closed waits here for the VPN the service is
++     * establishing now, instead of reading a number that already belongs to another file.
++     */
++    fun await(timeoutMillis: Long, epoch: Long? = null): XrayTun? {
++        val deadline = System.currentTimeMillis() + timeoutMillis
++        while (System.currentTimeMillis() < deadline) {
++            take(epoch)?.let { return it }
++            Thread.sleep(POLL_MS)
++        }
++        return take(epoch)
++    }
++
++    /// Drops the slot, and only the slot of [epoch] when one is given.
++    ///
++    /// A stop that names the tunnel it is closing must not clear the tunnel that replaced it:
++    /// a newer `establish()` publishes while an older stop is still unwinding, and an
++    /// unconditional clear left the newer descriptor reachable by nobody.
++    fun clear(epoch: Long? = null) = synchronized(lock) {
++        val held = pending ?: return@synchronized
++        if (epoch != null && held.epoch > epoch) return@synchronized
++        pending = null
++    }
++}
++
++/**
++ * The plugin's stop, for the service that owns the tunnel.
++ *
++ * The service cannot see the plugin (the module dependency runs the other way), and a core
++ * left running after the VPN is revoked goes on reading a descriptor the system no longer
++ * routes into: the plugin has to let go of the tunnel it was handed when the service closes
++ * it. The plugin registers here; the service calls it before it closes the descriptor it owns.
++ */
++object XrayChildControl {
++    @Volatile
++    var stop: (() -> Unit)? = null
++}
++
++/// The measurement core, reached from the portal channel.
++///
++/// The core belongs to the xray plugin, which owns the library and its single instance; the
++/// dashboard talks to the portal channel. These lambdas are the one line between them, set
++/// when the xray plugin attaches and cleared when it goes — null means this build has no child
++/// at all, which is exactly what the caller must hear.
++object PortalMeasureBridge {
++    @Volatile
++    var start: ((String, String, String, Int, Int) -> Map<String, Any>)? = null
++
++    @Volatile
++    var stop: (() -> Boolean)? = null
++
++    /// What the tunnel's own core has timed so far, without measuring anything. Set by the
++    /// xray plugin; the dashboard reads it through this bridge because it speaks to the
++    /// portal channel, not to the core's.
++    @Volatile
++    var observatory: (() -> Map<String, Any>)? = null
++}
+diff --git a/android/common/src/main/res/values/strings.xml b/android/common/src/main/res/values/strings.xml
+index d4e2f0450de36deb7ed609f23b68d3c6d5c55609..a9c785793acb6640a69c6e1a9669ce9c5479e4a5 100644
+--- a/android/common/src/main/res/values/strings.xml
++++ b/android/common/src/main/res/values/strings.xml
+@@ -1,5 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <resources>
+-    <string name="app_name">FlClashX</string>
+-    <string name="service_channel_name">FlClashX Service</string>
++    <string name="app_name">Portal</string>
++    <string name="service_channel_name">Portal Service</string>
+ </resources>
+diff --git a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+index b68325ef63c711163cbcf4ae1a7e8cf2b8d910bd..759b7a00e0431ec7e5a9562357d45859543d9c94 100644
+--- a/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
++++ b/android/service/src/main/java/com/follow/clashx/service/VpnService.kt
+@@ -7,9 +7,14 @@ import android.net.ProxyInfo
+ import android.os.Binder
+ import android.os.Build
+ import android.os.IBinder
++import android.os.ParcelFileDescriptor
+ import androidx.core.content.getSystemService
+ import com.follow.clashx.common.AccessControlMode
+ import com.follow.clashx.common.GlobalState
++import com.follow.clashx.common.PortalRuntimeState
++import com.follow.clashx.common.XrayChildControl
++import com.follow.clashx.common.XrayTun
++import com.follow.clashx.common.XrayTunHolder
+ import com.follow.clashx.common.R as CommonR
+ import com.follow.clashx.core.Core
+ import com.follow.clashx.service.models.CIDR
+@@ -22,6 +27,7 @@ import com.follow.clashx.service.models.tunOptions
+ import com.follow.clashx.service.modules.ServiceModules
+ import java.net.InetSocketAddress
+ import java.util.concurrent.ConcurrentHashMap
++import java.util.concurrent.atomic.AtomicInteger
+ import android.net.VpnService as SystemVpnService
+ 
+ class VpnService : SystemVpnService(), ManagedService {
+@@ -30,6 +36,16 @@ class VpnService : SystemVpnService(), ManagedService {
+     private val tunLock = Any()
+     private var tunRunning = false
+ 
++    /// Who reads the established descriptor: the engine, or the simple portal's child.
++    private var tunOwnedByChild = false
++
++    /// The simple portal's descriptor. The child borrows its number; the service keeps it.
++    private var xrayDescriptor: ParcelFileDescriptor? = null
++
++    /// The epoch of the descriptor in [xrayDescriptor], so a stop of an older tunnel cannot
++    /// clear the newer one the service has already published.
++    private var xrayEpoch = 0L
++
+     override fun onDestroy() {
+         try {
+             cleanup()
+@@ -118,16 +134,47 @@ class VpnService : SystemVpnService(), ManagedService {
+     }
+ 
+     override fun onRevoke() {
++        // The system took the tunnel away, and it does not wait for a switch that may be
++        // running: the record is fenced first, so a transaction in flight cannot publish its
++        // `Active` over an interface that no longer exists. The stop below is the same one
++        // every other close takes, and it is idempotent.
++        PortalRuntimeState.revoke("vpn-permission-revoked")
+         stop()
+         notifyVpnRevoked()
+     }
+ 
+     private fun handleStart(options: VpnOptions) {
+-        val fd = with(Builder()) {
++        // Whatever read the interface before this start goes first, whichever core it was.
++        // `establish()` replaces the interface, and a previous reader left running either
++        // reads a tunnel that no longer carries anything or — its descriptor still open —
++        // keeps reading the new one beside the reader this start hands it to. The old
++        // condition named the Xray case only (`tunOwnedByChild`), so a mihomo tunnel that
++        // was still running survived the hand-over and became the second reader the simple
++        // portal showed on the device.
++        val previousOwner = synchronized(tunLock) {
++            val owner = when {
++                !tunRunning -> OWNER_OFF
++                tunOwnedByChild -> OWNER_XRAY
++                else -> OWNER_MIHOMO
++            }
++            stopTunLocked()
++            owner
++        }
++        val owner = if (options.xrayTun) OWNER_XRAY else OWNER_MIHOMO
++        // One number per established interface, minted here and carried by the tunnel the
++        // child is handed: an acknowledgement that names an older epoch belongs to a
++        // descriptor this start has already replaced.
++        val fdEpoch = PortalRuntimeState.nextFdEpoch()
++        GlobalState.log(
++            "tun generation=${tunGeneration.incrementAndGet()} fdEpoch=$fdEpoch owner=$owner " +
++                "previous=$previousOwner stopped=${previousOwner != OWNER_OFF}",
++        )
++        val descriptor = with(Builder()) {
+             addAddressAndRoutes(options)
+             addDnsServers(options)
+             setMtu(options.tunMtu)
+             configureAccessControl(options)
++            keepCoreOutOfTunnel(options)
+             setSession(getString(CommonR.string.app_name))
+             setBlocking(false)
+             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+@@ -136,7 +183,12 @@ class VpnService : SystemVpnService(), ManagedService {
+             if (options.allowBypass) {
+                 allowBypass()
+             }
+-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && options.systemProxy) {
++            // The system proxy names the engine's mixed port, and in the simple portal no
++            // engine runs: declaring it would send every app to a port nothing listens on.
++            if (!options.xrayTun &&
++                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
++                options.systemProxy
++            ) {
+                 GlobalState.log("Enable VPN HTTP proxy")
+                 setHttpProxy(
+                     ProxyInfo.buildDirectProxy(
+@@ -146,9 +198,13 @@ class VpnService : SystemVpnService(), ManagedService {
+                     ),
+                 )
+             }
+-            establish()?.detachFd()
+-                ?: error("VPN establishment was rejected by the system")
++            establish() ?: error("VPN establishment was rejected by the system")
+         }
++        if (options.xrayTun) {
++            handOverToChild(descriptor, options, fdEpoch)
++            return
++        }
++        val fd = descriptor.detachFd()
+         synchronized(tunLock) {
+             tunRunning = true
+             try {
+@@ -176,6 +232,44 @@ class VpnService : SystemVpnService(), ManagedService {
+         }
+     }
+ 
++    /**
++     * The simple portal's tunnel: no engine is started, and the descriptor goes to the core.
++     *
++     * The core runs inside this process, so the sockets it opens for the node carry this app's
++     * uid — and that uid is the one the tunnel must not route. [keepCoreOutOfTunnel] is what
++     * states that, in the only way Android lets an app state it. Nothing here resolves an
++     * interface for the core: an interface name would be a second, weaker spelling of the same
++     * fact, and the core's own path for using one reads the interface table over rtnetlink,
++     * which an app uid cannot do.
++     */
++    private fun handOverToChild(
++        descriptor: ParcelFileDescriptor,
++        options: VpnOptions,
++        fdEpoch: Long,
++    ) {
++        synchronized(tunLock) {
++            // The previous tunnel was taken down in handleStart, before this establish: the
++            // system routes into the interface this start has just replaced, and the reader
++            // that was on it is stopped — the child told to stop, the descriptor this service
++            // owns closed — before another is published. A live number left behind would be
++            // the second reader again.
++            tunOwnedByChild = true
++            tunRunning = true
++            xrayDescriptor = descriptor
++            xrayEpoch = fdEpoch
++            XrayTunHolder.publish(
++                XrayTun(
++                    descriptor = descriptor,
++                    mtu = options.tunMtu,
++                    gateway = listOf(IPV4_ADDRESS),
++                    dns = listOf(DNS),
++                    epoch = fdEpoch,
++                ),
++            )
++            GlobalState.log("tun fdEpoch=$fdEpoch owner=$OWNER_XRAY published for the core")
++        }
++    }
++
+     private fun Builder.addAddressAndRoutes(options: VpnOptions) {
+         val ipv4Address = IPV4_ADDRESS.toCIDR()
+         addAddress(ipv4Address.address, ipv4Address.prefixLength)
+@@ -215,12 +309,42 @@ class VpnService : SystemVpnService(), ManagedService {
+         }
+     }
+ 
++    /// Keeps this app's own traffic out of the tunnel it reads, by uid.
++    ///
++    /// The simple portal's core is a library in this process, so every socket it opens for the
++    /// node carries this app's uid. Without an exclusion the system would route that socket
++    /// straight back into the tun the core is reading: the core would send its own node traffic
++    /// into itself, and the connection would never leave the device. Android's answer is the
++    /// per-uid one — `addDisallowedApplication` makes the VPN install no route into the tun for
++    /// this package — which is what `VpnService.protect` does for a single socket and what
++    /// `autoOutboundsInterface` would have said in the core's own words. It is the only one that
++    /// works here: the core resolves that setting with `net.InterfaceByName`, and reading the
++    /// interface table over rtnetlink is denied to an app uid.
++    private fun Builder.keepCoreOutOfTunnel(options: VpnOptions) {
++        if (!options.xrayTun) return
++        try {
++            addDisallowedApplication(packageName)
++        } catch (throwable: Exception) {
++            // Reported instead of ignored: a tunnel that routes the core's own transport is one
++            // that carries nothing, and pretending to have it start is worse than not starting.
++            error("the portal core cannot be kept out of its own tunnel: ${throwable.message}")
++        }
++    }
++
+     private fun Builder.configureAccessControl(options: VpnOptions) {
+         val accessControl = options.accessControlProps
+         if (!accessControl.enable) return
+         when (accessControl.mode) {
+             AccessControlMode.ACCEPT_SELECTED -> {
+-                (accessControl.acceptList + packageName).forEach { name ->
++                // A package cannot be both allowed and disallowed, and the simple portal's core
++                // is this app: it stays out of the tunnel (keepCoreOutOfTunnel) rather than in
++                // it, so this list never names this app.
++                val names = if (options.xrayTun) {
++                    accessControl.acceptList - packageName
++                } else {
++                    accessControl.acceptList + packageName
++                }
++                names.forEach { name ->
+                     addApplication(name, ::addAllowedApplication)
+                 }
+             }
+@@ -273,13 +397,44 @@ class VpnService : SystemVpnService(), ManagedService {
+     }
+ 
+     private fun stopTunLocked() {
+-        if (tunRunning) {
++        if (!tunRunning) return
++        val owner = if (tunOwnedByChild) OWNER_XRAY else OWNER_MIHOMO
++        if (tunOwnedByChild) {
++            // The child goes first: it holds its own copy of the descriptor, and a process
++            // left reading a revoked tunnel keeps the interface alive for as long as it runs.
++            XrayChildControl.stop?.invoke()
++            // Only this tunnel's slot: a newer establish may already have published the
++            // descriptor of the next generation, and clearing it would leave that one
++            // reachable by nobody.
++            XrayTunHolder.clear(xrayEpoch)
++            xrayDescriptor?.let { descriptor ->
++                runCatching { descriptor.close() }
++                    .onFailure { GlobalState.log("Unable to close the Xray tunnel: $it") }
++            }
++            xrayDescriptor = null
++            xrayEpoch = 0L
++            tunOwnedByChild = false
++        } else {
+             Core.stopTun()
+-            tunRunning = false
+         }
++        tunRunning = false
++        GlobalState.log(
++            "tun generation=${tunGeneration.get()} owner=$owner released, owner=$OWNER_OFF",
++        )
+     }
+ 
+     companion object {
++        /// Numbers each established tunnel across service instances, so the log tells one
++        /// hand-over from the next: the service stops between a close and the next start, so
++        /// a per-instance counter would call every tunnel the first one.
++        private val tunGeneration = AtomicInteger(0)
++
++        // Who reads the established tunnel: nothing, the engine, or the child. Spelled in the
++        // log, because a number alone cannot say which core a start took the interface from.
++        private const val OWNER_OFF = "Off"
++        private const val OWNER_MIHOMO = "Mihomo"
++        private const val OWNER_XRAY = "Xray"
++
+         // mihomo's own TUN default: 198.18.0.0/15 is benchmarking space no LAN
+         // uses, and its fake-ip pool starts at .4, past this /30.
+         private const val IPV4_ADDRESS = "198.18.0.1/30"
+diff --git a/android/service/src/main/java/com/follow/clashx/service/models/VpnOptions.kt b/android/service/src/main/java/com/follow/clashx/service/models/VpnOptions.kt
+index dbed6ab377512ad3545203e14ac796aa97cd4fa9..3c22d7e29d010317ecab96c60f91609c4ccdf0ea 100644
+--- a/android/service/src/main/java/com/follow/clashx/service/models/VpnOptions.kt
++++ b/android/service/src/main/java/com/follow/clashx/service/models/VpnOptions.kt
+@@ -27,6 +27,13 @@ data class VpnOptions(
+     val excludesAllRoutes: Boolean = false,
+     val mtu: Int = 0,
+     val congestionController: String? = null,
++    /**
++     * The simple portal: the tunnel belongs to the Xray child, not to the engine.
++     *
++     * The service still establishes it — only a VpnService can — but hands the descriptor to
++     * the child instead of to the Core, and no engine is started or configured.
++     */
++    val xrayTun: Boolean = false,
+ )
+ 
+ private const val DEFAULT_TUN_MTU = 9000
+diff --git a/android/service/src/main/res/drawable-hdpi/ic_service.png b/android/service/src/main/res/drawable-hdpi/ic_service.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..52322075d3697762c76cbec0df6f135e586cb596
+GIT binary patch
+literal 476
+zcmV<20VDp2P)<h;3K|Lk000e1NJLTq001Na001Ni1^@s6;Q*MJ0004_Nkl<Zc%1E5
+zJ4ysW5PffUH82s}&16B0OayNrn0N(26H~!68Jmi!cMvbIiJrg(U0vr%X|1ed+dV%7
+zmw7NSQ&YdL?s`)Lbm*{TU`j!f>GWEPmy^tETkA8KR*~|_m?23?S_g0fVAwF1M*x>3
+zALhPGTbhAi14(yk5BHL`-FFs>9TeJ`@f92c*aa{JFl%@{1K0#`?!JSu`-x%=?I8N0
+zPU)6`C9)AyNClbsN<y8H>J|phs6D?mNr;hmzioF4(JrgI4KD!337rvuwW^M*CX{<+
+z#w2%4P;6oA9wR?VHvkTNi%Jt~-Liinz$fMTC4hbljLSk2nWX&B6QWl}(zhxZ`#Hnc
+z^4oaJ+D4a93SEVku0pCPZ)}@NsP~J5GL<!*5Q}F`h;iafY-0%gyR-t}H8LO1WmCWZ
+z&~+ac@2SLM3d@j;{*7)&l57Sp;?(tid^G1WNrwTuiKM;Q2wP^z-vV$3VBi(HCV3Sb
+z)E8{`0UQBX^=e;`ysbRsFFHmAc|j*@^*5;CI9n8vjE<p&?PF^{iXA%qN4x{wM@TM>
+SJ``F20000<MNUMnLSTYn?8nmp
+
+literal 0
+HcmV?d00001
+
+diff --git a/android/service/src/main/res/drawable-mdpi/ic_service.png b/android/service/src/main/res/drawable-mdpi/ic_service.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..42f8c02f95fe1e3a32a4b72266e5854baf77a490
+GIT binary patch
+literal 370
+zcmV-&0ge8NP)<h;3K|Lk000e1NJLTq000;O000;W1^@s6;CDUv0003wNkl<Zc%0pp
+zK}rNM5Ji9Ww1}X10CAxp-p-XPaqlHuILGh+f;-P5?uO}p5=}wqNz&=T&G;d7I{8)g
+zyHZ_|4joq70Bn&XGn&ajx5RnPruGGAl6tjaG_%jy06~SBjli9x2T3bQL0K(bLok)}
+zEa~ybso9uQY_1&mVn1BDQ1_cl!I7j*R7F(3tLPV9!U@mgDIpiY4LmItQ&ofWcPeS_
+z5Q&EOl0Fi}VO&ajnK_@P00D1i_O1lLg&NRWhNnPC(<%lHXL8<R*e$5@A(rHj%>OLF
+z-Z=aKeP+#nEHB5gP>MF$^OBwou$6QY$z2>nftO~$;#wKrLx3k>1BAx+3WPH4l71ED
+zJ+KCbIM#8kE$zTHaGShaVSW=vZm;Hi+Qw~;SK`zz9RE~m*P-*Wcfh~EH`=l1q8jE&
+Q82|tP07*qoM6N<$f^xg2H~;_u
+
+literal 0
+HcmV?d00001
+
+diff --git a/android/service/src/main/res/drawable-xhdpi/ic_service.png b/android/service/src/main/res/drawable-xhdpi/ic_service.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..40c4ab7eced8740f7b24c0d75100274f5cad9eb5
+GIT binary patch
+literal 585
+zcmV-P0=E5$P)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm0006INkl<Zc%1E-
+zO^OsT6vzKB)2{piKQ<yR!~?kU94<VC2%cfK>K(>~cW|i}@BpG~H=~1$ppH)0Pa+A#
+zrlvZfQq2VOgV0pxy_fpGysEBxEp<AbPG<&I>Hrk`lwf8o797}HEO@d;Ns_V+eNdkr
+zU?u6Ymf^dZos>9a2>_g#4Zu@Lk0o6XzO~AUFped?lC&Scn_W_|Y=9^1j_2vxQ%q(s
+zsl^MDK1jMPX^^zkwJ?Ow-;(Z_*<mc*vmAUqPZH|>lB6q=T;<Z)B*ym%x*_Q>95dyR
+z14(vv0g~1^hPeVfi{Ae?$lm3xB~-vruuHK_W>ZsuE8Nj4)DSR)6Mq|qo7jmscVE)O
+z#P?hXcx`6SavXq1=Se{1VtCB(<5c6sxvQ$gs#YMMO*1<M{BOsofH((a-6C_?`9)V7
+zr^az=9H+){Y8<D=acUf=#&K#Kr^a#mj|4DtzSNeQ0&I&dg>P7^jJLPFngV`E`Ward
+zhm8ykLEuqFoapm8tj)++hqlVs%yY|bZ0(OUpnSK^^98u&dpN#}HxcXayl>M0?>Azk
+zyiC`gD<CfFo31Z_BmX=f#xLL<@F3W3-O*?R+ymYKCrP|x;2;R}YuXa+^_!Beg~PR(
+zeT+hL`<SUMa5r@RJm1Xhla}JFEzQaNm=7Zv&dvPXKR8mqSsi5l6+gcl-RX2X9To5g
+X5stb6!ikb600000NkvXXu0mjf6b}>h
+
+literal 0
+HcmV?d00001
+
+diff --git a/android/service/src/main/res/drawable-xxhdpi/ic_service.png b/android/service/src/main/res/drawable-xxhdpi/ic_service.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..eb8692ec7937e79445513736862f161bb47dfc8f
+GIT binary patch
+literal 740
+zcmeAS@N?(olHy`uVBq!ia0vp^9w5xY1|&n@Zgyv2U|Q|z;uumf=k4tMT_TPG$M)a4
+zYt3wERqSYD^nqpm0iT27A6WTn83cQ3c=>&NY8Xs~loy|75p-qd4LxE%@zlGTOL?X|
+zrz^J_U$(a1USpq8mauGh*1mP`=G|P$)*|4<p$H_t^iIv`NxAs#R#MuL2?~~KmWLcX
+z_NmPG+LEd|$8hthet*Up3424*z8(I%aoxof)gy|PvIle-b~9}A=D(|^$2fzjg7-n=
+zOxrc(3H#?2*e&t6_qgEZ`ro(O!fbtua?*?^g)`cGjq?_f{LZ>!PY&Y^<ITTsKHtY8
+z_47g%+XJqKn+(t9xu(_Czh{UkI4HHgpx3$obLaX`oIe*?8%{Y9xo3OGIYx`ehfMf7
+z^t?Y`b7+lBdBg3ly^F&|Mn3Ad)r|Jt3zZs~R00m9@D?9jbK%vNiA*;c=1=ciqMxq)
+z{_A&!xF3a=zb}qSzwVt^yqKjbFReOON~yA1nDx{gg_${iS?}{tPkKG)h?@VUG&9wi
+z_d2CGr@Wr<=IeTH-Or3d8V*dX9t#*aMHE0*G_Y_@aKI}l%9Ubacf*QhmYI*X=k;kn
+zlmfSIuzu~UV7z$wgTE{vmQCZA2xBd1_?8mLw?{X6le68jN1pHgJ~1i$_fh}vy$?B;
+z>{b5PZnj#oq`33EO8KP4xkjIgZ71DUiLac!|9`Tv>WqJ%vfo{)jdPd!@K5OFj*~aD
+z>;CR&IP0ylUoY{yr_eFu_rK>FTfRU0=7aAfeg2mh^Ht<0?}^!eu&-?M+0QES6aPFC
+z4DP?NUFH2RvCc5T=pyZ=r&ppTrQ7Z_PM=a|zS;lhF|X7;`Z@JC7z=ilS^1uj|FrzA
+z&}~7h!^&;F?cZ0t=he2X+I36QOwY1BZKLhFUEi;zhJ%w3hayYZv3P@p%jPMZ|Md)*
+PdKo-j{an^LB{Ts5+IC04
+
+literal 0
+HcmV?d00001
+
+diff --git a/android/service/src/main/res/drawable-xxxhdpi/ic_service.png b/android/service/src/main/res/drawable-xxxhdpi/ic_service.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..b24746cb1f6002cf068973a6552bd3bc2fcb808d
+GIT binary patch
+literal 900
+zcmeAS@N?(olHy`uVBq!ia0vp^2_VeD1|%QND7Ro>VD|QOaSW-L^LEb0tPn?$w*Q;8
+z#TJRVadT&{70q!8kayUyMIh&h(}oQjE<43LN^kta=wcnHvn6OvO+!c%<3*PcgPU*k
+zo6`@a-h7}o^W@Ck|Kxc*9~hOtt9gFr-d^)!2E`TuCk_M=D0*1Wp(y-Zu#~a#FP@W(
+zCl#x>PA0zn7~Xxxq`)}({C;MOj=GPR&x92#%)Gh7oas}8=RCFo*#nXc?pgCTD^%W$
+zWcwg@AlbNj=JbotrZ1hdN#*?{AE9TB?EB^{3o~h0b8M6IC%%SihGX~GY&-sV1}%A>
+zn%<v&XzRO6QB121eyTIpFc>fyym@%UUw9*1f__7H+P6JRT0~|p-Ffrp-uIK|uTOlT
+zl;>OHw?$E5ZMWQC&Cv7H-s~3qBvjS)Bys;i4WXE&>Y8`6<Yp~?G5?9f%iTLKF$HC9
+ztDU{AxT{Wn#`4rf(>)vvgamq6Sd<wL0+}zngS&gQzh<wkwa*Ma!0?|_mn(vGL&VDW
+z$qe5XDn<zzd^-_uvRQa;x{uC}rWc|O+zgi{pHYjOYBu*(*t@sEoBQ3PPBrja`Ae<6
+z@MNiZ<W{>I&;1)JpG?-7#QJh>(ku0^*QI>*9se^USxE`=@*;+BTi&a&Ou4~i;$Z9b
+zhEv08-zD+i%m=>bx=HV?)!u1&_@v{<)b^($bx%J|J+(}U=}-LrVBWb~_P)65vT<?b
+zLjNn$|93y(o2K*NtC_Kh_`F{kY4dB3^G552mYq9Yvo>#G%FP*1PTVehzdWLBS<a_z
+z4xhA7mgaB%bh|$8<G)#V!Y@w!ut7QTiSVAt=+DVQ+jsvBk-Gh~@5|Qup4=zbCsaHW
+zir!QBvzy=G>Mft>Cb`1wJKybA<<5KUvE$)ndu@NucjsreOnb>U>51wjeVez-U2jZ^
+zzf)<yud1X}Wyz~>e~-FbD&FB9`&28pR_E4g-PslR#$@VGrVR#9H>es%&(rx5HM?`s
+zrj=aRE@~EUoMcz<cShY6p1CUe?z+>=pYc3D>-}nv$oqL^dT#Ear;~+|lQl4b->|G_
+Zc*VK*$zq0Wj=<c-;OXk;vd$@?2>_b7krMy_
+
+literal 0
+HcmV?d00001
+
+diff --git a/android/service/src/main/res/drawable/ic_service.xml b/android/service/src/main/res/drawable/ic_service.xml
+deleted file mode 100644
+index 814350f06cfd21eb7ee98028eaccb9eeb03cd403..0000000000000000000000000000000000000000
+--- a/android/service/src/main/res/drawable/ic_service.xml
++++ /dev/null
+@@ -1,12 +0,0 @@
+-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:width="24dp"
+-    android:height="24dp"
+-    android:viewportWidth="1060"
+-    android:viewportHeight="1060">
+-  <path
+-      android:pathData="M247,1019.1L247,1019.1A80.2,80.2 75,0 1,217.6 909.5L702.6,69.5A80.2,80.2 75,0 1,812.2 40.1L812.2,40.1A80.2,80.2 75,0 1,841.5 149.7L356.5,989.7A80.2,80.2 75,0 1,247 1019.1z"
+-      android:fillColor="#ffffff"/>
+-  <path
+-      android:pathData="M842.6,909.3C864.8,947.7 851.6,996.7 813.3,1018.9C774.9,1041 725.8,1027.9 703.7,989.5L547.7,719.4C545.9,716.3 545.9,712.5 547.7,709.4L628.8,568.9C632.6,562.3 642.3,562.3 646.1,568.9L842.6,909.3ZM248.1,39.9C286.4,17.8 335.5,30.9 357.6,69.3L514.2,340.4C515.9,343.5 515.9,347.3 514.2,350.4L433.1,490.8C429.2,497.5 419.6,497.5 415.8,490.8L218.7,149.5C196.6,111.1 209.7,62.1 248.1,39.9Z"
+-      android:fillColor="#ffffff"/>
+-</vector>
+diff --git a/core/fetch_subscription.go b/core/fetch_subscription.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..7058f5a83fd3a4cf6c0144011978e0d72649e0a3
+--- /dev/null
++++ b/core/fetch_subscription.go
+@@ -0,0 +1,59 @@
++package core
++
++import (
++	"encoding/base64"
++	"fmt"
++	"io"
++	"net/http"
++	"time"
++)
++
++// fetchSubscriptionParams is one request on behalf of the app.
++type fetchSubscriptionParams struct {
++	URL       string `json:"url"`
++	UserAgent string `json:"userAgent"`
++}
++
++// fetchSubscriptionReply is the whole answer: the body and the headers it came with.
++//
++// The headers are not decoration: the panel puts the plan's title, its traffic counters and
++// the update interval there, and the app shows all three.
++type fetchSubscriptionReply struct {
++	Status  int                 `json:"status"`
++	Headers map[string][]string `json:"headers"`
++	Body    string              `json:"body"`
++}
++
++// handleFetchSubscription fetches a subscription body with the core's own HTTP client.
++//
++// A panel may answer the same client name differently depending on who is asking: the
++// engine's client is the one it was written for, and another TLS stack can be served a
++// generic Clash fallback instead of the document with the panel's own notes. Doing the fetch
++// here means the app parses the body the engine would have received.
++func handleFetchSubscription(params fetchSubscriptionParams) (fetchSubscriptionReply, error) {
++	request, err := http.NewRequest(http.MethodGet, params.URL, nil)
++	if err != nil {
++		return fetchSubscriptionReply{}, err
++	}
++	if params.UserAgent != "" {
++		request.Header.Set("User-Agent", params.UserAgent)
++	}
++	client := &http.Client{Timeout: 45 * time.Second}
++	response, err := client.Do(request)
++	if err != nil {
++		return fetchSubscriptionReply{}, err
++	}
++	defer response.Body.Close()
++	body, err := io.ReadAll(io.LimitReader(response.Body, 32<<20))
++	if err != nil {
++		return fetchSubscriptionReply{}, err
++	}
++	if response.StatusCode < 200 || response.StatusCode >= 300 {
++		return fetchSubscriptionReply{}, fmt.Errorf("http %d", response.StatusCode)
++	}
++	return fetchSubscriptionReply{
++		Status:  response.StatusCode,
++		Headers: response.Header,
++		Body:    base64.StdEncoding.EncodeToString(body),
++	}, nil
++}
+diff --git a/core/go.mod b/core/go.mod
+index 29634b987246cb3ea6de2df28efcc2a6e2b053f3..d42bd036f8109713206895fa8ed645a89a3aee47 100644
+--- a/core/go.mod
++++ b/core/go.mod
+@@ -5,6 +5,9 @@ go 1.27.0
+ // v0.4.29 plus the darwin dscacheutil reap, see third_party/README.md.
+ replace github.com/metacubex/sing-tun => ./third_party/sing-tun
+ 
++// Portal: single core = Prizrak-Core (mihomo fork with finalmask, XHTTP, ML-DSA, prizrak-utls).
++replace github.com/metacubex/mihomo => github.com/legiz-ru/Prizrak-Core v1.19.34-r3
++
+ require (
+ 	github.com/Microsoft/go-winio v0.6.2
+ 	github.com/dlclark/regexp2 v1.12.0
+@@ -124,6 +127,7 @@ require (
+ 	github.com/tailscale/peercred v0.0.0-20250107143737-35a0c7bd7edc // indirect
+ 	github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923 // indirect
+ 	github.com/ulikunitz/xz v0.5.15 // indirect
++	github.com/vernesong/leaves v0.0.0-20260629081247-2a1c022f37d0 // indirect
+ 	github.com/vishvananda/netns v0.0.5 // indirect
+ 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
+ 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
+@@ -156,3 +160,9 @@ godebug (
+ 	rsa1024min=0
+ 	x509negativeserial=1
+ )
++
++// r3's own pins: the newer prizrak forks carry quic.Parrot* and RealityConfig.RequireMLKEM,
++// which Prizrak-Core v1.19.34-r3 uses and the previous forks did not have.
++replace github.com/metacubex/quic-go => github.com/legiz-ru/prizrak-quic-go v0.61.1-0.20261115185305-1bee6927e56b
++
++replace github.com/metacubex/utls => github.com/legiz-ru/prizrak-utls v0.0.0-20261115193325-827c5267ec58
+diff --git a/core/go.sum b/core/go.sum
+index 7646903df1c98e9a921836ae653ba5c66d486576..247c8debd26b7435726b2ccebf16f1586d25e9ae 100644
+--- a/core/go.sum
++++ b/core/go.sum
+@@ -97,6 +97,12 @@ github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
+ github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
+ github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
+ github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
++github.com/legiz-ru/Prizrak-Core v1.19.34-r3 h1:VVIJzui66VM25IN62nI66KHKlosmuEBn9AeE8xzExU0=
++github.com/legiz-ru/Prizrak-Core v1.19.34-r3/go.mod h1:Tp0pj7FSU0wQGEYjxD5DYeRREoMp45m8u7ow1dVhtAI=
++github.com/legiz-ru/prizrak-quic-go v0.61.1-0.20261115185305-1bee6927e56b h1:iZ7vH6KviYmJWq5KDLiTZv0Nn3XO7DWJTdw2WWi16rM=
++github.com/legiz-ru/prizrak-quic-go v0.61.1-0.20261115185305-1bee6927e56b/go.mod h1:wajB+r3LMWwvk5YakfCu5DylUXabbRNgdyJBHJOqG8k=
++github.com/legiz-ru/prizrak-utls v0.0.0-20261115193325-827c5267ec58 h1:lPxrHpJIO08gUI7zkw2WQayvUrt6WxFxFfpw3D/ZPbs=
++github.com/legiz-ru/prizrak-utls v0.0.0-20261115193325-827c5267ec58/go.mod h1:fCleWyTleu20o1ixVRIesy+fZjG14LmO7YwwSMPe560=
+ github.com/mdlayher/netlink v1.7.2 h1:/UtM3ofJap7Vl4QWCPDGXY8d3GIY2UGSDbK+QWmY8/g=
+ github.com/mdlayher/netlink v1.7.2/go.mod h1:xraEF7uJbxLhc5fpHL4cPe221LI2bdttWlU+ZGLfQSw=
+ github.com/mdlayher/socket v0.5.1 h1:VZaqt6RkGkt2OE9l3GcC6nZkqD3xKeQLyfleW/uBcos=
+@@ -145,8 +151,6 @@ github.com/metacubex/kcp-go v0.0.0-20260105040817-550693377604 h1:hJwCVlE3ojViC3
+ github.com/metacubex/kcp-go v0.0.0-20260105040817-550693377604/go.mod h1:lpmN3m269b3V5jFCWtffqBLS4U3QQoIid9ugtO+OhVc=
+ github.com/metacubex/mhurl v0.1.0 h1:ZdW4Zxe3j3uJ89gNytOazHu6kbHn5owutN/VfXOI8GE=
+ github.com/metacubex/mhurl v0.1.0/go.mod h1:2qpQImCbXoUs6GwJrjuEXKelPyoimsIXr07eNKZdS00=
+-github.com/metacubex/mihomo v1.19.34 h1:+nkzw4xRehvk2ldLHMelXszd0ES1ysE/ArL92KPfQno=
+-github.com/metacubex/mihomo v1.19.34/go.mod h1:Hlv3FJhuInvgHLuaSRkBpn5+at5eFS5QlybKlZ5RJP4=
+ github.com/metacubex/mipstack v0.0.0-20261019124225-9a80a07eaeb9 h1:/uFijgwBH3L7m/Ztfd+XpQjMmYgN74FjNTxperKhtdQ=
+ github.com/metacubex/mipstack v0.0.0-20261019124225-9a80a07eaeb9/go.mod h1:+bbwALZI0pbi2auSG5A3ptdpV2DZ2eLObziXo+P7oj0=
+ github.com/metacubex/mlkem v0.1.0 h1:wFClitonSFcmipzzQvax75beLQU+D7JuC+VK1RzSL8I=
+@@ -155,8 +159,6 @@ github.com/metacubex/nftables v0.0.0-20260426003805-208c2c1ba2cb h1:wk6mHYPURSUv
+ github.com/metacubex/nftables v0.0.0-20260426003805-208c2c1ba2cb/go.mod h1:73ZrCfhdkW4F2E2GAlta3km/S2RHhFNogCMtWZV2anQ=
+ github.com/metacubex/qpack v0.6.0 h1:YqClGIMOpiRYLjV1qOs483Od08MdPgRnHjt90FuaAKw=
+ github.com/metacubex/qpack v0.6.0/go.mod h1:lKGSi7Xk94IMvHGOmxS9eIei3bvIqpOAImEBsaOwTkA=
+-github.com/metacubex/quic-go v0.61.1-0.20260727080200-2548683b76f4 h1:7oX6CpHVqoUXNyyt0MTuO5ywd1qVe1S1t3jXWMW7bYc=
+-github.com/metacubex/quic-go v0.61.1-0.20260727080200-2548683b76f4/go.mod h1:KTmibo7vZo0gCxdFWrPEQ/u/RGt92mJkrXDE2Qg2/AU=
+ github.com/metacubex/randv2 v0.2.0 h1:uP38uBvV2SxYfLj53kuvAjbND4RUDfFJjwr4UigMiLs=
+ github.com/metacubex/randv2 v0.2.0/go.mod h1:kFi2SzrQ5WuneuoLLCMkABtiBu6VRrMrWFqSPyj2cxY=
+ github.com/metacubex/restls-client-go v0.1.9 h1:QmLKwVFuAjB6rL9lQNKj8CuwHqGMJjV36oskeBPEtVs=
+@@ -189,8 +191,6 @@ github.com/metacubex/tfo-go v0.0.0-20261026151606-08d83ec08c84 h1:mWjqcMU28lJ1+J
+ github.com/metacubex/tfo-go v0.0.0-20261026151606-08d83ec08c84/go.mod h1:l9oLnLoEXyGZ5RVLsh7QCC5XsouTUyKk4F2nLm2DHLw=
+ github.com/metacubex/tls v0.1.9 h1:pcHJSwFeHNswF96Z5RQW+j5cmwI2AYPdsNumK6JJSls=
+ github.com/metacubex/tls v0.1.9/go.mod h1:0XeVdL0cBw+8i5Hqy3lVeP9IyD/LFTq02ExvHM6rzEM=
+-github.com/metacubex/utls v1.9.0-alpha.1 h1:0tE4Pi5eoGnhEvS+ZZvVhEpZh5Ugo2nDQM+69g4SFaM=
+-github.com/metacubex/utls v1.9.0-alpha.1/go.mod h1:kncGGVhFaoGn5M3pFe3SXhZCzsbCJayNOH4UEqTKTko=
+ github.com/metacubex/wazero v0.0.0-20260628025728-9ae6bdcf2a7d h1:UMFI+kdp0jA8s9tC7oul0pWeTW6s8lnm0dD5PT+RY14=
+ github.com/metacubex/wazero v0.0.0-20260628025728-9ae6bdcf2a7d/go.mod h1:p48xp436h1oGfoXuEnVONeDhTW+E2UpY94GAVxA62oI=
+ github.com/metacubex/wireguard-go v0.0.0-20250820062549-a6cecdd7f57f h1:FGBPRb1zUabhPhDrlKEjQ9lgIwQ6cHL4x8M9lrERhbk=
+@@ -266,6 +266,8 @@ github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923 h1:tHNk7XK9GkmKUR6Gh8gV
+ github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923/go.mod h1:eLL9Nub3yfAho7qB0MzZizFhTU2QkLeoVsWdHtDW264=
+ github.com/ulikunitz/xz v0.5.15 h1:9DNdB5s+SgV3bQ2ApL10xRc35ck0DuIX/isZvIk+ubY=
+ github.com/ulikunitz/xz v0.5.15/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
++github.com/vernesong/leaves v0.0.0-20260629081247-2a1c022f37d0 h1:nUA4Mk3K64DfnpHfhJHrbDf5j0R7mYgPJ3W81vFopAg=
++github.com/vernesong/leaves v0.0.0-20260629081247-2a1c022f37d0/go.mod h1:Ndptw/K8n2twzGNEgCBSaEdTjT3EWU5YvJ476KwDKGw=
+ github.com/vishvananda/netlink v1.1.0/go.mod h1:cTgwzPIzzgDAYoQrMm0EdrjRUBkTqKYppBueQtXaqoE=
+ github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df/go.mod h1:JP3t17pCcGlemwknint6hfoeCVQrEMVwxRLRjXpq+BU=
+ github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f/go.mod h1:DD4vA1DwXk04H54A1oHXtwZmA0grkVMdPxx/VGLCah0=
+@@ -344,6 +346,7 @@ google.golang.org/protobuf v1.34.2 h1:6xV6lTsCfpGD21XK49h7MhtcApnLqkfYgPcdHftf6h
+ google.golang.org/protobuf v1.34.2/go.mod h1:qYOHts0dSfpeUzUFpOMr/WGzszTmLH+DiWniOlNbLDw=
+ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+ gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
++gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+ gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+ software.sslmate.com/src/go-pkcs12 v0.4.0 h1:H2g08FrTvSFKUj+D309j1DPfk5APnIdAQAB8aEykJ5k=
+ software.sslmate.com/src/go-pkcs12 v0.4.0/go.mod h1:Qiz0EyvDRJjjxGyUQa2cCNZn/wMyzrRJ/qcDXOQazLI=
+diff --git a/core/method.go b/core/method.go
+index 46017c40586c54b6e3a12ce55874bdb0efaeb39e..2b3588b8655100456e4dff408be3fe16442d3ef7 100644
+--- a/core/method.go
++++ b/core/method.go
+@@ -203,6 +203,7 @@ var methodHandlers = map[CoreMethod]methodHandler{
+ 	convertProxiesMethod:      withFallible(handleConvertProxies),
+ 	encodeShareLinksMethod:    withArguments(handleEncodeShareLinks),
+ 	decodeShareLinksMethod:    withArguments(handleDecodeShareLinks),
++	fetchSubscriptionMethod:   withFallible(handleFetchSubscription),
+ 	getProxiesMethod:          withoutArguments(handleGetProxies),
+ 	changeProxyMethod:         withArguments(handleChangeProxy),
+ 	asyncTestDelayMethod:      withArguments(handleTestDelay),
+diff --git a/core/profile_base.go b/core/profile_base.go
+index 1f9eacbf40633144e04de22b0f9dc17b99776395..12e44ad244e9cf5061c5fbe35f82ccec07c2c352 100644
+--- a/core/profile_base.go
++++ b/core/profile_base.go
+@@ -234,11 +234,26 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	// The host contributes an outbound of its own (the local Xray) and a group that selects
++	// it. A profile carries its own proxies and groups, and the loop below replaces both, so
++	// they are captured here and appended afterwards instead of being lost.
++	addedProxies := mappingValue(root, "proxies")
++	addedGroups := mappingValue(root, "proxy-groups")
+ 	for _, key := range profileBaseSections {
+ 		if value := mappingValue(profile, key); value != nil {
+ 			setMappingValue(root, key, value)
+ 		}
+ 	}
++	if merged, err := appendByName(addedProxies, mappingValue(root, "proxies")); err != nil {
++		return nil, err
++	} else if merged != nil {
++		setMappingValue(root, "proxies", merged)
++	}
++	if merged, err := appendByName(addedGroups, mappingValue(root, "proxy-groups")); err != nil {
++		return nil, err
++	} else if merged != nil {
++		setMappingValue(root, "proxy-groups", merged)
++	}
+ 	rules, err := appendRules(mappingValue(root, "rules"), mappingValue(profile, "rules"))
+ 	if err != nil {
+ 		return nil, err
+@@ -328,6 +343,50 @@ func appendRules(added, profile *yaml.Node) (*yaml.Node, error) {
+ 	return &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: content}, nil
+ }
+ 
++// The host's own entries go in front of the profile's and are matched by name, because
++// mihomo refuses a config where two proxies or two groups share a name.
++func appendByName(added, profile *yaml.Node) (*yaml.Node, error) {
++	added, profile = resolveAlias(added), resolveAlias(profile)
++	if added == nil || isNull(added) || (added.Kind == yaml.SequenceNode && len(added.Content) == 0) {
++		return nil, nil
++	}
++	if added.Kind != yaml.SequenceNode {
++		return nil, fmt.Errorf("line %d: expected a list", added.Line)
++	}
++	if profile == nil || isNull(profile) {
++		return added, nil
++	}
++	if profile.Kind != yaml.SequenceNode {
++		return nil, fmt.Errorf("line %d: expected a list", profile.Line)
++	}
++	taken := make(map[string]bool, len(added.Content))
++	for _, item := range added.Content {
++		if name := nameOf(item); name != "" {
++			taken[name] = true
++		}
++	}
++	content := append([]*yaml.Node{}, added.Content...)
++	for _, item := range profile.Content {
++		if name := nameOf(item); name != "" && taken[name] {
++			continue
++		}
++		content = append(content, item)
++	}
++	return &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: content}, nil
++}
++
++// nameOf reads the `name:` scalar of a list item, or "" when the item has none.
++func nameOf(node *yaml.Node) string {
++	item := resolveAlias(node)
++	if item == nil || item.Kind != yaml.MappingNode {
++		return ""
++	}
++	if value := mappingValue(item, "name"); value != nil && value.Kind == yaml.ScalarNode {
++		return value.Value
++	}
++	return ""
++}
++
+ func resolveAlias(node *yaml.Node) *yaml.Node {
+ 	for node != nil && node.Kind == yaml.AliasNode && node.Alias != nil {
+ 		node = node.Alias
+diff --git a/core/profile_base_merge_test.go b/core/profile_base_merge_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..554304f8bf3a72e2d90895c4a90f9d5a23c3209f
+--- /dev/null
++++ b/core/profile_base_merge_test.go
+@@ -0,0 +1,76 @@
++package core
++
++import (
++	"testing"
++
++	"go.yaml.in/yaml/v3"
++)
++
++// A profile carries its own proxies, and the host adds one of its own (the local Xray).
++// The merge must keep both, and must never let two entries share a name: mihomo refuses
++// such a config, and one bad entry costs every proxy the user has.
++func TestAppendByNameKeepsBothSides(t *testing.T) {
++	added := list(t, "- name: XRAY-SOCKS\n  type: socks5\n  server: 127.0.0.1\n")
++	profile := list(t, "- name: node-a\n  type: vless\n- name: node-b\n  type: trojan\n")
++
++	merged, err := appendByName(added, profile)
++	if err != nil {
++		t.Fatalf("appendByName: %v", err)
++	}
++	names := namesOf(t, merged)
++	if len(names) != 3 || names[0] != "XRAY-SOCKS" || names[1] != "node-a" || names[2] != "node-b" {
++		t.Fatalf("want the host entry first then the profile's, got %v", names)
++	}
++}
++
++func TestAppendByNameDropsDuplicates(t *testing.T) {
++	added := list(t, "- name: XRAY-SOCKS\n  type: socks5\n")
++	profile := list(t, "- name: XRAY-SOCKS\n  type: http\n- name: node-a\n  type: vless\n")
++
++	merged, err := appendByName(added, profile)
++	if err != nil {
++		t.Fatalf("appendByName: %v", err)
++	}
++	names := namesOf(t, merged)
++	if len(names) != 2 {
++		t.Fatalf("want the duplicate dropped, got %v", names)
++	}
++	if names[0] != "XRAY-SOCKS" || names[1] != "node-a" {
++		t.Fatalf("want the host's entry to win, got %v", names)
++	}
++}
++
++func TestAppendByNameWithoutHostEntriesChangesNothing(t *testing.T) {
++	profile := list(t, "- name: node-a\n  type: vless\n")
++	merged, err := appendByName(nil, profile)
++	if err != nil {
++		t.Fatalf("appendByName: %v", err)
++	}
++	if merged != nil {
++		t.Fatalf("want nil so the caller leaves the profile alone, got %v", namesOf(t, merged))
++	}
++}
++
++func list(t *testing.T, src string) *yaml.Node {
++	t.Helper()
++	var doc yaml.Node
++	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
++		t.Fatalf("unmarshal: %v", err)
++	}
++	if len(doc.Content) == 0 {
++		t.Fatalf("empty document")
++	}
++	return doc.Content[0]
++}
++
++func namesOf(t *testing.T, node *yaml.Node) []string {
++	t.Helper()
++	if node == nil {
++		return nil
++	}
++	out := make([]string, 0, len(node.Content))
++	for _, item := range node.Content {
++		out = append(out, nameOf(item))
++	}
++	return out
++}
+diff --git a/core/protocol.go b/core/protocol.go
+index 93c2f6b6572d0bf9ba113c34a776117df2df75df..0c31e8de762f96e2fd00f7d6d2c6eb2d90376311 100644
+--- a/core/protocol.go
++++ b/core/protocol.go
+@@ -15,25 +15,26 @@ import (
+ type CoreMethod string
+ 
+ const (
+-	messageMethod          CoreMethod = "message"
+-	initClashMethod        CoreMethod = "initClash"
+-	getIsInitMethod        CoreMethod = "getIsInit"
+-	forceGcMethod          CoreMethod = "forceGc"
+-	shutdownMethod         CoreMethod = "shutdown"
+-	validateConfigMethod   CoreMethod = "validateConfig"
+-	decryptConfigMethod    CoreMethod = "decryptConfig"
+-	validateProxiesMethod  CoreMethod = "validateProxies"
+-	validateFiltersMethod  CoreMethod = "validateFilters"
+-	convertProxiesMethod   CoreMethod = "convertProxies"
+-	encodeShareLinksMethod CoreMethod = "encodeShareLinks"
+-	decodeShareLinksMethod CoreMethod = "decodeShareLinks"
+-	updateConfigMethod     CoreMethod = "updateConfig"
+-	getProxiesMethod       CoreMethod = "getProxies"
+-	changeProxyMethod      CoreMethod = "changeProxy"
+-	getTrafficMethod       CoreMethod = "getTraffic"
+-	getTotalTrafficMethod  CoreMethod = "getTotalTraffic"
+-	resetTrafficMethod     CoreMethod = "resetTraffic"
+-	asyncTestDelayMethod   CoreMethod = "asyncTestDelay"
++	messageMethod           CoreMethod = "message"
++	initClashMethod         CoreMethod = "initClash"
++	getIsInitMethod         CoreMethod = "getIsInit"
++	forceGcMethod           CoreMethod = "forceGc"
++	shutdownMethod          CoreMethod = "shutdown"
++	validateConfigMethod    CoreMethod = "validateConfig"
++	decryptConfigMethod     CoreMethod = "decryptConfig"
++	validateProxiesMethod   CoreMethod = "validateProxies"
++	validateFiltersMethod   CoreMethod = "validateFilters"
++	convertProxiesMethod    CoreMethod = "convertProxies"
++	encodeShareLinksMethod  CoreMethod = "encodeShareLinks"
++	decodeShareLinksMethod  CoreMethod = "decodeShareLinks"
++	fetchSubscriptionMethod CoreMethod = "fetchSubscription"
++	updateConfigMethod      CoreMethod = "updateConfig"
++	getProxiesMethod        CoreMethod = "getProxies"
++	changeProxyMethod       CoreMethod = "changeProxy"
++	getTrafficMethod        CoreMethod = "getTraffic"
++	getTotalTrafficMethod   CoreMethod = "getTotalTraffic"
++	resetTrafficMethod      CoreMethod = "resetTraffic"
++	asyncTestDelayMethod    CoreMethod = "asyncTestDelay"
+ 
+ 	outboundIpMethod               CoreMethod = "outboundIp"
+ 	serviceCheckMethod             CoreMethod = "serviceCheck"
+diff --git a/core/share_link.go b/core/share_link.go
+index 2238a230bb7aa04c3262d664800eddfe056b04b5..93d50e48a4b15ab755f6693b5a3dc340552d2db5 100644
+--- a/core/share_link.go
++++ b/core/share_link.go
+@@ -22,10 +22,17 @@ func handleEncodeShareLinks(mappings []map[string]any) []string {
+ 	return links
+ }
+ 
++// handleDecodeShareLinks turns one subscription body into proxies the engine can hold.
++//
++// The body is whatever the panel decided to serve: a list of share links, the same list in
++// base64, or an Xray JSON document (Happ, Incy, v2rayN, Remnawave and Streisand are served
++// that shape). Every popular client hands the body to its core and lets the core's own
++// converter read it, so this does the same instead of keeping a second reader in Dart: the
++// link reader and the Xray JSON reader are both here, in the core we already ship.
+ func handleDecodeShareLinks(lines []string) [][]map[string]any {
+ 	results := make([][]map[string]any, len(lines))
+ 	for i, line := range lines {
+-		proxies, err := convert.ConvertsV2Ray([]byte(line))
++		proxies, err := decodeBody(line)
+ 		if err != nil {
+ 			proxies = []map[string]any{}
+ 		}
+@@ -37,6 +44,24 @@ func handleDecodeShareLinks(lines []string) [][]map[string]any {
+ 	return results
+ }
+ 
++// decodeBody reads one body with whichever of the core's readers fits it.
++//
++// A JSON document is a single object or an array of client configs and is read by the Xray
++// JSON reader; everything else is a line of share links, possibly base64-wrapped, and is
++// read by the link reader. `convert.IsXrayJSON` is the same test the engine uses to decide
++// how to read a subscription, so both sides agree on what a body is.
++func decodeBody(body string) ([]map[string]any, error) {
++	trimmed := strings.TrimSpace(body)
++	if trimmed == "" {
++		return nil, nil
++	}
++	buf := []byte(trimmed)
++	if convert.IsXrayJSON(buf) {
++		return convert.ConvertsXrayJSON(buf)
++	}
++	return convert.ConvertsV2Ray(buf)
++}
++
+ func unescapeHysteria2Password(proxy map[string]any) {
+ 	if proxy["type"] != "hysteria2" || proxy["realm-opts"] != nil {
+ 		return
+diff --git a/core/share_link_test.go b/core/share_link_test.go
+index 5f41cf35e5799fbaf264c317f287522226a770f5..3a53f7043d8a9967327b07eb796d87c5ed0e6a40 100644
+--- a/core/share_link_test.go
++++ b/core/share_link_test.go
+@@ -315,3 +315,45 @@ func TestDecodeShareLinksAnswersEveryLine(t *testing.T) {
+ 		t.Errorf("names = %v, %v", results[0][0]["name"], results[2][0]["name"])
+ 	}
+ }
++
++func TestDecodeShareLinksReadsAnXrayJSONDocument(t *testing.T) {
++	// A panel that serves one document to every client: Happ and Incy read this, and so does
++	// the engine now — the transport it describes (XHTTP over REALITY, with its path, mode and
++	// padding) must arrive whole, because a path that is lost sends the core to "/" and the
++	// server refuses the session.
++	const body = `[{
++		"remarks": "portal-xhttp",
++		"meta": {"serverDescription": "только Gemini"},
++		"outbounds": [{
++			"tag": "node-1",
++			"protocol": "vless",
++			"settings": {"vnext": [{"address": "cdn.example.com", "port": 443,
++				"users": [{"id": "b831381d-6324-4d53-ad4f-8cda48b30811", "encryption": "none"}]}]},
++			"streamSettings": {
++				"network": "xhttp",
++				"security": "reality",
++				"realitySettings": {"serverName": "www.microsoft.com", "publicKey": "pbk", "shortId": "ab", "fingerprint": "firefox"},
++				"xhttpSettings": {"path": "/7irvxr7e", "mode": "auto", "xPaddingBytes": "100-1000"}
++			}
++		}]
++	}]`
++	results := handleDecodeShareLinks([]string{body})
++	if len(results) != 1 || len(results[0]) != 1 {
++		t.Fatalf("results = %v", results)
++	}
++	proxy := results[0][0]
++	for field, want := range map[string]string{
++		"type":                       "vless",
++		"server":                     "cdn.example.com",
++		"network":                    "xhttp",
++		"xhttp-opts.path":            "/7irvxr7e",
++		"xhttp-opts.mode":            "auto",
++		"xhttp-opts.x-padding-bytes": "100-1000",
++		"servername":                 "www.microsoft.com",
++		"serverDescription":          "только Gemini",
++	} {
++		if got := lookupField(proxy, field); got != want {
++			t.Errorf("%s = %v, want %v", field, got, want)
++		}
++	}
++}
+diff --git a/plugins/setup/setup_hooks/lib/src/options.dart b/plugins/setup/setup_hooks/lib/src/options.dart
+index f360b53059afb41f09d82479b6b5b1e2bfe2ddb5..37fca692643f6ecefa72a9a2ea087c6cedd0f4b7 100644
+--- a/plugins/setup/setup_hooks/lib/src/options.dart
++++ b/plugins/setup/setup_hooks/lib/src/options.dart
+@@ -35,7 +35,7 @@ class BuildConfig {
+     coreName: 'FlClashCore',
+     outputDir: 'libclash',
+     helperDir: 'services/helper',
+-    helperName: 'FlClashXHelperService',
++    helperName: 'PortalHelperService',
+   );
+ 
+   static BuildConfig load({required String rootDir}) {
+diff --git a/plugins/wifi_ssid/android/build.gradle b/plugins/wifi_ssid/android/build.gradle
+index 5691631e05fc3b2af26387b364a111b1bf3c4b05..86cb475cd371c92924ae62825a6aef4025b2793b 100644
+--- a/plugins/wifi_ssid/android/build.gradle
++++ b/plugins/wifi_ssid/android/build.gradle
+@@ -21,6 +21,23 @@ allprojects {
+ 
+ apply plugin: 'com.android.library'
+ 
++// The app decides the SDK floor and writes it in android/gradle/libs.versions.toml; a plugin
++// that hardcodes a number pins the app to an old minimum the day the app raises it. Read the
++// catalog instead, and keep a fallback for a build of this package on its own.
++def sdkFloorFromCatalog = {
++    def dir = rootProject.projectDir
++    for (int depth = 0; depth < 5 && dir != null; depth++, dir = dir.parentFile) {
++        for (name in ['gradle/libs.versions.toml', 'android/gradle/libs.versions.toml']) {
++            def catalog = new File(dir, name)
++            if (catalog.exists()) {
++                def match = (catalog.text =~ /(?m)^\s*minSdk\s*=\s*"(\d+)"/)
++                if (match.find()) return match.group(1).toInteger()
++            }
++        }
++    }
++    return 24
++}()
++
+ android {
+     namespace 'com.follow.clash.wifi_ssid'
+     compileSdk 37
+@@ -31,7 +48,7 @@ android {
+     }
+ 
+     defaultConfig {
+-        minSdk 24
++        minSdk sdkFloorFromCatalog
+     }
+ }
+ 

@@ -1,0 +1,38 @@
+{
+  "series": "0.7.67",
+  "kind": "grouped",
+  "base": {
+    "sha": "5b4d0669",
+    "name": "FlClashX upstream v0.5.3"
+  },
+  "groups": [
+    {
+      "file": "10-core-network.patch",
+      "sha256": "4306aa00fab5b39b7e96dec5bf55393844e3d7e50e1618849234effff5b77aa7",
+      "bytes": 194158
+    },
+    {
+      "file": "20-brand-assets.patch",
+      "sha256": "3ab2139665f92674944ea01e01e809167e05d85d7e662dfb64eb12f89133fb87",
+      "bytes": 14265096
+    },
+    {
+      "file": "30-i18n.patch",
+      "sha256": "c4853f06abe0dc486b8af31fc90255430ccec5d62c71b9123cb4c3a51b0ef508",
+      "bytes": 498127
+    },
+    {
+      "file": "40-interface.patch",
+      "sha256": "1283c7af912f4050a14b1f77e220f5b88380464eb508bd979c5a2b6c835f6ebf",
+      "bytes": 770957
+    },
+    {
+      "file": "50-build-pipeline.patch",
+      "sha256": "aa39a68417e802b91a3cbd28ce3214bf42c0787907d11a2665d4ea6f87cee6e5",
+      "bytes": 3728019
+    }
+  ],
+  "apply": "git-apply",
+  "tree": "23a1cd2246d5f45f688fc35921d89194830ca664",
+  "compare": "product"
+}
