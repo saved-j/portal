@@ -3309,9 +3309,12 @@ class _FilterEditorSheet extends ConsumerWidget {
                       title: Text(name),
                       trailing: Switch(
                         value: !filters.hidden.contains(name),
-                        onChanged: (_) => ref
-                            .read(portalFiltersProvider.notifier)
-                            .toggle(name),
+                        onChanged: (_) {
+                          TutorialBus.fire(TutorialEvent.filterToggled);
+                          ref
+                              .read(portalFiltersProvider.notifier)
+                              .toggle(name);
+                        },
                       ),
                     ),
                 ],

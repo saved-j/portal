@@ -198,6 +198,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// are the two ways past the page.
   int _pingHolds = 0;
 
+  /// How many filters the owner has toggled on the list page. Three toggles, or closing the
+  /// list, are the two ways past the page.
+  int _filterToggles = 0;
+
   /// The card is out of the way for a moment on purpose: the page wants the screen itself to be
   /// watched — the list arriving, a sheet closing — not the words about it.
   bool _cardHidden = false;
@@ -215,6 +219,9 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   bool _served = false;
 
   Timer? _waitTimer;
+
+  /// Closes the sheet this page opened when the owner has done enough inside it.
+  NavigatorState? _nav;
 
   /// The screen this page opened is closed by the owner, not by the tour; the page advances on
   /// the close.
@@ -298,6 +305,12 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _nav = Navigator.maybeOf(context);
+  }
+
+  @override
   void dispose() {
     tourScrollLocked.value = false;
     TutorialBus.last.removeListener(_onAction);
@@ -354,6 +367,19 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       setState(() {});
       if (_pingHolds >= 3) {
         _next();
+      }
+      return;
+    }
+    // The filter-list page: a toggled filter is one more step toward the three that close the
+    // list, so the owner can finish by using the list instead of pressing back.
+    if (step.number == 2 &&
+        _served &&
+        TutorialBus.last.value == TutorialEvent.filterToggled) {
+      TutorialBus.last.value = null;
+      _filterToggles += 1;
+      setState(() {});
+      if (_filterToggles >= 3) {
+        _nav?.pop();
       }
       return;
     }
@@ -415,6 +441,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     _served = false;
     _chipTaps = 0;
     _pingHolds = 0;
+    _filterToggles = 0;
     _showingPings = false;
     tourScrollLocked.value = true;
     AppHaptics.tap();
