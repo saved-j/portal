@@ -2789,7 +2789,7 @@ class AppLocalizations {
   /// `The app only manages configurations and routes traffic by rules on your device.\n\nWe sell nothing and provide no proxy servers, nodes, subscriptions or network access. Every server and subscription comes from a third-party provider, and their legality, safety and quality are between you and that provider. The app is not affiliated with such providers and is not responsible for them.`
   String get disclaimerSoftwareContent {
     return Intl.message(
-      'The app only manages configurations and routes traffic by rules on your device.\n\nWe sell nothing and provide no proxy servers, nodes, subscriptions or network access. Every server and subscription comes from a third-party provider, and their legality, safety and quality are between you and that provider. The app is not affiliated with such providers and is not responsible for them.',
+      'Portal is an app that wraps your connections through third-party locations (servers).\n\nThe app does NOT CONTAIN any locations (servers) itself. For everything to work, you need a SUBSCRIPTION.\n\nPortal supports different kinds of subscriptions, but the subscriptions themselves are a separate service, obtained from us or from third parties on your own. Questions of legality, safety and quality of the subscriptions have nothing to do with the APP, and are resolved where you bought the service.',
       name: 'disclaimerSoftwareContent',
       desc: '',
       args: [],
@@ -2849,7 +2849,7 @@ class AppLocalizations {
   /// `The source code is open under the GPL-3.0 license. The Prizrak core and other third-party components carry their own licenses. The authors are not responsible for modified builds or builds distributed by third parties.`
   String get disclaimerLicenseContent {
     return Intl.message(
-      'The source code is open under the GPL-3.0 license. The Prizrak core and other third-party components carry their own licenses. The authors are not responsible for modified builds or builds distributed by third parties.',
+      'The source code is open under the GPL-3.0 license. The cores (prizrak-core, x-ray) and other third-party components carry their own licenses. The authors are not responsible for modified builds or builds distributed by third parties.',
       name: 'disclaimerLicenseContent',
       desc: '',
       args: [],

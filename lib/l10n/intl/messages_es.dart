@@ -739,7 +739,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "FlClashX es un cliente gratuito y de código abierto basado en el núcleo Mihomo. Aquí tienes en breve qué hace, qué no hace y qué datos recoge. Al pulsar «Acepto» aceptas estas condiciones.",
     ),
     "disclaimerLicenseContent": MessageLookupByLibrary.simpleMessage(
-      "El código fuente es abierto bajo la licencia GPL-3.0. El núcleo Mihomo y otros componentes de terceros tienen sus propias licencias. Los autores no responden por compilaciones modificadas o distribuidas por terceros.",
+      "El código fuente es abierto bajo la licencia GPL-3.0. Los núcleos (prizrak-core, x-ray) y otros componentes de terceros tienen sus propias licencias. Los autores no responden por compilaciones modificadas o distribuidas por terceros.",
     ),
     "disclaimerLicenseTitle": MessageLookupByLibrary.simpleMessage("Licencia"),
     "disclaimerPrivacyContent": MessageLookupByLibrary.simpleMessage(
@@ -753,7 +753,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Responsabilidad",
     ),
     "disclaimerSoftwareContent": MessageLookupByLibrary.simpleMessage(
-      "La aplicación solo gestiona configuraciones y enruta el tráfico según reglas en tu dispositivo.\n\nNo vendemos nada ni ofrecemos servidores proxy, nodos, suscripciones ni acceso a la red. Todos los servidores y suscripciones provienen de proveedores externos; su legalidad, seguridad y calidad son asunto entre tú y ese proveedor. La aplicación no está vinculada a esos proveedores ni responde por ellos.",
+      "Portal es una aplicación que envuelve tus conexiones a través de ubicaciones (servidores) de terceros.\n\nLa aplicación NO CONTIENE por sí misma ninguna ubicación (servidor). Para que todo funcione, necesitas una SUSCRIPCIÓN.\n\nPortal admite distintos tipos de suscripciones, pero esas suscripciones son un servicio aparte, obtenido de nosotros o de terceros por tu cuenta. Las cuestiones de legalidad, seguridad y calidad de las suscripciones no guardan relación con la APLICACIÓN y, por tanto, se resuelven donde compraste el servicio.",
     ),
     "disclaimerSoftwareTitle": MessageLookupByLibrary.simpleMessage(
       "Qué es y qué no es",

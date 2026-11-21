@@ -592,7 +592,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "FlClashX は Mihomo コアを基にした無料のオープンソースクライアントです。何をするか、何をしないか、どのデータを収集するかを簡潔に説明します。「同意する」を押すと、これらの条件に同意したことになります。",
     ),
     "disclaimerLicenseContent": MessageLookupByLibrary.simpleMessage(
-      "ソースコードは GPL-3.0 ライセンスで公開されています。Mihomo コアとその他のサードパーティ製コンポーネントには、それぞれのライセンスが適用されます。改変されたビルドや第三者が配布するビルドについて、作者は責任を負いません。",
+      "ソースコードは GPL-3.0 ライセンスで公開されています。コア（prizrak-core、x-ray）とその他のサードパーティ製コンポーネントには、それぞれのライセンスが適用されます。改変されたビルドや第三者が配布するビルドについて、作者は責任を負いません。",
     ),
     "disclaimerLicenseTitle": MessageLookupByLibrary.simpleMessage("ライセンス"),
     "disclaimerPrivacyContent": MessageLookupByLibrary.simpleMessage(
@@ -604,7 +604,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "disclaimerResponsibilityTitle": MessageLookupByLibrary.simpleMessage("責任"),
     "disclaimerSoftwareContent": MessageLookupByLibrary.simpleMessage(
-      "本アプリはお使いの端末上で設定を管理し、ルールに従ってトラフィックを転送するだけです。\n\n私たちは何も販売せず、プロキシサーバー、ノード、サブスクリプション、ネットワーク接続も提供しません。サーバーとサブスクリプションはすべて第三者の提供者から入手するものであり、その合法性、安全性、品質は利用者と提供者の間の問題です。本アプリはそうした提供者と関係がなく、責任も負いません。",
+      "Portal は、お客様の接続を第三者提供のロケーション（サーバー）経由で包み込むアプリです。\n\nアプリ自体はロケーション（サーバー）を一切含みません。すべてを機能させるには、サブスクリプションが必要です。\n\nPortal はさまざまな種類のサブスクリプションに対応していますが、サブスクリプション自体は、弊社または第三者が独自に提供する別個のサービスです。サブスクリプションの合法性・安全性・品質に関する問題はアプリとは無関係であり、サービスを購入した場所で解決されます。",
     ),
     "disclaimerSoftwareTitle": MessageLookupByLibrary.simpleMessage(
       "できること、含まれないもの",

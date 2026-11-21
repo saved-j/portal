@@ -582,7 +582,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Portal 是基于 FlClashX、搭载 Prizrak 内核的免费开源客户端。下面简要说明它做什么、不做什么以及收集哪些数据。点击“我同意”即表示接受这些条款。",
     ),
     "disclaimerLicenseContent": MessageLookupByLibrary.simpleMessage(
-      "源代码以 GPL-3.0 许可证开放。Prizrak 内核及其他第三方组件使用各自的许可证。作者不对经修改或由第三方分发的版本负责。",
+      "源代码以 GPL-3.0 许可证开放。Prizrak 与 Xray 内核（prizrak-core、x-ray）及其他第三方组件使用各自的许可证。作者不对经修改或由第三方分发的版本负责。",
     ),
     "disclaimerLicenseTitle": MessageLookupByLibrary.simpleMessage("许可证"),
     "disclaimerPrivacyContent": MessageLookupByLibrary.simpleMessage(
@@ -594,7 +594,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "disclaimerResponsibilityTitle": MessageLookupByLibrary.simpleMessage("责任"),
     "disclaimerSoftwareContent": MessageLookupByLibrary.simpleMessage(
-      "本程序只在您的设备上管理配置并按规则转发流量。\n\n我们不出售任何东西，也不提供代理服务器、节点、订阅或网络接入。所有服务器和订阅均来自第三方提供者，其合法性、安全性和质量由您与提供者自行解决。本程序与此类提供者无关，也不为其负责。",
+      "Portal 是一款通过第三方位置（服务器）来包装您连接的应用。\n\n应用本身不包含任何位置（服务器）。要让一切正常工作，您需要一个订阅。\n\nPortal 支持不同类型的订阅，但订阅本身是一项单独的服务，由我们或第三方独立提供。订阅的合法性、安全性和质量问题与应用无关，应在购买服务之处解决。",
     ),
     "disclaimerSoftwareTitle": MessageLookupByLibrary.simpleMessage(
       "它是什么，不是什么",

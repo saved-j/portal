@@ -581,7 +581,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "FlClashX는 Mihomo 코어 기반의 무료 오픈소스 클라이언트입니다. 무엇을 하고, 무엇을 하지 않으며, 어떤 데이터를 수집하는지 간단히 안내합니다. “동의합니다”를 누르면 이 조건에 동의하는 것입니다.",
     ),
     "disclaimerLicenseContent": MessageLookupByLibrary.simpleMessage(
-      "소스 코드는 GPL-3.0 라이선스로 공개되어 있습니다. Mihomo 코어와 기타 제3자 구성 요소는 각자의 라이선스를 따릅니다. 수정되었거나 제3자가 배포한 빌드에 대해 작성자는 책임지지 않습니다.",
+      "소스 코드는 GPL-3.0 라이선스로 공개되어 있습니다. 코어（prizrak-core、x-ray）와 기타 제3자 구성 요소는 각자의 라이선스를 따릅니다. 수정되었거나 제3자가 배포한 빌드에 대해 작성자는 책임지지 않습니다.",
     ),
     "disclaimerLicenseTitle": MessageLookupByLibrary.simpleMessage("라이선스"),
     "disclaimerPrivacyContent": MessageLookupByLibrary.simpleMessage(
@@ -593,7 +593,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "disclaimerResponsibilityTitle": MessageLookupByLibrary.simpleMessage("책임"),
     "disclaimerSoftwareContent": MessageLookupByLibrary.simpleMessage(
-      "이 앱은 기기에서 설정을 관리하고 규칙에 따라 트래픽을 전달하는 일만 합니다.\n\n우리는 아무것도 판매하지 않으며 프록시 서버, 노드, 구독, 네트워크 접속을 제공하지 않습니다. 모든 서버와 구독은 제3자 제공자에게서 받는 것이며, 그 합법성, 안전성, 품질은 사용자와 해당 제공자 사이의 문제입니다. 이 앱은 그러한 제공자와 관련이 없으며 책임지지 않습니다.",
+      "Portal은 제3자 제공 위치(서버)를 통해 연결을 감싸는 앱입니다.\n\n앱 자체에는 위치(서버)가 전혀 포함되어 있지 않습니다. 모든 것이 작동하려면 구독이 필요합니다.\n\nPortal은 다양한 종류의 구독을 지원하지만, 구독 자체는 당사 또는 제3자가 독자적으로 제공하는 별도의 서비스입니다. 구독의 합법성, 안전성, 품질 문제는 앱과 무관하며, 서비스를 구매한 곳에서 해결됩니다.",
     ),
     "disclaimerSoftwareTitle": MessageLookupByLibrary.simpleMessage(
       "무엇이고 무엇이 아닌가",
