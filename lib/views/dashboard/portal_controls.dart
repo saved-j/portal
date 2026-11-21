@@ -2849,14 +2849,12 @@ class _ServerRowState extends ConsumerState<_ServerRow>
         child: ListTile(
           dense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-          // A picked server carries the firm's own mark — the П of the quick-settings tile, at
-          // its own weight, tinted and lit. The rest keep the neutral globe: a portal that is
-          // chosen is this network; the others are just proxies.
+          // The leading mark is one height for every row: 20, the globe's size. A picked server
+          // shows the firm's own glyph — the quick-settings tile, tinted and lit — at that same
+          // size, so nothing in the column grows or shrinks with the selection.
           leading: widget.selected
               ? DecoratedBox(
                   decoration: BoxDecoration(
-                    color: scheme.primary.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(8),
                     boxShadow: [
                       BoxShadow(
                         color: scheme.primary.withValues(alpha: 0.55),
@@ -2865,12 +2863,12 @@ class _ServerRowState extends ConsumerState<_ServerRow>
                       ),
                     ],
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(3),
+                  child: SizedBox.square(
+                    dimension: 20,
                     child: Image.asset(
                       'assets/images/portal_glyph.png',
-                      width: 18,
-                      height: 18,
+                      width: 20,
+                      height: 20,
                       color: scheme.primary,
                       colorBlendMode: BlendMode.srcIn,
                     ),
