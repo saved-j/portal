@@ -747,7 +747,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "hashByInUser": MessageLookupByLibrary.simpleMessage("按入站用户哈希"),
     "healthCheck": MessageLookupByLibrary.simpleMessage("健康检查"),
     "helperCorruptTip": MessageLookupByLibrary.simpleMessage(
-      "Helper 服务不可用，无法启用 TUN 模式，请重新安装 FlClashX。",
+      "Helper 服务不可用，无法启用 TUN 模式，请重新安装 Portal。",
     ),
     "hex": MessageLookupByLibrary.simpleMessage("十六进制"),
     "hideFromList": MessageLookupByLibrary.simpleMessage("从列表中隐藏"),

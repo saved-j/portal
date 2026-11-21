@@ -948,7 +948,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Comprobación de estado",
     ),
     "helperCorruptTip": MessageLookupByLibrary.simpleMessage(
-      "El servicio auxiliar (Helper) no está disponible; no se puede activar el modo TUN. Reinstala FlClashX para restaurarlo.",
+      "El servicio auxiliar (Helper) no está disponible; no se puede activar el modo TUN. Reinstala Portal para restaurarlo.",
     ),
     "hex": MessageLookupByLibrary.simpleMessage("Hex"),
     "hideFromList": MessageLookupByLibrary.simpleMessage("Ocultar de la lista"),

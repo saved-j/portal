@@ -1007,7 +1007,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "healthCheck": MessageLookupByLibrary.simpleMessage("Проверка состояния"),
     "helperCorruptTip": MessageLookupByLibrary.simpleMessage(
-      "Служба Helper недоступна, поэтому TUN-режим включить нельзя. Переустановите FlClashX.",
+      "Служба Helper недоступна, поэтому TUN-режим включить нельзя. Переустановите Portal.",
     ),
     "hex": MessageLookupByLibrary.simpleMessage("Hex"),
     "hideFromList": MessageLookupByLibrary.simpleMessage("Скрыть из списка"),

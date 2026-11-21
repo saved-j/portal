@@ -64,7 +64,7 @@ _AppSettingProps _$AppSettingPropsFromJson(
   portalGroupXray: json['portalGroupXray'] as String? ?? '',
   portalGroupRulesProfile: json['portalGroupRulesProfile'] as String? ?? '',
   portalGroupXrayProfile: json['portalGroupXrayProfile'] as String? ?? '',
-  portalDisplay: (json['portalDisplay'] as num?)?.toInt() ?? 2,
+  portalDisplay: (json['portalDisplay'] as num?)?.toInt() ?? 1,
   portalPingRulesEnabled: json['portalPingRulesEnabled'] as bool? ?? true,
   portalPingRulesInterval:
       (json['portalPingRulesInterval'] as num?)?.toInt() ?? 60,

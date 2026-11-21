@@ -749,7 +749,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "hashByInUser": MessageLookupByLibrary.simpleMessage("インバウンドユーザーでハッシュ"),
     "healthCheck": MessageLookupByLibrary.simpleMessage("ヘルスチェック"),
     "helperCorruptTip": MessageLookupByLibrary.simpleMessage(
-      "Helper サービスが利用できないため、TUN モードを有効にできません。FlClashX を再インストールしてください。",
+      "Helper サービスが利用できないため、TUN モードを有効にできません。Portal を再インストールしてください。",
     ),
     "hex": MessageLookupByLibrary.simpleMessage("16進数"),
     "hideFromList": MessageLookupByLibrary.simpleMessage("リストから隠す"),

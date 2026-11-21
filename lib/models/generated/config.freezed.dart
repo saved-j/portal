@@ -312,7 +312,7 @@ mixin _$AppSettingProps implements DiagnosticableTreeMixin {
 /// highlighted in one says nothing about the other.
  String get portalGroupRules; String get portalGroupXray;/// Which profile each of those names belongs to. A group named in one subscription does
 /// not exist in another, so a name read under the wrong profile would empty the strip.
- String get portalGroupRulesProfile; String get portalGroupXrayProfile;/// How the filter chips are drawn (name only, name + server, and so on). Stored because
+ String get portalGroupRulesProfile; String get portalGroupXrayProfile;/// How the filter chips are drawn (icon, icon + name, name). Stored because
 /// a view the owner chose is a choice, not a session: it comes back after a restart
 /// instead of falling back to the default while nobody is looking.
  int get portalDisplay;/// Auto-ping, per mode: two switches and two periods, stored apart. The owner sees one
@@ -676,7 +676,7 @@ class _AppSettingProps with DiagnosticableTreeMixin implements AppSettingProps {
 /// not exist in another, so a name read under the wrong profile would empty the strip.
 @override@JsonKey() final  String portalGroupRulesProfile;
 @override@JsonKey() final  String portalGroupXrayProfile;
-/// How the filter chips are drawn (name only, name + server, and so on). Stored because
+/// How the filter chips are drawn (icon, icon + name, name). Stored because
 /// a view the owner chose is a choice, not a session: it comes back after a restart
 /// instead of falling back to the default while nobody is looking.
 @override@JsonKey() final  int portalDisplay;

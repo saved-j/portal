@@ -5081,10 +5081,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Helper service unavailable; TUN mode cannot be enabled. Reinstall FlClashX to restore it.`
+  /// `Helper service unavailable; TUN mode cannot be enabled. Reinstall Portal to restore it.`
   String get helperCorruptTip {
     return Intl.message(
-      'Helper service unavailable; TUN mode cannot be enabled. Reinstall FlClashX to restore it.',
+      'Helper service unavailable; TUN mode cannot be enabled. Reinstall Portal to restore it.',
       name: 'helperCorruptTip',
       desc: '',
       args: [],

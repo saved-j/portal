@@ -736,7 +736,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "hashByInUser": MessageLookupByLibrary.simpleMessage("인바운드 사용자별 해시"),
     "healthCheck": MessageLookupByLibrary.simpleMessage("상태 확인"),
     "helperCorruptTip": MessageLookupByLibrary.simpleMessage(
-      "헬퍼 서비스를 사용할 수 없어 TUN 모드를 켤 수 없습니다. FlClashX를 다시 설치하여 복구하세요.",
+      "헬퍼 서비스를 사용할 수 없어 TUN 모드를 켤 수 없습니다. Portal를 다시 설치하여 복구하세요.",
     ),
     "hex": MessageLookupByLibrary.simpleMessage("16진수"),
     "hideFromList": MessageLookupByLibrary.simpleMessage("목록에서 숨기기"),

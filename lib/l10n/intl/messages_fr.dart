@@ -946,7 +946,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "healthCheck": MessageLookupByLibrary.simpleMessage("Contrôle d’état"),
     "helperCorruptTip": MessageLookupByLibrary.simpleMessage(
-      "Service Helper indisponible ; le mode TUN ne peut pas être activé. Réinstallez FlClashX pour le rétablir.",
+      "Service Helper indisponible ; le mode TUN ne peut pas être activé. Réinstallez Portal pour le rétablir.",
     ),
     "hex": MessageLookupByLibrary.simpleMessage("Hex"),
     "hideFromList": MessageLookupByLibrary.simpleMessage("Masquer de la liste"),
