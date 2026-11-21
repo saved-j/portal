@@ -928,11 +928,8 @@ Future<PortalCoreResult> _enterSimplePortal(WidgetRef ref) async {
 
 /// Mode control with the two list controls beside it: sorting and the delay test.
 class PortalModeSwitch extends ConsumerStatefulWidget {
-  const PortalModeSwitch({super.key, this.forcedOff = false});
+  const PortalModeSwitch({super.key});
 
-  /// Drawn as off whatever the app is doing: the first tour page asks the owner to switch the
-  /// network on, and the switch he is told to press has to be off before he presses it.
-  final bool forcedOff;
 
   @override
   ConsumerState<PortalModeSwitch> createState() => _PortalModeSwitchState();
@@ -1045,7 +1042,7 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                       // The thumb tells the truth about the mode the app is in, even when that
                       // mode has just gone dark: a portal that keeps working on its last good
                       // config must not look switched off.
-                      value: !widget.forcedOff && mode == Mode.rule,
+                      value: mode == Mode.rule,
                       activeThumbColor: _liveGreen(context),
                       activeTrackColor: _liveGreen(
                         context,

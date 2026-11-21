@@ -36,10 +36,6 @@ const _gap = 12.0;
 
 /// The hero home page: the service's logo and name over the plan, the
 /// server and one connect button, the way the fork drew it.
-/// The switch is drawn off while the tour is on its first page, so the first gesture the owner
-/// makes is the one the tour asks for — and he sees the list arrive as a result of it.
-final tourSwitchOff = ValueNotifier<bool>(false);
-
 /// True while the tour is up: the working screen does not scroll under it.
 ///
 /// The tour measures its target every frame, so a frame cannot lag behind a scroll — but a page the
@@ -321,14 +317,7 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                                     const SizedBox(height: 12),
                                     const PortalPlanCard(),
                                     const SizedBox(height: _gap),
-                                    ValueListenableBuilder<bool>(
-                                      valueListenable: tourSwitchOff,
-                                      builder: (_, off, _) => PortalModeSwitch(
-                                        key: tutorialKeys[
-                                            TutorialTarget.modeSwitch],
-                                        forcedOff: off,
-                                      ),
-                                    ),
+                                    const PortalModeSwitch(),
                                   ],
                                 ),
                               ),
@@ -352,15 +341,7 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
                           // switch: visible, but out of the way of choosing a server.
                           const PortalPlanCard(),
                           const SizedBox(height: _gap),
-                          ValueListenableBuilder<bool>(
-                            valueListenable: tourSwitchOff,
-                            builder: (_, off, _) => PortalModeSwitch(
-                              // The switch itself carries the tour key: a second key on this
-                              // wrapper made the same GlobalKey live twice, and the frame
-                              // vanished because the measured context was the dead one.
-                              forcedOff: off,
-                            ),
-                          ),
+                          const PortalModeSwitch(),
                           const SizedBox(height: 4),
                           PortalServerList(
                             key: tutorialKeys[TutorialTarget.autoPingColumn],

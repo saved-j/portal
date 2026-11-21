@@ -7,6 +7,7 @@ import 'package:fl_clash/views/dashboard/portal_controls.dart'
     show portalAvailabilityProvider;
 
 import 'tutorial_bus.dart';
+import 'package:fl_clash/enum/enum.dart' show Mode;
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/haptics.dart';
 import 'package:material_ui/material_ui.dart';
@@ -45,6 +46,7 @@ class TutorialStep {
     this.done,
     this.opensScreen = false,
     this.needsMode = true,
+    this.switchesOn = false,
   });
 
   final TutorialTarget? target;
@@ -70,6 +72,10 @@ class TutorialStep {
   /// filter strip and the tile layout are the engine's. A portal-only subscription keeps the
   /// first and the last pages and nothing in between.
   final bool needsMode;
+
+  /// The page turns the network mode on by itself, through the real control, before it lets the
+  /// owner see the list arrive.
+  final bool switchesOn;
 
   /// The action that closes this page. The owner performs it on the real control; the page
   /// then says what happened and moves on.
@@ -105,15 +111,16 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 37;
+const tutorialVersion = 38;
 
 const tutorialSteps = <TutorialStep>[
-  // The switch, not the row: the tour asks for a tap on the control that moves, and closes when
-  // it has actually moved.
+  // The switch, not the row. The page switches the network on itself, through the same control the
+  // owner would press, so the wave that follows is the real one; the card hides while it arrives
+  // and leaves only the list visible in the hole.
   TutorialStep(
     target: TutorialTarget.modeSwitch,
     number: 1,
-    done: TutorialEvent.modeChanged,
+    switchesOn: true,
   ),
   // Opening a list is a screen, not a card: the tour hides, the real page comes up, and the next
   // page is about what the owner does there.
@@ -193,6 +200,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// How many times the owner has switched the tile look on the page that asks for it.
   int _chipTaps = 0;
 
+  /// The card is out of the way for a moment on purpose: the page wants the screen itself to be
+  /// watched — the list arriving, a sheet closing — not the words about it.
+  bool _cardHidden = false;
+
   /// The page that asked for a screen has been served: it is not drawn again, not even for the
   /// moment the closing sheet takes to slide away.
   bool _served = false;
@@ -243,6 +254,14 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     } else {
       _waitFor(_steps[_index]);
     }
+    // The first page needs the network off to teach anything, and the wave only plays when the
+    // switch really moves: the mode is turned on here, once, before the owner sees the page.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_steps[_index].switchesOn) {
+        _switchModeOn();
+      }
+    });
   }
 
   /// How many screens the tour's own pages have pushed. While it is above zero the tour is not
@@ -288,7 +307,6 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   @override
   void dispose() {
-    tourSwitchOff.value = false;
     tourScrollLocked.value = false;
     _autoClose?.cancel();
     TutorialBus.last.removeListener(_onAction);
@@ -316,6 +334,37 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
         curve: Curves.easeOutCubic,
       ),
     );
+  }
+
+  /// Turns the network mode on through the switch's own action, then lets the card hide while the
+  /// list arrives: the wave is the lesson on this page, and a card over it would hide it.
+  Future<void> _switchModeOn() async {
+    final mode = ref.read(patchClashConfigProvider.select((state) => state.mode));
+    if (mode == Mode.rule) {
+      // Already on: there is no wave to show, so the page simply moves on.
+      _advanceAfter(seconds: 1);
+      return;
+    }
+    // The same call the switch makes: one owner of the mode, no second way to change it.
+    await ref.read(setupActionProvider.notifier).pickMode(Mode.rule);
+    if (!mounted) return;
+    _advanceAfter(seconds: 3);
+  }
+
+  /// The page is done: hide the card for a beat so the screen it produced is seen, then move on.
+  void _onPageSettled() {
+    setState(() => _waiting = false);
+    _advanceAfter(seconds: 2);
+  }
+
+  void _advanceAfter({required int seconds}) {
+    _cardHidden = true;
+    setState(() {});
+    Future<void>.delayed(Duration(seconds: seconds), () {
+      if (!mounted) return;
+      _cardHidden = false;
+      _next();
+    });
   }
 
   /// The owner has just done the thing this page asks for: the page closes itself.
@@ -450,10 +499,6 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   @override
   Widget build(BuildContext context) {
-    // The first page asks for the switch: it is drawn off while that page is up, and the list
-    // under it is what the owner's own press fills.
-    final forceOff = _index == 0 && _steps[_index].target == TutorialTarget.modeSwitch;
-    if (tourSwitchOff.value != forceOff) tourSwitchOff.value = forceOff;
     // While a screen the tour opened is up, the tour is not drawn at all: the owner reads the
     // screen first, and the page that follows is the one that says how to use it.
     if (_screens > 0) return const SizedBox.shrink();
@@ -602,7 +647,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
             ),
           ),
           ..._frameAround(rect, size),
-          if (!_waiting)
+          if (!_waiting && !_cardHidden)
           IgnorePointer(
             ignoring: false,
             child: _CardSlot(
