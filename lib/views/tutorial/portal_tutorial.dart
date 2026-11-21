@@ -594,30 +594,6 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // Never taller than its gap, and never taller than two fifths of the screen: the page behind
     // it is the lesson, and the card's own text scrolls inside whatever height is left.
     final cardSpace = room.height.clamp(0.0, screen.height * 0.42);
-    // ignore: avoid_print
-    assert(() {
-      if (rect != null) print('TGT ${step.number}: ${rect.top.round()}..${rect.bottom.round()} gaps ${gaps.map((g) => "${g.side}:${g.room.top.round()}..${g.room.bottom.round()}").join(" ")}');
-      return true;
-    }());
-    assert(() {
-      print(
-        'SLOT ${usable.side} room=${room.top.round()}..${room.bottom.round()} '
-        'space=${cardSpace.round()}',
-      );
-      return true;
-    }());
-    // ignore: avoid_print
-    assert(() {
-      if (rect != null) {
-        print(
-          'TOUR ${step.number}: side=${usable.side} '
-          'room=${room.left.round()},${room.top.round()} '
-          '${room.width.round()}x${room.height.round()} cap=${cardSpace.round()} '
-          'screenH=${screen.height.round()}',
-        );
-      }
-      return true;
-    }());
     return Material(
       type: MaterialType.transparency,
       child: Stack(

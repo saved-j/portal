@@ -1201,31 +1201,6 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                         ),
                       );
                       return;
-                      final auto = ref.read(autoPingProvider.notifier);
-                      final turningOn = !auto.current.enabled;
-                      auto.setEnabled(turningOn);
-                      // Measuring the simple portal means its core is running, and the core is
-                      // the tunnel: switching auto-check on opens the portal, exactly as the
-                      // connect button does.
-                      if (turningOn && ref.read(runTimeProvider) == null) {
-                        unawaited(
-                          ref
-                              .read(setupActionProvider.notifier)
-                              .setRunning(true),
-                        );
-                      }
-                      // A document built while the switch was off carries no schedule at all, so a
-                      // running core has to be restarted on one that does.
-                      final live = ref.read(portalStatusProvider);
-                      if (turningOn &&
-                          live.active &&
-                          live.owner == PortalOwner.xray) {
-                        unawaited(
-                          ref
-                              .read(setupActionProvider.notifier)
-                              .reapplyPortalDocument(),
-                        );
-                      }
                     },
                     icon: testing
                         ? SizedBox.square(
