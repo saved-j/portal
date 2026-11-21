@@ -3362,28 +3362,21 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
   final previousMode = ref.read(patchClashConfigProvider.select((s) => s.mode));
   final wasRunning = ref.read(runTimeProvider) != null;
   try {
-    // 1. The portal goes down first: the tun must not outlive the core that reads it.
-    if (wasRunning && !await setup.setRunning(false)) {
-      throw const _PortalSwitchFailure('the portal did not stop');
-    }
-    // 2. The child is stopped before the next core wants the tunnel, and the answer is the
-    // plugin's: a stop that did not happen cannot be treated as one that did.
-    // The portal is down, and the child with it: `close` is the coordinator's own stop, so
-    // the core has returned from `XrayStop` before the next owner is asked for.
-    // On a desktop there is no native coordinator to close: the child is a process this side
-    // started, and the stop below is what ends it.
-    if (system.isAndroid) {
-      final stopped = await portalRuntime.close(reason: 'switch');
-      if (!stopped.ok && !stopped.cancelled) {
-        throw _PortalSwitchFailure(
-          'the portal core did not stop: ${stopped.reason}',
-        );
+    // The previous owner lets go inside the native `open` below, in one transaction: the
+    // coordinator's `releaseLocked` stops the old core (the tun first, then the listener), the
+    // service establishes the tunnel, and only then does the next owner acknowledge it. A
+    // separate graceful stop here is what turned a quick switch into a race — `stopListener`
+    // drained the engine while the service was already being asked for the next core — so on
+    // Android the close is left to `open` alone, the urgent stop Mark asked for.
+    if (system.isDesktop) {
+      // 1. The portal goes down first: the tun must not outlive the core that reads it.
+      if (wasRunning && !await setup.setRunning(false)) {
+        throw const _PortalSwitchFailure('the portal did not stop');
       }
-    } else {
-      // A desktop child is a process this side owns, and nothing else stops it: without this
-      // the Xray core kept running after the switch, and its servers — a different subscription
-      // document altogether — were still there to be read in the network mode. Two cores, two
-      // documents, and neither outlives the mode it belongs to.
+      // 2. A desktop has no native coordinator to close: the child is a process this side
+      // started, and the stop below is what ends it. Without it the Xray core kept running
+      // after the switch, and its servers — a different subscription document — were still
+      // there to be read in the network mode.
       await DesktopXrayChild.stop();
     }
     // 3-5. The next core, then the mode, then the route — in that order, and only as far
