@@ -111,7 +111,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 39;
+const tutorialVersion = 40;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, not the row. The page switches the network on itself, through the same control the
@@ -120,6 +120,7 @@ const tutorialSteps = <TutorialStep>[
   TutorialStep(
     target: TutorialTarget.modeSwitch,
     number: 1,
+    done: TutorialEvent.modeChanged,
     switchesOn: true,
   ),
   // Opening a list is a screen, not a card: the tour hides, the real page comes up, and the next
@@ -340,15 +341,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// list arrives: the wave is the lesson on this page, and a card over it would hide it.
   Future<void> _switchModeOn() async {
     final mode = ref.read(patchClashConfigProvider.select((state) => state.mode));
-    if (mode == Mode.rule) {
-      // Already on: there is no wave to show, so the page simply moves on.
-      _advanceAfter(seconds: 1);
-      return;
-    }
-    // The same call the switch makes: one owner of the mode, no second way to change it.
-    await ref.read(setupActionProvider.notifier).pickMode(Mode.rule);
-    if (!mounted) return;
-    _advanceAfter(seconds: 3);
+    if (mode == Mode.global) return;
+    // The tour starts the app in the simple portal, for real: the switch it points at is off
+    // because the app is in the other mode, and the owner's own press is what turns it on.
+    await ref.read(setupActionProvider.notifier).pickMode(Mode.global);
   }
 
   /// The page is done: hide the card for a beat so the screen it produced is seen, then move on.
@@ -378,15 +374,8 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     // Switching the mode is followed by the list arriving: the owner has to see that before the
     // next page asks him for anything.
     if (step.number == 1) {
-      if (_waiting) return;
-      _waiting = true;
-      setState(() {});
-      Future<void>.delayed(const Duration(milliseconds: 1800), () {
-        if (!mounted) return;
-        _waiting = false;
-        setState(() {});
-        _next();
-      });
+      // Three seconds: the mode change itself, then the list arriving top to bottom.
+      _advanceAfter(seconds: 3);
       return;
     }
     if (step.number == 3 && !_confirmed) {
