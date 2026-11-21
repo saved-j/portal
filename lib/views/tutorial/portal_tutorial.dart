@@ -105,7 +105,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 43;
+const tutorialVersion = 44;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, and only the switch. The app opens in the simple portal, so the switch is off by
@@ -193,6 +193,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   /// How many times the owner has switched the tile look on the page that asks for it.
   int _chipTaps = 0;
+
+  /// How many rows the owner has held to ping on the bolt page. Three held pings, or Next,
+  /// are the two ways past the page.
+  int _pingHolds = 0;
 
   /// The card is out of the way for a moment on purpose: the page wants the screen itself to be
   /// watched — the list arriving, a sheet closing — not the words about it.
@@ -347,6 +351,20 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   void _onAction() {
     if (!mounted || _waiting) return;
     final step = _steps[_index];
+    // The bolt page, after the bolt: a held row is one more ping toward the three the page
+    // asks for. It is a separate gesture from the bolt itself, so it is read here before the
+    // page's own `done` gate.
+    if (step.number == 7 &&
+        _showingPings &&
+        TutorialBus.last.value == TutorialEvent.pingRowHeld) {
+      TutorialBus.last.value = null;
+      _pingHolds += 1;
+      setState(() {});
+      if (_pingHolds >= 3) {
+        _next();
+      }
+      return;
+    }
     if (step.done == null || step.done != TutorialBus.last.value) return;
     TutorialBus.last.value = null;
     // The tile page shows the result before it closes: the owner should read what his own
@@ -369,11 +387,12 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     if (step.number == 7) {
       if (!_showingPings) {
         _showingPings = true;
+        _pingHolds = 0;
         // Unlock the scroll so the owner can look around while the pings arrive.
         tourScrollLocked.value = false;
         setState(() {});
       }
-      _advanceAfter(seconds: 4, noMask: true);
+      // The page waits for three held pings or the owner's "Next" — no auto-advance.
       return;
     }
     // The look of the tiles changes under the finger, so one double tap is not enough to see it:
@@ -403,6 +422,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   void _next() {
     _served = false;
     _chipTaps = 0;
+    _pingHolds = 0;
     _showingPings = false;
     tourScrollLocked.value = true;
     AppHaptics.tap();
@@ -643,7 +663,9 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
                   ? context.appLocalizations.tutorialChipOff
                   : null,
               isLast: _index == _steps.length - 1,
-              holdsMore: step.number == 4 && _confirmed,
+              holdsMore:
+                  (step.number == 4 && _confirmed) ||
+                      (step.number == 7 && _showingPings),
               onNext: _next,
               onSkip: _finish,
             ),
@@ -781,7 +803,7 @@ class _TutorialCard extends StatelessWidget {
                   onPressed: onNext,
                   child: Text(context.appLocalizations.tutorialNext),
                 )
-              else if (step.number == 4 && holdsMore)
+              else if ((step.number == 4 || step.number == 7) && holdsMore)
                 FilledButton(
                   onPressed: onNext,
                   child: Text(context.appLocalizations.tutorialNext),

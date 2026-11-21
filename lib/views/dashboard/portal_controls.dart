@@ -3011,6 +3011,7 @@ class _ServerRowState extends ConsumerState<_ServerRow>
           // already.
           onLongPress: () {
             HapticFeedback.mediumImpact();
+            TutorialBus.fire(TutorialEvent.pingRowHeld);
             if (measurable) {
               // One row, timed by the core that already holds every node: the same call the sweep
               // makes, narrowed to this tag. No portal is raised for it and the number cannot be

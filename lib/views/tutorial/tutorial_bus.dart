@@ -14,6 +14,7 @@ enum TutorialEvent {
   labelTapped,
   started,
   pingAllStarted,
+  pingRowHeld,
 }
 
 /// The one channel between a control and the tour.
