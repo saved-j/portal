@@ -883,8 +883,9 @@ class _GroupActions extends ConsumerWidget {
               HapticFeedback.selectionClick();
               ref.read(portalBypassProvider.notifier).toggle(ref, group);
             },
-            icon: GlyphIcon(
-              AppGlyphs.power,
+            icon: Icon(
+              Icons.power_settings_new,
+              size: TonalButtonSize.compact.icon,
               color: bypassed ? context.colorScheme.primary : null,
             ),
           ),
