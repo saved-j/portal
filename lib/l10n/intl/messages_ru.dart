@@ -317,6 +317,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "accessControlAllowDesc": MessageLookupByLibrary.simpleMessage(
       "Через VPN проходят только выбранные приложения",
     ),
+    "accessControlAllow": MessageLookupByLibrary.simpleMessage("Разрешить"),
+    "accessControlDeny": MessageLookupByLibrary.simpleMessage("Запретить"),
     "accessControlDesc": MessageLookupByLibrary.simpleMessage(
       "Контроль доступа определяет, какие приложения идут через портал.",
     ),

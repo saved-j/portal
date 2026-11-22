@@ -315,6 +315,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "accessControlAllowDesc": MessageLookupByLibrary.simpleMessage(
       "Only selected apps go through the VPN",
     ),
+    "accessControlAllow": MessageLookupByLibrary.simpleMessage("Allow"),
+    "accessControlDeny": MessageLookupByLibrary.simpleMessage("Deny"),
     "accessControlDesc": MessageLookupByLibrary.simpleMessage(
       "Access control decides which apps go through the portal.",
     ),

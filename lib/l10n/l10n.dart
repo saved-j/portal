@@ -1175,6 +1175,26 @@ class AppLocalizations {
     );
   }
 
+  /// `Allow` — the dock segment that routes only the selected apps.
+  String get accessControlAllow {
+    return Intl.message(
+      'Allow',
+      name: 'accessControlAllow',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Deny` — the dock segment that excludes the selected apps.
+  String get accessControlDeny {
+    return Intl.message(
+      'Deny',
+      name: 'accessControlDeny',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Selected apps are excluded from the VPN`
   String get accessControlNotAllowDesc {
     return Intl.message(

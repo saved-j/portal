@@ -162,6 +162,12 @@ class _AccessViewState extends ConsumerState<AccessView>
     });
   }
 
+  void _handleModeChanged(AccessControlMode mode) {
+    ref.read(accessControlStateProvider.notifier).update((state) {
+      return state.copyWith(mode: mode);
+    });
+  }
+
   Future<void> _handleBack() async {
     final res = await dialogs.showSaveChanges();
     if (res == null) {
@@ -301,6 +307,8 @@ class _AccessViewState extends ConsumerState<AccessView>
     required List<Package> packages,
     required Set<String> selected,
     required bool isSearching,
+    required bool enabled,
+    required AccessControlMode mode,
   }) {
     return FutureBuilder(
       future: _completer.future,
@@ -329,10 +337,19 @@ class _AccessViewState extends ConsumerState<AccessView>
               itemExtent: 72,
               itemBuilder: (_, index) {
                 final package = packages[index];
+                final isSelected = selected.contains(package.packageName);
+                // In whitelist the selected apps are the live ones; in blacklist the
+                // unselected ones are. With access control off there is no filtering, so
+                // nothing is dimmed.
+                final active = !enabled ||
+                    (mode == AccessControlMode.acceptSelected
+                        ? isSelected
+                        : !isSelected);
                 return PackageListItem(
                   key: Key(package.packageName),
                   package: package,
-                  value: selected.contains(package.packageName),
+                  value: isSelected,
+                  dimmed: !active,
                   onChanged: (value) {
                     _handleSelected(package.packageName);
                   },
@@ -431,6 +448,7 @@ class _AccessViewState extends ConsumerState<AccessView>
                     accessControl: accessControl,
                     selectedCount: valueList.length,
                     onEnable: () => _handleEnable(true),
+                    onModeChanged: _handleModeChanged,
                   ),
                   body: DisabledMask(
                     status: !accessControl.enable,
@@ -438,6 +456,8 @@ class _AccessViewState extends ConsumerState<AccessView>
                       packages: viewPackages,
                       selected: valueList.toSet(),
                       isSearching: query.isNotEmpty,
+                      enabled: accessControl.enable,
+                      mode: accessControl.mode,
                     ),
                   ),
                 ),
@@ -452,57 +472,102 @@ class _AccessStatus extends StatelessWidget {
     required this.accessControl,
     required this.selectedCount,
     required this.onEnable,
+    required this.onModeChanged,
   });
 
   final AccessControlProps accessControl;
   final int selectedCount;
   final VoidCallback onEnable;
+  final ValueChanged<AccessControlMode> onModeChanged;
 
   @override
   Widget build(BuildContext context) {
     final appLocalizations = context.appLocalizations;
     final colorScheme = context.colorScheme;
     final enabled = accessControl.enable;
-    final description = enabled
-        ? switch (accessControl.mode) {
-            AccessControlMode.acceptSelected =>
-              appLocalizations.accessControlAllowDesc,
-            AccessControlMode.rejectSelected =>
-              appLocalizations.accessControlNotAllowDesc,
-          }
-        : appLocalizations.accessControlDisabledDesc;
-    return Padding(
-      padding: EdgeInsetsDirectional.fromSTEB(16, 6, enabled ? 16 : 8, 6),
-      child: Row(
-        spacing: 12,
-        children: [
-          GlyphIcon(
-            enabled ? AppGlyphs.appsList : AppGlyphs.info,
-            size: 20,
-            color: colorScheme.onSurfaceVariant,
-          ),
-          Expanded(
-            child: Text(
-              description,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyle.footnote
-                  .of(context)
-                  .copyWith(color: colorScheme.onSurface),
+    if (!enabled) {
+      return Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 6, 8, 6),
+        child: Row(
+          spacing: 12,
+          children: [
+            GlyphIcon(
+              AppGlyphs.info,
+              size: 20,
+              color: colorScheme.onSurfaceVariant,
             ),
-          ),
-          if (enabled)
-            TonalChip(
-              label: appLocalizations.accessControlSelectedCount(selectedCount),
-              color: colorScheme.primary.opacity15,
-              foregroundColor: colorScheme.primary,
-            )
-          else
+            Expanded(
+              child: Text(
+                appLocalizations.accessControlDisabledDesc,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyle.footnote
+                    .of(context)
+                    .copyWith(color: colorScheme.onSurface),
+              ),
+            ),
             TonalButton(
               size: TonalButtonSize.compact,
               label: appLocalizations.turnOn,
               onPressed: onEnable,
             ),
+          ],
+        ),
+      );
+    }
+    final description = switch (accessControl.mode) {
+      AccessControlMode.acceptSelected => appLocalizations.accessControlAllowDesc,
+      AccessControlMode.rejectSelected =>
+        appLocalizations.accessControlNotAllowDesc,
+    };
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 6, 16, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // The dock selector: deny (blacklist) on the left, allow (whitelist) on the
+          // right. The same control the settings sheet used to hold, brought down into
+          // the one place the owner is already looking at.
+          SegmentedControl<AccessControlMode>(
+            segments: [
+              (
+                AccessControlMode.rejectSelected,
+                appLocalizations.accessControlDeny,
+              ),
+              (
+                AccessControlMode.acceptSelected,
+                appLocalizations.accessControlAllow,
+              ),
+            ],
+            value: accessControl.mode,
+            onChanged: onModeChanged,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            spacing: 12,
+            children: [
+              GlyphIcon(
+                AppGlyphs.appsList,
+                size: 20,
+                color: colorScheme.onSurfaceVariant,
+              ),
+              Expanded(
+                child: Text(
+                  description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyle.footnote
+                      .of(context)
+                      .copyWith(color: colorScheme.onSurface),
+                ),
+              ),
+              TonalChip(
+                label: appLocalizations.accessControlSelectedCount(selectedCount),
+                color: colorScheme.primary.opacity15,
+                foregroundColor: colorScheme.primary,
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -512,27 +577,37 @@ class _AccessStatus extends StatelessWidget {
 class PackageListItem extends StatelessWidget {
   final Package package;
   final bool value;
+  final bool dimmed;
   final void Function(bool?) onChanged;
 
   const PackageListItem({
     super.key,
     required this.package,
     required this.value,
+    required this.dimmed,
     required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = context.colorScheme;
+    final icon = PackageIcon(packageName: package.packageName, size: 48);
+    final textColor = dimmed ? colorScheme.onSurfaceVariant : null;
     return ListItem.checkbox(
-      leading: PackageIcon(packageName: package.packageName, size: 48),
+      leading: dimmed
+          ? ColorFiltered(
+              colorFilter: const ColorFilter.matrix(_dimmedIconMatrix),
+              child: icon,
+            )
+          : icon,
       title: Text(
         package.label,
-        style: const TextStyle(overflow: TextOverflow.ellipsis),
+        style: TextStyle(overflow: TextOverflow.ellipsis, color: textColor),
         maxLines: 1,
       ),
       subtitle: Text(
         package.packageName,
-        style: const TextStyle(overflow: TextOverflow.ellipsis),
+        style: TextStyle(overflow: TextOverflow.ellipsis, color: textColor),
         maxLines: 1,
       ),
       value: value,
@@ -540,6 +615,15 @@ class PackageListItem extends StatelessWidget {
     );
   }
 }
+
+/// Turns an app icon to greyscale for a filter that is not routed: the coloured icon is
+/// the "live" signal, and the grey one is "not going through the portal".
+const _dimmedIconMatrix = <double>[
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0, 0, 0, 1, 0, //
+];
 
 class AccessControlPanel extends StatelessWidget {
   const AccessControlPanel({super.key});
@@ -565,22 +649,6 @@ class AccessControlPanel extends StatelessWidget {
         children: [
           generateSection(
             items: [
-              ConfigOptionsItem<AccessControlMode>(
-                title: (l) => l.mode,
-                options: AccessControlMode.values,
-                textBuilder: (mode) => switch (mode) {
-                  AccessControlMode.acceptSelected =>
-                    appLocalizations.whitelistMode,
-                  AccessControlMode.rejectSelected =>
-                    appLocalizations.blacklistMode,
-                },
-                selector: accessControlStateProvider.select(
-                  (state) => state.mode,
-                ),
-                onChanged: _writer(
-                  (state, value) => state.copyWith(mode: value),
-                ),
-              ),
               ConfigOptionsItem<AccessSortType>(
                 title: (l) => l.sort,
                 options: AccessSortType.values,
