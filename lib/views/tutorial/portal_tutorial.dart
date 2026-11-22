@@ -107,7 +107,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 49;
+const tutorialVersion = 50;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, and only the switch. The app opens in the simple portal, so the switch is off by
@@ -975,31 +975,31 @@ class _FilterHint extends StatelessWidget {
           const IgnorePointer(child: SizedBox.expand()),
           SafeArea(
             child: Align(
-              alignment: Alignment.topCenter,
+              // The list itself is a bottom sheet, so the hint hangs at the bottom of the
+              // screen, below the eye's natural path — out of the way of the filters above.
+              alignment: Alignment.bottomCenter,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: Material(
                   color: theme.colorScheme.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(20),
                   elevation: 8,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           context.appLocalizations.tutorialBody2Off,
                           style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
                         ),
                         if (ok) ...[
-                          const SizedBox(height: 8),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: FilledButton(
-                              onPressed: onOk,
-                              child: Text(context.appLocalizations.tutorialOk),
-                            ),
+                          const SizedBox(height: 10),
+                          // Centred, not pushed to an edge: one small window that holds its
+                          // message and its OK, no wider than its own words.
+                          FilledButton(
+                            onPressed: onOk,
+                            child: Text(context.appLocalizations.tutorialOk),
                           ),
                         ],
                       ],

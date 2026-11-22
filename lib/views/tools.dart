@@ -312,7 +312,16 @@ class _TutorialItem extends StatelessWidget {
     return ListItem(
       leading: const GlyphIcon(AppGlyphs.sparkle),
       title: Text(context.appLocalizations.tutorialStart),
-      onTap: () => unawaited(showPortalTutorial(context)),
+      onTap: () {
+        // The tour runs over the working screen, framing its switch and tiles — not over this
+        // settings page. Leave it first so the controls the tour points at are the visible ones.
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            unawaited(showPortalTutorial(context));
+          }
+        });
+      },
     );
   }
 }

@@ -637,6 +637,9 @@ class ListHeader extends ConsumerWidget {
     final isDelayTesting = ref.watch(
       delayTestingGroupsProvider.select((state) => state.contains(groupName)),
     );
+    final bypassed = ref.watch(
+      portalBypassProvider.select((state) => state.containsKey(groupName)),
+    );
     final colorScheme = context.colorScheme;
     final level = floating > 0
         ? SurfaceLevel.floatingOf(colorScheme)
@@ -662,16 +665,21 @@ class ListHeader extends ConsumerWidget {
                   HapticFeedback.mediumImpact();
                   ref.read(portalBypassProvider.notifier).toggle(ref, group);
                 },
-                child: Row(
-                  children: [
-                    _GroupIcon(src: group.icon, name: groupName),
-                    Flexible(
-                      child: _GroupSummary(
-                        groupName: groupName,
-                        description: group.serverDescription,
+                child: Opacity(
+                  // A filter in DIRECT is not live: its icon and name go grey, exactly as the
+                  // chip does on the portal screen, so the list and the dashboard agree.
+                  opacity: bypassed ? 0.45 : 1,
+                  child: Row(
+                    children: [
+                      _GroupIcon(src: group.icon, name: groupName),
+                      Flexible(
+                        child: _GroupSummary(
+                          groupName: groupName,
+                          description: group.serverDescription,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -886,7 +894,12 @@ class _GroupActions extends ConsumerWidget {
             icon: Icon(
               Icons.power_settings_new,
               size: TonalButtonSize.compact.icon,
-              color: bypassed ? context.colorScheme.primary : null,
+              // Green while the filter runs, red when it is out of the portal (DIRECT): the
+              // power icon tells the owner whether this filter is live, the opposite of a
+              // plain on/off. Matches the portal chip: a bypassed filter is dimmed.
+              color: bypassed
+                  ? context.colorScheme.error
+                  : const Color(0xFF00F5A0),
             ),
           ),
           const SizedBox(width: 6),
