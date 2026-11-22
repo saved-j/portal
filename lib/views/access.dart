@@ -523,6 +523,7 @@ class _AccessStatus extends StatelessWidget {
     return Padding(
       padding: const EdgeInsetsDirectional.fromSTEB(16, 6, 16, 6),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // The dock selector: deny (blacklist) on the left, allow (whitelist) on the
