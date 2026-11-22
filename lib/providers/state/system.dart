@@ -223,9 +223,20 @@ SharedState sharedState(Ref ref) {
   // engine's raw selected-map is not the pick — it is the core's own state, not the choice the
   // owner sees.
   final activeGroup = liveGroup ?? groups.firstOrNull?.name ?? '';
-  final currentServer = mode == Mode.global
+  final allGroups = ref.watch(groupsProvider);
+  // The pick is the filter's choice — often the "⚡️ Auto" group, not a node. The shade should
+  // name the server the tunnel is really on, so the pick is walked through url-test/selector
+  // groups down to the leaf node.
+  final pick = mode == Mode.global
       ? portalXrayPickFor(fullSettings, profileId)
       : portalRulePickFor(fullSettings, profileId, activeGroup);
+  final resolvedPick = computeRealSelectedProxyState(
+    pick,
+    groups: allGroups,
+    selectedMap: selectedMap,
+  );
+  final currentServer =
+      resolvedPick.proxyName.isNotEmpty ? resolvedPick.proxyName : pick;
   // The bolt carries the measured latency of the server that is actually connected, so the owner
   // reads a number from the shade, not an empty glyph. The sweep needs the same test URL the
   // app's own bolt uses, resolved to the live group first.
@@ -233,7 +244,6 @@ SharedState sharedState(Ref ref) {
   final defaultTestUrl = ref.watch(
     appSettingProvider.select((state) => state.testUrl),
   );
-  final allGroups = ref.watch(groupsProvider);
   final connectedDelay = mode == Mode.global
       ? 0
       : computeProxyDelayState(
