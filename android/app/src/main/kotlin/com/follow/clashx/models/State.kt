@@ -15,6 +15,7 @@ data class SharedState(
     val pingText: String = "Ping",
     val showPing: Boolean = false,
     val pingServers: List<String> = emptyList(),
+    val detail: String = "",
     val vpnOptions: VpnOptions? = null,
     val setupParams: SetupParams? = null,
 )

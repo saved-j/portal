@@ -262,6 +262,24 @@ SharedState sharedState(Ref ref) {
           delayMap: delayMap,
         ).delay;
   final pingText = connectedDelay > 0 ? '⚡ ${connectedDelay} ms' : '⚡';
+  // The shade carries the facts the owner reads at a glance: latency, used traffic and the
+  // subscription's end date. A missing piece simply drops out of the joined line.
+  final profile = ref.watch(currentProfileProvider);
+  final subInfo = profile?.subscriptionInfo;
+  final usedTraffic = (subInfo?.upload ?? 0) + (subInfo?.download ?? 0);
+  final trafficLimit = subInfo?.total ?? 0;
+  final trafficText = usedTraffic > 0 || trafficLimit > 0
+      ? '${usedTraffic.traffic.show} / ${trafficLimit > 0 ? trafficLimit.traffic.show : '♾️'}'
+      : '';
+  final expireDate = subInfo?.expireDate;
+  final expiryText = expireDate == null
+      ? ''
+      : '${expireDate.day.toString().padLeft(2, '0')}.'
+          '${expireDate.month.toString().padLeft(2, '0')}.${expireDate.year}';
+  final pingPart = connectedDelay > 0 ? '⚡ ${connectedDelay} ms' : '';
+  final detail = [pingPart, trafficText, expiryText]
+      .where((part) => part.isNotEmpty)
+      .join(' · ');
   // The servers the notification bolt pings: every node of the live group, the same sweep the
   // working screen's bolt runs. Empty in the simple portal — its bolt lives in the app, not in
   // the notification.
@@ -278,6 +296,7 @@ SharedState sharedState(Ref ref) {
     pingText: pingText,
     showPing: mode != Mode.global,
     pingServers: pingServers,
+    detail: detail,
     showStopAction: appSetting.showStopAction,
     stopText: currentAppLocalizations.stop,
     stopTip: currentAppLocalizations.stopVpn,

@@ -179,7 +179,7 @@ final class TrayStateProvider
   }
 }
 
-String _$trayStateHash() => r'b6cdae023d0318da3ee6bb0d74ff790611640456';
+String _$trayStateHash() => r'8a024383d9b037a5184ab81c506364b34a292cd5';
 
 /// Measured delays of the proxies the tray lists, by group and then proxy
 /// name. Resolved like a proxy card, so a nested group shows its selection.
@@ -437,7 +437,7 @@ final class SharedStateProvider
   }
 }
 
-String _$sharedStateHash() => r'e0f80bc79bfb8defde1b3b955ac57699dfea01a1';
+String _$sharedStateHash() => r'5390358aa4ccb9e75054e0299ad8cc208f971f05';
 
 @ProviderFor(vpnRouteAddress)
 final vpnRouteAddressProvider = VpnRouteAddressProvider._();

@@ -75,6 +75,11 @@ internal class NotificationModule(
         val views = RemoteViews(service.packageName, R.layout.notification_portal).apply {
             setTextViewText(R.id.notif_title, params.title)
             setTextViewText(R.id.notif_server, params.server)
+            setTextViewText(R.id.notif_info, params.detail)
+            setViewVisibility(
+                R.id.notif_info,
+                if (params.detail.isNotEmpty()) View.VISIBLE else View.GONE,
+            )
             setTextViewText(R.id.notif_stop, params.stopText)
             setTextColor(R.id.notif_stop, STOP_COLOR)
             setOnClickPendingIntent(R.id.notif_stop, stopIntent)

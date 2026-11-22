@@ -542,6 +542,7 @@ internal class ServiceStateMachine(private val host: ServiceStateHost) {
             showStopAction = state.showStopAction,
             pingText = state.pingText,
             showPing = state.showPing,
+            detail = state.detail,
         )
     }
 }
