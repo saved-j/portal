@@ -49,3 +49,9 @@ final tourResetTiles = ValueNotifier<int>(0);
 /// network on himself, so a panel that forbids the global mode (`noglobal`) must not push the
 /// rule mode back over it mid-lesson.
 final tourSimulatesSimple = ValueNotifier<bool>(false);
+
+/// True while the owner hot-switches the portal mode. The switch changes the mode and then
+/// stops the tunnel itself; the VPN-options watcher that normally offers a "config changed,
+/// restart" tip must hold its tongue while that one transaction runs, or the owner sees a
+/// restart prompt the very switch he is making already answers.
+final portalModeSwitching = ValueNotifier<bool>(false);

@@ -3440,6 +3440,7 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
     return;
   }
   _portalSwitching = true;
+  portalModeSwitching.value = true;
   // The tap is zero for both measurements: the record writes click → `phase=active` from its
   // own hook, the screen writes click → rows once it has them.
   portalSwitchClock.begin(toSimple: toSimple);
@@ -3522,6 +3523,7 @@ Future<void> _switchPortal(WidgetRef ref, {required bool toSimple}) async {
     _reportSwitchFailure(error);
   } finally {
     _portalSwitching = false;
+    portalModeSwitching.value = false;
   }
 }
 

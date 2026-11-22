@@ -8,6 +8,8 @@ import 'package:fl_clash/providers/state.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../views/tutorial/tutorial_bus.dart';
+
 bool _serviceVpnDemanded() => service?.vpnDemandedBySystem ?? false;
 
 class VpnManager extends ConsumerStatefulWidget {
@@ -40,7 +42,8 @@ class _VpnContainerState extends ConsumerState<VpnManager> {
       if (wanted != null &&
           effective(prev) != wanted &&
           running != null &&
-          running != wanted) {
+          running != wanted &&
+          !portalModeSwitching.value) {
         _showRestartTip();
       }
     });
