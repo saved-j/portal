@@ -107,7 +107,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 51;
+const tutorialVersion = 52;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, and only the switch. The app opens in the simple portal, so the switch is off by
@@ -205,10 +205,6 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   /// The floating hint drawn over the filter list once it opens.
   OverlayEntry? _filterHint;
-
-  /// The owner turned off a filter and pressed the hint's OK: the page advances on the close it
-  /// caused, not on a dismissal.
-  bool _filterDone = false;
 
   /// The card is out of the way for a moment on purpose: the page wants the screen itself to be
   /// watched — the list arriving, a sheet closing — not the words about it.
@@ -315,16 +311,11 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     }
     if (screens < _screens) {
       // The owner closed the screen this page opened. The lesson was to see it, so the page is
-      // done the moment it closes — except the filter list, which advances only through its own
-      // OK, once a filter is off.
+      // done the moment it closes — the filter list included, whether a filter was toggled or
+      // the owner just backed out with the back button.
       _screens = screens;
       _removeFilterHint();
       if (_steps[_index].opensScreen && _served) {
-        if (_steps[_index].number == 2 && !_filterDone) {
-          _served = false;
-          setState(() {});
-          return;
-        }
         _next();
         return;
       }
@@ -346,7 +337,6 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
         builder: (_) => _FilterHint(
           ok: _filterToggles >= 1,
           onOk: () {
-            _filterDone = true;
             _removeFilterHint();
             _nav?.pop();
           },
@@ -519,7 +509,6 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     _chipTaps = 0;
     _pingHolds = 0;
     _filterToggles = 0;
-    _filterDone = false;
     _removeFilterHint();
     _chipScrolls = 0;
     _showingPings = false;

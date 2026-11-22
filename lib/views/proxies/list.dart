@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/common/outbound.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -637,9 +638,15 @@ class ListHeader extends ConsumerWidget {
     final isDelayTesting = ref.watch(
       delayTestingGroupsProvider.select((state) => state.contains(groupName)),
     );
-    final bypassed = ref.watch(
+    final inMemoryBypassed = ref.watch(
       portalBypassProvider.select((state) => state.containsKey(groupName)),
     );
+    final pendingByGroup = ref.watch(portalPendingProvider);
+    final picked = pendingByGroup[groupName] != null;
+    // The same rule as the portal chip: a filter already routed to DIRECT is a bypass before
+    // anyone touches it, and a hand-picked server wins over the panel's DIRECT at once.
+    final bypassed =
+        inMemoryBypassed || (isBuiltinOutboundName(group.now ?? '') && !picked);
     final colorScheme = context.colorScheme;
     final level = floating > 0
         ? SurfaceLevel.floatingOf(colorScheme)
@@ -874,9 +881,16 @@ class _GroupActions extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bypassed = ref.watch(
+    final inMemoryBypassed = ref.watch(
       portalBypassProvider.select((state) => state.containsKey(group.name)),
     );
+    final pendingByGroup = ref.watch(portalPendingProvider);
+    final picked = pendingByGroup[group.name] != null;
+    // A filter already routed to DIRECT is a bypass by definition: the power icon shows it red
+    // and grey before anyone touches it, the same rule the portal chip follows. A hand-picked
+    // server wins over the panel's DIRECT at once.
+    final bypassed =
+        inMemoryBypassed || (isBuiltinOutboundName(group.now ?? '') && !picked);
     return TonalButtonTheme(
       size: TonalButtonSize.compact,
       child: Row(
