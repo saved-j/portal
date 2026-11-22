@@ -483,7 +483,18 @@ class PortalFiltersNotifier
 
   void toggle(String name) {
     final hidden = {...state.hidden};
-    if (!hidden.remove(name)) hidden.add(name);
+    if (hidden.remove(name)) {
+      // Turning a tile back on is always allowed.
+      _write(hidden: hidden);
+      return;
+    }
+    // Turning a tile off must leave at least two tiles visible — except for a subscription
+    // whose servers were spread into a single category, where one is the floor. Without the
+    // floor the owner can hide the last tile and lose the strip (and its editor button).
+    final total = portalGroups(ref.read(groupsProvider)).length;
+    final minVisible = total <= 1 ? 1 : 2;
+    if (total - hidden.length - 1 < minVisible) return;
+    hidden.add(name);
     _write(hidden: hidden);
   }
 
@@ -1456,19 +1467,10 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
         //           (simple ? PortalOwner.xray : PortalOwner.mihomo),
         // ),
         // The filter strip belongs to the engine's rules. In the simple portal the list is
-        // the second core's own servers, so there are no filters to show.
-        if (!simple && xrayServers.isEmpty && groups.length > 1)
+        // the second core's own servers, so there are no filters to show. The strip (and its
+        // editor button) stays for a single tile too: one tile still needs its editor reachable.
+        if (!simple && xrayServers.isEmpty && groups.isNotEmpty)
           _FilterStripEnter(child: const _GroupStrip()),
-        if (!simple && groups.length == 1)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Text(
-              group.name,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
         for (final (index, proxy) in members.indexed)
           _ServerEnter(
             // The key names the mode as well as the row: without it the widget state survives a
@@ -3288,9 +3290,8 @@ class _FilterEditorSheet extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 8),
-            Flexible(
+            Expanded(
               child: ReorderableListView(
-                shrinkWrap: true,
                 onReorder: (from, to) {
                   final next = [...order];
                   if (to > from) to -= 1;
