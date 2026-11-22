@@ -1635,7 +1635,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody1": MessageLookupByLibrary.simpleMessage(
       "门户网络可以拆分流量，让不同应用走不同国家。这就是动态分流（split tunnelling）。\n\n如果不需要，可以使用「简单模式」：几乎所有流量都经由一个国家。\n\n在此切换模式。",
     ),
-    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("左右滑动磁贴查看。"),
+    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("这些磁贴是按应用分流流量的筛选器——可以为每个筛选器指定各自的服务器。请左右滑动磁贴。"),
     "tutorialBody2": MessageLookupByLibrary.simpleMessage(
       "左侧按钮打开用于分流流量的筛选器列表。在这里可以调整筛选器顺序，并关闭不需要的筛选器。",
     ),

@@ -3248,13 +3248,11 @@ class PortalPlanCard extends ConsumerWidget {
   }
 }
 
-/// Reorder and hide the group filters. A sheet, not a page: it edits a row of chips.
+/// Reorder and hide the group filters. A full page, like the proxies list it edits: material
+/// chrome with a back button and the modal scrim, not a strip sheet with a drag handle.
 Future<void> showPortalFilterEditor(BuildContext context) {
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (_) => const _FilterEditorSheet(),
+  return Navigator.of(context).push<void>(
+    MaterialPageRoute(builder: (_) => const _FilterEditorSheet()),
   );
 }
 
@@ -3274,18 +3272,15 @@ class _FilterEditorSheet extends ConsumerWidget {
                 .map((g) => g.name)
                 .where((name) => !filters.order.contains(name)),
           ];
-    return SafeArea(
-      child: Padding(
+    return LiquidGlassScope(
+      enabled: false,
+      child: CommonScaffold(
+        title: context.appLocalizations.filtersTitle,
+        body: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              context.appLocalizations.filtersTitle,
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 4),
             Text(
               context.appLocalizations.filtersHint,
               style: theme.textTheme.bodySmall?.copyWith(
@@ -3331,8 +3326,16 @@ class _FilterEditorSheet extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      title: Text(name),
+                      // A tile hidden from the list is shown dimmed: hiding it here is 'off',
+                      // so it reads inactive exactly like an off chip on the dashboard.
+                      title: Opacity(
+                        opacity: filters.hidden.contains(name) ? 0.45 : 1,
+                        child: Text(name),
+                      ),
                       trailing: Switch(
+                        // Stage three teaches the tile list: this candle removes a tile from
+                        // the list, or puts it back. It deals in visibility, not tunnelling —
+                        // the power button that (de)activates tunnelling lives on stage four.
                         value: !filters.hidden.contains(name),
                         onChanged: (_) {
                           TutorialBus.fire(TutorialEvent.filterToggled);
@@ -3347,6 +3350,7 @@ class _FilterEditorSheet extends ConsumerWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

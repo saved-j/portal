@@ -9245,10 +9245,10 @@ class AppLocalizations {
       args: [],
     );
   }
-  /// `Sweep the tiles left and right to look around.`
+  /// `These are the filters that split traffic for individual apps — you can give each filter its own server. Sweep the tiles left and right.`
   String get tutorialBody1Chips {
     return Intl.message(
-      'Sweep the tiles left and right to look around.',
+      'These are the filters that split traffic for individual apps — you can give each filter its own server. Sweep the tiles left and right.',
       name: 'tutorialBody1Chips',
       desc: '',
       args: [],

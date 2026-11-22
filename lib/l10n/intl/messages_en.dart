@@ -2099,7 +2099,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody1": MessageLookupByLibrary.simpleMessage(
       "The portal network splits traffic, sending different apps through different countries. That is dynamic split tunnelling.\n\nIf you do not need it, the app works in the “simple mode”, where almost all traffic goes through one country.\n\nSwitch the mode here.",
     ),
-    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("Sweep the tiles left and right to look around."),
+    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("These are the filters that split traffic for individual apps — you can give each filter its own server. Sweep the tiles left and right."),
     "tutorialBody2": MessageLookupByLibrary.simpleMessage(
       "The button on the left opens the list of filters that split the traffic. Here you can reorder the filters and turn off the ones you do not need.",
     ),

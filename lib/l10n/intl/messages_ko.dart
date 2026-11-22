@@ -1688,7 +1688,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody1": MessageLookupByLibrary.simpleMessage(
       "포털 네트워크는 트래픽을 나누어 앱마다 다른 국가를 거치게 합니다. 이를 동적 분할 터널링이라고 합니다.\n\n필요 없다면 \'간단 모드\'로 사용할 수 있으며, 거의 모든 트래픽이 한 국가를 거칩니다.\n\n여기에서 모드를 전환하세요.",
     ),
-    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("타일을 좌우로 밀어 둘러보세요."),
+    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("앱별로 트래픽을 나누는 필터입니다. 필터마다 다른 서버를 지정할 수 있습니다. 타일을 좌우로 밀어 보세요."),
     "tutorialBody2": MessageLookupByLibrary.simpleMessage(
       "왼쪽 버튼으로 트래픽을 나누는 필터 목록이 열립니다. 여기서 필터 순서를 바꾸고 필요 없는 것을 끌 수 있습니다.",
     ),

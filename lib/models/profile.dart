@@ -169,7 +169,7 @@ extension ProfileExtension on Profile {
   /// that becomes the profile's label; showing it whole made the header and the card look
   /// broken. One getter cleans it for every screen at once.
   String get realLabel =>
-      label.takeFirstValid([headers.displayName, defaultLabel]);
+      headers.displayName.takeFirstValid([label, defaultLabel]);
 
   String get defaultLabel => url.webUri?.host ?? id.toString();
 

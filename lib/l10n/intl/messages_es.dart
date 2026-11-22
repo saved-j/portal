@@ -2144,7 +2144,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody1": MessageLookupByLibrary.simpleMessage(
       "La red de portales reparte el tráfico y hace que distintas aplicaciones salgan por distintos países. Eso se llama túnel dividido dinámico.\n\nSi no lo necesitas, la aplicación funciona en el «modo simple», cuando casi todo el tráfico sale por un solo país.\n\nCambia el modo aquí.",
     ),
-    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("Desliza los mosaicos a izquierda y derecha para echar un vistazo."),
+    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("Estos son los filtros que dividen el tráfico por aplicación — a cada filtro puedes darle su propio servidor. Desliza los mosaicos a izquierda y derecha."),
     "tutorialBody2": MessageLookupByLibrary.simpleMessage(
       "El botón de la izquierda abre la lista de filtros que dividen el tráfico. Aquí puedes reordenar los filtros y apagar los que no necesitas.",
     ),

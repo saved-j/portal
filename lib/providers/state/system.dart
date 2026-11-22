@@ -226,6 +226,28 @@ SharedState sharedState(Ref ref) {
   final currentServer = mode == Mode.global
       ? portalXrayPickFor(fullSettings, profileId)
       : portalRulePickFor(fullSettings, profileId, activeGroup);
+  // The bolt carries the measured latency of the server that is actually connected, so the owner
+  // reads a number from the shade, not an empty glyph. The sweep needs the same test URL the
+  // app's own bolt uses, resolved to the live group first.
+  final delayMap = ref.watch(delayDataSourceProvider);
+  final defaultTestUrl = ref.watch(
+    appSettingProvider.select((state) => state.testUrl),
+  );
+  final allGroups = ref.watch(groupsProvider);
+  final connectedDelay = mode == Mode.global
+      ? 0
+      : computeProxyDelayState(
+          proxyName: currentServer,
+          testUrl: (groups
+                      .where((g) => g.name == liveGroup)
+                      .firstOrNull
+                      ?.testUrl)
+                  .takeFirstValid([defaultTestUrl]),
+          groups: allGroups,
+          selectedMap: selectedMap,
+          delayMap: delayMap,
+        ).delay;
+  final pingText = connectedDelay > 0 ? '⚡ ${connectedDelay} ms' : '⚡';
   // The servers the notification bolt pings: every node of the live group, the same sweep the
   // working screen's bolt runs. Empty in the simple portal — its bolt lives in the app, not in
   // the notification.
@@ -239,7 +261,7 @@ SharedState sharedState(Ref ref) {
   return SharedState(
     currentProfileName: currentProfileName,
     currentServer: currentServer,
-    pingText: '⚡',
+    pingText: pingText,
     showPing: mode != Mode.global,
     pingServers: pingServers,
     showStopAction: appSetting.showStopAction,

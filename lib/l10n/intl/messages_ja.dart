@@ -1717,7 +1717,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody1": MessageLookupByLibrary.simpleMessage(
       "ポータルネットワークは通信を分割し、アプリごとに別の国を通します。これを動的スプリットトンネリングと呼びます。\n\n必要なければ「シンプルモード」で使えます。ほぼすべての通信が 1 つの国を通ります。\n\nここでモードを切り替えます。",
     ),
-    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("タイルを左右にスワイプして見渡しましょう。"),
+    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("これはアプリごとにトラフィックを分けるフィルターです。フィルターごとに別のサーバーを割り当てられます。タイルを左右にスワイプしてください。"),
     "tutorialBody2": MessageLookupByLibrary.simpleMessage(
       "左のボタンで、トラフィックを分けるフィルター一覧が開きます。ここでフィルターの並び替えや不要なもののオフができます。",
     ),

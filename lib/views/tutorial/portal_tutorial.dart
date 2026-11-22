@@ -107,7 +107,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 50;
+const tutorialVersion = 51;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, and only the switch. The app opens in the simple portal, so the switch is off by
