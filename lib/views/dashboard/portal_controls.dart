@@ -364,7 +364,12 @@ class PortalBypassNotifier extends Notifier<Map<String, String?>> {
       final restore = state[group.name];
       state = {...state}..remove(group.name);
       if (restore != null) {
-        action.changeProxy(groupName: group.name, proxyName: restore);
+        // A tile whose remembered pick was DIRECT has no server of its own to return to;
+        // turning it back on would land on DIRECT again and read as dead. Put it on the
+        // group's auto pick instead (AutoRussia for the Ru-apps one) so the toggle visibly works.
+        final effective =
+            _isBuiltinOutbound(restore) ? (_autoFallbackFor(group) ?? restore) : restore;
+        action.changeProxy(groupName: group.name, proxyName: effective);
       }
       return;
     }
@@ -510,6 +515,32 @@ final portalFiltersProvider =
 /// The engine's built-in outbounds sometimes arrive decorated ('DIRECT 🇷🇺',
 /// 'Direct '), so the check is on the leading word, not on an exact match.
 bool _isBuiltinOutbound(String name) => isBuiltinOutboundName(name);
+
+/// The server a tile should fall back to when it is taken out of DIRECT, and its remembered
+/// pick was DIRECT itself (a tile whose default is DIRECT has no other server to return to, so
+/// returning to DIRECT looks dead). The answer is the group's own auto pick: the url-test member
+/// whose name hints at "Russia" for the Ru-apps filter, otherwise the first auto member.
+///
+/// "AutoRussia" is found by its name, not hardcoded: the panel renames it over time, and this
+/// looks the name up fresh every call.
+String? _autoFallbackFor(Group group) {
+  final members = group.all;
+  if (members.isEmpty) return null;
+  // The Ru-apps filter's auto pick is named "AutoRussia"/"Автороссия"; it may be an url-test
+  // member or a selector, so match by name first, then fall back to any url-test member.
+  for (final probe in members) {
+    final lower = probe.name.toLowerCase();
+    if (lower.contains('russia') || lower.contains('россия')) return probe.name;
+  }
+  final autoMembers = members.where((p) => p.type == GroupType.URLTest.value);
+  if (autoMembers.isNotEmpty) return autoMembers.first.name;
+  for (final probe in members) {
+    final lower = probe.name.toLowerCase();
+    if (lower.contains('auto') || lower.contains('авто')) return probe.name;
+  }
+  return null;
+}
+
 
 List<Group> portalGroups(List<Group> all) => [
   for (final item in all)
