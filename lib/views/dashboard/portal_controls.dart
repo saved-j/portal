@@ -3292,6 +3292,9 @@ class _FilterEditorSheet extends ConsumerWidget {
             const SizedBox(height: 8),
             Expanded(
               child: ReorderableListView(
+                // The first row must clear the scaffold's floating header, so the top tile's
+                // switch stays reachable when the list is scrolled all the way up.
+                padding: EdgeInsets.only(top: context.contentTopPadding),
                 onReorder: (from, to) {
                   final next = [...order];
                   if (to > from) to -= 1;

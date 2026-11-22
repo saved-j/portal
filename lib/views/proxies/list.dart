@@ -643,10 +643,11 @@ class ListHeader extends ConsumerWidget {
     );
     final pendingByGroup = ref.watch(portalPendingProvider);
     final picked = pendingByGroup[groupName] != null;
-    // The same rule as the portal chip: a filter already routed to DIRECT is a bypass before
-    // anyone touches it, and a hand-picked server wins over the panel's DIRECT at once.
+    // The resolved pick the subtitle shows, so the 'DIRECT' line and the grey/red state agree.
+    final selectedName =
+        ref.watch(selectedProxyNameProvider(groupName)) ?? group.now ?? '';
     final bypassed =
-        inMemoryBypassed || (isBuiltinOutboundName(group.now ?? '') && !picked);
+        inMemoryBypassed || (isBuiltinOutboundName(selectedName) && !picked);
     final colorScheme = context.colorScheme;
     final level = floating > 0
         ? SurfaceLevel.floatingOf(colorScheme)
@@ -887,10 +888,12 @@ class _GroupActions extends ConsumerWidget {
     final pendingByGroup = ref.watch(portalPendingProvider);
     final picked = pendingByGroup[group.name] != null;
     // A filter already routed to DIRECT is a bypass by definition: the power icon shows it red
-    // and grey before anyone touches it, the same rule the portal chip follows. A hand-picked
-    // server wins over the panel's DIRECT at once.
+    // and grey before anyone touches it. The truth is the resolved pick the subtitle shows,
+    // not the raw group.now, so the icon and the 'DIRECT' line can never disagree.
+    final selectedName =
+        ref.watch(selectedProxyNameProvider(group.name)) ?? group.now ?? '';
     final bypassed =
-        inMemoryBypassed || (isBuiltinOutboundName(group.now ?? '') && !picked);
+        inMemoryBypassed || (isBuiltinOutboundName(selectedName) && !picked);
     return TonalButtonTheme(
       size: TonalButtonSize.compact,
       child: Row(

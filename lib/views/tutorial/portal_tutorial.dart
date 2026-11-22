@@ -107,7 +107,7 @@ class TutorialStep {
 /// from the list, so the numbering stays honest.
 /// The version of the tour below. Bump it with the steps: `AppSettingProps.tutorialVersion`
 /// is compared against it when the app starts.
-const tutorialVersion = 52;
+const tutorialVersion = 53;
 
 const tutorialSteps = <TutorialStep>[
   // The switch, and only the switch. The app opens in the simple portal, so the switch is off by
@@ -964,11 +964,11 @@ class _FilterHint extends StatelessWidget {
           const IgnorePointer(child: SizedBox.expand()),
           SafeArea(
             child: Align(
-              // The list itself is a bottom sheet, so the hint hangs at the bottom of the
-              // screen, below the eye's natural path — out of the way of the filters above.
-              alignment: Alignment.bottomCenter,
+              // The hint hangs in the lower quarter, not flush with the bottom: the list runs
+              // under it and the OK window must not cover the bottom rows the owner is reading.
+              alignment: const Alignment(0, 0.72),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Material(
                   color: theme.colorScheme.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(20),
