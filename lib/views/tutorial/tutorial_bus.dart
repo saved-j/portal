@@ -10,6 +10,7 @@ enum TutorialEvent {
   modeChanged,
   filtersOpened,
   chipHeld,
+  chipActivated,
   chipDoubleTapped,
   labelTapped,
   started,

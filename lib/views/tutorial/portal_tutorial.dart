@@ -119,11 +119,12 @@ const tutorialSteps = <TutorialStep>[
     number: 1,
     done: TutorialEvent.modeChanged,
   ),
-  // Holding a tile switches one filter on and off: the lesson of tunnelling per service.
+  // A tap brings a filter into the portal; holding it takes it out again: the lesson of
+  // tunnelling per service.
   TutorialStep(
     target: TutorialTarget.chip,
     number: 3,
-    done: TutorialEvent.chipHeld,
+    done: TutorialEvent.chipActivated,
   ),
   // A double tap changes the tile layout.
   TutorialStep(

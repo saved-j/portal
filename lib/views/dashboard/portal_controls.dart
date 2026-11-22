@@ -359,20 +359,35 @@ class PortalBypassNotifier extends Notifier<Map<String, String?>> {
   /// is not waited for. A chip that greys only when the core confirms reads as a dead
   /// control, and the user's job is not to watch the tunnel.
   void toggle(WidgetRef ref, Group group) {
-    final action = ref.read(proxiesActionProvider.notifier);
     if (state.containsKey(group.name)) {
-      final restore = state[group.name];
-      state = {...state}..remove(group.name);
-      if (restore != null) {
-        // A tile whose remembered pick was DIRECT has no server of its own to return to;
-        // turning it back on would land on DIRECT again and read as dead. Put it on the
-        // group's auto pick instead (AutoRussia for the Ru-apps one) so the toggle visibly works.
-        final effective =
-            _isBuiltinOutbound(restore) ? (_autoFallbackFor(group) ?? restore) : restore;
-        action.changeProxy(groupName: group.name, proxyName: effective);
-      }
-      return;
+      activate(ref, group);
+    } else {
+      deactivate(ref, group);
     }
+  }
+
+  /// A single tap: bring the filter into the portal, undoing a bypass. A filter already
+  /// on is left as it is — the tap never switches it off.
+  void activate(WidgetRef ref, Group group) {
+    final action = ref.read(proxiesActionProvider.notifier);
+    if (!state.containsKey(group.name)) return;
+    final restore = state[group.name];
+    state = {...state}..remove(group.name);
+    if (restore != null) {
+      // A tile whose remembered pick was DIRECT has no server of its own to return to;
+      // turning it back on would land on DIRECT again and read as dead. Put it on the
+      // group's auto pick instead (AutoRussia for the Ru-apps one) so the toggle visibly works.
+      final effective =
+          _isBuiltinOutbound(restore) ? (_autoFallbackFor(group) ?? restore) : restore;
+      action.changeProxy(groupName: group.name, proxyName: effective);
+    }
+  }
+
+  /// A long press: take the filter out of the portal (DIRECT). A filter already off is
+  /// left as it is — the press never switches it back on.
+  void deactivate(WidgetRef ref, Group group) {
+    final action = ref.read(proxiesActionProvider.notifier);
+    if (state.containsKey(group.name)) return;
     // Bypass routes to the engine's own built-in, whatever the panel calls it.
     final target =
         group.all
@@ -2540,15 +2555,15 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                 horizontal: 3,
                               ),
                               child: GestureDetector(
-                                // Long press turns the filter into a bypass: the engine gets
-                                // DIRECT, the chip goes grey, nobody has to hunt for DIRECT
-                                // in the server list.
+                                // A tap brings the filter into the portal; a long press takes it
+                                // out — the engine gets DIRECT, the chip goes grey, nobody has to
+                                // hunt for DIRECT in the server list.
                                 onLongPress: () {
                                   HapticFeedback.mediumImpact();
                                   TutorialBus.fire(TutorialEvent.chipHeld);
                                   ref
                                       .read(portalBypassProvider.notifier)
-                                      .toggle(ref, item);
+                                      .deactivate(ref, item);
                                 },
                                 child: Opacity(
                                   opacity: bypassed ? 0.45 : 1,
@@ -2640,9 +2655,13 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
                                     selected: item.name == active,
                                     onSelected: (_) {
                                       HapticFeedback.selectionClick();
+                                      TutorialBus.fire(TutorialEvent.chipActivated);
                                       ref
                                           .read(portalGroupProvider.notifier)
                                           .pick(item.name);
+                                      ref
+                                          .read(portalBypassProvider.notifier)
+                                          .activate(ref, item);
                                     },
                                   ),
                                 ),

@@ -2107,7 +2107,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Turn off the filters you do not need.",
     ),
     "tutorialBody3": MessageLookupByLibrary.simpleMessage(
-      "Holding a finger on a tile switches that filter on and off — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.",
+      "Tap a tile to bring that filter into the portal, and hold it to take it out again — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.",
     ),
     "tutorialBody4": MessageLookupByLibrary.simpleMessage(
       "A double tap on a tile changes the way the tiles look.",
@@ -2125,7 +2125,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "The tile starts the portal from any screen: open the shade, tap the pencil, scroll to your own apps and add “Portal”.",
     ),
     "tutorialChipOff": MessageLookupByLibrary.simpleMessage(
-      "The filter is off. Hold it again to switch it back on.",
+      "The filter is off. Tap it to switch it back on.",
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Next"),
     "tutorialStart": MessageLookupByLibrary.simpleMessage("Tutorial"),

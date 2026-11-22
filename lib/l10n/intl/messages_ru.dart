@@ -2204,7 +2204,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Отключите ненужные фильтры.",
     ),
     "tutorialBody3": MessageLookupByLibrary.simpleMessage(
-      "Удержанием пальца на плитке фильтр включается и выключается — так туннелирование настраивается для отдельных сервисов.\n\nНапример, можно включить туннель ТОЛЬКО для Телеграма, Ютуба и Инстаграма.",
+      "Нажатием на плитку фильтр включается, удержанием — выключается. Так туннелирование настраивается для отдельных сервисов.\n\nНапример, можно включить туннель ТОЛЬКО для Телеграма, Ютуба и Инстаграма.",
     ),
     "tutorialBody4": MessageLookupByLibrary.simpleMessage(
       "Двойным тапом на плитку переключается внешний вид плиток.",
@@ -2222,7 +2222,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Плитка запускает портал из любого экрана: откройте шторку, нажмите карандаш, пролистайте до пользовательских приложений и добавьте «Портал».",
     ),
     "tutorialChipOff": MessageLookupByLibrary.simpleMessage(
-      "Фильтр выключен. Зажмите ещё раз, чтобы включить.",
+      "Фильтр выключен. Нажмите, чтобы включить.",
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Далее"),
     "tutorialStart": MessageLookupByLibrary.simpleMessage("Туториал"),

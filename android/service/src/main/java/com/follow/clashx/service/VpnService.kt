@@ -322,6 +322,13 @@ class VpnService : SystemVpnService(), ManagedService {
     /// interface table over rtnetlink is denied to an app uid.
     private fun Builder.keepCoreOutOfTunnel(options: VpnOptions) {
         if (!options.xrayTun) return
+        val accessControl = options.accessControlProps
+        // In whitelist mode the core is already out of the tunnel: `configureAccessControl`
+        // never names this app, so nothing routes it. Android refuses a builder that mixes the
+        // allowed and disallowed sets, and this call would be the one that mixes them.
+        if (accessControl.enable && accessControl.mode == AccessControlMode.ACCEPT_SELECTED) {
+            return
+        }
         try {
             addDisallowedApplication(packageName)
         } catch (throwable: Exception) {

@@ -9303,7 +9303,7 @@ class AppLocalizations {
   /// `Holding a finger on a tile switches that filter on and off — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.`
   String get tutorialBody3 {
     return Intl.message(
-      'Holding a finger on a tile switches that filter on and off — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.',
+      'Tap a tile to bring that filter into the portal, and hold it to take it out again — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.',
       name: 'tutorialBody3',
       desc: '',
       args: [],
@@ -9538,7 +9538,7 @@ class AppLocalizations {
   /// `The filter is off. Hold it again to switch it back on.`
   String get tutorialChipOff {
     return Intl.message(
-      'The filter is off. Hold it again to switch it back on.',
+      'The filter is off. Tap it to switch it back on.',
       name: 'tutorialChipOff',
       desc: '',
       args: [],
