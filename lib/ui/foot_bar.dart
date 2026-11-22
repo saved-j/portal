@@ -51,17 +51,18 @@ class FloatingFootBar extends StatelessWidget {
             child: LiquidGlassScope.dockOf(context)
                 ? LiquidGlass(
                     style: LiquidGlassStyle.pill(colorScheme),
+                    borderRadius: AppRadius.xl,
                     child: content,
                   )
                 : CustomPaint(
                     painter: SurfaceShadowPainter(
-                      corners: AppRadius.full,
+                      corners: AppRadius.xl,
                       shadows: dockShadows(colorScheme),
                     ),
                     child: DecoratedBox(
                       decoration: ShapeDecoration(
                         color: level.colorOf(colorScheme),
-                        shape: AppShape.full,
+                        shape: AppShape.xl,
                       ),
                       child: content,
                     ),
