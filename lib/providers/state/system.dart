@@ -235,8 +235,12 @@ SharedState sharedState(Ref ref) {
     groups: allGroups,
     selectedMap: selectedMap,
   );
-  final currentServer =
-      resolvedPick.proxyName.isNotEmpty ? resolvedPick.proxyName : pick;
+  // A group pick resolves to a node; the shade shows the whole chain so the owner reads both
+  // the pick ("⚡ Auto") and the node it landed on ("Южная Корея").
+  final resolvedName = resolvedPick.proxyName;
+  final currentServer = resolvedName.isNotEmpty && resolvedName != pick
+      ? '$pick - $resolvedName'
+      : pick;
   // The bolt carries the measured latency of the server that is actually connected, so the owner
   // reads a number from the shade, not an empty glyph. The sweep needs the same test URL the
   // app's own bolt uses, resolved to the live group first.
