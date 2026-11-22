@@ -238,12 +238,10 @@ SharedState sharedState(Ref ref) {
   // A group pick resolves to a node; the shade shows the whole chain so the owner reads both
   // the pick ("⚡ Auto") and the node it landed on ("Южная Корея").
   final resolvedName = resolvedPick.proxyName;
-  final currentServer = resolvedName.isNotEmpty && resolvedName != pick
+  final serverLine = resolvedName.isNotEmpty && resolvedName != pick
       ? '$pick - $resolvedName'
       : pick;
-  // The bolt carries the measured latency of the server that is actually connected, so the owner
-  // reads a number from the shade, not an empty glyph. The sweep needs the same test URL the
-  // app's own bolt uses, resolved to the live group first.
+  // The latency is measured for the actual node, not for the chain name shown above.
   final delayMap = ref.watch(delayDataSourceProvider);
   final defaultTestUrl = ref.watch(
     appSettingProvider.select((state) => state.testUrl),
@@ -251,7 +249,7 @@ SharedState sharedState(Ref ref) {
   final connectedDelay = mode == Mode.global
       ? 0
       : computeProxyDelayState(
-          proxyName: currentServer,
+          proxyName: resolvedName,
           testUrl: (groups
                       .where((g) => g.name == liveGroup)
                       .firstOrNull
@@ -261,23 +259,29 @@ SharedState sharedState(Ref ref) {
           selectedMap: selectedMap,
           delayMap: delayMap,
         ).delay;
-  final pingText = connectedDelay > 0 ? '⚡ ${connectedDelay} ms' : '⚡';
-  // The shade carries the facts the owner reads at a glance: latency, used traffic and the
-  // subscription's end date. A missing piece simply drops out of the joined line.
+  // The server line carries the latency; the button stays a plain "Test".
+  final currentServer = connectedDelay > 0
+      ? '$serverLine  ⚡ ${connectedDelay} ms'
+      : serverLine;
+  final pingText = currentAppLocalizations.delayTest;
+  // The info line: used traffic and the subscription's end date. This panel states usage only
+  // in its own title and sends no subscription-userinfo, so the title's number is the fallback.
   final profile = ref.watch(currentProfileProvider);
   final subInfo = profile?.subscriptionInfo;
   final usedTraffic = (subInfo?.upload ?? 0) + (subInfo?.download ?? 0);
   final trafficLimit = subInfo?.total ?? 0;
+  final statedTraffic = profile?.headers.trafficText;
   final trafficText = usedTraffic > 0 || trafficLimit > 0
       ? '${usedTraffic.traffic.show} / ${trafficLimit > 0 ? trafficLimit.traffic.show : '♾️'}'
-      : '';
+      : statedTraffic != null
+          ? '$statedTraffic / ♾️'
+          : '';
   final expireDate = subInfo?.expireDate;
   final expiryText = expireDate == null
       ? ''
       : '${expireDate.day.toString().padLeft(2, '0')}.'
           '${expireDate.month.toString().padLeft(2, '0')}.${expireDate.year}';
-  final pingPart = connectedDelay > 0 ? '⚡ ${connectedDelay} ms' : '';
-  final detail = [pingPart, trafficText, expiryText]
+  final detail = [trafficText, expiryText]
       .where((part) => part.isNotEmpty)
       .join(' · ');
   // The servers the notification bolt pings: every node of the live group, the same sweep the
