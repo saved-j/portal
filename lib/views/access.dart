@@ -446,7 +446,6 @@ class _AccessViewState extends ConsumerState<AccessView>
               : FloatingFootBar(
                   bar: _AccessStatus(
                     accessControl: accessControl,
-                    selectedCount: valueList.length,
                     onEnable: () => _handleEnable(true),
                     onModeChanged: _handleModeChanged,
                   ),
@@ -470,13 +469,11 @@ class _AccessViewState extends ConsumerState<AccessView>
 class _AccessStatus extends StatelessWidget {
   const _AccessStatus({
     required this.accessControl,
-    required this.selectedCount,
     required this.onEnable,
     required this.onModeChanged,
   });
 
   final AccessControlProps accessControl;
-  final int selectedCount;
   final VoidCallback onEnable;
   final ValueChanged<AccessControlMode> onModeChanged;
 
@@ -515,61 +512,21 @@ class _AccessStatus extends StatelessWidget {
         ),
       );
     }
-    final description = switch (accessControl.mode) {
-      AccessControlMode.acceptSelected => appLocalizations.accessControlAllowDesc,
-      AccessControlMode.rejectSelected =>
-        appLocalizations.accessControlNotAllowDesc,
-    };
     return Padding(
       padding: const EdgeInsetsDirectional.fromSTEB(16, 6, 16, 6),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // The dock selector: deny (blacklist) on the left, allow (whitelist) on the
-          // right. The same control the settings sheet used to hold, brought down into
-          // the one place the owner is already looking at.
-          SegmentedControl<AccessControlMode>(
-            segments: [
-              (
-                AccessControlMode.rejectSelected,
-                appLocalizations.accessControlDeny,
-              ),
-              (
-                AccessControlMode.acceptSelected,
-                appLocalizations.accessControlAllow,
-              ),
-            ],
-            value: accessControl.mode,
-            onChanged: onModeChanged,
+      child: SegmentedControl<AccessControlMode>(
+        segments: [
+          (
+            AccessControlMode.rejectSelected,
+            '${appLocalizations.accessControlDeny} ${accessControl.rejectList.length}',
           ),
-          const SizedBox(height: 8),
-          Row(
-            spacing: 12,
-            children: [
-              GlyphIcon(
-                AppGlyphs.appsList,
-                size: 20,
-                color: colorScheme.onSurfaceVariant,
-              ),
-              Expanded(
-                child: Text(
-                  description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyle.footnote
-                      .of(context)
-                      .copyWith(color: colorScheme.onSurface),
-                ),
-              ),
-              TonalChip(
-                label: appLocalizations.accessControlSelectedCount(selectedCount),
-                color: colorScheme.primary.opacity15,
-                foregroundColor: colorScheme.primary,
-              ),
-            ],
+          (
+            AccessControlMode.acceptSelected,
+            '${appLocalizations.accessControlAllow} ${accessControl.acceptList.length}',
           ),
         ],
+        value: accessControl.mode,
+        onChanged: onModeChanged,
       ),
     );
   }
