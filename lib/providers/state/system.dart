@@ -284,6 +284,14 @@ SharedState sharedState(Ref ref) {
   final detail = [trafficText, expiryText]
       .where((part) => part.isNotEmpty)
       .join(' · ');
+  // The stats row: data actually transferred through the tunnel, and how long it has been up.
+  final sessionTraffic = ref.watch(totalTrafficProvider);
+  final runTime = ref.watch(runTimeProvider);
+  final downText = sessionTraffic.down.traffic.show;
+  final upText = sessionTraffic.up.traffic.show;
+  final stats = runTime == null
+      ? '↓ $downText · ↑ $upText'
+      : '↓ $downText · ↑ $upText · ⏱ ${_uptime(runTime)}';
   // The servers the notification bolt pings: every node of the live group, the same sweep the
   // working screen's bolt runs. Empty in the simple portal — its bolt lives in the app, not in
   // the notification.
@@ -301,6 +309,7 @@ SharedState sharedState(Ref ref) {
     showPing: mode != Mode.global,
     pingServers: pingServers,
     detail: detail,
+    stats: stats,
     showStopAction: appSetting.showStopAction,
     stopText: currentAppLocalizations.stop,
     stopTip: currentAppLocalizations.stopVpn,
@@ -313,6 +322,17 @@ SharedState sharedState(Ref ref) {
     ),
     vpnOptions: ref.watch(vpnOptionsProvider).value,
   );
+}
+
+/// The tunnel's uptime as the owner reads it — "3ч 24м", "12м 5с", "40с".
+String _uptime(int milliseconds) {
+  final total = Duration(milliseconds: milliseconds);
+  final hours = total.inHours;
+  final minutes = total.inMinutes % 60;
+  final seconds = total.inSeconds % 60;
+  if (hours > 0) return '${hours}ч ${minutes}м';
+  if (minutes > 0) return '${minutes}м ${seconds}с';
+  return '${seconds}с';
 }
 
 @Riverpod(keepAlive: true)

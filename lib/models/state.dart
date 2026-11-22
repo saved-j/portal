@@ -199,6 +199,7 @@ abstract class SharedState with _$SharedState {
     @Default(false) bool showPing,
     @Default([]) List<String> pingServers,
     @Default('') String detail,
+    @Default('') String stats,
   }) = _SharedState;
 
   factory SharedState.fromJson(Map<String, Object?> json) =>

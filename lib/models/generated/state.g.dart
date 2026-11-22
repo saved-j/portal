@@ -28,6 +28,7 @@ _SharedState _$SharedStateFromJson(Map<String, dynamic> json) => _SharedState(
           .toList() ??
       const [],
   detail: json['detail'] as String? ?? '',
+  stats: json['stats'] as String? ?? '',
 );
 
 Map<String, dynamic> _$SharedStateToJson(_SharedState instance) =>
@@ -45,4 +46,5 @@ Map<String, dynamic> _$SharedStateToJson(_SharedState instance) =>
       'showPing': instance.showPing,
       'pingServers': instance.pingServers,
       'detail': instance.detail,
+      'stats': instance.stats,
     };

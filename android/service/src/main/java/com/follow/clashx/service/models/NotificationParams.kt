@@ -8,4 +8,5 @@ data class NotificationParams(
     val pingText: String = "PING",
     val showPing: Boolean = false,
     val detail: String = "",
+    val stats: String = "",
 )

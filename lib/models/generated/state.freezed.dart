@@ -5303,7 +5303,7 @@ as String?,
 /// @nodoc
 mixin _$SharedState {
 
- SetupParams? get setupParams; VpnOptions? get vpnOptions; String get stopTip; String get startTip; String get localNetworkTip; String get currentProfileName; String get stopText; bool get showStopAction; String get currentServer; String get pingText; bool get showPing; List<String> get pingServers; String get detail;
+ SetupParams? get setupParams; VpnOptions? get vpnOptions; String get stopTip; String get startTip; String get localNetworkTip; String get currentProfileName; String get stopText; bool get showStopAction; String get currentServer; String get pingText; bool get showPing; List<String> get pingServers; String get detail; String get stats;
 /// Create a copy of SharedState
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -5317,20 +5317,20 @@ $SharedStateCopyWith<SharedState> get copyWith => _$SharedStateCopyWithImpl<Shar
 @override
 bool operator ==(Object other) {
   final _this = this as SharedState;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SharedState&&(identical(other.setupParams, _this.setupParams) || other.setupParams == _this.setupParams)&&(identical(other.vpnOptions, _this.vpnOptions) || other.vpnOptions == _this.vpnOptions)&&(identical(other.stopTip, _this.stopTip) || other.stopTip == _this.stopTip)&&(identical(other.startTip, _this.startTip) || other.startTip == _this.startTip)&&(identical(other.localNetworkTip, _this.localNetworkTip) || other.localNetworkTip == _this.localNetworkTip)&&(identical(other.currentProfileName, _this.currentProfileName) || other.currentProfileName == _this.currentProfileName)&&(identical(other.stopText, _this.stopText) || other.stopText == _this.stopText)&&(identical(other.showStopAction, _this.showStopAction) || other.showStopAction == _this.showStopAction)&&(identical(other.currentServer, _this.currentServer) || other.currentServer == _this.currentServer)&&(identical(other.pingText, _this.pingText) || other.pingText == _this.pingText)&&(identical(other.showPing, _this.showPing) || other.showPing == _this.showPing)&&const DeepCollectionEquality().equals(other.pingServers, _this.pingServers)&&(identical(other.detail, _this.detail) || other.detail == _this.detail));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SharedState&&(identical(other.setupParams, _this.setupParams) || other.setupParams == _this.setupParams)&&(identical(other.vpnOptions, _this.vpnOptions) || other.vpnOptions == _this.vpnOptions)&&(identical(other.stopTip, _this.stopTip) || other.stopTip == _this.stopTip)&&(identical(other.startTip, _this.startTip) || other.startTip == _this.startTip)&&(identical(other.localNetworkTip, _this.localNetworkTip) || other.localNetworkTip == _this.localNetworkTip)&&(identical(other.currentProfileName, _this.currentProfileName) || other.currentProfileName == _this.currentProfileName)&&(identical(other.stopText, _this.stopText) || other.stopText == _this.stopText)&&(identical(other.showStopAction, _this.showStopAction) || other.showStopAction == _this.showStopAction)&&(identical(other.currentServer, _this.currentServer) || other.currentServer == _this.currentServer)&&(identical(other.pingText, _this.pingText) || other.pingText == _this.pingText)&&(identical(other.showPing, _this.showPing) || other.showPing == _this.showPing)&&const DeepCollectionEquality().equals(other.pingServers, _this.pingServers)&&(identical(other.detail, _this.detail) || other.detail == _this.detail)&&(identical(other.stats, _this.stats) || other.stats == _this.stats));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as SharedState;
-  return Object.hash(runtimeType,_this.setupParams,_this.vpnOptions,_this.stopTip,_this.startTip,_this.localNetworkTip,_this.currentProfileName,_this.stopText,_this.showStopAction,_this.currentServer,_this.pingText,_this.showPing,const DeepCollectionEquality().hash(_this.pingServers),_this.detail);
+  return Object.hash(runtimeType,_this.setupParams,_this.vpnOptions,_this.stopTip,_this.startTip,_this.localNetworkTip,_this.currentProfileName,_this.stopText,_this.showStopAction,_this.currentServer,_this.pingText,_this.showPing,const DeepCollectionEquality().hash(_this.pingServers),_this.detail,_this.stats);
 }
 
 @override
 String toString() {
   final _this = this as SharedState;
-  return 'SharedState(setupParams: ${_this.setupParams}, vpnOptions: ${_this.vpnOptions}, stopTip: ${_this.stopTip}, startTip: ${_this.startTip}, localNetworkTip: ${_this.localNetworkTip}, currentProfileName: ${_this.currentProfileName}, stopText: ${_this.stopText}, showStopAction: ${_this.showStopAction}, currentServer: ${_this.currentServer}, pingText: ${_this.pingText}, showPing: ${_this.showPing}, pingServers: ${_this.pingServers}, detail: ${_this.detail})';
+  return 'SharedState(setupParams: ${_this.setupParams}, vpnOptions: ${_this.vpnOptions}, stopTip: ${_this.stopTip}, startTip: ${_this.startTip}, localNetworkTip: ${_this.localNetworkTip}, currentProfileName: ${_this.currentProfileName}, stopText: ${_this.stopText}, showStopAction: ${_this.showStopAction}, currentServer: ${_this.currentServer}, pingText: ${_this.pingText}, showPing: ${_this.showPing}, pingServers: ${_this.pingServers}, detail: ${_this.detail}, stats: ${_this.stats})';
 }
 
 
@@ -5341,7 +5341,7 @@ abstract mixin class $SharedStateCopyWith<$Res>  {
   factory $SharedStateCopyWith(SharedState value, $Res Function(SharedState) _then) = _$SharedStateCopyWithImpl;
 @useResult
 $Res call({
- SetupParams? setupParams, VpnOptions? vpnOptions, String stopTip, String startTip, String localNetworkTip, String currentProfileName, String stopText, bool showStopAction, String currentServer, String pingText, bool showPing, List<String> pingServers, String detail
+ SetupParams? setupParams, VpnOptions? vpnOptions, String stopTip, String startTip, String localNetworkTip, String currentProfileName, String stopText, bool showStopAction, String currentServer, String pingText, bool showPing, List<String> pingServers, String detail, String stats
 });
 
 
@@ -5358,7 +5358,7 @@ class _$SharedStateCopyWithImpl<$Res>
 
 /// Create a copy of SharedState
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? setupParams = freezed,Object? vpnOptions = freezed,Object? stopTip = null,Object? startTip = null,Object? localNetworkTip = null,Object? currentProfileName = null,Object? stopText = null,Object? showStopAction = null,Object? currentServer = null,Object? pingText = null,Object? showPing = null,Object? pingServers = null,Object? detail = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? setupParams = freezed,Object? vpnOptions = freezed,Object? stopTip = null,Object? startTip = null,Object? localNetworkTip = null,Object? currentProfileName = null,Object? stopText = null,Object? showStopAction = null,Object? currentServer = null,Object? pingText = null,Object? showPing = null,Object? pingServers = null,Object? detail = null,Object? stats = null,}) {
   return _then(SharedState(
 setupParams: freezed == setupParams ? _self.setupParams : setupParams // ignore: cast_nullable_to_non_nullable
 as SetupParams?,vpnOptions: freezed == vpnOptions ? _self.vpnOptions : vpnOptions // ignore: cast_nullable_to_non_nullable
@@ -5373,6 +5373,7 @@ as String,pingText: null == pingText ? _self.pingText : pingText // ignore: cast
 as String,showPing: null == showPing ? _self.showPing : showPing // ignore: cast_nullable_to_non_nullable
 as bool,pingServers: null == pingServers ? _self.pingServers : pingServers // ignore: cast_nullable_to_non_nullable
 as List<String>,detail: null == detail ? _self.detail : detail // ignore: cast_nullable_to_non_nullable
+as String,stats: null == stats ? _self.stats : stats // ignore: cast_nullable_to_non_nullable
 as String,
   ));
 }
@@ -5482,10 +5483,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( SetupParams? setupParams,  VpnOptions? vpnOptions,  String stopTip,  String startTip,  String localNetworkTip,  String currentProfileName,  String stopText,  bool showStopAction,  String currentServer,  String pingText,  bool showPing,  List<String> pingServers,  String detail)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( SetupParams? setupParams,  VpnOptions? vpnOptions,  String stopTip,  String startTip,  String localNetworkTip,  String currentProfileName,  String stopText,  bool showStopAction,  String currentServer,  String pingText,  bool showPing,  List<String> pingServers,  String detail,  String stats)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SharedState() when $default != null:
-return $default(_that.setupParams,_that.vpnOptions,_that.stopTip,_that.startTip,_that.localNetworkTip,_that.currentProfileName,_that.stopText,_that.showStopAction,_that.currentServer,_that.pingText,_that.showPing,_that.pingServers,_that.detail);case _:
+return $default(_that.setupParams,_that.vpnOptions,_that.stopTip,_that.startTip,_that.localNetworkTip,_that.currentProfileName,_that.stopText,_that.showStopAction,_that.currentServer,_that.pingText,_that.showPing,_that.pingServers,_that.detail,_that.stats);case _:
   return orElse();
 
 }
@@ -5503,10 +5504,10 @@ return $default(_that.setupParams,_that.vpnOptions,_that.stopTip,_that.startTip,
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( SetupParams? setupParams,  VpnOptions? vpnOptions,  String stopTip,  String startTip,  String localNetworkTip,  String currentProfileName,  String stopText,  bool showStopAction,  String currentServer,  String pingText,  bool showPing,  List<String> pingServers,  String detail)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( SetupParams? setupParams,  VpnOptions? vpnOptions,  String stopTip,  String startTip,  String localNetworkTip,  String currentProfileName,  String stopText,  bool showStopAction,  String currentServer,  String pingText,  bool showPing,  List<String> pingServers,  String detail,  String stats)  $default,) {final _that = this;
 switch (_that) {
 case _SharedState():
-return $default(_that.setupParams,_that.vpnOptions,_that.stopTip,_that.startTip,_that.localNetworkTip,_that.currentProfileName,_that.stopText,_that.showStopAction,_that.currentServer,_that.pingText,_that.showPing,_that.pingServers,_that.detail);case _:
+return $default(_that.setupParams,_that.vpnOptions,_that.stopTip,_that.startTip,_that.localNetworkTip,_that.currentProfileName,_that.stopText,_that.showStopAction,_that.currentServer,_that.pingText,_that.showPing,_that.pingServers,_that.detail,_that.stats);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -5523,10 +5524,10 @@ return $default(_that.setupParams,_that.vpnOptions,_that.stopTip,_that.startTip,
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( SetupParams? setupParams,  VpnOptions? vpnOptions,  String stopTip,  String startTip,  String localNetworkTip,  String currentProfileName,  String stopText,  bool showStopAction,  String currentServer,  String pingText,  bool showPing,  List<String> pingServers,  String detail)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( SetupParams? setupParams,  VpnOptions? vpnOptions,  String stopTip,  String startTip,  String localNetworkTip,  String currentProfileName,  String stopText,  bool showStopAction,  String currentServer,  String pingText,  bool showPing,  List<String> pingServers,  String detail,  String stats)?  $default,) {final _that = this;
 switch (_that) {
 case _SharedState() when $default != null:
-return $default(_that.setupParams,_that.vpnOptions,_that.stopTip,_that.startTip,_that.localNetworkTip,_that.currentProfileName,_that.stopText,_that.showStopAction,_that.currentServer,_that.pingText,_that.showPing,_that.pingServers,_that.detail);case _:
+return $default(_that.setupParams,_that.vpnOptions,_that.stopTip,_that.startTip,_that.localNetworkTip,_that.currentProfileName,_that.stopText,_that.showStopAction,_that.currentServer,_that.pingText,_that.showPing,_that.pingServers,_that.detail,_that.stats);case _:
   return null;
 
 }
@@ -5538,7 +5539,7 @@ return $default(_that.setupParams,_that.vpnOptions,_that.stopTip,_that.startTip,
 @JsonSerializable()
 
 class _SharedState implements SharedState {
-  const _SharedState({this.setupParams, this.vpnOptions, required this.stopTip, required this.startTip, required this.localNetworkTip, required this.currentProfileName, required this.stopText, this.showStopAction = true, this.currentServer = '', this.pingText = '', this.showPing = false,  List<String> pingServers = const [], this.detail = ''}): _pingServers = pingServers;
+  const _SharedState({this.setupParams, this.vpnOptions, required this.stopTip, required this.startTip, required this.localNetworkTip, required this.currentProfileName, required this.stopText, this.showStopAction = true, this.currentServer = '', this.pingText = '', this.showPing = false,  List<String> pingServers = const [], this.detail = '', this.stats = ''}): _pingServers = pingServers;
   factory _SharedState.fromJson(Map<String, dynamic> json) => _$SharedStateFromJson(json);
 
 @override final  SetupParams? setupParams;
@@ -5560,6 +5561,7 @@ class _SharedState implements SharedState {
 }
 
 @override@JsonKey() final  String detail;
+@override@JsonKey() final  String stats;
 
 /// Create a copy of SharedState
 /// with the given fields replaced by the non-null parameter values.
@@ -5574,18 +5576,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SharedState&&(identical(other.setupParams, setupParams) || other.setupParams == setupParams)&&(identical(other.vpnOptions, vpnOptions) || other.vpnOptions == vpnOptions)&&(identical(other.stopTip, stopTip) || other.stopTip == stopTip)&&(identical(other.startTip, startTip) || other.startTip == startTip)&&(identical(other.localNetworkTip, localNetworkTip) || other.localNetworkTip == localNetworkTip)&&(identical(other.currentProfileName, currentProfileName) || other.currentProfileName == currentProfileName)&&(identical(other.stopText, stopText) || other.stopText == stopText)&&(identical(other.showStopAction, showStopAction) || other.showStopAction == showStopAction)&&(identical(other.currentServer, currentServer) || other.currentServer == currentServer)&&(identical(other.pingText, pingText) || other.pingText == pingText)&&(identical(other.showPing, showPing) || other.showPing == showPing)&&const DeepCollectionEquality().equals(other.pingServers, _pingServers)&&(identical(other.detail, detail) || other.detail == detail));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SharedState&&(identical(other.setupParams, setupParams) || other.setupParams == setupParams)&&(identical(other.vpnOptions, vpnOptions) || other.vpnOptions == vpnOptions)&&(identical(other.stopTip, stopTip) || other.stopTip == stopTip)&&(identical(other.startTip, startTip) || other.startTip == startTip)&&(identical(other.localNetworkTip, localNetworkTip) || other.localNetworkTip == localNetworkTip)&&(identical(other.currentProfileName, currentProfileName) || other.currentProfileName == currentProfileName)&&(identical(other.stopText, stopText) || other.stopText == stopText)&&(identical(other.showStopAction, showStopAction) || other.showStopAction == showStopAction)&&(identical(other.currentServer, currentServer) || other.currentServer == currentServer)&&(identical(other.pingText, pingText) || other.pingText == pingText)&&(identical(other.showPing, showPing) || other.showPing == showPing)&&const DeepCollectionEquality().equals(other.pingServers, _pingServers)&&(identical(other.detail, detail) || other.detail == detail)&&(identical(other.stats, stats) || other.stats == stats));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,setupParams,vpnOptions,stopTip,startTip,localNetworkTip,currentProfileName,stopText,showStopAction,currentServer,pingText,showPing,const DeepCollectionEquality().hash(_pingServers),detail);
+    return Object.hash(runtimeType,setupParams,vpnOptions,stopTip,startTip,localNetworkTip,currentProfileName,stopText,showStopAction,currentServer,pingText,showPing,const DeepCollectionEquality().hash(_pingServers),detail,stats);
 }
 
 @override
 String toString() {
-    return 'SharedState(setupParams: $setupParams, vpnOptions: $vpnOptions, stopTip: $stopTip, startTip: $startTip, localNetworkTip: $localNetworkTip, currentProfileName: $currentProfileName, stopText: $stopText, showStopAction: $showStopAction, currentServer: $currentServer, pingText: $pingText, showPing: $showPing, pingServers: $pingServers, detail: $detail)';
+    return 'SharedState(setupParams: $setupParams, vpnOptions: $vpnOptions, stopTip: $stopTip, startTip: $startTip, localNetworkTip: $localNetworkTip, currentProfileName: $currentProfileName, stopText: $stopText, showStopAction: $showStopAction, currentServer: $currentServer, pingText: $pingText, showPing: $showPing, pingServers: $pingServers, detail: $detail, stats: $stats)';
 }
 
 
@@ -5596,7 +5598,7 @@ abstract mixin class _$SharedStateCopyWith<$Res> implements $SharedStateCopyWith
   factory _$SharedStateCopyWith(_SharedState value, $Res Function(_SharedState) _then) = __$SharedStateCopyWithImpl;
 @override @useResult
 $Res call({
- SetupParams? setupParams, VpnOptions? vpnOptions, String stopTip, String startTip, String localNetworkTip, String currentProfileName, String stopText, bool showStopAction, String currentServer, String pingText, bool showPing, List<String> pingServers, String detail
+ SetupParams? setupParams, VpnOptions? vpnOptions, String stopTip, String startTip, String localNetworkTip, String currentProfileName, String stopText, bool showStopAction, String currentServer, String pingText, bool showPing, List<String> pingServers, String detail, String stats
 });
 
 
@@ -5613,7 +5615,7 @@ class __$SharedStateCopyWithImpl<$Res>
 
 /// Create a copy of SharedState
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? setupParams = freezed,Object? vpnOptions = freezed,Object? stopTip = null,Object? startTip = null,Object? localNetworkTip = null,Object? currentProfileName = null,Object? stopText = null,Object? showStopAction = null,Object? currentServer = null,Object? pingText = null,Object? showPing = null,Object? pingServers = null,Object? detail = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? setupParams = freezed,Object? vpnOptions = freezed,Object? stopTip = null,Object? startTip = null,Object? localNetworkTip = null,Object? currentProfileName = null,Object? stopText = null,Object? showStopAction = null,Object? currentServer = null,Object? pingText = null,Object? showPing = null,Object? pingServers = null,Object? detail = null,Object? stats = null,}) {
   return _then(_SharedState(
 setupParams: freezed == setupParams ? _self.setupParams : setupParams // ignore: cast_nullable_to_non_nullable
 as SetupParams?,vpnOptions: freezed == vpnOptions ? _self.vpnOptions : vpnOptions // ignore: cast_nullable_to_non_nullable
@@ -5628,6 +5630,7 @@ as String,pingText: null == pingText ? _self.pingText : pingText // ignore: cast
 as String,showPing: null == showPing ? _self.showPing : showPing // ignore: cast_nullable_to_non_nullable
 as bool,pingServers: null == pingServers ? _self._pingServers : pingServers // ignore: cast_nullable_to_non_nullable
 as List<String>,detail: null == detail ? _self.detail : detail // ignore: cast_nullable_to_non_nullable
+as String,stats: null == stats ? _self.stats : stats // ignore: cast_nullable_to_non_nullable
 as String,
   ));
 }

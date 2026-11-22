@@ -80,6 +80,11 @@ internal class NotificationModule(
                 R.id.notif_info,
                 if (params.detail.isNotEmpty()) View.VISIBLE else View.GONE,
             )
+            setTextViewText(R.id.notif_stats, params.stats)
+            setViewVisibility(
+                R.id.notif_stats,
+                if (params.stats.isNotEmpty()) View.VISIBLE else View.GONE,
+            )
             setTextViewText(R.id.notif_stop, params.stopText)
             setTextColor(R.id.notif_stop, STOP_COLOR)
             setOnClickPendingIntent(R.id.notif_stop, stopIntent)
