@@ -62,6 +62,14 @@ val Intent.toPendingIntent: PendingIntent
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
+val BroadcastAction.toPendingBroadcast: PendingIntent
+    get() = PendingIntent.getBroadcast(
+        GlobalState.application,
+        0,
+        Intent(action).apply { component = Components.serviceBroadcastReceiver },
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
 fun Context.ensureNotificationChannel() {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
         return

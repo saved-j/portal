@@ -4986,6 +4986,11 @@ class AppLocalizations {
     return Intl.message('Delay test', name: 'delayTest', desc: '', args: []);
   }
 
+  /// `Test` — the short label for the notification's ping button.
+  String get testShort {
+    return Intl.message('Test', name: 'testShort', desc: '', args: []);
+  }
+
   /// `Test every delay`
   String get delayTestAll {
     return Intl.message(

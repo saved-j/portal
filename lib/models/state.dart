@@ -198,6 +198,7 @@ abstract class SharedState with _$SharedState {
     @Default('') String pingText,
     @Default(false) bool showPing,
     @Default([]) List<String> pingServers,
+    @Default('') String latency,
     @Default('') String detail,
     @Default('') String stats,
   }) = _SharedState;

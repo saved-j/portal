@@ -708,6 +708,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "delay": MessageLookupByLibrary.simpleMessage("Задержка"),
     "delayFailed": MessageLookupByLibrary.simpleMessage("Сбой"),
     "delayTest": MessageLookupByLibrary.simpleMessage("Тест задержки"),
+    "testShort": MessageLookupByLibrary.simpleMessage("Тест"),
     "delayTestAll": MessageLookupByLibrary.simpleMessage(
       "Проверить задержку всех узлов",
     ),

@@ -259,11 +259,10 @@ SharedState sharedState(Ref ref) {
           selectedMap: selectedMap,
           delayMap: delayMap,
         ).delay;
-  // The server line carries the latency; the button stays a plain "Test".
-  final currentServer = connectedDelay > 0
-      ? '$serverLine  ⚡ ${connectedDelay} ms'
-      : serverLine;
-  final pingText = currentAppLocalizations.delayTest;
+  // The server line carries the server only; the latency sits beside it on the right.
+  final currentServer = serverLine;
+  final latency = connectedDelay > 0 ? '⚡ ${connectedDelay} ms' : '';
+  final pingText = currentAppLocalizations.testShort;
   // The info line: used traffic and the subscription's end date. This panel states usage only
   // in its own title and sends no subscription-userinfo, so the title's number is the fallback.
   final profile = ref.watch(currentProfileProvider);
@@ -308,6 +307,7 @@ SharedState sharedState(Ref ref) {
     pingText: pingText,
     showPing: mode != Mode.global,
     pingServers: pingServers,
+    latency: latency,
     detail: detail,
     stats: stats,
     showStopAction: appSetting.showStopAction,

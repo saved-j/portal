@@ -27,6 +27,7 @@ _SharedState _$SharedStateFromJson(Map<String, dynamic> json) => _SharedState(
           ?.map((e) => e as String)
           .toList() ??
       const [],
+  latency: json['latency'] as String? ?? '',
   detail: json['detail'] as String? ?? '',
   stats: json['stats'] as String? ?? '',
 );
@@ -45,6 +46,7 @@ Map<String, dynamic> _$SharedStateToJson(_SharedState instance) =>
       'pingText': instance.pingText,
       'showPing': instance.showPing,
       'pingServers': instance.pingServers,
+      'latency': instance.latency,
       'detail': instance.detail,
       'stats': instance.stats,
     };

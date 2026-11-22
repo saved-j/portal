@@ -10,11 +10,13 @@ import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import com.follow.clashx.common.Components
 import com.follow.clashx.common.GlobalState
+import com.follow.clashx.common.BroadcastAction
 import com.follow.clashx.common.QuickAction
 import com.follow.clashx.common.ensureNotificationChannel
 import com.follow.clashx.common.quickIntent
 import com.follow.clashx.common.receiveBroadcastFlow
 import com.follow.clashx.common.startForeground
+import com.follow.clashx.common.toPendingBroadcast
 import com.follow.clashx.common.toPendingIntent
 import com.follow.clashx.service.R
 import com.follow.clashx.service.ServiceConfig
@@ -67,18 +69,25 @@ internal class NotificationModule(
 
     private val stopIntent by lazy { QuickAction.STOP.quickIntent.toPendingIntent }
 
-    private val pingIntent by lazy { QuickAction.PING.quickIntent.toPendingIntent }
+    // The test button is a broadcast, not an activity, so tapping it never brings the app
+    // to the foreground — the ping just runs in the service.
+    private val pingIntent by lazy { BroadcastAction.PING.toPendingBroadcast }
 
     private fun update(params: NotificationParams) {
         // The expanded shade is a custom view because the standard action row always stacks its
         // buttons together, and the owner wants Stop on the left and the bolt on the right.
         val views = RemoteViews(service.packageName, R.layout.notification_portal).apply {
             setTextViewText(R.id.notif_title, params.title)
-            setTextViewText(R.id.notif_server, params.server)
             setTextViewText(R.id.notif_info, params.detail)
             setViewVisibility(
                 R.id.notif_info,
                 if (params.detail.isNotEmpty()) View.VISIBLE else View.GONE,
+            )
+            setTextViewText(R.id.notif_server, params.server)
+            setTextViewText(R.id.notif_latency, params.latency)
+            setViewVisibility(
+                R.id.notif_latency,
+                if (params.latency.isNotEmpty()) View.VISIBLE else View.GONE,
             )
             setTextViewText(R.id.notif_stats, params.stats)
             setViewVisibility(

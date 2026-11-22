@@ -141,6 +141,7 @@
             <intent-filter>
                 <action android:name="${applicationId}.intent.action.VPN_START_REQUESTED" />
                 <action android:name="${applicationId}.intent.action.VPN_REVOKED" />
+                <action android:name="${applicationId}.intent.action.PING" />
             </intent-filter>
         </receiver>
 

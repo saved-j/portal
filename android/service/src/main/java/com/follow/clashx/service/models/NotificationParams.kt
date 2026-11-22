@@ -7,6 +7,7 @@ data class NotificationParams(
     val showStopAction: Boolean = true,
     val pingText: String = "PING",
     val showPing: Boolean = false,
+    val latency: String = "",
     val detail: String = "",
     val stats: String = "",
 )

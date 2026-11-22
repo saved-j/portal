@@ -1,36 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The expanded shade: the service name, the server, and the two controls in opposite
-     corners — Stop on the left, the bolt on the right. A custom view, because the standard
-     action row always stacks its buttons together. -->
+<!-- The expanded shade: service name + traffic on the first (longest) line, server + latency
+     below it, then the stats row, then Stop on the left and Test on the right. A custom view,
+     because the standard action row always stacks its buttons together. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="8dp">
 
-    <TextView
-        android:id="@+id/notif_title"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textAppearance="@android:style/TextAppearance.Material.Notification.Title" />
+        android:orientation="horizontal">
 
-    <TextView
-        android:id="@+id/notif_info"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textAppearance="@android:style/TextAppearance.Material.Notification" />
+        <TextView
+            android:id="@+id/notif_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification.Title" />
 
-    <TextView
-        android:id="@+id/notif_server"
+        <TextView
+            android:id="@+id/notif_info"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:gravity="end"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification" />
+    </LinearLayout>
+
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:maxLines="2"
-        android:textAppearance="@android:style/TextAppearance.Material.Notification" />
+        android:layout_marginTop="2dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/notif_server"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification" />
+
+        <TextView
+            android:id="@+id/notif_latency"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:gravity="end"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textAppearance="@android:style/TextAppearance.Material.Notification" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/notif_stats"

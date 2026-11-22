@@ -12,6 +12,7 @@ enum class QuickAction {
 enum class BroadcastAction {
     VPN_START_REQUESTED,
     VPN_REVOKED,
+    PING,
 }
 
 enum class AccessControlMode {
