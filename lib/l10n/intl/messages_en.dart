@@ -2121,7 +2121,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Here are all the routing rules of your subscription at once. Enter the tiles and choose servers.\n\n⏻ — turns a filter on and routes it, Direct — routes it straight through.\n⚡️ — checks the server latency; the lower, the better.",
     ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage(
-      "Press the portal: it opens and starts carrying traffic.",
+      "Press the portal: it opens and starts carrying traffic.\n\nAfter you start, the app will ask for the device-search permission. It can turn itself off automatically on chosen Wi-Fi networks, for example when your home router already runs a VPN.\n\nBy the way, Portal also installs on routers. More in the project's Telegram chat. All the links are in About, in the settings.",
     ),
     "tutorialBody7": MessageLookupByLibrary.simpleMessage(
       "Press the bolt and the app measures the delay to every server in this mode — a TLS handshake to the test host inside the tunnel — turning the dashes into numbers. Then hold a finger on a server's row to measure just that one. Check two or three servers this way.",

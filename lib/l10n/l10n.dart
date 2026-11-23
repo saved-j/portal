@@ -9385,10 +9385,10 @@ class AppLocalizations {
     return Intl.message('Start', name: 'tutorialTitle6', desc: '', args: []);
   }
 
-  /// `And finally — start.`
+  /// `Press the portal: it opens and starts carrying traffic.\n\nAfter you start, the app will ask for the device-search permission. It can turn itself off automatically on chosen Wi-Fi networks, for example when your home router already runs a VPN.\n\nBy the way, Portal also installs on routers. More in the project's Telegram chat. All the links are in About, in the settings.`
   String get tutorialBody6 {
     return Intl.message(
-      'And finally — start.',
+      'Press the portal: it opens and starts carrying traffic.\n\nAfter you start, the app will ask for the device-search permission. It can turn itself off automatically on chosen Wi-Fi networks, for example when your home router already runs a VPN.\n\nBy the way, Portal also installs on routers. More in the project\'s Telegram chat. All the links are in About, in the settings.',
       name: 'tutorialBody6',
       desc: '',
       args: [],
