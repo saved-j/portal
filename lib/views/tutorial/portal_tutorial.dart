@@ -139,11 +139,12 @@ const tutorialSteps = <TutorialStep>[
     number: 2,
     opensScreen: true,
   ),
-  // The word, not the row: the dashboard opens on the name and nothing else.
+  // The word, not the row: the dashboard opens on the name and nothing else. Like the filter
+  // list, this page is done when the owner closes the screen he opened — not on the tap that
+  // opened it, so the routing-rules hint has time to sit over the list it explains.
   TutorialStep(
     target: TutorialTarget.modeLabel,
     number: 5,
-    done: TutorialEvent.labelTapped,
     opensScreen: true,
   ),
   // The page asks for the measurement the button performs, and the list it leaves behind is the
