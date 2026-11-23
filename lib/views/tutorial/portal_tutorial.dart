@@ -958,12 +958,18 @@ class _CardSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // An "above"/"left" card hugs the bottom edge of its gap — right against the control it
+    // explains — and grows up only as tall as its own words. Anchoring with `bottom` instead of
+    // `top = roomBottom - cardSpace` fixes a short card being pinned to the far end of the gap
+    // with half a screen of air between it and the control.
+    final screenHeight = MediaQuery.sizeOf(context).height;
     return Stack(
       children: [
         Positioned(
           left: left,
           width: width,
-          top: upper ? roomBottom - cardSpace : roomTop,
+          top: upper ? null : roomTop,
+          bottom: upper ? screenHeight - roomBottom : null,
           child: ConstrainedBox(
             key: tutorialCardKey,
             constraints: BoxConstraints(maxHeight: cardSpace, maxWidth: width),
