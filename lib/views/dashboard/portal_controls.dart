@@ -370,16 +370,27 @@ class PortalBypassNotifier extends Notifier<Map<String, String?>> {
   /// on is left as it is — the tap never switches it off.
   void activate(WidgetRef ref, Group group) {
     final action = ref.read(proxiesActionProvider.notifier);
-    if (!state.containsKey(group.name)) return;
-    final restore = state[group.name];
-    state = {...state}..remove(group.name);
-    if (restore != null) {
-      // A tile whose remembered pick was DIRECT has no server of its own to return to;
-      // turning it back on would land on DIRECT again and read as dead. Put it on the
-      // group's auto pick instead (AutoRussia for the Ru-apps one) so the toggle visibly works.
-      final effective =
-          _isBuiltinOutbound(restore) ? (_autoFallbackFor(group) ?? restore) : restore;
-      action.changeProxy(groupName: group.name, proxyName: effective);
+    // A long-press bypass: the tile remembers the server it was on and returns to it.
+    if (state.containsKey(group.name)) {
+      final restore = state[group.name];
+      state = {...state}..remove(group.name);
+      if (restore != null) {
+        // A tile whose remembered pick was DIRECT has no server of its own to return to;
+        // turning it back on would land on DIRECT again and read as dead. Put it on the
+        // group's auto pick instead (AutoRussia for the Ru-apps one) so the toggle visibly works.
+        final effective =
+            _isBuiltinOutbound(restore) ? (_autoFallbackFor(group) ?? restore) : restore;
+        action.changeProxy(groupName: group.name, proxyName: effective);
+      }
+      return;
+    }
+    // A tile that sits on DIRECT without a remembered bypass is a default-DIRECT tile: the tap
+    // must move it onto the group's auto pick, not leave it on DIRECT (which reads as dead).
+    if (_isBuiltinOutbound(group.now ?? '')) {
+      final auto = _autoFallbackFor(group);
+      if (auto != null) {
+        action.changeProxy(groupName: group.name, proxyName: auto);
+      }
     }
   }
 
