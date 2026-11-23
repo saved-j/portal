@@ -230,17 +230,21 @@ SharedState sharedState(Ref ref) {
   final pick = mode == Mode.global
       ? portalXrayPickFor(fullSettings, profileId)
       : portalRulePickFor(fullSettings, profileId, activeGroup);
+  // The stored pick is the owner's choice; when none is stored (a default-DIRECT filter or one
+  // never picked) the engine's own selection is the honest route — DIRECT shows DIRECT, never an
+  // empty line.
+  final pickOrEngine = pick.isNotEmpty ? pick : (selectedMap[activeGroup] ?? '');
   final resolvedPick = computeRealSelectedProxyState(
-    pick,
+    pickOrEngine,
     groups: allGroups,
     selectedMap: selectedMap,
   );
   // A group pick resolves to a node; the shade shows the whole chain so the owner reads both
   // the pick ("⚡ Auto") and the node it landed on ("Южная Корея").
   final resolvedName = resolvedPick.proxyName;
-  final serverLine = resolvedName.isNotEmpty && resolvedName != pick
-      ? '$pick - $resolvedName'
-      : pick;
+  final serverLine = resolvedName.isNotEmpty && resolvedName != pickOrEngine
+      ? '$pickOrEngine - $resolvedName'
+      : pickOrEngine;
   // The latency is measured for the actual node, not for the chain name shown above.
   final delayMap = ref.watch(delayDataSourceProvider);
   final defaultTestUrl = ref.watch(
@@ -259,8 +263,12 @@ SharedState sharedState(Ref ref) {
           selectedMap: selectedMap,
           delayMap: delayMap,
         ).delay;
-  // The server line carries the server only; the latency sits beside it on the right.
-  final currentServer = serverLine;
+  // The server line carries the server only; the latency sits beside it on the right. The
+  // filter's flag or first letter rides in front so the owner reads which filter the route
+  // belongs to even in the collapsed shade.
+  final filterMark = mode == Mode.global ? '' : _filterMark(activeGroup);
+  final currentServer =
+      filterMark.isNotEmpty ? '$filterMark  $serverLine' : serverLine;
   final latency = connectedDelay > 0 ? '⚡ ${connectedDelay} ms' : '';
   final pingText = mode == Mode.global
       ? currentAppLocalizations.nextServer
@@ -418,4 +426,13 @@ bool suspend(Ref ref) {
   final currentSSID = ref.watch(currentSSIDProvider);
   final excludeSSIDs = ref.watch(excludeSSIDsProvider);
   return excludeSSIDs.contains(currentSSID);
+}
+
+/// The filter's own mark for the shade: a leading flag (two regional indicators) when the name
+/// carries one, otherwise the first letter or digit — the same mark the tile shows.
+String _filterMark(String name) {
+  final flag = RegExp(r'^[\u{1F1E6}-\u{1F1FF}]{2}', unicode: true).firstMatch(name);
+  if (flag != null) return flag.group(0)!;
+  final letter = RegExp(r'[\p{L}\p{N}]', unicode: true).firstMatch(name)?.group(0);
+  return letter?.toUpperCase() ?? '';
 }
