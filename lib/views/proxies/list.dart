@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../dashboard/portal_controls.dart';
+import '../tutorial/tutorial_bus.dart';
 import 'card.dart';
 import 'common.dart';
 
@@ -906,6 +907,7 @@ class _GroupActions extends ConsumerWidget {
                 : context.appLocalizations.portalBypassFilter,
             onPressed: () {
               HapticFeedback.selectionClick();
+              TutorialBus.fire(TutorialEvent.filterToggled);
               ref.read(portalBypassProvider.notifier).toggle(ref, group);
             },
             icon: Icon(

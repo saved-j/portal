@@ -464,6 +464,17 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       _filterHint?.markNeedsBuild();
       return;
     }
+    // The server list teaches the routing rules; one power toggle on a filter is the lesson
+    // done — the owner used the control the hint described, so the page advances and the list
+    // closes on its own.
+    if (step.number == 5 &&
+        _served &&
+        TutorialBus.last.value == TutorialEvent.filterToggled) {
+      TutorialBus.last.value = null;
+      _nav?.pop();
+      _next();
+      return;
+    }
     if (step.done == null || step.done != TutorialBus.last.value) return;
     TutorialBus.last.value = null;
     // The tile page shows the result before it closes: the owner should read what his own
@@ -812,6 +823,26 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
             ),
             ),
           ),
+          // The first page alone offers a quiet way out: a small close in the corner ends the
+          // tour, so a returning owner is not marched through it again.
+          if (_index == 0)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Material(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                      onPressed: _finish,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           // One way forward: the card's own button. A second Next floating at the bottom made
           // the tour read as two different screens fighting for the same tap.
         ],
@@ -994,6 +1025,37 @@ class _FilterHint extends StatelessWidget {
   final bool ok;
   final VoidCallback onOk;
 
+  /// The hint's words, with a line prefixed by `§` drawn as a small footnote — the legend's
+  /// main points read at a glance, the fine print under them stays out of the way.
+  TextSpan _bodySpan(ThemeData theme) {
+    final normal = theme.textTheme.bodyMedium?.copyWith(height: 1.35);
+    final small = theme.textTheme.labelSmall?.copyWith(
+      height: 1.3,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final lines = text.split('\n');
+    return TextSpan(
+      children: [
+        for (var i = 0; i < lines.length; i++)
+          ..._lineSpan(lines[i], normal, small, last: i == lines.length - 1),
+      ],
+    );
+  }
+
+  Iterable<TextSpan> _lineSpan(
+    String line,
+    TextStyle? normal,
+    TextStyle? small, {
+    required bool last,
+  }) {
+    final isSmall = line.startsWith('§');
+    final content = isSmall ? line.substring(1).trim() : line;
+    return [
+      TextSpan(text: content, style: isSmall ? small : normal),
+      if (!last) const TextSpan(text: '\n'),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1019,9 +1081,8 @@ class _FilterHint extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          text,
-                          style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
+                        Text.rich(
+                          _bodySpan(theme),
                         ),
                         if (ok) ...[
                           const SizedBox(height: 10),

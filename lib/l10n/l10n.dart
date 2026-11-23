@@ -9375,10 +9375,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Here are all the routing rules of your subscription at once. Enter the tiles and choose servers.\n\n⏻ — turns a filter on and routes it, Direct — routes it straight through.\n⚡️ — checks the server latency; the lower, the better.`
+  /// `Here are all the routing rules of your subscription at once. Enter the tiles and choose servers.\n🔌 — manages a filter: whether to tunnel through a country or not.\n§ OFF is done through Direct — straight through, past the tunnel.\n⚡️ — checks the server latency; the lower, the better.\n§ Under blocking, bandwidth depends more on your provider. A server can be close while the channel to it is throttled.`
   String get tutorialServerListHint {
     return Intl.message(
-      'Here are all the routing rules of your subscription at once. Enter the tiles and choose servers.\n\n⏻ — turns a filter on and routes it, Direct — routes it straight through.\n⚡️ — checks the server latency; the lower, the better.',
+      'Here are all the routing rules of your subscription at once. Enter the tiles and choose servers.\n🔌 — manages a filter: whether to tunnel through a country or not.\n§ OFF is done through Direct — straight through, past the tunnel.\n⚡️ — checks the server latency; the lower, the better.\n§ Under blocking, bandwidth depends more on your provider. A server can be close while the channel to it is throttled.',
       name: 'tutorialServerListHint',
       desc: '',
       args: [],
