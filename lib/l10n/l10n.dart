@@ -9370,6 +9370,16 @@ class AppLocalizations {
     );
   }
 
+  /// `Here are all the routing rules of your subscription at once. Enter the tiles and choose servers.\n\n⏻ — turns a filter on and routes it, Direct — routes it straight through.\n⚡️ — checks the server latency; the lower, the better.`
+  String get tutorialServerListHint {
+    return Intl.message(
+      'Here are all the routing rules of your subscription at once. Enter the tiles and choose servers.\n\n⏻ — turns a filter on and routes it, Direct — routes it straight through.\n⚡️ — checks the server latency; the lower, the better.',
+      name: 'tutorialServerListHint',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `Start`
   String get tutorialTitle6 {
     return Intl.message('Start', name: 'tutorialTitle6', desc: '', args: []);

@@ -2117,6 +2117,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody5": MessageLookupByLibrary.simpleMessage(
       "Tapping “Portal network” opens the screen where every filter is set at once — on one page.",
     ),
+    "tutorialServerListHint": MessageLookupByLibrary.simpleMessage(
+      "Here are all the routing rules of your subscription at once. Enter the tiles and choose servers.\n\n⏻ — turns a filter on and routes it, Direct — routes it straight through.\n⚡️ — checks the server latency; the lower, the better.",
+    ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage(
       "Press the portal: it opens and starts carrying traffic.",
     ),

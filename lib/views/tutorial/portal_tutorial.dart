@@ -310,6 +310,11 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
           tourResetTiles.value++;
           _showFilterHint();
         }
+        // The server list is the routing rules in full; its symbols are worth a word before the
+        // owner starts tapping servers.
+        if (_steps[_index].number == 5) {
+          _showServerListHint();
+        }
       }
       setState(() {});
       return;
@@ -340,11 +345,32 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       late final OverlayEntry entry;
       entry = OverlayEntry(
         builder: (_) => _FilterHint(
+          text: context.appLocalizations.tutorialBody2Off,
           ok: _filterToggles >= 1,
           onOk: () {
             _removeFilterHint();
             _nav?.pop();
           },
+        ),
+      );
+      _filterHint = entry;
+      overlay.insert(entry);
+    });
+  }
+
+  /// Draws the routing-rules hint over the server list once the network-mode page opens it. The
+  /// symbols are explained here so the first visit to the list already has a key to read it.
+  void _showServerListHint() {
+    _removeFilterHint();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _filterHint != null) return;
+      final overlay = Overlay.of(context, rootOverlay: true);
+      late final OverlayEntry entry;
+      entry = OverlayEntry(
+        builder: (_) => _FilterHint(
+          text: context.appLocalizations.tutorialServerListHint,
+          ok: false,
+          onOk: () {},
         ),
       );
       _filterHint = entry;
@@ -955,8 +981,9 @@ class _CardSlot extends StatelessWidget {
 /// once a filter is off. It lives in its own overlay entry so it can sit on top of the sheet the
 /// page opened, without a barrier that would keep the sheet's own controls from the owner.
 class _FilterHint extends StatelessWidget {
-  const _FilterHint({required this.ok, required this.onOk});
+  const _FilterHint({required this.text, required this.ok, required this.onOk});
 
+  final String text;
   final bool ok;
   final VoidCallback onOk;
 
@@ -986,7 +1013,7 @@ class _FilterHint extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          context.appLocalizations.tutorialBody2Off,
+                          text,
                           style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
                         ),
                         if (ok) ...[

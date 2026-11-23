@@ -2214,6 +2214,9 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody5": MessageLookupByLibrary.simpleMessage(
       "Нажатие на «Сеть порталов» открывает экран, где все фильтры настраиваются сразу — на одном экране.",
     ),
+    "tutorialServerListHint": MessageLookupByLibrary.simpleMessage(
+      "Здесь представлены все правила маршрутизации вашей подписки сразу. Заходите в плитки, выбирайте сервера.\n\n⏻ — включает фильтр и пускает через него, Direct — пускает напрямую.\n⚡️ — проверяет задержку до сервера, чем ниже — тем лучше.",
+    ),
     "tutorialBody6": MessageLookupByLibrary.simpleMessage(
       "Нажмите на портал — он откроется и начнёт работу.",
     ),
