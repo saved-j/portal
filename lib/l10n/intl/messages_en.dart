@@ -2101,7 +2101,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "tutorialBody1": MessageLookupByLibrary.simpleMessage(
       "The portal network splits traffic, sending different apps through different countries. That is dynamic split tunnelling.\n\nIf you do not need it, the app works in the “simple mode”, where almost all traffic goes through one country.\n\nSwitch the mode here.",
     ),
-    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("These are the filters that split traffic for individual apps — you can give each filter its own server. Sweep the tiles left and right."),
+    "tutorialBody1Chips": MessageLookupByLibrary.simpleMessage("These are the filters that split traffic for different apps. Each filter can be given its own server, or left on «auto». Swipe left and right to look at the list of filters."),
     "tutorialBody2": MessageLookupByLibrary.simpleMessage(
       "The button on the left opens the list of filters that split the traffic. Here you can reorder the filters and turn off the ones you do not need.",
     ),
@@ -2109,7 +2109,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Turn off the filters you do not need.",
     ),
     "tutorialBody3": MessageLookupByLibrary.simpleMessage(
-      "Tap a tile to bring that filter into the portal, and hold it to take it out again — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.",
+      "Holding a tile disables that filter, a single tap enables it back. Try it.\n\nIf you need the VPN only for Telegram, Instagram and YouTube, you can leave just those tiles enabled.",
     ),
     "tutorialBody4": MessageLookupByLibrary.simpleMessage(
       "A double tap on a tile changes the way the tiles look.",

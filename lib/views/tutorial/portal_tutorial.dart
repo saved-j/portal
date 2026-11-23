@@ -196,6 +196,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// How many times the owner has switched the tile look on the page that asks for it.
   int _chipTaps = 0;
 
+  /// How many times the owner has toggled a filter on the tap/hold page. Three toggles, or
+  /// the OK, move the page on.
+  int _chipToggles = 0;
+
   /// How many rows the owner has held to ping on the bolt page. Three held pings, or Next,
   /// are the two ways past the page.
   int _pingHolds = 0;
@@ -404,7 +408,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       TutorialBus.last.value = null;
       _chipScrolls += 1;
       setState(() {});
-      if (_chipScrolls >= 3) {
+      if (_chipScrolls >= 2) {
         _next();
       }
       return;
@@ -462,9 +466,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       }
       return;
     }
-    if (step.number == 3 && !_confirmed) {
+    if (step.number == 3) {
+      _chipToggles += 1;
       setState(() => _confirmed = true);
-      return;
+      if (_chipToggles < 3) return;
     }
     // The bolt leaves numbers behind. The point of this page is to see the figures on the
     // servers, not the bolt: the focus moves onto the list, the mask lifts, the scroll is freed
@@ -481,11 +486,11 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       return;
     }
     // The look of the tiles changes under the finger, so one double tap is not enough to see it:
-    // the page stays until ten taps have happened or the owner presses Next himself.
+    // the page stays until four changes have happened or the owner presses Next himself.
     if (step.number == 4) {
       _chipTaps += 1;
       setState(() => _confirmed = true);
-      if (_chipTaps < 10) return;
+      if (_chipTaps < 4) return;
     }
     _next();
   }
@@ -508,6 +513,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     _served = false;
     _confirmed = false;
     _chipTaps = 0;
+    _chipToggles = 0;
     _pingHolds = 0;
     _filterToggles = 0;
     _removeFilterHint();

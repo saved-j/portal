@@ -9270,10 +9270,10 @@ class AppLocalizations {
       args: [],
     );
   }
-  /// `These are the filters that split traffic for individual apps — you can give each filter its own server. Sweep the tiles left and right.`
+  /// `These are the filters that split traffic for different apps. Each filter can be given its own server, or left on «auto». Swipe left and right to look at the list of filters.`
   String get tutorialBody1Chips {
     return Intl.message(
-      'These are the filters that split traffic for individual apps — you can give each filter its own server. Sweep the tiles left and right.',
+      'These are the filters that split traffic for different apps. Each filter can be given its own server, or left on «auto». Swipe left and right to look at the list of filters.',
       name: 'tutorialBody1Chips',
       desc: '',
       args: [],
@@ -9320,10 +9320,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Holding a finger on a tile switches that filter on and off — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.`
+  /// `Holding a tile disables that filter, a single tap enables it back. Try it.\n\nIf you need the VPN only for Telegram, Instagram and YouTube, you can leave just those tiles enabled.`
   String get tutorialBody3 {
     return Intl.message(
-      'Tap a tile to bring that filter into the portal, and hold it to take it out again — that is how tunnelling is set for individual services.\n\nFor example, you can keep the tunnel ONLY for Telegram, YouTube and Instagram.',
+      'Holding a tile disables that filter, a single tap enables it back. Try it.\n\nIf you need the VPN only for Telegram, Instagram and YouTube, you can leave just those tiles enabled.',
       name: 'tutorialBody3',
       desc: '',
       args: [],
