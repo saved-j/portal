@@ -7,6 +7,9 @@ import com.follow.clashx.common.PortalOwner
 import com.follow.clashx.common.PortalRuntime
 import com.follow.clashx.common.PortalRuntimeState
 import com.follow.clashx.common.XrayTunHolder
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -85,6 +88,10 @@ object PortalRuntimeCoordinator {
 
     /// The last document a run actually started on, for a start with no Flutter engine.
     private const val SAVED_DOCUMENT = "portal-last-node.json"
+
+    // The tags the child document marks its nodes with; they mirror `portal_document.dart`.
+    private const val NODE_TAG_PREFIX = "node:"
+    private const val SELECTED_TAG = "portal-selected"
 
     private val mutex = Mutex()
 
@@ -230,6 +237,57 @@ object PortalRuntimeCoordinator {
             }
         }
         PortalOutcome(ok = ok, reason = lastError)
+    }
+
+    /// The shade's "next server" in the simple portal: the saved document holds every node with
+    /// the selected one tagged `portal-selected`, so cycling rewrites that one outbound to the
+    /// next node and starts the child on it — no Flutter, the same way the bolt pings.
+    suspend fun nextServer(): PortalOutcome = mutex.withLock {
+        GlobalState.log("$TAG entry=nextServer")
+        guarded {
+            val document = savedDocument()
+                ?: return@guarded PortalOutcome(ok = false, reason = "no saved document to cycle")
+            val cycled = cycleSelectedNode(document)
+                ?: return@guarded PortalOutcome(ok = false, reason = "nothing to cycle")
+            val owner = desiredOwner()
+            val closed = closeLocked("next-server")
+            if (!closed.ok) closed else openLocked(owner, cycled, "next-server")
+        }
+    }
+
+    /// Rewrites the document's `portal-selected` outbound to the next node (wrapping after the
+    /// last) and returns the new document, or null when there is no next node to switch to.
+    private fun cycleSelectedNode(document: String): String? {
+        val root = runCatching { JsonParser.parseString(document).asJsonObject }.getOrNull()
+            ?: return null
+        val outbounds = root.getAsJsonArray("outbounds") ?: return null
+        val nodes = mutableListOf<JsonObject>()
+        var selectedIndex = -1
+        var lastNodeIndex = -1
+        for (element in outbounds) {
+            val item = element as? JsonObject ?: continue
+            val tag = item.get("tag")?.asString ?: continue
+            when {
+                tag.startsWith(NODE_TAG_PREFIX) -> {
+                    nodes.add(item)
+                    lastNodeIndex = nodes.size - 1
+                }
+
+                tag == SELECTED_TAG -> selectedIndex = lastNodeIndex
+            }
+        }
+        // Two nodes are the minimum for a cycle; one node (or no selection) has no next.
+        if (nodes.size < 2 || selectedIndex < 0) return null
+        val next = nodes[(selectedIndex + 1) % nodes.size].deepCopy()
+        next.addProperty("tag", SELECTED_TAG)
+        val rebuilt = JsonArray()
+        for (element in outbounds) {
+            val item = element as? JsonObject ?: continue
+            val tag = item.get("tag")?.asString ?: ""
+            rebuilt.add(if (tag == SELECTED_TAG) next else item)
+        }
+        root.add("outbounds", rebuilt)
+        return root.toString()
     }
 
     // Any throw is this transaction's own failure; it must not leave a Starting record that

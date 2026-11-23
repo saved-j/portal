@@ -5011,6 +5011,11 @@ class AppLocalizations {
     return Intl.message('Test', name: 'testShort', desc: '', args: []);
   }
 
+  /// `Next server` — the short label for the notification's button in the simple portal.
+  String get nextServer {
+    return Intl.message('Next server', name: 'nextServer', desc: '', args: []);
+  }
+
   /// `Test every delay`
   String get delayTestAll {
     return Intl.message(

@@ -73,6 +73,9 @@ internal class NotificationModule(
     // to the foreground — the ping just runs in the service.
     private val pingIntent by lazy { BroadcastAction.PING.toPendingBroadcast }
 
+    // In the simple portal the same slot cycles the xray node, also without the app.
+    private val nextIntent by lazy { BroadcastAction.NEXT_SERVER.toPendingBroadcast }
+
     private fun update(params: NotificationParams) {
         // The expanded shade is a custom view because the standard action row always stacks its
         // buttons together, and the owner wants Stop on the left and the bolt on the right.
@@ -103,7 +106,10 @@ internal class NotificationModule(
             )
             setTextViewText(R.id.notif_ping, params.pingText)
             setTextColor(R.id.notif_ping, PING_COLOR)
-            setOnClickPendingIntent(R.id.notif_ping, pingIntent)
+            setOnClickPendingIntent(
+                R.id.notif_ping,
+                if (params.nextAction) nextIntent else pingIntent,
+            )
             setViewVisibility(
                 R.id.notif_ping,
                 if (params.showPing) View.VISIBLE else View.GONE,

@@ -262,7 +262,9 @@ SharedState sharedState(Ref ref) {
   // The server line carries the server only; the latency sits beside it on the right.
   final currentServer = serverLine;
   final latency = connectedDelay > 0 ? '⚡ ${connectedDelay} ms' : '';
-  final pingText = currentAppLocalizations.testShort;
+  final pingText = mode == Mode.global
+      ? currentAppLocalizations.nextServer
+      : currentAppLocalizations.testShort;
   // The info line: used traffic and the subscription's end date. This panel states usage only
   // in its own title and sends no subscription-userinfo, so the title's number is the fallback.
   final profile = ref.watch(currentProfileProvider);
@@ -305,7 +307,7 @@ SharedState sharedState(Ref ref) {
     currentProfileName: currentProfileName,
     currentServer: currentServer,
     pingText: pingText,
-    showPing: mode != Mode.global,
+    showPing: true,
     pingServers: pingServers,
     latency: latency,
     detail: detail,

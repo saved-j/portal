@@ -39,6 +39,8 @@ class ServiceBroadcastReceiver : BroadcastReceiver() {
             BroadcastAction.VPN_REVOKED.action -> ServiceState.handleVpnRevokeAction()
 
             BroadcastAction.PING.action -> PortalRuntimeCoordinator.ping()
+
+            BroadcastAction.NEXT_SERVER.action -> PortalRuntimeCoordinator.nextServer()
         }
     }
 

@@ -7,6 +7,8 @@ data class NotificationParams(
     val showStopAction: Boolean = true,
     val pingText: String = "PING",
     val showPing: Boolean = false,
+    /// True in the simple portal: the shade's button cycles the xray node instead of pinging.
+    val nextAction: Boolean = false,
     val latency: String = "",
     val detail: String = "",
     val stats: String = "",

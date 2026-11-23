@@ -13,6 +13,7 @@ enum class BroadcastAction {
     VPN_START_REQUESTED,
     VPN_REVOKED,
     PING,
+    NEXT_SERVER,
 }
 
 enum class AccessControlMode {

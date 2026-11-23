@@ -542,6 +542,9 @@ internal class ServiceStateMachine(private val host: ServiceStateHost) {
             showStopAction = state.showStopAction,
             pingText = state.pingText,
             showPing = state.showPing,
+            // The simple portal has no ping sweep (its bolt lives in the app), so an empty
+            // sweep is the signal that the shade's button cycles the xray node instead.
+            nextAction = state.pingServers.isEmpty(),
             latency = state.latency,
             detail = state.detail,
             stats = state.stats,

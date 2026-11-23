@@ -688,6 +688,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "delay": MessageLookupByLibrary.simpleMessage("Delay"),
     "delayFailed": MessageLookupByLibrary.simpleMessage("Failed"),
     "delayTest": MessageLookupByLibrary.simpleMessage("Delay test"),
+    "nextServer": MessageLookupByLibrary.simpleMessage("Next server"),
     "delayTestAll": MessageLookupByLibrary.simpleMessage("Test every delay"),
     "delayTestTimeout": MessageLookupByLibrary.simpleMessage(
       "Delay test timeout",
