@@ -2135,6 +2135,9 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Next"),
     "tutorialStart": MessageLookupByLibrary.simpleMessage("Tutorial"),
+    "tutorialUnavailableSplitTunnel": MessageLookupByLibrary.simpleMessage(
+      "Your subscription does not support split-tunneling mode, so this mode is unavailable to you and this tutorial is not needed.",
+    ),
     "tutorialOk": MessageLookupByLibrary.simpleMessage("OK"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Skip"),
     "tutorialStepOf": m105,

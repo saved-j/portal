@@ -9430,6 +9430,16 @@ class AppLocalizations {
     return Intl.message('Tutorial', name: 'tutorialStart', desc: '', args: []);
   }
 
+  /// `Your subscription does not support split-tunneling…`
+  String get tutorialUnavailableSplitTunnel {
+    return Intl.message(
+      'Your subscription does not support split-tunneling mode, so this mode is unavailable to you and this tutorial is not needed.',
+      name: 'tutorialUnavailableSplitTunnel',
+      desc: '',
+      args: [],
+    );
+  }
+
   /// `OK`
   String get tutorialOk {
     return Intl.message('OK', name: 'tutorialOk', desc: '', args: []);

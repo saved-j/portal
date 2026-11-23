@@ -304,24 +304,40 @@ class _DeveloperItem extends StatelessWidget {
   }
 }
 
-class _TutorialItem extends StatelessWidget {
+class _TutorialItem extends ConsumerWidget {
   const _TutorialItem();
 
   @override
-  Widget build(BuildContext context) {
-    return ListItem(
-      leading: const GlyphIcon(AppGlyphs.sparkle),
-      title: Text(context.appLocalizations.tutorialStart),
-      onTap: () {
-        // The tour runs over the working screen, framing its switch and tiles — not over this
-        // settings page. Leave it first so the controls the tour points at are the visible ones.
-        Navigator.of(context).popUntil((route) => route.isFirst);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (context.mounted) {
-            unawaited(showPortalTutorial(context));
-          }
-        });
-      },
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The tour teaches split-tunnelling, which only a mihomo subscription has. Without one the
+    // item is greyed and explains itself instead of launching a tour with nothing to point at.
+    final hasMihomo = ref.watch(
+      availableModesProvider.select((modes) => modes.contains(Mode.rule)),
+    );
+    final item = Opacity(
+      opacity: hasMihomo ? 1.0 : 0.5,
+      child: ListItem(
+        leading: const GlyphIcon(AppGlyphs.sparkle),
+        title: Text(context.appLocalizations.tutorialStart),
+        onTap: hasMihomo
+            ? () {
+                // The tour runs over the working screen, framing its switch and tiles — not over
+                // this settings page. Leave it first so the controls the tour points at are the
+                // visible ones.
+                Navigator.of(context).popUntil((route) => route.isFirst);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (context.mounted) {
+                    unawaited(showPortalTutorial(context));
+                  }
+                });
+              }
+            : null,
+      ),
+    );
+    if (hasMihomo) return item;
+    return Tooltip(
+      message: context.appLocalizations.tutorialUnavailableSplitTunnel,
+      child: item,
     );
   }
 }

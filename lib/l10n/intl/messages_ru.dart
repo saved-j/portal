@@ -2232,6 +2232,9 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "tutorialNext": MessageLookupByLibrary.simpleMessage("Далее"),
     "tutorialStart": MessageLookupByLibrary.simpleMessage("Туториал"),
+    "tutorialUnavailableSplitTunnel": MessageLookupByLibrary.simpleMessage(
+      "Ваша подписка не поддерживает режим сплит-туннелей, вам этот режим недоступен и потому этот туториал вам не нужен.",
+    ),
     "tutorialOk": MessageLookupByLibrary.simpleMessage("ОК"),
     "tutorialSkip": MessageLookupByLibrary.simpleMessage("Пропустить"),
     "tutorialStepOf": m105,
