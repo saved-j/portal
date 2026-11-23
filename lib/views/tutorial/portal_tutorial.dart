@@ -194,6 +194,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// numbers the core has not produced yet when the previous page closes.
   bool _waiting = false;
 
+  /// Page one's fake switch, once the owner has toggled it: it turns on in place, then the
+  /// mask lifts and the real strip slides in behind it.
+  bool _fakeSwitchOn = false;
+
   /// How many times the owner has switched the tile look on the page that asks for it.
   int _chipTaps = 0;
 
@@ -487,6 +491,9 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       // slide-down, ~260 ms), and only then come back asking the owner to sweep. The page then
       // advances on three or four sweeps, or the OK button.
       if (!_showingChips) {
+        // The fake switch was toggled: turn the network mode on for real so the tile strip
+        // arrives. A direct mode change, not the core handover — the owner connects later.
+        ref.read(setupActionProvider.notifier).changeMode(Mode.rule);
         _cardHidden = true;
         _noMask = true;
         _waitTimer?.cancel();
@@ -558,6 +565,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     _chipScrolls = 0;
     _showingPings = false;
     _showingChips = false;
+    _fakeSwitchOn = false;
     tourScrollLocked.value = true;
     AppHaptics.tap();
     // The step is written down as it is reached: a tour cut off by a restart resumes here.
@@ -653,6 +661,15 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     return full;
   }
 
+  /// The control's full touch box, not the visible track the frame shrinks to: the fake switch
+  /// on page one must sit exactly where the real one is so the tap lands where the owner aims.
+  Rect? _targetBox(TutorialTarget target) {
+    final box = tutorialKeys[target]?.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return null;
+    final origin = box.localToGlobal(Offset.zero);
+    return origin & box.size;
+  }
+
   @override
   Widget build(BuildContext context) {
     // While a screen the tour opened is up, the tour is not drawn at all: the owner reads the
@@ -663,6 +680,12 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     final size = MediaQuery.sizeOf(context);
     final screen = size;
     final rect = _targetRect(step.target);
+    // Page one fakes the switch, so the owner always sees it off and toggles it on — regardless
+    // of the mode the app restored into. The box is the real switch's, measured here for the
+    // fake one to cover it.
+    final switchBox = step.number == 1 && !_showingChips
+        ? _targetBox(TutorialTarget.modeSwitch)
+        : null;
     // The card fills the larger free gap beside the thing it points at, and never leaves the
     // screen: the gap is the card's height limit, and the page scrolls inside it when the text is
     // larger than the gap.
@@ -786,6 +809,22 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
             ),
             ..._frameAround(rect, size),
           ],
+          // Page one's fake switch: always off, so the owner turns it on the first time — from
+          // any starting mode. It only advances the tour; the step handler switches the mode.
+          if (switchBox != null)
+            Positioned.fromRect(
+              rect: switchBox,
+              child: Center(
+                child: Switch(
+                  value: _fakeSwitchOn,
+                  onChanged: (_) {
+                    setState(() => _fakeSwitchOn = true);
+                    AppHaptics.tap();
+                    TutorialBus.fire(TutorialEvent.modeChanged);
+                  },
+                ),
+              ),
+            ),
           if (!_waiting && !_cardHidden)
           IgnorePointer(
             ignoring: false,
