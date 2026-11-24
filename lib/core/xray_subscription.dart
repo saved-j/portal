@@ -255,7 +255,11 @@ XrayServerConfig? xrayServerFor(List<XrayServerConfig> servers, String? preferre
   return servers.first;
 }
 
-/// The protocol of the outbound that carries traffic.
+/// The protocol chain of the outbound that carries traffic — `xhttp/tls/vless`,
+/// `tls/vless`, `vless`. The badge reads the transport, the security layer when it is not
+/// plain, and the protocol, because a single word (`vless`) hid the fact that two servers on
+/// the same protocol can run different transports — which is exactly what the owner chooses
+/// between. `tcp` is the default transport and is omitted.
 String _protocolOf(Map<String, dynamic> config) {
   final outbounds = config['outbounds'];
   if (outbounds is! List) return 'xray';
@@ -264,7 +268,18 @@ String _protocolOf(Map<String, dynamic> config) {
     if (item is! Map) continue;
     final protocol = '${item['protocol'] ?? ''}'.toLowerCase();
     if (protocol.isEmpty || routers.contains(protocol)) continue;
-    return protocol;
+    final stream = item['streamSettings'];
+    final network = stream is Map
+        ? '${stream['network'] ?? ''}'.trim().toLowerCase()
+        : '';
+    final security = stream is Map
+        ? '${stream['security'] ?? ''}'.trim().toLowerCase()
+        : '';
+    return [
+      if (network.isNotEmpty && network != 'tcp') network,
+      if (security.isNotEmpty && security != 'none') security,
+      protocol,
+    ].join('/');
   }
   return 'xray';
 }

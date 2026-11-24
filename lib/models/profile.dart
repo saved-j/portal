@@ -259,6 +259,29 @@ extension ProfileExtension on Profile {
       firstError = error;
       firstTrace = trace;
     }
+    // The panel may refuse a device it does not know: the same link is asked once more
+    // without the device headers before any fallback host is tried. The owner wants the
+    // device id by default; when the panel will not serve one, the link is asked without it.
+    if (sent.isNotEmpty) {
+      try {
+        return await _updateFrom(
+          url,
+          validate,
+          fetch,
+          const <String, String>{},
+          downloadTimeoutDuration,
+          isCurrent,
+          probeFetch ?? fetch,
+        );
+      } on ProfileUpdateSupersededException {
+        rethrow;
+      } catch (error) {
+        commonPrint.log(
+          'subscription without device headers also failed: ${compactError(error)}',
+          logLevel: LogLevel.warning,
+        );
+      }
+    }
     final fallbacks = headers.fallbackUrlsOf(Uri.tryParse(url) ?? Uri());
     if (fallbacks.isEmpty) {
       Error.throwWithStackTrace(firstError, firstTrace);

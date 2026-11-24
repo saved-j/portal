@@ -2,6 +2,8 @@ package com.follow.clashx.plugins
 
 import com.follow.clashx.ServiceController
 import com.follow.clashx.ServiceState
+import android.os.Handler
+import android.os.Looper
 import com.follow.clashx.common.Components
 import com.follow.clashx.common.GlobalState
 import com.follow.clashx.core.Core
@@ -39,6 +41,7 @@ class ServicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         messenger = binding.binaryMessenger
         channel = MethodChannel(messenger, SERVICE_CHANNEL)
         channel.setMethodCallHandler(this)
+        appChannel = channel
         // Serial: watchRoute keeps the latest intent by the order calls reach the Core.
         coreChannel = MethodChannel(
             messenger,
@@ -170,8 +173,28 @@ class ServicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
     }
 
-    private companion object {
+    companion object {
         val SERVICE_CHANNEL = "${Components.PACKAGE_NAME}/service"
         val CORE_CHANNEL = "${Components.PACKAGE_NAME}/core"
+
+        // The one messenger to the running Flutter engine. Null while the app has been thrown
+        // out of memory, which is exactly when the shade must fall back to its own core call.
+        @Volatile
+        var appChannel: MethodChannel? = null
+
+        fun notifyPingRequested(): Boolean {
+            val channel = appChannel ?: return false
+            channel.invokeMethod("pingRequested", null)
+            return true
+        }
+
+        fun notifyNextServerDone(selectedName: String) {
+            val channel = appChannel ?: return
+            GlobalState.log("ServicePlugin notifyNextServerDone name=$selectedName channel=set")
+            // The coordinator runs on a worker thread; the channel must post to the main thread.
+            Handler(Looper.getMainLooper()).post {
+                channel.invokeMethod("nextServerDone", selectedName)
+            }
+        }
     }
 }

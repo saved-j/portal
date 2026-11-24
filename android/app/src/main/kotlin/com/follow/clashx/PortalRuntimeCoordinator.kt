@@ -1,6 +1,7 @@
 package com.follow.clashx
 
 import com.follow.clashx.common.GlobalState
+import com.follow.clashx.plugins.ServicePlugin
 import com.follow.clashx.plugins.XrayPlugin
 import java.io.File
 import com.follow.clashx.common.PortalOwner
@@ -10,6 +11,7 @@ import com.follow.clashx.common.XrayTunHolder
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -235,6 +237,10 @@ object PortalRuntimeCoordinator {
                 ok = false
                 lastError = sent.exceptionOrNull()?.message ?: "ping failed"
             }
+            // The core's delay test is async, but firing every node at once floods its dial
+            // pool and the re-pick sometimes never lands. One short beat per node keeps the
+            // sweep a sweep instead of a burst.
+            delay(40)
         }
         PortalOutcome(ok = ok, reason = lastError)
     }
@@ -246,18 +252,27 @@ object PortalRuntimeCoordinator {
         GlobalState.log("$TAG entry=nextServer")
         guarded {
             val document = savedDocument()
-                ?: return@guarded PortalOutcome(ok = false, reason = "no saved document to cycle")
+            if (document == null) {
+                GlobalState.log("$TAG nextServer: no saved document to cycle")
+                return@guarded PortalOutcome(ok = false, reason = "no saved document to cycle")
+            }
             val cycled = cycleSelectedNode(document)
-                ?: return@guarded PortalOutcome(ok = false, reason = "nothing to cycle")
+            if (cycled == null) {
+                GlobalState.log("$TAG nextServer: nothing to cycle (document ${document.length} chars)")
+                return@guarded PortalOutcome(ok = false, reason = "nothing to cycle")
+            }
             val owner = desiredOwner()
             val closed = closeLocked("next-server")
-            if (!closed.ok) closed else openLocked(owner, cycled, "next-server")
-        }
-    }
+            val outcome = if (!closed.ok) closed else openLocked(owner, cycled.first, "next-server")
+            // The app's pick must follow the shade's cycle, or the notification keeps the old name.
+            ServicePlugin.notifyNextServerDone(cycled.second)
+            outcome
+            }
+            }
 
     /// Rewrites the document's `portal-selected` outbound to the next node (wrapping after the
     /// last) and returns the new document, or null when there is no next node to switch to.
-    private fun cycleSelectedNode(document: String): String? {
+    private fun cycleSelectedNode(document: String): Pair<String, String>? {
         val root = runCatching { JsonParser.parseString(document).asJsonObject }.getOrNull()
             ?: return null
         val outbounds = root.getAsJsonArray("outbounds") ?: return null
@@ -278,16 +293,32 @@ object PortalRuntimeCoordinator {
         }
         // Two nodes are the minimum for a cycle; one node (or no selection) has no next.
         if (nodes.size < 2 || selectedIndex < 0) return null
-        val next = nodes[(selectedIndex + 1) % nodes.size].deepCopy()
-        next.addProperty("tag", SELECTED_TAG)
+        val nextNode = nodes[(selectedIndex + 1) % nodes.size]
+        // The name the shade and the app both read: the node's tag says the name, not a position,
+        // and a duplicate name carries a `#<n>` suffix that is not part of the pick.
+        val nextTag = nextNode.get("tag")?.asString ?: ""
+        var nextName = nextTag.removePrefix(NODE_TAG_PREFIX)
+        val repeat = nextName.lastIndexOf('#')
+        if (repeat > 0 && nextName.substring(repeat + 1).toIntOrNull() != null) {
+            nextName = nextName.substring(0, repeat)
+        }
+        val selectedCopy = nextNode.deepCopy()
+        selectedCopy.addProperty("tag", SELECTED_TAG)
+        // The selected handle must sit right after the node it names: only then does the next
+        // cycle read the new position. Replacing the old handle in place left it anchored to the
+        // previous node, so every press cycled to the same server.
         val rebuilt = JsonArray()
         for (element in outbounds) {
             val item = element as? JsonObject ?: continue
             val tag = item.get("tag")?.asString ?: ""
-            rebuilt.add(if (tag == SELECTED_TAG) next else item)
+            if (tag == SELECTED_TAG) continue
+            rebuilt.add(item)
+            if (tag == nextTag) {
+                rebuilt.add(selectedCopy)
+            }
         }
         root.add("outbounds", rebuilt)
-        return root.toString()
+        return Pair(root.toString(), nextName)
     }
 
     // Any throw is this transaction's own failure; it must not leave a Starting record that

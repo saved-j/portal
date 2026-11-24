@@ -57,6 +57,9 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
   /// both qualify in the same launch.
   bool _tourRequested = false;
 
+  /// Profiles whose broken-subscription recovery already ran this session.
+  final Set<int> _recoveredBroken = {};
+
   @override
   void initState() {
     super.initState();
@@ -102,6 +105,20 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
     showPortalTutorial(context, fromStep: resume);
   }
 
+  /// A subscription whose engine file reads as corrupt is updated once; a failed update
+  /// removes the profile, which drops the owner on the add-subscription screen.
+  void _recoverBrokenProfile() {
+    final profile = ref.read(currentProfileProvider);
+    if (profile == null || !_recoveredBroken.add(profile.id)) return;
+    unawaited(() async {
+      try {
+        await ref.read(profilesActionProvider.notifier).updateProfile(profile);
+      } catch (_) {
+        await ref.read(profilesActionProvider.notifier).deleteProfile(profile.id);
+      }
+    }());
+  }
+
   void _onLockChanged() {
     if (mounted) setState(() {});
   }
@@ -132,6 +149,13 @@ class _HeroDashboardState extends ConsumerState<HeroDashboard> {
         });
       },
     );
+    // A subscription whose engine file reads as corrupt (a half-written download, or a panel
+    // that answered an error page) is not shown a dead switch: it is updated once, and if the
+    // update fails the profile is removed — which drops the owner on the add-subscription screen.
+    ref.listen(engineFormatStatusProvider, (previous, next) {
+      if (next.value?.status != EngineFormatStatus.parseFailed) return;
+      _recoverBrokenProfile();
+    });
     return _buildBody(context);
   }
 

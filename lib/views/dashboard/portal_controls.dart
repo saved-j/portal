@@ -219,7 +219,7 @@ final portalPendingProvider =
 /// row is never put in this map: its number is the engine's own, taken through the tunnel it
 /// built. A missing key means "not asked yet"; a null entry means "asked, no answer" — and a
 /// null is also the honest answer for a name that only resolves to the tunnel's own address.
-final tcpDelayProvider = NotifierProvider<TcpDelayNotifier, Map<String, int?>>(
+final tcpDelayProvider = NotifierProvider<TcpDelayNotifier, Map<String, List<int?>>>(
   TcpDelayNotifier.new,
 );
 
@@ -231,7 +231,7 @@ final tcpDelayProvider = NotifierProvider<TcpDelayNotifier, Map<String, int?>>(
 /// subscriptions would otherwise show the other core's number, and a switch would look like
 /// nothing had been measured at all.
 final engineDelayProvider =
-    NotifierProvider<EngineDelayNotifier, Map<String, int?>>(
+    NotifierProvider<EngineDelayNotifier, Map<String, List<int?>>>(
       EngineDelayNotifier.new,
     );
 
@@ -242,7 +242,13 @@ final engineDelayProvider =
 /// something. It starts off in every session: a timer that survives a restart is a timer the
 /// owner has forgotten about.
 
-class EngineDelayNotifier extends Notifier<Map<String, int?>> {
+/// Appends one measurement to a server's ping trail and keeps the last three slots.
+List<int?> _pushTrail(List<int?> list, int? next) {
+  final grown = [...list, next];
+  return grown.length > 3 ? grown.sublist(grown.length - 3) : grown;
+}
+
+class EngineDelayNotifier extends Notifier<Map<String, List<int?>>> {
   final SweepLedger ledger = SweepLedger();
 
   int get sweepId => ledger.id;
@@ -256,10 +262,30 @@ class EngineDelayNotifier extends Notifier<Map<String, int?>> {
   bool isFresh(String name) => ledger.isFresh(name);
 
   @override
-  Map<String, int?> build() => const {};
+  Map<String, List<int?>> build() => const {};
+
+  /// The three-slot trail of one server's measurements, oldest first. A server that has
+  /// never been measured has no entry.
+  List<int?> historyOf(String name) => state[name] ?? const <int?>[];
+
+  /// A measurement is about to start: the last number moves one slot left and the newest
+  /// slot is left empty, so the busy flag draws the spinner exactly where the next number
+  /// will land.
+  void begin(Iterable<String> names) {
+    final next = {...state};
+    for (final name in names) {
+      final list = next[name] ?? const <int?>[];
+      next[name] = _pushTrail(list, null);
+    }
+    state = next;
+  }
 
   void record(String name, int? ms) {
-    state = {...state, name: ms};
+    final list = state[name] ?? const <int?>[];
+    // Newest first: the fresh measurement lands in the newest slot and the older ones move
+    // left. The value (or the timeout) has arrived, so the row stops spinning.
+    state = {...state, name: [ms, ...list].take(3).toList()};
+    ref.read(delayBusyProvider.notifier).remove(name);
     ledger.record(name, ms);
   }
 
@@ -269,7 +295,7 @@ class EngineDelayNotifier extends Notifier<Map<String, int?>> {
   }
 }
 
-class TcpDelayNotifier extends Notifier<Map<String, int?>> {
+class TcpDelayNotifier extends Notifier<Map<String, List<int?>>> {
   /// The sweep's bookkeeping: freshness of each row and which sweep is the newest.
   ///
   /// Kept in a pure object so the rules that were wrong twice (a cancelled sweep coming back
@@ -306,13 +332,28 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
   int _generation = 0;
 
   @override
-  Map<String, int?> build() {
+  Map<String, List<int?>> build() {
     // The measurements belong to the profile: a different one is a different set of servers,
     // so the rows, their dates and the sweep in flight all go with it instead of lighting up
     // names that only look alike.
     ref.watch(currentProfileIdProvider);
     ref.onDispose(() => _generation++);
     return const {};
+  }
+
+  /// The three-slot trail of one server's measurements, oldest first.
+  List<int?> historyOf(String name) => state[name] ?? const <int?>[];
+
+  /// A measurement is about to start: the last number moves one slot left and the newest
+  /// slot is left empty, so the busy flag draws the spinner exactly where the next number
+  /// will land.
+  void begin(Iterable<String> names) {
+    final next = {...state};
+    for (final name in names) {
+      final list = next[name] ?? const <int?>[];
+      next[name] = _pushTrail(list, null);
+    }
+    state = next;
   }
 
   /// Forgets everything measured for the previous profile: its rows, their dates and the
@@ -328,7 +369,11 @@ class TcpDelayNotifier extends Notifier<Map<String, int?>> {
   ///
   /// One answer, written from a sweep that measured the row itself.
   void record(String name, int? ms) {
-    state = {...state, name: ms};
+    final list = state[name] ?? const <int?>[];
+    // Newest first: the fresh measurement lands in the newest slot and the older ones move
+    // left. The value (or the timeout) has arrived, so the row stops spinning.
+    state = {...state, name: [ms, ...list].take(3).toList()};
+    ref.read(delayBusyProvider.notifier).remove(name);
     // A dash counts as a measurement too: asking again inside the window would only spend
     // another timeout on a node that just refused.
     ledger.record(name, ms);
@@ -369,35 +414,37 @@ class PortalBypassNotifier extends Notifier<Map<String, String?>> {
   /// A single tap: bring the filter into the portal, undoing a bypass. A filter already
   /// on is left as it is — the tap never switches it off.
   void activate(WidgetRef ref, Group group) {
-    final action = ref.read(proxiesActionProvider.notifier);
-    // A long-press bypass: the tile remembers the server it was on and returns to it.
+    // The server the tile moves onto: its remembered pick when it was bypassed, or the group's
+    // auto pick when it sat on DIRECT by default. A tile already on a real server stays put.
+    String? effective;
     if (state.containsKey(group.name)) {
       final restore = state[group.name];
-      state = {...state}..remove(group.name);
-      if (restore != null) {
-        // A tile whose remembered pick was DIRECT has no server of its own to return to;
-        // turning it back on would land on DIRECT again and read as dead. Put it on the
-        // group's auto pick instead (AutoRussia for the Ru-apps one) so the toggle visibly works.
-        final effective =
-            _isBuiltinOutbound(restore) ? (_autoFallbackFor(group) ?? restore) : restore;
-        action.changeProxy(groupName: group.name, proxyName: effective);
-      }
+      effective = restore == null
+          ? null
+          : (_isBuiltinOutbound(restore) ? (_autoFallbackFor(group) ?? restore) : restore);
+    } else if (_isBuiltinOutbound(group.now ?? '')) {
+      effective = _autoFallbackFor(group);
+    }
+    // The bypass ends either way: the tap brings the filter back into the portal.
+    state = {...state}..remove(group.name);
+    if (effective == null) return;
+    commonPrint.log('bypass activate: ${group.name} effective=$effective');
+    // The same path the server row takes: show the pick at once, store it, and ask the engine
+    // only when it is there to answer. A closed portal has no core to confirm, and asking it
+    // would fail and roll the pick back — the pick is stored for the start that follows.
+    ref.read(portalPendingProvider.notifier).pick(group.name, effective);
+    ref.read(portalSelectionProvider.notifier).pickRule(group.name, effective);
+    final action = ref.read(proxiesActionProvider.notifier);
+    if (ref.read(runTimeProvider) == null) {
+      action.storeSelection(groupName: group.name, proxyName: effective);
       return;
     }
-    // A tile that sits on DIRECT without a remembered bypass is a default-DIRECT tile: the tap
-    // must move it onto the group's auto pick, not leave it on DIRECT (which reads as dead).
-    if (_isBuiltinOutbound(group.now ?? '')) {
-      final auto = _autoFallbackFor(group);
-      if (auto != null) {
-        action.changeProxy(groupName: group.name, proxyName: auto);
-      }
-    }
+    action.changeProxy(groupName: group.name, proxyName: effective);
   }
 
   /// A long press: take the filter out of the portal (DIRECT). A filter already off is
   /// left as it is — the press never switches it back on.
   void deactivate(WidgetRef ref, Group group) {
-    final action = ref.read(proxiesActionProvider.notifier);
     if (state.containsKey(group.name)) return;
     // Bypass routes to the engine's own built-in, whatever the panel calls it.
     final target =
@@ -407,6 +454,12 @@ class PortalBypassNotifier extends Notifier<Map<String, String?>> {
             .firstOrNull ??
         'DIRECT';
     state = {...state, group.name: group.now};
+    commonPrint.log('bypass deactivate: ${group.name} now=${group.now} target=$target');
+    final action = ref.read(proxiesActionProvider.notifier);
+    if (ref.read(runTimeProvider) == null) {
+      action.storeSelection(groupName: group.name, proxyName: target);
+      return;
+    }
     action.changeProxy(groupName: group.name, proxyName: target);
   }
 }
@@ -544,25 +597,16 @@ bool _isBuiltinOutbound(String name) => isBuiltinOutboundName(name);
 
 /// The server a tile should fall back to when it is taken out of DIRECT, and its remembered
 /// pick was DIRECT itself (a tile whose default is DIRECT has no other server to return to, so
-/// returning to DIRECT looks dead). The answer is the group's own auto pick: the url-test member
-/// whose name hints at "Russia" for the Ru-apps filter, otherwise the first auto member.
-///
-/// "AutoRussia" is found by its name, not hardcoded: the panel renames it over time, and this
-/// looks the name up fresh every call.
+/// returning to DIRECT looks dead). The answer is the group's own auto pick: its first url-test
+/// member, or — when the panel ships none — its first real server. No name-matching: every
+/// filter falls back the same way.
 String? _autoFallbackFor(Group group) {
   final members = group.all;
   if (members.isEmpty) return null;
-  // The Ru-apps filter's auto pick is named "AutoRussia"/"Автороссия"; it may be an url-test
-  // member or a selector, so match by name first, then fall back to any url-test member.
-  for (final probe in members) {
-    final lower = probe.name.toLowerCase();
-    if (lower.contains('russia') || lower.contains('россия')) return probe.name;
-  }
   final autoMembers = members.where((p) => p.type == GroupType.URLTest.value);
   if (autoMembers.isNotEmpty) return autoMembers.first.name;
   for (final probe in members) {
-    final lower = probe.name.toLowerCase();
-    if (lower.contains('auto') || lower.contains('авто')) return probe.name;
+    if (!_isBuiltinOutbound(probe.name)) return probe.name;
   }
   return null;
 }
@@ -762,7 +806,7 @@ PortalShown _portalShown(
       : const <XrayServerConfig>[];
   final cachedRows = simple
       ? const <PortalRow>[]
-      : (ref.watch(portalEngineRowsProvider)[profileKey] ??
+      : (ref.watch(portalEngineRowsProvider)['$profileKey:$groupName'] ??
             const <PortalRow>[]);
   final profileRows = simple
       ? const <PortalRow>[]
@@ -823,6 +867,17 @@ PortalShown _portalShown(
             // Only a file that really is a mihomo config may feed the network list. An Xray
             // subscription sitting in the same profile is a different document entirely, and
             // reading it here is how the wrong config reached the wrong mode.
+            // The selected filter's own members from the engine's last answer: the flat
+            // `proxies:` file is the main group only, and a filter chosen while the portal is
+            // closed must show its own servers, not the main group's.
+            (
+              'cache',
+              portalFallbackGroup(
+                simple: false,
+                servers: const [],
+                engineRows: cachedRows,
+              ),
+            ),
             (
               'profile',
               ref.watch(engineFormatStatusProvider).value?.status ==
@@ -833,17 +888,6 @@ PortalShown _portalShown(
                       engineRows: profileRows,
                     )
                   : null,
-            ),
-            // The engine's own last answer for this profile: switching modes must show servers
-            // immediately, and the profile file is not always the list the engine had. Only the
-            // engine writes here, and only while it owns this mode.
-            (
-              'cache',
-              portalFallbackGroup(
-                simple: false,
-                servers: const [],
-                engineRows: cachedRows,
-              ),
             ),
           ],
     remember: remember,
@@ -1089,7 +1133,10 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                       onChanged: bothUnavailable
                           ? null
                           : (value) {
-                              if (value ? !engineAvailable : !xrayAvailable) {
+                              // During the tour the switch is the lesson itself: it toggles
+                              // freely without the "no nodes" refusal, so the tour advances.
+                              if (!tourSimulatesSimple.value &&
+                                  (value ? !engineAvailable : !xrayAvailable)) {
                                 HapticFeedback.vibrate();
                                 dialogs.showNotifier(
                                   value ? engineReason : xrayReason,
@@ -1098,6 +1145,16 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                                 return;
                               }
                               HapticFeedback.selectionClick();
+                              if (tourSimulatesSimple.value && !value) {
+                                // The OFF direction (the simple portal) may not exist during
+                                // the tour: flip the mode visually only, so the switch reads
+                                // OFF without starting a core. Only turning the network ON is
+                                // the lesson's action, so this direction does not fire it.
+                                ref
+                                    .read(patchClashConfigProvider.notifier)
+                                    .update((state) => state.copyWith(mode: Mode.global));
+                                return;
+                              }
                               TutorialBus.fire(TutorialEvent.modeChanged);
                               // The thumb has already moved; the portal underneath either
                               // comes up on the other core or comes back exactly as it was.
@@ -1230,9 +1287,6 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
                         testDelayWithEngine(
                           ref.read,
                           rows,
-                          wasRunning:
-                              runStatus.active &&
-                              runStatus.owner == PortalOwner.mihomo,
                           force: true,
                         ),
                       );
@@ -1277,18 +1331,6 @@ class _PortalModeSwitchState extends ConsumerState<PortalModeSwitch> {
               ),
             ),
           ),
-        if (shownReason.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(left: 4, top: 2),
-            child: Text(
-              shownReason,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.error,
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -1316,8 +1358,14 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
     final simple = mode == Mode.global;
     final filters = ref.watch(portalFiltersProvider);
+    // The engine is the live source of the groups; before its first answer on a cold start
+    // the profile's own file already names the same filters, so the strip shows at once.
+    final engineGroups = ref.watch(groupsProvider);
+    final allGroups = engineGroups.isNotEmpty
+        ? engineGroups
+        : (ref.watch(profilePortalGroupsProvider).value ?? const <Group>[]);
     final groups = portalVisibleGroups(
-      ref.watch(groupsProvider),
+      allGroups,
       filters.hidden,
       filters.order,
     );
@@ -1362,15 +1410,14 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
       if (next.isEmpty) return;
       // This listener is the engine's own feed (`groupsProvider` answers only from the engine),
       // so what it writes is engine rows by construction — no conditions needed, and none that
-      // could delay a cache a mode switch wants to draw from immediately.
-      final group =
-          next.where((g) => g.name == groupName).firstOrNull ?? next.first;
-      ref
-          .read(portalEngineRowsProvider.notifier)
-          .remember(
-            profileId: '${ref.read(currentProfileIdProvider) ?? ''}',
-            group: group,
-          );
+      // could delay a cache a mode switch wants to draw from immediately. Every group is
+      // remembered under its own name, so a filter chosen while the portal is closed still
+      // finds its own members instead of the main group's.
+      final profileId = '${ref.read(currentProfileIdProvider) ?? ''}';
+      final notifier = ref.read(portalEngineRowsProvider.notifier);
+      for (final group in next) {
+        notifier.remember(profileId: profileId, group: group);
+      }
     });
     // The simple portal is driven by the child, whose build of the same subscription names
     // its own servers; the network mode draws the engine's. Each mode's rows come from its
@@ -1495,8 +1542,8 @@ class _PortalServerListState extends ConsumerState<PortalServerList> {
         final ranks = <String, int>{};
         for (final proxy in members) {
           final value = xrayServerByName.containsKey(proxy.name)
-              ? xrayDelays[proxy.name]
-              : engineDelays[proxy.name] ??
+              ? xrayDelays[proxy.name]?.last
+              : engineDelays[proxy.name]?.last ??
                     ref.read(delayProvider(proxyName: proxy.name));
           // -1 is mihomo's timeout marker, not a fast server.
           ranks[proxy.name] = value == null || value <= 0 ? 1 << 30 : value;
@@ -1915,7 +1962,6 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
         testDelayWithEngine(
           ref.read,
           widget.engineProxies,
-          wasRunning: widget.wasRunning,
         ),
       );
     }
@@ -1928,59 +1974,99 @@ class _TcpDelaySweepState extends ConsumerState<_TcpDelaySweep> {
 /// Waits until the engine reports a running proxy, so the first test is not queued into a
 /// core that has not applied its config yet.
 
-/// Runs a delay test, opening the engine for it when the portal is closed.
-///
-/// The engine answers a delay test for any proxy in its applied config, but it needs to be
-/// running to have that config and to reach the nodes. So a closed portal is opened for the
-/// duration of the test, without any of the portal's own animation or state, and closed
-/// again afterwards. If the portal was already open, nothing is toggled.
+/// A delay sweep must never overlap another: a measurement started over one in flight
+/// cancels the first one's dials and restarts the core, so the numbers never land. Every
+/// sweep — the child's and the engine's — waits its turn on this tail, so the core always
+/// sees exactly one.
+Future<void> _sweepTail = Future.value();
+
+Future<void> _exclusiveSweep(Future<void> Function() body) {
+  final turn = _sweepTail.then((_) => body());
+  // A failed turn must not poison the tail for the one behind it.
+  _sweepTail = turn.then((_) {}, onError: (_) {});
+  return turn;
+}
+
+/// Runs a delay test, opening the engine for it when the portal is closed and the owner
+/// asked for it (`force`). The automatic sweep never opens a tunnel — it measures what the
+/// running engine already times by itself.
 Future<void> testDelayWithEngine(
   ProviderReader read,
   List<Proxy> proxies, {
   String? testUrl,
-  required bool wasRunning,
   bool force = false,
-}) async {
-  if (proxies.isEmpty) return;
-  // Two minutes of a row's own number is good enough: a mode switch fills the gaps instead
-  // of re-measuring a list it had just finished.
+}) {
+  if (proxies.isEmpty) return Future.value();
   final delay = read(engineDelayProvider.notifier);
-  final stale = [
+  // Two minutes of a row's own number is good enough: a mode switch fills the gaps instead
+  // of re-measuring a list it had just finished. A deliberate press (`force`) asks everything.
+  final pending = [
     for (final proxy in proxies)
       if (delay.ledger.needsMeasurement(proxy.name, force: force)) proxy,
   ];
-  if (stale.isEmpty) {
+  if (pending.isEmpty) {
     commonPrint.log(
       'portal test: every engine row was measured within '
       '${_delayFreshness.inMinutes} minutes, nothing to do',
     );
-    return;
+    return Future.value();
   }
-  if (wasRunning) {
-    read(delayBusyProvider.notifier)
-        .addAll([for (final proxy in stale) proxy.name]);
-    await read(proxiesActionProvider.notifier).delayTest(stale, testUrl);
-    // The engine answers into its own map; the rows' numbers are taken from there, and each
-    // answer is stamped so a switch back does not ask again.
-    for (final proxy in stale) {
-      final value = read(delayProvider(proxyName: proxy.name));
-      delay.record(proxy.name, (value != null && value > 0) ? value : null);
+  // The spinner shows at the press, not when the queue reaches the test: the hold registers
+  // a pending measurement now.
+  read(delayBusyProvider.notifier).addAll([for (final p in pending) p.name]);
+  return _exclusiveSweep(() async {
+    // The engine's actual state is read here, not at the press: the queue may have raised
+    // and lowered it since.
+    final running = read(runTimeProvider) != null;
+    var raised = false;
+    if (!running) {
+      if (!force) {
+        commonPrint.log(
+          'portal test: the engine is not running, nothing to measure',
+        );
+        read(delayBusyProvider.notifier)
+            .removeAll([for (final p in pending) p.name]);
+        return;
+      }
+      raised = await read(setupActionProvider.notifier).setRunning(true);
+      if (!raised) {
+        read(delayBusyProvider.notifier)
+            .removeAll([for (final p in pending) p.name]);
+        return;
+      }
+      // The delay test needs the engine to have applied its config: a test sent while the
+      // config is still being loaded answers null, which reads as a cross. Poll the engine's
+      // groups until they arrive, bounded so a broken start cannot hang the press.
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (read(groupsProvider).isEmpty && DateTime.now().isBefore(deadline)) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
     }
-    read(delayBusyProvider.notifier).clear();
-    commonPrint.log(
-      'portal test: engine sweep rows=${stale.length}/${proxies.length} '
-      'kept_open=yes',
-    );
-    return;
-  }
-  // The core is not running, so there is nothing to time: the engine times its own nodes while
-  // it runs, and auto-ping is what keeps it running. This function never raises a tunnel — a
-  // measurement that opens and closes the portal is a measurement the owner did not ask for,
-  // and the portal closing under a working connection is what that looks like from outside.
-  commonPrint.log(
-    'portal test: the engine is not running, nothing to measure',
-  );
-  return;
+    try {
+      // The engine answers its nodes in small chunks, one after the other, so the numbers fill
+      // in as they arrive instead of a wall at the end — the same shape the child's sweep draws.
+      // Each chunk's answer is read from the delay map after the chunk, never polled mid-run
+      // where a not-yet-arrived answer would read as a cross.
+      for (var index = 0; index < pending.length; index += _sweepChunk) {
+        final chunk = pending.skip(index).take(_sweepChunk).toList();
+        await read(proxiesActionProvider.notifier).delayTest(chunk, testUrl);
+        for (final proxy in chunk) {
+          final value = read(delayProvider(proxyName: proxy.name));
+          delay.record(proxy.name, (value != null && value > 0) ? value : null);
+        }
+      }
+    } finally {
+      read(delayBusyProvider.notifier)
+          .removeAll([for (final p in pending) p.name]);
+      if (raised) {
+        await read(setupActionProvider.notifier).setRunning(false);
+      }
+      commonPrint.log(
+        'portal test: engine sweep rows=${pending.length}/${proxies.length} '
+        'kept_open=${running ? 'yes' : 'no'}',
+      );
+    }
+  });
 }
 
 /// and the core is told to stop.
@@ -1989,15 +2075,15 @@ Future<void> testDelayWithChild(
   List<XrayServerConfig> servers, {
   required bool wasRunning,
   bool force = false,
-}) async {
+}) {
   if (servers.isEmpty) {
     commonPrint.log(
-    'portal test: the simple portal has no servers to measure '
-    '(profile carries none)',
-    logLevel: LogLevel.warning,
+      'portal test: the simple portal has no servers to measure '
+      '(profile carries none)',
+      logLevel: LogLevel.warning,
     );
     read(delayRunMessageProvider.notifier).set('в подписке нет серверов Xray');
-    return;
+    return Future.value();
   }
   final measure = measureConfig(servers);
   if (measure.entries.isEmpty) {
@@ -2005,39 +2091,40 @@ Future<void> testDelayWithChild(
       'portal test: the simple portal has servers but no measurable addresses',
       logLevel: LogLevel.warning,
     );
-    return;
+    return Future.value();
   }
   final delay = read(tcpDelayProvider.notifier);
-  final url = read(appSettingProvider).testUrl;
-  final watch = Stopwatch()..start();
   // Rows measured less than a minute ago are not asked again: a mode switch is a reason to
   // fill the gaps, not to spend the phone's traffic on numbers that are still true.
   // A press of the test button measures everything in front of the owner: the two-minute
   // window is for the automatic sweep at launch and after a switch, not for a deliberate press.
-  final stale = [
+  final pending = [
     for (final entry in measure.entries)
       if (delay.ledger.needsMeasurement(entry.name, force: force)) entry,
   ];
-  if (stale.isEmpty) {
+  if (pending.isEmpty) {
     commonPrint.log(
       'portal test: every row was measured within '
       '${_delayFreshness.inMinutes} minutes, nothing to do',
     );
-    return;
+    return Future.value();
   }
-  final sweep = delay.beginSweep(Mode.global);
   // The rows that are about to be asked show a turning indicator, not a dash: an empty number
-  // reads as "no answer", and these have not been asked yet.
-  final busy = read(delayBusyProvider.notifier);
-  busy.addAll([for (final entry in stale) entry.name]);
-  var measured = 0;
-  var failure = '';
-  // What the owner can see: a sweep of the whole list would spend its first seconds on nodes
-  // that are scrolled out of sight. The filter is the app's own, and the list already draws
-  // only what it passes.
-  final visible = _visibleServerNames(read);
+  // reads as "no answer", and these have not been asked yet. Marked at the press so the
+  // spinner shows even while the queue drains ahead of it.
+  read(delayBusyProvider.notifier).addAll([for (final entry in pending) entry.name]);
+  return _exclusiveSweep(() async {
+    final url = read(appSettingProvider).testUrl;
+    final watch = Stopwatch()..start();
+    final sweep = delay.beginSweep(Mode.global);
+    var measured = 0;
+    var failure = '';
+    // What the owner can see: a sweep of the whole list would spend its first seconds on nodes
+    // that are scrolled out of sight. The filter is the app's own, and the list already draws
+    // only what it passes.
+    final visible = _visibleServerNames(read);
   try {
-    for (var index = 0; index < stale.length; index += _sweepChunk) {
+    for (var index = 0; index < pending.length; index += _sweepChunk) {
       // A newer sweep — a mode switch, a tap on the other list — owns the map from here.
       if (!delay.isCurrentSweep(sweep, Mode.global)) {
         failure = 'cancelled';
@@ -2047,7 +2134,7 @@ Future<void> testDelayWithChild(
         failure = 'deadline';
         break;
       }
-      final chunk = stale.skip(index).take(_sweepChunk).toList();
+      final chunk = pending.skip(index).take(_sweepChunk).toList();
       // The same sweep, asked of whichever core owns it: the phone runs it inside the app,
       // a desktop runs it in the child's own binary under the `measure` subcommand. One
       // implementation, one set of numbers.
@@ -2112,13 +2199,14 @@ Future<void> testDelayWithChild(
     }
   } finally {
     // Always: a spinner that outlives the run is a lie about work in progress.
-    busy.clear();
+    read(delayBusyProvider.notifier)
+        .removeAll([for (final entry in pending) entry.name]);
     await portalRuntime.stopMeasure();
     // Nothing to clear: the identifier only grows, so a sweep that has been superseded can
     // never look current again.
     watch.stop();
     commonPrint.log(
-      'portal test: sweep rows=${stale.length}/${measure.entries.length} measured=$measured '
+      'portal test: sweep rows=${pending.length}/${measure.entries.length} measured=$measured '
       'visible=${visible.length} kept_open=${wasRunning ? 'yes' : 'no'} '
       'duration_ms=${watch.elapsedMilliseconds}'
       '${failure.isEmpty ? '' : ' error=$failure'}',
@@ -2130,12 +2218,13 @@ Future<void> testDelayWithChild(
         durationMs: watch.elapsedMilliseconds,
         stoppedAfter: false,
         detail:
-            'rows=${stale.length}/${measure.entries.length} measured=$measured'
+            'rows=${pending.length}/${measure.entries.length} measured=$measured'
             ' visible=${visible.length}'
             '${failure.isEmpty ? '' : ' error=$failure'}',
       ),
     );
   }
+  });
 }
 
 /// The auto-ping period, chosen by the owner.
@@ -2464,7 +2553,10 @@ class _GroupStripState extends ConsumerState<_GroupStrip> {
         ),
       );
     }
-    final allGroups = ref.watch(groupsProvider);
+    final engineGroups = ref.watch(groupsProvider);
+    final allGroups = engineGroups.isNotEmpty
+        ? engineGroups
+        : (ref.watch(profilePortalGroupsProvider).value ?? const <Group>[]);
     final filters = ref.watch(portalFiltersProvider);
     final groups = portalVisibleGroups(
       allGroups,
@@ -2770,6 +2862,9 @@ class DelayBusyNotifier extends Notifier<Set<String>> {
   void remove(String name) =>
       state = {...state}..remove(name);
 
+  void removeAll(Iterable<String> names) =>
+      state = {...state}..removeAll(names);
+
   void clear() => state = const <String>{};
 }
 
@@ -2857,13 +2952,27 @@ class _ServerRowState extends ConsumerState<_ServerRow>
         widget.tcpPort > 0;
     // Two cores, two maps: a row's number is read from the map of the core that produced it,
     // so a name present in both subscriptions can never show the other core's value.
-    final delay = measurable
+    // The trail of the last measurements, oldest first, from the core that produced them.
+    // The engine's raw delay is a fallback with no history behind it.
+    final history = measurable
         ? ref.watch(tcpDelayProvider)[widget.proxy.name]
-        : ref.watch(engineDelayProvider)[widget.proxy.name] ??
-              ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
+        : ref.watch(engineDelayProvider)[widget.proxy.name];
+    final fallbackDelay = measurable
+        ? null
+        : ref.watch(delayProvider(proxyName: node ?? widget.proxy.name));
     final color = widget.selected
         ? scheme.onPrimaryContainer
         : scheme.onSurfaceVariant;
+    // The protocol the badge reads: the chain looked up by name in the Xray document — the
+    // engine's YAML carries only the bare protocol (`vless`, `hysteria2`), the chain lives in
+    // the subscription's Xray body, which describes the same servers.
+    final protocolChain = ref.watch(portalNoteIndexProvider).when(
+          data: (index) => index.protocolFor(widget.proxy.name),
+          loading: () => '',
+          error: (_, _) => '',
+        );
+    final protocolLabel =
+        protocolChain.isNotEmpty ? protocolChain : widget.proxy.type;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -2992,20 +3101,24 @@ class _ServerRowState extends ConsumerState<_ServerRow>
               );
             },
           ),
-          trailing: Row(
+          trailing: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // The transport, beside the number it belongs to: a second server of the same
-              // country is told apart by what it speaks, and the two are read in one glance.
-              if (widget.proxy.type.trim().isNotEmpty) ...[
+              // The transport above the number it belongs to: the protocol chain is the
+              // row's second line on the right and the measurement sits under it, the same
+              // two-line shape the name and its note make on the left.
+              if (protocolLabel.trim().isNotEmpty) ...[
                 Text(
-                  widget.proxy.type.toUpperCase(),
+                  protocolLabel.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: color.withValues(alpha: 0.75),
                     letterSpacing: 0.4,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(height: 1),
               ],
               // The number arrives the moment the answer does, not at the end of the whole
               // sweep: the spinner yields to the figure the instant one exists. A server that
@@ -3018,35 +3131,61 @@ class _ServerRowState extends ConsumerState<_ServerRow>
                       (busy) => busy.contains(widget.proxy.name),
                     ),
                   );
-                  final value = delay;
-                  if (value != null && value > 0) {
-                    return Text(
-                      _delayText(value),
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: _delayColor(context, value),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    );
-                  }
-                  // A measured failure — timeout or unreachable — is a fact, read as a cross.
-                  if (value != null) {
+                  // Newest first. While a measurement is in flight the last two completed
+                  // values shift left and the spinner takes the newest slot; once it lands the
+                  // value replaces the spinner. A timeout is a measurement too: a cross.
+                  final values = history ?? const <int?>[];
+                  Widget slot(int? value, double opacity) {
+                    if (value != null && value > 0) {
+                      return Text(
+                        _delayText(value),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: _delayColor(
+                            context,
+                            value,
+                          ).withValues(alpha: opacity),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    }
                     return GlyphIcon(
                       AppGlyphs.close,
                       size: 14,
-                      color: _delayBad(context),
+                      color: _delayBad(context).withValues(alpha: opacity),
                     );
                   }
+                  final pieces = <Widget>[];
+                  void push(int? value, double opacity) {
+                    pieces
+                      ..add(slot(value, opacity))
+                      ..add(const SizedBox(width: 3));
+                  }
                   if (busy) {
-                    return SizedBox.square(
+                    if (values.length >= 2) push(values[1], 0.25);
+                    if (values.length >= 1) push(values[0], 0.5);
+                    pieces.add(SizedBox.square(
                       dimension: 12,
                       child: CircularProgressIndicator(
                         strokeWidth: 1.6,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
-                    );
+                    ));
+                  } else {
+                    if (values.length >= 3) push(values[2], 0.25);
+                    if (values.length >= 2) push(values[1], 0.5);
+                    if (values.isNotEmpty) {
+                      pieces.add(slot(values[0], 1));
+                    } else if (fallbackDelay != null) {
+                      pieces.add(slot(fallbackDelay, 1));
+                    } else {
+                      pieces.add(Text('—', style: theme.textTheme.labelMedium));
+                    }
                   }
-                  // Not measured yet, and not measuring: an honest dash.
-                  return Text('—', style: theme.textTheme.labelMedium);
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: pieces,
+                  );
                 },
               ),
             ],
@@ -3119,21 +3258,13 @@ class _ServerRowState extends ConsumerState<_ServerRow>
             }
             // One server, timed by the engine's own API. A closed portal is opened for the
             // measurement and closed again — the owner asked for one number, not for a tunnel.
-            unawaited(() async {
-              final wasRunning = ref.read(runTimeProvider) != null;
-              if (!wasRunning) {
-                final raised = await ref
-                    .read(setupActionProvider.notifier)
-                    .setRunning(true);
-                if (!raised) return;
-              }
-              await testDelayWithEngine(ref.read, [
-                widget.proxy,
-              ], wasRunning: true, force: true);
-              if (!wasRunning) {
-                await ref.read(setupActionProvider.notifier).setRunning(false);
-              }
-            }());
+            unawaited(
+              testDelayWithEngine(
+                ref.read,
+                [widget.proxy],
+                force: true,
+              ),
+            );
           },
         ),
       ),

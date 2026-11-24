@@ -251,7 +251,7 @@ SharedState sharedState(Ref ref) {
     appSettingProvider.select((state) => state.testUrl),
   );
   final connectedDelay = mode == Mode.global
-      ? 0
+      ? (ref.watch(tcpDelayProvider)[resolvedName]?.firstOrNull ?? 0)
       : computeProxyDelayState(
           proxyName: resolvedName,
           testUrl: (groups

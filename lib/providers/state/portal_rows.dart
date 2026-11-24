@@ -129,6 +129,37 @@ List<PortalRow> parsePortalRows(String body) {
   return rows;
 }
 
+/// The filters the profile's own file names, for the chip strip to draw before the engine
+/// answers.
+///
+/// The engine is the live source, but on a cold start it takes seconds to answer and the
+/// strip must not sit empty. The file already carries the same `proxy-groups:`, so their
+/// names are shown at once and the engine's own answer replaces them when it arrives. The
+/// members and `now` are the engine's facts and are left empty here.
+List<Group> parsePortalGroups(String body) {
+  final text = body.trim();
+  if (text.isEmpty) return const [];
+  Object? document;
+  try {
+    document = loadYaml(text);
+  } catch (_) {
+    return const [];
+  }
+  if (document is! Map) return const [];
+  final groups = document['proxy-groups'];
+  if (groups is! List) return const [];
+  final seen = <String>{};
+  final result = <Group>[];
+  for (final item in groups) {
+    if (item is! Map) continue;
+    final name = '${item['name'] ?? ''}'.trim();
+    if (name.isEmpty || !seen.add(name)) continue;
+    if (isBuiltinOutboundName(name) || isPortalServiceNode(name)) continue;
+    result.add(Group(type: GroupType.Selector, name: name));
+  }
+  return result;
+}
+
 /// The simple portal's rows: the child's own servers, named by the child's document.
 ///
 /// The list, the row and the mode control are all shaped around a [Group], and in this mode
@@ -205,7 +236,7 @@ class PortalEngineRowsNotifier extends Notifier<Map<String, List<PortalRow>>> {
           ),
     ];
     if (rows.isEmpty) return;
-    state = {...state, profileId: rows};
+    state = {...state, '$profileId:${group.name}': rows};
   }
 }
 
@@ -276,11 +307,17 @@ enum RowsOwner {
 /// A name is only matched to a note when both sides are the same string after the flag is
 /// dropped: «🇪🇪 Эстония» and «Эстония» are the same server, «Эстония» and «Эстония 2» are not.
 class PortalNoteIndex {
-  const PortalNoteIndex(this._notes);
+  const PortalNoteIndex(this._notes, [this._protocols = const {}]);
 
-  const PortalNoteIndex.empty() : _notes = const {};
+  const PortalNoteIndex.empty() : _notes = const {}, _protocols = const {};
 
   final Map<String, String> _notes;
+
+  /// The full protocol chain of each server, from the same document as the notes: the
+  /// engine's YAML names only the bare protocol (`vless`, `hysteria2`), the chain —
+  /// `xhttp/tls/vless` — lives in the Xray document and is handed to the rows of both lists
+  /// the same way the notes are.
+  final Map<String, String> _protocols;
 
   static final _flag = RegExp(
     r'^[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\s]+',
@@ -292,12 +329,21 @@ class PortalNoteIndex {
       name.replaceFirst(_flag, '').replaceAll(RegExp(r'\s+'), ' ').trim();
 
   /// Builds the index from the second core's document, which is where the notes are.
-  factory PortalNoteIndex.ofServers(List<XrayServerConfig> servers) => PortalNoteIndex({
-        for (final server in servers)
-          if (server.description.isNotEmpty) keyOf(server.name): server.description,
-      });
+  factory PortalNoteIndex.ofServers(List<XrayServerConfig> servers) => PortalNoteIndex(
+        {
+          for (final server in servers)
+            if (server.description.isNotEmpty)
+              keyOf(server.name): server.description,
+        },
+        {
+          for (final server in servers)
+            if (server.protocol.isNotEmpty) keyOf(server.name): server.protocol,
+        },
+      );
 
   String noteFor(String name) => _notes[keyOf(name)] ?? '';
+
+  String protocolFor(String name) => _protocols[keyOf(name)] ?? '';
 
   bool get isEmpty => _notes.isEmpty;
 }
@@ -375,6 +421,21 @@ final profilePortalRowsProvider =
   }
 });
 
+/// The current profile's own filters, parsed from its file: the chip strip's first source
+/// before the engine has answered.
+final profilePortalGroupsProvider =
+    FutureProvider.autoDispose<List<Group>>((ref) async {
+  final profile = ref.watch(currentProfileProvider);
+  if (profile == null) return const [];
+  try {
+    final file = await profile.file;
+    if (!await file.exists()) return const [];
+    return parsePortalGroups(await file.readAsString());
+  } catch (_) {
+    return const [];
+  }
+});
+
 /// The servers the second core offers.
 ///
 /// The subscription body is an array of full xray configurations and each element is one
@@ -383,7 +444,7 @@ final profilePortalRowsProvider =
 final xrayServersProvider = FutureProvider.autoDispose<List<XrayServerConfig>>((
   ref,
 ) async {
-  final profile = ref.read(currentProfileProvider);
+  final profile = ref.watch(currentProfileProvider);
   if (profile == null) return const [];
   final body = await profile.readXrayFormat();
   if (body == null) return const [];

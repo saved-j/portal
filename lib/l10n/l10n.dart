@@ -9375,10 +9375,10 @@ class AppLocalizations {
     );
   }
 
-  /// `Here are all the routing rules of your subscription at once. Enter the tiles and choose servers.\n🔌 — manages a filter: whether to tunnel through a country or not.\n§ OFF is done through Direct — straight through, past the tunnel.\n⚡️ — checks the server latency; the lower, the better.\n§ Under blocking, bandwidth depends more on your provider. A server can be close while the channel to it is throttled.`
+  /// `Here are all the routing rules of your subscription at once. Enter the tiles and choose servers.\n🔌 — manages a filter: whether to tunnel through a country or not.\n§ OFF is done through Direct — straight through, past the tunnel.\n⚡️ — checks the latency; the lower, the better.\n§ Under blocking, bandwidth depends more on your provider. A server can be close while the channel to it is throttled.`
   String get tutorialServerListHint {
     return Intl.message(
-      'Here are all the routing rules of your subscription at once. Enter the tiles and choose servers.\n🔌 — manages a filter: whether to tunnel through a country or not.\n§ OFF is done through Direct — straight through, past the tunnel.\n⚡️ — checks the server latency; the lower, the better.\n§ Under blocking, bandwidth depends more on your provider. A server can be close while the channel to it is throttled.',
+      'Here are all the routing rules of your subscription at once. Enter the tiles and choose servers.\n🔌 — manages a filter: whether to tunnel through a country or not.\n§ OFF is done through Direct — straight through, past the tunnel.\n⚡️ — checks the latency; the lower, the better.\n§ Under blocking, bandwidth depends more on your provider. A server can be close while the channel to it is throttled.',
       name: 'tutorialServerListHint',
       desc: '',
       args: [],
@@ -9390,10 +9390,10 @@ class AppLocalizations {
     return Intl.message('Start', name: 'tutorialTitle6', desc: '', args: []);
   }
 
-  /// `Press the portal: it opens and starts carrying traffic.\n\nAfter you start, the app will ask for the device-search permission. The app can turn itself off automatically on chosen Wi-Fi networks, for example when your home router already runs a VPN.\n\nBy the way, Portal also installs on routers. More in the project's Telegram chat. All the links are in About, in the settings.`
+  /// `Press the portal: it opens and starts carrying traffic.\n\nOnce the connection starts, the app will ask for permission to find nearby devices. This permission is needed for the suspend-on-Wi-Fi feature to work when you enter a chosen network.\n\nBy the way, Portal also installs on routers. More in the project's Telegram chat. All the links are in About, in the settings.`
   String get tutorialBody6 {
     return Intl.message(
-      'Press the portal: it opens and starts carrying traffic.\n\nAfter you start, the app will ask for the device-search permission. The app can turn itself off automatically on chosen Wi-Fi networks, for example when your home router already runs a VPN.\n\nBy the way, Portal also installs on routers. More in the project\'s Telegram chat. All the links are in About, in the settings.',
+      'Press the portal: it opens and starts carrying traffic.\n\nOnce the connection starts, the app will ask for permission to find nearby devices. This permission is needed for the suspend-on-Wi-Fi feature to work when you enter a chosen network.\n\nBy the way, Portal also installs on routers. More in the project\'s Telegram chat. All the links are in About, in the settings.',
       name: 'tutorialBody6',
       desc: '',
       args: [],
@@ -9585,6 +9585,16 @@ class AppLocalizations {
     return Intl.message(
       'The filter is off. Tap it to switch it back on.',
       name: 'tutorialChipOff',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The filter is on. Hold it to switch it off.`
+  String get tutorialChipOn {
+    return Intl.message(
+      'The filter is on. Hold it to switch it off.',
+      name: 'tutorialChipOn',
       desc: '',
       args: [],
     );

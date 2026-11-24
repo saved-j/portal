@@ -37,6 +37,12 @@ abstract mixin class ServiceListener {
 
   /// A stop from Quick Settings or automation while no service runs.
   void onServiceStopRequested() {}
+
+  /// The shade's ping button: run the same sweep the working screen's bolt runs.
+  void onPingRequested() {}
+
+  /// The shade's "next server" cycled the child onto a new node; the app must record the pick.
+  void onNextServerDone(String selectedName) {}
 }
 
 class Service {
@@ -95,6 +101,15 @@ class Service {
           break;
         case 'vpnDemanded':
           _vpnDemandedBySystem = call.arguments == true;
+          break;
+        case 'pingRequested':
+          _dispatch('ping request', (listener) => listener.onPingRequested());
+          break;
+        case 'nextServerDone':
+          _dispatch(
+            'next server done',
+            (listener) => listener.onNextServerDone(call.arguments as String? ?? ''),
+          );
           break;
         default:
           throw MissingPluginException();

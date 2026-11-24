@@ -4,9 +4,13 @@ import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/core/core.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/models/portal_selection.dart' show withPortalXrayPick;
 import 'package:fl_clash/plugins/app.dart';
+import 'package:fl_clash/plugins/portal_runtime.dart' show PortalOwner;
 import 'package:fl_clash/plugins/service.dart';
 import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/views/dashboard/portal_controls.dart'
+    show portalGroupProvider, testDelayWithChild, testDelayWithEngine;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -121,6 +125,47 @@ class _AndroidContainerState extends ConsumerState<AndroidManager>
   void onServiceStopped() {
     unawaited(ref.read(setupActionProvider.notifier).setRunning(false));
     super.onServiceStopped();
+  }
+
+  /// The shade's ping button: the same sweep the working screen's bolt runs, in the app's
+  /// own queue — not the core's raw delay test.
+  @override
+  void onPingRequested() {
+    unawaited(_runShadePing());
+  }
+
+  Future<void> _runShadePing() async {
+    final simple = ref.read(patchClashConfigProvider).mode == Mode.global;
+    final runStatus = ref.read(portalStatusProvider);
+    if (simple) {
+      final servers = await ref.read(xrayServersProvider.future);
+      await testDelayWithChild(
+        ref.read,
+        servers,
+        wasRunning: runStatus.active && runStatus.owner == PortalOwner.xray,
+        force: true,
+      );
+      return;
+    }
+    final liveGroup = ref.read(portalGroupProvider);
+    final rows = ref
+        .read(groupsProvider)
+        .where((item) => item.name == liveGroup)
+        .expand((item) => item.all)
+        .toList();
+    await testDelayWithEngine(ref.read, rows, force: true);
+  }
+
+  /// The shade's "next server" cycled the child onto a new node; record the pick so the
+  /// notification names the node the tunnel is really on.
+  @override
+  void onNextServerDone(String selectedName) {
+    commonPrint.log('portal next server done: $selectedName');
+    if (selectedName.isEmpty) return;
+    final profileId = ref.read(currentProfileIdProvider);
+    ref
+        .read(appSettingProvider.notifier)
+        .update((state) => withPortalXrayPick(state, profileId, selectedName));
   }
 
   /// An excluded SSID keeps the run while the service is down.

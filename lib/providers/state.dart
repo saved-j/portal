@@ -10,6 +10,8 @@ import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/database/database.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/plugins/portal_runtime.dart';
+import 'package:fl_clash/views/dashboard/portal_controls.dart'
+    show tcpDelayProvider;
 import 'package:fl_clash/features/proxy_chains/proxy_chains.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/ui/ui.dart';

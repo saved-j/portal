@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:fl_clash/plugins/app.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:win32_registry/win32_registry.dart';
 
@@ -19,12 +18,10 @@ const _compactHwidLength = 16;
 
 /// Request headers that tell a panel which device, OS and model this is.
 class DeviceIdentity {
-  DeviceIdentity({DeviceInfoPlugin? plugin, Future<String?>? androidId})
-    : _plugin = plugin ?? DeviceInfoPlugin(),
-      _androidId = androidId;
+  DeviceIdentity({DeviceInfoPlugin? plugin})
+    : _plugin = plugin ?? DeviceInfoPlugin();
 
   final DeviceInfoPlugin _plugin;
-  final Future<String?>? _androidId;
   Future<Map<String, String>>? _headers;
 
   /// Resolved once per run; nothing is persisted, since the same inputs give
@@ -55,11 +52,11 @@ class DeviceIdentity {
   Future<(String?, String?, String?, String?)> _platformDetails() async {
     if (Platform.isAndroid) {
       final info = await _plugin.androidInfo;
-      final id = await (_androidId ?? app?.getAndroidId() ?? _noId);
       return (
-        id != null && id.isNotEmpty
-            ? id
-            : '${info.brand}-${info.device}-${info.hardware}-${info.id}',
+        // A readable, stable device identity the owner recognises in the panel's device
+        // list: "PortalDuo @ vivo v2454da". The model is fixed per device, so one phone
+        // always occupies one slot.
+        'PortalDuo @ ${info.manufacturer.toLowerCase()} ${info.model.toLowerCase()}',
         'Android',
         info.version.release,
         '${info.manufacturer} ${info.model}',
@@ -136,7 +133,5 @@ String compactHwid(String id) => sha256
 @visibleForTesting
 String windowsHwidSource(String machineGuid) =>
     'StringValue(MachineGuid, $machineGuid)';
-
-final Future<String?> _noId = Future.value();
 
 DeviceIdentity deviceIdentity = DeviceIdentity();

@@ -201,6 +201,11 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
   /// the OK, move the page on.
   int _chipToggles = 0;
 
+  /// Whether the tile the owner last touched on the tap/hold page is on (tapped) or off
+  /// (held). The page's hint follows this: an on tile is "hold to switch off", an off tile
+  /// "tap to switch on".
+  bool _tileEnabled = false;
+
   /// How many rows the owner has held to ping on the bolt page. Three held pings, or Next,
   /// are the two ways past the page.
   int _pingHolds = 0;
@@ -425,6 +430,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
 
   /// The owner has just done the thing this page asks for: the page closes itself.
   void _onAction() {
+    commonPrint.log('_onAction: event=${TutorialBus.last.value} step=${_steps[_index].number} waiting=$_waiting mounted=$mounted');
     if (!mounted || _waiting) return;
     final step = _steps[_index];
     // The switch page, after the switch: a swept chip strip is one more step toward the three
@@ -475,6 +481,17 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       _next();
       return;
     }
+    // The tap/hold page: a held tile is now off (DIRECT), a tapped one on — the hint follows
+    // whichever the owner just did, read here before the page's own `done` gate.
+    if (step.number == 3 &&
+        TutorialBus.last.value == TutorialEvent.chipHeld) {
+      TutorialBus.last.value = null;
+      setState(() {
+        _tileEnabled = false;
+        _confirmed = true;
+      });
+      return;
+    }
     if (step.done == null || step.done != TutorialBus.last.value) return;
     TutorialBus.last.value = null;
     // The tile page shows the result before it closes: the owner should read what his own
@@ -487,6 +504,7 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       // slide-down, ~260 ms), and only then come back asking the owner to sweep. The page then
       // advances on three or four sweeps, or the OK button.
       if (!_showingChips) {
+        commonPrint.log('step1 handler: to chips');
         _cardHidden = true;
         _noMask = true;
         _waitTimer?.cancel();
@@ -506,7 +524,10 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
     }
     if (step.number == 3) {
       _chipToggles += 1;
-      setState(() => _confirmed = true);
+      setState(() {
+        _tileEnabled = true;
+        _confirmed = true;
+      });
       if (_chipToggles < 3) return;
     }
     // The bolt leaves numbers behind. The point of this page is to see the figures on the
@@ -810,7 +831,9 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
               index: _index,
               total: _steps.length,
               bodyOverride: step.number == 3 && _confirmed
-                  ? context.appLocalizations.tutorialChipOff
+                  ? (_tileEnabled
+                      ? context.appLocalizations.tutorialChipOn
+                      : context.appLocalizations.tutorialChipOff)
                   : step.number == 1 && _showingChips
                       ? context.appLocalizations.tutorialBody1Chips
                       : null,
@@ -1204,8 +1227,15 @@ OverlayEntry? _tourEntry;
 /// because of a sidebar or a title bar, and the mask covers everything the owner can see.
 Future<void> showPortalTutorial(BuildContext context, {int fromStep = 0}) async {
   if (tourIsShowing) return;
+  // The tour is taught with a finger: the switch sits in the mask's hole and is pressed by
+  // touch. A TV's remote walks focus under the mask instead, so the tour is not shown there.
+  if (system.isTV) return;
   tourIsShowing = true;
   tourSimulatesSimple.value = true;
+  // A press made before the tour opened (the owner switched to the simple portal, or any
+  // control fired an event) left `last` holding it. `ValueNotifier` only notifies on change,
+  // so the tour's own switch press would then be a silent no-op. Forget it so that press is heard.
+  TutorialBus.last.value = null;
   // The tour teaches the network mode from the simple portal, so the switch must sit on the
   // simple mode before the tour opens — whatever launched the tour (the first run or the
   // settings item). Forced here, in the one shared entry point, and the `tourSimulatesSimple`
