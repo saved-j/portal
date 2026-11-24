@@ -220,7 +220,7 @@ class DesktopIdentity {
 const stableDesktop = DesktopIdentity(
   pre: false,
   executable: _appName,
-  helper: 'PortalHelperService',
+  helper: 'FlClashXHelperService',
   displayName: _appName,
   bundleId: _bundleId,
   packageName: 'flclashx',
@@ -232,7 +232,7 @@ const stableDesktop = DesktopIdentity(
 const preDesktop = DesktopIdentity(
   pre: true,
   executable: 'PortalPre',
-  helper: 'PortalPreHelperService',
+  helper: 'FlClashXPreHelperService',
   displayName: '$_appName Pre',
   bundleId: '$_bundleId.pre',
   packageName: 'flclashx-pre',
@@ -794,7 +794,7 @@ Future<void> _packageWindows(
         p.join(build.rootDir, 'windows', 'packaging', 'exe', 'inno_setup.iss'),
       ).readAsStringSync(),
       config: config,
-      version: build.version,
+      version: build.appVersion,
       arch: build.arch,
       sourceDir: bundle,
       outputDir: build.distPath,

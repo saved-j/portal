@@ -375,8 +375,11 @@ class _PortalTutorialState extends ConsumerState<PortalTutorial> {
       entry = OverlayEntry(
         builder: (_) => _FilterHint(
           text: context.appLocalizations.tutorialServerListHint,
-          ok: false,
-          onOk: () {},
+          ok: true,
+          onOk: () {
+            _removeFilterHint();
+            _nav?.pop();
+          },
         ),
       );
       _filterHint = entry;
